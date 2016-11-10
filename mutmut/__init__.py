@@ -52,44 +52,51 @@ mutations_by_type = {
 #     }
 
 
-def mutate(source, count_only=False):
+class Context(object):
+    def __init__(self, mutate_index):
+        self.index = 0
+        self.performed_mutations = 0
+        self.mutate_index = mutate_index
+
+
+def mutate(source, mutate_index=None):
+    """
+    :param source: source code
+    :param mutate_index: the index of the mutation to be performed, if None mutates all available places
+    :return: tuple: mutated source code, number of mutations performed
+    """
     result = parse(source)
-    mutation_count = mutate_list_of_nodes(result, count_only=count_only)
-    if count_only:
-        return mutation_count
-    return dumps(result)
+    context = Context(mutate_index=mutate_index)
+    mutate_list_of_nodes(result, context=context)
+    return dumps(result), context.performed_mutations
 
 recurse = {'def'}
 ignore = {'endl'}
 mutate_and_recurse = {'return'}
 
 
-def mutate_node(i, count_only=False):
+def mutate_node(i, context):
     t = i['type']
     if t in ignore:
-        return 0
+        return
 
     if t in recurse:
-        return mutate_list_of_nodes(i['value'], count_only=count_only)
+        mutate_list_of_nodes(i['value'], context=context)
     else:
         m = mutations_by_type[t]
-        mutation_count = 0
         for key, vale in m.items():
-            mutation_count += 1
-            if not count_only:
+            if context.mutate_index in (None, context.index):
+                context.performed_mutations += 1
                 i[key] = evaluate(m[key], node=i, **i)
+            context.index += 1
             if t in mutate_and_recurse:
-                mutation_count += mutate_node(i['value'], count_only=count_only)
-        return mutation_count
+                mutate_node(i['value'], context=context)
 
 
-def mutate_list_of_nodes(result, count_only=False):
-    mutation_count = 0
+def mutate_list_of_nodes(result, context):
     for i in result:
-        mutation_count += mutate_node(i, count_only=count_only)
-
-    return mutation_count
+        mutate_node(i, context=context)
 
 
 def count_mutations(source):
-    return mutate(source, count_only=True)
+    return mutate(source)[1]
