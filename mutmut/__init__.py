@@ -1,3 +1,4 @@
+import numpy
 from baron import parse, dumps
 from tri.declarative import evaluate
 
@@ -21,6 +22,7 @@ mutations_by_type = {
         }[value],
     ),
     'int': dict(value=lambda value, **_: str(int(value) + 1)),
+    'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
     'return': dict(type='yield'),
     'yield': dict(type='return'),
 }

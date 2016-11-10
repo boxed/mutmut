@@ -8,6 +8,7 @@ import pytest
         ('1-1', '1+1'),
         ('1*1', '1/1'),
         ('1/1', '1*1'),
+        ('1.0', '1.0000000000000002'),
     ]
 )
 def test_basic_mutations(actual, expected):
