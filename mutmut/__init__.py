@@ -25,6 +25,11 @@ mutations_by_type = {
     'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
     'return': dict(type='yield'),
     'yield': dict(type='return'),
+    'name': dict(
+        value=lambda value, **_: {
+            'True': 'False',
+            'False': 'True',
+        }[value]),
 }
 
 # ("and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "not", "or", "pass", "print", "raise", "return", "try", "while", "with", "yield")
@@ -34,11 +39,9 @@ mutations_by_type = {
 # TODO:
 # str
 # unicode?
-# number
-# bool
+# long?
 # continue -> break
 # break -> continue
-# yield -> return
 
 # compare_mapping = {
 #     ast.Eq: ast.NotEq,
