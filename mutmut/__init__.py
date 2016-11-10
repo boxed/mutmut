@@ -52,31 +52,44 @@ mutations_by_type = {
 #     }
 
 
-def mutate(source):
-    return mutate_list_of_nodes(parse(source))
+def mutate(source, count_only=False):
+    result = parse(source)
+    mutation_count = mutate_list_of_nodes(result, count_only=count_only)
+    if count_only:
+        return mutation_count
+    return dumps(result)
 
 recurse = {'def'}
 ignore = {'endl'}
 mutate_and_recurse = {'return'}
 
 
-def mutate_node(i):
+def mutate_node(i, count_only=False):
     t = i['type']
     if t in ignore:
-        return
+        return 0
 
     if t in recurse:
-        mutate_list_of_nodes(i['value'])
+        return mutate_list_of_nodes(i['value'], count_only=count_only)
     else:
         m = mutations_by_type[t]
+        mutation_count = 0
         for key, vale in m.items():
-            i[key] = evaluate(m[key], node=i, **i)
+            mutation_count += 1
+            if not count_only:
+                i[key] = evaluate(m[key], node=i, **i)
             if t in mutate_and_recurse:
-                mutate_node(i['value'])
+                mutation_count += mutate_node(i['value'], count_only=count_only)
+        return mutation_count
 
 
-def mutate_list_of_nodes(result):
+def mutate_list_of_nodes(result, count_only=False):
+    mutation_count = 0
     for i in result:
-        mutate_node(i)
+        mutation_count += mutate_node(i, count_only=count_only)
 
-    return dumps(result)
+    return mutation_count
+
+
+def count_mutations(source):
+    return mutate(source, count_only=True)
