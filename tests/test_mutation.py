@@ -27,6 +27,8 @@ import pytest
         ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
         ("None is None", "None is not None"),
         ("None is not None", "None is None"),
+        ("x if a else b", "x if a else b"),
+        ('a or b', 'a and b'),
     ]
 )
 def test_basic_mutations(actual, expected):

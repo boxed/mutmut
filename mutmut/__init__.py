@@ -63,6 +63,12 @@ mutations_by_type = {
     'comparison': dict(
         value=comparison_mutation,
     ),
+    'boolean_operator': dict(
+        value=lambda value, **_: {
+            'or': 'and',
+            'and': 'or',
+        }[value],
+    ),
 
     # Don't mutate:
     'tuple': {},
@@ -95,6 +101,16 @@ mutations_by_type = {
     'dotted_name': {},
     'global': {},
     'print': {},
+    'ternary_operator': {},
+    'call': {},
+    'call_argument': {},
+    'lambda': {},
+    'def_argument': {},
+    'dict_argument': {},
+    'with': {},
+    'with_context_item': {},
+    'associative_parenthesis': {},
+    'pass': {},
 }
 
 # TODO: ("and", "as", "assert", "del", "elif", "else", "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "not", "or", "pass", "print", "raise", "try", "while", "with")
@@ -155,6 +171,16 @@ mutate_and_recurse = {
     'class': ['inherit_from', 'decorators', 'value'],
     'decorator': ['value', 'call'],
     'print': ['value'],
+    'ternary_operator': ['value', 'first', 'second'],
+    'call': ['value'],
+    'call_argument': ['value', 'target'],
+    'lambda': ['value', 'arguments'],
+    'def_argument': ['value', 'target'],
+    'dict_argument': ['value'],
+    'with': ['value', 'contexts'],
+    'with_context_item': ['value', 'as'],
+    'associative_parenthesis': ['value'],
+    'boolean_operator': ['value', 'first', 'second'],
 }
 
 
@@ -185,7 +211,7 @@ def mutate_node(i, context):
                 if isinstance(i[x], list):
                     mutate_list_of_nodes(i[x], context=context)
                 else:
-                    assert isinstance(i[x], dict), type(i[x])
+                    assert isinstance(i[x], dict), (i, type(i[x]), dumps(i))
                     mutate_node(i[x], context=context)
 
 
