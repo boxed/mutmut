@@ -14,8 +14,8 @@ def comparison_mutation(value, **_):
         '==': '!=',
         '!=': '==',
         'in': 'not in',
-        'not in': 'in',
         'not': '',
+        'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
     }[value['first']]
     return value
 
@@ -52,7 +52,6 @@ mutations_by_type = {
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'return': dict(type='yield'),
     'yield': dict(type='return'),
-    'raise': dict(type='return'),
     'continue': dict(type='break'),
     'break': dict(type='continue'),
     'name': dict(
@@ -66,19 +65,19 @@ mutations_by_type = {
     ),
 
     # Don't mutate:
-    'tuple': dict(),
-    'list': dict(),
-    'dict': dict(),
-    'set': dict(),
-    'comma': dict(),
-    'from_import': dict(),
-    'import': dict(),
-    'assignment': dict(),  # TODO
-    'ifelseblock': dict(),
-    'if': dict(),
-    'elif': dict(),
-    'else': dict(),
-    'atomtrailers': dict(),  # http://redbaron.readthedocs.io/en/latest/nodes_reference.html#atomtrailersnode
+    'tuple': {},
+    'list': {},
+    'dict': {},
+    'set': {},
+    'comma': {},
+    'from_import': {},
+    'import': {},
+    'assignment': {},  # TODO
+    'ifelseblock': {},
+    'if': {},
+    'elif': {},
+    'else': {},
+    'atomtrailers': {},  # http://redbaron.readthedocs.io/en/latest/nodes_reference.html#atomtrailersnode
     'dict_comprehension': {},
     'list_comprehension': {},
     'set_comprehension': {},
@@ -91,6 +90,11 @@ mutations_by_type = {
     'comment': {},
     'del': {},
     'assert': {},
+    'raise': {},
+    'decorator': {},
+    'dotted_name': {},
+    'global': {},
+    'print': {},
 }
 
 # TODO: ("and", "as", "assert", "del", "elif", "else", "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "not", "or", "pass", "print", "raise", "try", "while", "with")
@@ -122,7 +126,7 @@ def mutate(source, mutate_index=None):
     result = parse(source)
     context = Context(mutate_index=mutate_index)
     mutate_list_of_nodes(result, context=context)
-    return dumps(result), context.performed_mutations
+    return dumps(result).replace(' not not ', ' '), context.performed_mutations
 
 recurse = {'def'}
 ignore = {'endl'}
@@ -149,6 +153,8 @@ mutate_and_recurse = {
     'raise': ['instance', 'value'],
     'try': ['else', 'finally', 'value'],
     'class': ['inherit_from', 'decorators', 'value'],
+    'decorator': ['value', 'call'],
+    'print': ['value'],
 }
 
 
@@ -163,7 +169,7 @@ def mutate_node(i, context):
     if t in recurse:
         mutate_list_of_nodes(i['value'], context=context)
     else:
-        assert t in mutations_by_type, t
+        assert t in mutations_by_type, (t, i.keys())
         m = mutations_by_type[t]
         for key, vale in m.items():
             if context.mutate_index in (None, context.index):

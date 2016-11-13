@@ -25,6 +25,8 @@ import pytest
         ('(1, 2)', '(2, 3)'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
         ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
+        ("None is None", "None is not None"),
+        ("None is not None", "None is None"),
     ]
 )
 def test_basic_mutations(actual, expected):
@@ -42,3 +44,6 @@ def test_count_available_mutations():
 def test_perform_one_indexed_mutation():
     assert mutate('def foo():\n    return 1', mutate_index=0) == ('def foo():\n    yield 1\n', 1)
     assert mutate('def foo():\n    return 1', mutate_index=1) == ('def foo():\n    return 2\n', 1)
+
+    # TODO: should this case raise an exception?
+    assert mutate('def foo():\n    return 1', mutate_index=2) == ('def foo():\n    return 1\n', 0)
