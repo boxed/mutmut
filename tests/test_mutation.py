@@ -1,3 +1,5 @@
+import os
+
 from mutmut import mutate, count_mutations
 import pytest
 
@@ -49,3 +51,12 @@ def test_perform_one_indexed_mutation():
 
     # TODO: should this case raise an exception?
     assert mutate('def foo():\n    return 1', mutate_index=2) == ('def foo():\n    return 1\n', 0)
+
+
+# def test_mutate_files():
+#     for dirpath, dirnames, filenames in os.walk('/path/to/some/big/project'):
+#         for f in filenames:
+#             if f.endswith('.py'):
+#                 fullpath = os.path.join(dirpath, f)
+#                 # print fullpath
+#                 mutate(open(fullpath).read())

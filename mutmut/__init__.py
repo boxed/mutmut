@@ -40,6 +40,7 @@ mutations_by_type = {
     'unitary_operator': dict(
         value=lambda value, **_: {
             'not': 'not not',
+            '-': '',
         }[value],
     ),
     'int': dict(value=lambda value, **_: repr(int(value) + 1)),
@@ -50,6 +51,8 @@ mutations_by_type = {
     'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
     'string': dict(value=lambda value, **_: value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]),
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
+    'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
+    'raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'return': dict(type='yield'),
     'yield': dict(type='return'),
     'continue': dict(type='break'),
@@ -87,11 +90,14 @@ mutations_by_type = {
     'dict_comprehension': {},
     'list_comprehension': {},
     'set_comprehension': {},
+    'generator_comprehension': {},
     'comprehension_loop': {},
     'comprehension_if': {},
     'dictitem': {},
     'for': {},
     'try': {},
+    'finally': {},
+    'while': {},
     'class': {},
     'comment': {},
     'del': {},
@@ -111,19 +117,12 @@ mutations_by_type = {
     'with_context_item': {},
     'associative_parenthesis': {},
     'pass': {},
+    'semicolon': {},
+    'string_chain': {},
+    'exec': {},
 }
 
-# TODO: ("and", "as", "assert", "del", "elif", "else", "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "not", "or", "pass", "print", "raise", "try", "while", "with")
-
 # TODO: detect regexes and mutate them in nasty ways?
-
-# TODO:
-
-# compare_mapping = {
-#     ast.NotIn: ast.In,
-#     ast.Is: ast.IsNot,
-#     ast.IsNot: ast.Is
-#     }
 
 
 class Context(object):
@@ -162,12 +161,14 @@ mutate_and_recurse = {
     'dict_comprehension': ['generators', 'result'],
     'list_comprehension': ['generators', 'result'],
     'set_comprehension': ['generators', 'result'],
+    'generator_comprehension': ['generators', 'result'],
     'comprehension_loop': ['ifs', 'iterator', 'target'],
     'unitary_operator': ['target'],
     'dictitem': ['key', 'value'],
     'for': ['else', 'iterator', 'target', 'value'],
     'raise': ['instance', 'value'],
     'try': ['else', 'finally', 'value'],
+    'finally': ['value'],
     'class': ['inherit_from', 'decorators', 'value'],
     'decorator': ['value', 'call'],
     'print': ['value'],
@@ -180,7 +181,10 @@ mutate_and_recurse = {
     'with': ['value', 'contexts'],
     'with_context_item': ['value', 'as'],
     'associative_parenthesis': ['value'],
-    'boolean_operator': ['value', 'first', 'second'],
+    'boolean_operator': ['first', 'second'],
+    'while': ['test', 'value', 'else'],
+    'string_chain': ['value'],
+    'exec': ['globals', 'locals', 'value'],
 }
 
 
