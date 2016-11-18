@@ -1,0 +1,2 @@
+#! /bin/sh
+py.test tests.py --mutate=/Users/boxed/Projects/mutmut/pytest_plugin_test/foo.py:1 -s
