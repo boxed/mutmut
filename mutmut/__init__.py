@@ -4,6 +4,8 @@ from tri.declarative import evaluate
 
 __version__ = '0.0.1'
 
+ALL = 'all'
+
 
 def comparison_mutation(value, **_):
     value['first'] = {
@@ -132,7 +134,7 @@ class Context(object):
         self.mutate_index = mutate_index
 
 
-def mutate(source, mutate_index=None):
+def mutate(source, mutate_index=ALL):
     """
     :param source: source code
     :param mutate_index: the index of the mutation to be performed, if None mutates all available places
@@ -202,7 +204,7 @@ def mutate_node(i, context):
         assert t in mutations_by_type, (t, i.keys())
         m = mutations_by_type[t]
         for key, vale in m.items():
-            if context.mutate_index in (None, context.index):
+            if context.mutate_index in (ALL, context.index):
                 context.performed_mutations += 1
                 i[key] = evaluate(m[key], node=i, **i)
             context.index += 1

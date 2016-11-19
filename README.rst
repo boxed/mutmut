@@ -5,7 +5,7 @@ Mutmut aims to be several independent parts that together create a mutation test
 
 Master plan:
     - DONE: Mutator that given a file can give you the number of available mutations, and given an index can perform the mutation corresponing to that index.
-    - Custom importer that will mutate the code on the way in
+    - DONE: Custom importer that will mutate the code on the way in
     - Plug in to py.test to make it use the importer
     - Runner that runs py.test (or tox?) for each mutation
 

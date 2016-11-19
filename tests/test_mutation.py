@@ -1,6 +1,4 @@
-import os
-
-from mutmut import mutate, count_mutations
+from mutmut import mutate, count_mutations, ALL
 import pytest
 
 
@@ -34,11 +32,11 @@ import pytest
     ]
 )
 def test_basic_mutations(actual, expected):
-    assert mutate(actual)[0] == expected
+    assert mutate(actual, ALL)[0] == expected
 
 
 def test_mutate_all():
-    assert mutate('def foo():\n    return 1') == ('def foo():\n    yield 2\n', 2)
+    assert mutate('def foo():\n    return 1', ALL) == ('def foo():\n    yield 2\n', 2)
 
 
 def test_count_available_mutations():
