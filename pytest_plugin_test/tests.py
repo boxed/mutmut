@@ -1,4 +1,4 @@
 def test_foo():
     from foo import foo
-    assert foo() == 0
+    assert foo() == 2
 

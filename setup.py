@@ -90,8 +90,15 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
+        "Framework :: Pytest",
     ],
     test_suite='tests',
     cmdclass={'tag': Tag,
               'release_check': ReleaseCheck},
+    entry_points={
+        'pytest11': [
+            'mutmut = mutmut.pytestplugin',
+        ]
+    },
+    scripts=['bin/mutmut'],
 )

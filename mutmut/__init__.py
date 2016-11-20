@@ -1,4 +1,4 @@
-import numpy
+# import numpy
 from baron import parse, dumps
 from tri.declarative import evaluate
 
@@ -50,7 +50,8 @@ mutations_by_type = {
     # 'octa': dict(value=lambda value, **_: repr(long(value) + 1)),
     'hexa': dict(value=lambda value, **_: '0x%x' % (int(value[2:], base=16) + 1)),
     'binary': dict(value=lambda value, **_: '0b%x' % (int(value[2:], base=2) + 1)),
-    'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
+    # 'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
+    'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),  # this might be a bit brutal :P
     'string': dict(value=lambda value, **_: value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]),
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
@@ -134,10 +135,10 @@ class Context(object):
         self.mutate_index = mutate_index
 
 
-def mutate(source, mutate_index=ALL):
+def mutate(source, mutate_index):
     """
     :param source: source code
-    :param mutate_index: the index of the mutation to be performed, if None mutates all available places
+    :param mutate_index: the index of the mutation to be performed, if ALL mutates all available places
     :return: tuple: mutated source code, number of mutations performed
     """
     result = parse(source)
@@ -227,4 +228,4 @@ def mutate_list_of_nodes(result, context):
 
 
 def count_mutations(source):
-    return mutate(source)[1]
+    return mutate(source, ALL)[1]
