@@ -8,7 +8,8 @@ import pytest
         ('1-1', '2+2'),
         ('1*1', '2/2'),
         ('1/1', '2*2'),
-        ('1.0', '1.0000000000000002'),
+        # ('1.0', '1.0000000000000002'),  # using mumpy features
+        ('1.0', '101.0'),  # using mumpy features
         ('True', 'False'),
         ('False', 'True'),
         ('"foo"', '"XXfooXX"'),
@@ -29,6 +30,9 @@ import pytest
         ("None is not None", "None is None"),
         ("x if a else b", "x if a else b"),
         ('a or b', 'a and b'),
+        ('s[0]', 's[1]'),
+        ('s[0] = a', 's[1] = a'),
+        ('s[1:]', 's[2:]'),
     ]
 )
 def test_basic_mutations(actual, expected):
@@ -44,16 +48,23 @@ def test_count_available_mutations():
 
 
 def test_perform_one_indexed_mutation():
-    assert mutate('def foo():\n    return 1', mutate_index=0) == ('def foo():\n    yield 1\n', 1)
-    assert mutate('def foo():\n    return 1', mutate_index=1) == ('def foo():\n    return 2\n', 1)
+    assert mutate('def foo():\n    return 1', mutate_index=1) == ('def foo():\n    yield 1\n', 1)
+    assert mutate('def foo():\n    return 1', mutate_index=0) == ('def foo():\n    return 2\n', 1)
 
     # TODO: should this case raise an exception?
     assert mutate('def foo():\n    return 1', mutate_index=2) == ('def foo():\n    return 1\n', 0)
 
-# def test_mutate_files():
-#     for dirpath, dirnames, filenames in os.walk('/path/to/some/big/project'):
-#         for f in filenames:
-#             if f.endswith('.py'):
-#                 fullpath = os.path.join(dirpath, f)
-#                 # print fullpath
-#                 mutate(open(fullpath).read())
+
+def test_function():
+    assert mutate("def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n", mutate_index=0) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1)
+    assert mutate("def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n", mutate_index=1) == (
+"def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
+
+def test_mutate_files():
+    import os
+    for dirpath, dirnames, filenames in os.walk('/Users/boxed/Projects/tri.declarative/'):
+        for f in filenames:
+            if f.endswith('.py'):
+                fullpath = os.path.join(dirpath, f)
+                # print fullpath
+                mutate(open(fullpath).read(), ALL)

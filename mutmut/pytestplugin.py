@@ -6,10 +6,13 @@ import sys
 
 
 def mutator_hook(path):
-    assert os.path.exists(MutateFinder.file_to_mutate)
-    print('mutator_hook', path, MutateFinder.file_to_mutate.startswith(path))
-    if MutateFinder.file_to_mutate.startswith(path):
-        return MutateFinder(path)
+    if path:
+        assert os.path.exists(MutateFinder.file_to_mutate)
+        print('mutator_hook', path, MutateFinder.file_to_mutate.startswith(path))
+        if MutateFinder.file_to_mutate.startswith(path):
+            if not MutateFinder.path:
+                MutateFinder.path = path
+            return MutateFinder()
     raise ImportError
 
 

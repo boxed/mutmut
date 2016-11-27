@@ -1,18 +1,27 @@
 #!/usr/bin/env python
 
 import os
-
-# 1. How many mutations are available?
-#   a. for every source file, count mutations
-#   b. sum total
-# 2. For every available mutation, run test suite against that mutation
-import sys
 from subprocess import check_call
 
-from mutmut import mutate, ALL, count_mutations
+import click
+from mutmut import mutate, ALL, count_mutations, mutate_file
+from shutil import move
 
 
-def main(paths_to_mutate):
+@click.command()
+@click.argument('paths_to_mutate', nargs=-1)
+@click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
+@click.option('--backup/--no-backup', default=True)
+@click.option('--mutation', type=click.INT)
+def main(paths_to_mutate, apply, mutation, backup):
+    if apply:
+        assert mutation is not None
+        assert len(paths_to_mutate) == 1
+        mutations_performed = mutate_file(backup, mutation, paths_to_mutate[0])
+        if mutations_performed == 0:
+            print 'ERROR: no mutations performed. Are you sure the index is not too big?'
+        return
+
     mutations_by_file = {}
 
     for path in paths_to_mutate:
@@ -28,7 +37,13 @@ def main(paths_to_mutate):
         for mutation_index in range(mutations):
             progress += 1
             print '%s out of %s' % (progress, total)
-            check_call('py.test tests/ --mutate="%s:%s" -s' % (filename, mutation_index), shell=True)
+            # result = check_call('py.test tests/ --mutate="%s:%s" -s' % (filename, mutation_index), shell=True)  # TODO: fix plugin, then use this instead
+            mutate_file(backup=True, mutation=mutation_index, filename=filename)
+            result = check_call('py.test tests/', shell=True)
+            os.remove(filename)
+            move(filename+'.bak', filename)
+            if result == 0:  # if success
+                print 'FAIL: mutation %s:%s did not trigger failed tests' % (filename, mutation_index)
 
 
 def python_source_files(path):
@@ -46,4 +61,4 @@ def number_of_mutations(path):
     return total
 
 if __name__ == '__main__':
-    main([sys.argv[1]])
+    main()

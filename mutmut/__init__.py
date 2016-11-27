@@ -1,4 +1,6 @@
 # import numpy
+from copy import deepcopy
+
 from baron import parse, dumps
 from tri.declarative import evaluate
 
@@ -7,19 +9,34 @@ __version__ = '0.0.1'
 ALL = 'all'
 
 
+def to_int(s, base=10):
+    if s.upper().endswith('L'):
+        s = s[:-1]
+    if base == 8 and s.lower().startswith('o'):
+        s = s[1:]
+
+    return int(s, base=base)
+
+
 def comparison_mutation(value, **_):
-    value['first'] = {
+    result = deepcopy(value)
+    result['first'] = {
         '<': '<=',
         '<=': '<',
         '>': '>=',
         '>=': '>',
         '==': '!=',
         '!=': '==',
+        '<>': '==',
         'in': 'not in',
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
     }[value['first']]
-    return value
+    return result
+
+
+def float_exponent_mutation(value, **_):
+    ASDASDASDSA
 
 
 mutations_by_type = {
@@ -43,19 +60,23 @@ mutations_by_type = {
         value=lambda value, **_: {
             'not': 'not not',
             '-': '',
+            '~': '',
         }[value],
     ),
-    'int': dict(value=lambda value, **_: repr(int(value) + 1)),
+    'int': dict(value=lambda value, **_: repr(to_int(value) + 1)),
     'long': dict(value=lambda value, **_: repr(long(value) + 1)),
-    # 'octa': dict(value=lambda value, **_: repr(long(value) + 1)),
-    'hexa': dict(value=lambda value, **_: '0x%x' % (int(value[2:], base=16) + 1)),
-    'binary': dict(value=lambda value, **_: '0b%x' % (int(value[2:], base=2) + 1)),
+    'octa': dict(value=lambda value, **_: repr(to_int(value[1:], base=8) + 1)),
+    'hexa': dict(value=lambda value, **_: '0x%x' % (to_int(value[2:], base=16) + 1)),
+    'binary': dict(value=lambda value, **_: '0b%x' % (to_int(value[2:], base=2) + 1)),
     # 'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
     'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),  # this might be a bit brutal :P
+    'float_exponent': dict(value=float_exponent_mutation),  # this might be a bit brutal :P
     'string': dict(value=lambda value, **_: value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]),
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
+    'unicode_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
+    'binary_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'return': dict(type='yield'),
     'yield': dict(type='return'),
     'continue': dict(type='break'),
@@ -84,7 +105,7 @@ mutations_by_type = {
     'comma': {},
     'from_import': {},
     'import': {},
-    'assignment': {},  # TODO
+    'assignment': {},
     'ifelseblock': {},
     'if': {},
     'elif': {},
@@ -123,6 +144,13 @@ mutations_by_type = {
     'semicolon': {},
     'string_chain': {},
     'exec': {},
+    'endl': {},
+    'def': {},
+    'getitem': {},
+    'slice': {},
+    'dot': {},
+    'list_argument': {},
+    'argument_generator_comprehension': {},
 }
 
 # TODO: detect regexes and mutate them in nasty ways?
@@ -144,10 +172,11 @@ def mutate(source, mutate_index):
     result = parse(source)
     context = Context(mutate_index=mutate_index)
     mutate_list_of_nodes(result, context=context)
-    return dumps(result).replace(' not not ', ' '), context.performed_mutations
+    result_source = dumps(result).replace(' not not ', ' ')
+    if context.performed_mutations:
+        assert source != result_source
+    return result_source, context.performed_mutations
 
-recurse = {'def'}
-ignore = {'endl'}
 mutate_and_recurse = {
     'return': ['value'],
     'tuple': ['value'],
@@ -188,6 +217,13 @@ mutate_and_recurse = {
     'while': ['test', 'value', 'else'],
     'string_chain': ['value'],
     'exec': ['globals', 'locals', 'value'],
+    'def': ['value'],
+    'atomtrailers': ['value'],
+    'getitem': ['value'],
+    'assignment': ['value', 'target'],
+    'slice': ['upper', 'step', 'lower'],
+    'list_argument': ['value'],
+    'argument_generator_comprehension': ['generators', 'result'],
 }
 
 
@@ -196,36 +232,53 @@ def mutate_node(i, context):
         return
 
     t = i['type']
-    if t in ignore:
-        return
+    # print 'mutate_node', context.index, i
 
-    if t in recurse:
-        mutate_list_of_nodes(i['value'], context=context)
-    else:
-        assert t in mutations_by_type, (t, i.keys())
-        m = mutations_by_type[t]
-        for key, vale in m.items():
+    assert t in mutations_by_type, (t, i.keys(), dumps(i))
+    m = mutations_by_type[t]
+
+    if t in mutate_and_recurse:
+        for x in mutate_and_recurse[t]:
+            if i[x] is None:
+                continue
+
+            if isinstance(i[x], list):
+                mutate_list_of_nodes(i[x], context=context)
+            else:
+                assert isinstance(i[x], dict), (i, type(i[x]), dumps(i))
+                mutate_node(i[x], context=context)
+
+            if context.performed_mutations and context.mutate_index != ALL:
+                return
+
+    for key, value in m.items():
+        old = i[key]
+        new = evaluate(value, node=i, **i)
+        if new != old:
             if context.mutate_index in (ALL, context.index):
                 context.performed_mutations += 1
-                i[key] = evaluate(m[key], node=i, **i)
+                i[key] = new
             context.index += 1
 
-        if t in mutate_and_recurse:
-            for x in mutate_and_recurse[t]:
-                if i[x] is None:
-                    continue
-
-                if isinstance(i[x], list):
-                    mutate_list_of_nodes(i[x], context=context)
-                else:
-                    assert isinstance(i[x], dict), (i, type(i[x]), dumps(i))
-                    mutate_node(i[x], context=context)
+        if context.performed_mutations and context.mutate_index != ALL:
+            return
 
 
 def mutate_list_of_nodes(result, context):
     for i in result:
         mutate_node(i, context=context)
 
+        if context.performed_mutations and context.mutate_index != ALL:
+            return
+
 
 def count_mutations(source):
     return mutate(source, ALL)[1]
+
+
+def mutate_file(backup, mutation, filename):
+    if backup:
+        open(filename + '.bak', 'w').write(open(filename).read())
+    result, mutations_performed = mutate(open(filename).read(), mutation)
+    open(filename[0], 'w').write(result)
+    return mutations_performed
