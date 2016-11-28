@@ -8,8 +8,8 @@ import pytest
         ('1-1', '2+2'),
         ('1*1', '2/2'),
         ('1/1', '2*2'),
-        # ('1.0', '1.0000000000000002'),  # using mumpy features
-        ('1.0', '101.0'),  # using mumpy features
+        # ('1.0', '1.0000000000000002'),  # using numpy features
+        ('1.0', '101.0'),
         ('True', 'False'),
         ('False', 'True'),
         ('"foo"', '"XXfooXX"'),
@@ -20,8 +20,8 @@ import pytest
         # ("0L", "1L"),
         # ("0o0", "0o1"),
         ("0", "1"),
-        ("0x0", "0x1"),
-        ("0b0", "0b1"),
+        ("0x0", "1"),
+        ("0b0", "1"),
         ("1<2", "2<=3"),
         ('(1, 2)', '(2, 3)'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
@@ -33,6 +33,7 @@ import pytest
         ('s[0]', 's[1]'),
         ('s[0] = a', 's[1] = a'),
         ('s[1:]', 's[2:]'),
+        ('1j', '2j'),
     ]
 )
 def test_basic_mutations(actual, expected):
@@ -62,9 +63,20 @@ def test_function():
 
 def test_mutate_files():
     import os
-    for dirpath, dirnames, filenames in os.walk('/Users/boxed/Projects/tri.declarative/'):
+    for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
         for f in filenames:
             if f.endswith('.py'):
                 fullpath = os.path.join(dirpath, f)
+                if fullpath in {
+                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/PublicKey/_slowmath.py',
+                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/SelfTest/Util/test_number.py',
+                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/ecdsa.py',
+                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/numbertheory.py',
+                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/numpy/core/tests/test_umath.py',
+                }:
+                    continue
                 # print fullpath
-                mutate(open(fullpath).read(), ALL)
+                full_source = open(fullpath).read()
+                if 'yield from' in full_source:
+                    continue
+                mutate(full_source, ALL)

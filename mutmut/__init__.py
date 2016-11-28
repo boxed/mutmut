@@ -9,13 +9,31 @@ __version__ = '0.0.1'
 ALL = 'all'
 
 
-def to_int(s, base=10):
-    if s.upper().endswith('L'):
-        s = s[:-1]
-    if base == 8 and s.lower().startswith('o'):
-        s = s[1:]
+def int_mutation(value, **_):
+    suffix = ''
+    if value.upper().endswith('L'):
+        value = value[:-1]
+        suffix = 'L'
 
-    return int(s, base=base)
+    if value.startswith('0o'):
+        base = 8
+        value = value[2:]
+    elif value.startswith('0x'):
+        base = 16
+        value = value[2:]
+    elif value.startswith('0b'):
+        base = 2
+        value = value[2:]
+    elif value.startswith('0') and len(value) > 1:
+        base = 8
+        value = value[1:]
+    else:
+        base = 10
+
+    result = repr(int(value, base=base) + 1)
+    if not result.endswith(suffix):
+        result += suffix
+    return result
 
 
 def comparison_mutation(value, **_):
@@ -35,8 +53,16 @@ def comparison_mutation(value, **_):
     return result
 
 
-def float_exponent_mutation(value, **_):
-    ASDASDASDSA
+def float_exponant_mutation(value, **_):
+    a, b = value.upper().split('E')
+    return '%s-%s' % (a, (int(b) if b else 0) + 1)
+
+
+def complex_mutation(value, **_):
+    if '.' in value:
+        return '%sj' % (float(value[:-1])+1)
+    else:
+        return '%sj' % (int(value[:-1])+1)
 
 
 mutations_by_type = {
@@ -59,24 +85,26 @@ mutations_by_type = {
     'unitary_operator': dict(
         value=lambda value, **_: {
             'not': 'not not',
-            '-': '',
+            '-': '+',
+            '+': '-',
             '~': '',
         }[value],
     ),
-    'int': dict(value=lambda value, **_: repr(to_int(value) + 1)),
-    'long': dict(value=lambda value, **_: repr(long(value) + 1)),
-    'octa': dict(value=lambda value, **_: repr(to_int(value[1:], base=8) + 1)),
-    'hexa': dict(value=lambda value, **_: '0x%x' % (to_int(value[2:], base=16) + 1)),
-    'binary': dict(value=lambda value, **_: '0b%x' % (to_int(value[2:], base=2) + 1)),
+    'int': dict(value=int_mutation),
+    'long': dict(value=int_mutation),
+    'octa': dict(value=int_mutation),
+    'hexa': dict(value=int_mutation),
+    'binary': dict(value=int_mutation),
     # 'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
-    'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),  # this might be a bit brutal :P
-    'float_exponent': dict(value=float_exponent_mutation),  # this might be a bit brutal :P
+    'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),
+    'float_exponant': dict(value=float_exponant_mutation),
     'string': dict(value=lambda value, **_: value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]),
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'unicode_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
+    'complex': dict(value=complex_mutation),
     'return': dict(type='yield'),
     'yield': dict(type='return'),
     'continue': dict(type='break'),
@@ -150,7 +178,10 @@ mutations_by_type = {
     'slice': {},
     'dot': {},
     'list_argument': {},
+    'ellipsis': {},
     'argument_generator_comprehension': {},
+    'float_exponant_complex': {},  # TODO
+    'yield_atom': {},
 }
 
 # TODO: detect regexes and mutate them in nasty ways?
@@ -224,6 +255,7 @@ mutate_and_recurse = {
     'slice': ['upper', 'step', 'lower'],
     'list_argument': ['value'],
     'argument_generator_comprehension': ['generators', 'result'],
+    'yield_atom': ['value'],
 }
 
 
