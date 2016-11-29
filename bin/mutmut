@@ -1,11 +1,34 @@
 #!/usr/bin/env python
 
 import os
-from subprocess import check_call
+from subprocess import check_call, CalledProcessError
 
 import click
+import sys
+
 from mutmut import mutate, ALL, count_mutations, mutate_file
 from shutil import move
+
+
+# this function is stolen and modified from tqdm
+def status_printer(file):
+    """
+    Manage the printing and in-place updating of a line of characters.
+    Note that if the string is longer than a line, then in-place
+    updating may not work (it will print a new line at each refresh).
+    """
+    fp = file
+
+    last_len = [0]
+
+    def print_status(s):
+        len_s = len(s)
+        fp.write('\r' + s + (' ' * max(last_len[0] - len_s, 0)))
+        fp.flush()
+        last_len[0] = len_s
+    return print_status
+
+print_status = status_printer(sys.stdout)
 
 
 @click.command()
@@ -30,20 +53,28 @@ def main(paths_to_mutate, apply, mutation, backup):
 
     total = sum(mutations_by_file.values())
 
+    # TODO: handle ctrl+c
     print '--- starting mutation ---'
     progress = 0
     for filename, mutations in mutations_by_file.items():
-        print filename
+        # print filename
         for mutation_index in range(mutations):
             progress += 1
-            print '%s out of %s' % (progress, total)
+            print_status('%s out of %s' % (progress, total))
             # result = check_call('py.test tests/ --mutate="%s:%s" -s' % (filename, mutation_index), shell=True)  # TODO: fix plugin, then use this instead
             mutate_file(backup=True, mutation=mutation_index, filename=filename)
-            result = check_call('py.test tests/', shell=True)
+            try:
+                check_call('py.test tests/', shell=True, stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
+                print_status('')
+                print '\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index)
+            except CalledProcessError:
+                pass
             os.remove(filename)
+            try:
+                os.remove(filename+'c')  # remove .pyc file
+            except OSError:
+                pass
             move(filename+'.bak', filename)
-            if result == 0:  # if success
-                print 'FAIL: mutation %s:%s did not trigger failed tests' % (filename, mutation_index)
 
 
 def python_source_files(path):

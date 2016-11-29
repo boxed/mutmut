@@ -65,6 +65,12 @@ def complex_mutation(value, **_):
         return '%sj' % (int(value[:-1])+1)
 
 
+def string_mutation(value, **_):
+    if value.startswith('"""') or value.startswith("'''"):
+        return value[:3] + 'XX' + value[3:-3] + 'XX' + value[-3:]
+    return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
+
+
 mutations_by_type = {
     'binary_operator': dict(
         value=lambda value, **_: {
@@ -98,7 +104,7 @@ mutations_by_type = {
     # 'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
     'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),
     'float_exponant': dict(value=float_exponant_mutation),
-    'string': dict(value=lambda value, **_: value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]),
+    'string': dict(value=string_mutation),
     'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
@@ -309,8 +315,9 @@ def count_mutations(source):
 
 
 def mutate_file(backup, mutation, filename):
+    code = open(filename).read()
     if backup:
-        open(filename + '.bak', 'w').write(open(filename).read())
-    result, mutations_performed = mutate(open(filename).read(), mutation)
-    open(filename[0], 'w').write(result)
+        open(filename + '.bak', 'w').write(code)
+    result, mutations_performed = mutate(code, mutation)
+    open(filename, 'w').write(result)
     return mutations_performed
