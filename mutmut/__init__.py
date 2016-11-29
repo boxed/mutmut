@@ -208,6 +208,8 @@ def mutate(source, mutate_index):
     """
     result = parse(source)
     context = Context(mutate_index=mutate_index)
+    context.pragma_no_mutate_lines = {i+1 for i, line in enumerate(source.split('\n')) if '# pragma: no mutate' in line}  # lines are 1 based indexed
+    context.top_node = result
     mutate_list_of_nodes(result, context=context)
     result_source = dumps(result).replace(' not not ', ' ')
     if context.performed_mutations:

@@ -63,6 +63,14 @@ def test_function():
 "def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
 
+def test_pragma_no_mutate():
+    source = """
+def foo():
+    return 1+1  # pragma: no mutate
+    """
+    assert mutate(source, ALL) == source
+
+
 # def test_mutate_files():
 #     import os
 #     for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
