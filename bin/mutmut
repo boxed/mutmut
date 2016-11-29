@@ -34,7 +34,7 @@ print_status = status_printer(sys.stdout)
 @click.command()
 @click.argument('paths_to_mutate', nargs=-1)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
-@click.option('--backup/--no-backup', default=True)
+@click.option('--backup/--no-backup', default=False)
 @click.option('--mutation', type=click.INT)
 def main(paths_to_mutate, apply, mutation, backup):
     if apply:
