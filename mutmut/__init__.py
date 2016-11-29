@@ -67,7 +67,7 @@ def complex_mutation(value, **_):
 
 def string_mutation(value, **_):
     if value.startswith('"""') or value.startswith("'''"):
-        return value[:3] + 'XX' + value[3:-3] + 'XX' + value[-3:]
+        return value #value[:3] + 'XX' + value[3:-3] + 'XX' + value[-3:]
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -111,8 +111,6 @@ mutations_by_type = {
     'unicode_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'binary_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
     'complex': dict(value=complex_mutation),
-    'return': dict(type='yield'),
-    'yield': dict(type='return'),
     'continue': dict(type='break'),
     'break': dict(type='continue'),
     'name': dict(
@@ -188,9 +186,11 @@ mutations_by_type = {
     'argument_generator_comprehension': {},
     'float_exponant_complex': {},  # TODO
     'yield_atom': {},
+    'return': {},  # TODO: we should mutate "return foo" -> "return None"
+    'yield': {},  # TODO: we should mutate "yield foo" -> "yield None"
 }
 
-# TODO: detect regexes and mutate them in nasty ways?
+# TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
 
 
 class Context(object):
