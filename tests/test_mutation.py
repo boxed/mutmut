@@ -4,7 +4,6 @@ import pytest
 
 @pytest.mark.parametrize(
     'actual, expected', [
-        ('"""asd"""', '"""XXasdXX"""'),
         ('1+1', '2-2'),
         ('1-1', '2+2'),
         ('1*1', '2/2'),
@@ -42,16 +41,17 @@ def test_basic_mutations(actual, expected):
 
 
 def test_mutate_all():
-    assert mutate('def foo():\n    return 1', ALL) == ('def foo():\n    yield 2\n', 2)
+    assert mutate('def foo():\n    return 1+1', ALL) == ('def foo():\n    return 2-2\n', 3)
 
 
 def test_count_available_mutations():
-    assert count_mutations('def foo():\n    return 1') == 2
+    assert count_mutations('def foo():\n    return 1+1') == 3
 
 
 def test_perform_one_indexed_mutation():
-    assert mutate('def foo():\n    return 1', mutate_index=1) == ('def foo():\n    yield 1\n', 1)
-    assert mutate('def foo():\n    return 1', mutate_index=0) == ('def foo():\n    return 2\n', 1)
+    assert mutate('1+1', mutate_index=0) == ('2+1', 1)
+    assert mutate('1+1', mutate_index=1) == ('1+2', 1)
+    assert mutate('1+1', mutate_index=2) == ('1-1', 1)
 
     # TODO: should this case raise an exception?
     assert mutate('def foo():\n    return 1', mutate_index=2) == ('def foo():\n    return 1\n', 0)
