@@ -61,22 +61,25 @@ def test_function():
     assert mutate("def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n", mutate_index=1) == (
 "def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
-def test_mutate_files():
-    import os
-    for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
-        for f in filenames:
-            if f.endswith('.py'):
-                fullpath = os.path.join(dirpath, f)
-                if fullpath in {
-                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/PublicKey/_slowmath.py',
-                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/SelfTest/Util/test_number.py',
-                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/ecdsa.py',
-                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/numbertheory.py',
-                    '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/numpy/core/tests/test_umath.py',
-                }:
-                    continue
-                # print fullpath
-                full_source = open(fullpath).read()
-                if 'yield from' in full_source:
-                    continue
-                mutate(full_source, ALL)
+
+# def test_mutate_files():
+#     import os
+#     for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
+#         for f in filenames:
+#             if f.endswith('.py'):
+#                 fullpath = os.path.join(dirpath, f)
+#                 if fullpath in {
+#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/PublicKey/_slowmath.py',
+#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/SelfTest/Util/test_number.py',
+#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/ecdsa.py',
+#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/numbertheory.py',
+#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/numpy/core/tests/test_umath.py',
+#                 }:
+#                     continue
+#                 if 'py3' in fullpath:
+#                     continue
+#                 # print fullpath
+#                 full_source = open(fullpath).read()
+#                 if 'yield from' in full_source:
+#                     continue
+#                 mutate(full_source, ALL)
