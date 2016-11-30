@@ -198,6 +198,8 @@ class Context(object):
         self.index = 0
         self.performed_mutations = 0
         self.mutate_index = mutate_index
+        self.current_line = 1
+        self.pragma_no_mutate_lines = set()
 
 
 def mutate(source, mutate_index):
@@ -272,6 +274,10 @@ def mutate_node(i, context):
         return
 
     t = i['type']
+
+    if t == 'endl':
+        context.current_line += 1
+
     # print 'mutate_node', context.index, i
 
     assert t in mutations_by_type, (t, i.keys(), dumps(i))
@@ -293,6 +299,9 @@ def mutate_node(i, context):
 
     for key, value in m.items():
         old = i[key]
+        if context.current_line in context.pragma_no_mutate_lines:
+            continue
+
         new = evaluate(value, node=i, **i)
         if new != old:
             if context.mutate_index in (ALL, context.index):
