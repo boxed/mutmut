@@ -61,7 +61,8 @@ def complex_mutation(value, **_):
         return '%sj' % (int(value[:-1])+1)
 
 
-def string_mutation(value, **_):
+def string_mutation(value, context, **_):
+    context.current_line += value.count('\n')
     if value.startswith('"""') or value.startswith("'''"):
         return value #value[:3] + 'XX' + value[3:-3] + 'XX' + value[-3:]
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
@@ -251,7 +252,7 @@ def mutate_node(i, context):
         if context.current_line in context.pragma_no_mutate_lines:
             continue
 
-        new = evaluate(value, node=i, **i)
+        new = evaluate(value, context=context, node=i, **i)
         assert not callable(new)
         if new != old:
             if context.mutate_index in (ALL, context.index):
