@@ -1,4 +1,3 @@
-# import numpy
 from baron import parse, dumps
 from tri.declarative import evaluate
 

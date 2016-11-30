@@ -72,8 +72,8 @@ setup(
     description='',
     long_description=readme + '\n\n' + history,
     author='Anders Hovmöller',
-    author_email='',
-    url='',
+    author_email='boxed@killingar.net',
+    url='https://github.com/boxed/mutmut',
     packages=find_packages('.'),
     package_dir={'': '.'},
     include_package_data=True,
@@ -95,10 +95,11 @@ setup(
     test_suite='tests',
     cmdclass={'tag': Tag,
               'release_check': ReleaseCheck},
-    entry_points={
-        'pytest11': [
-            'mutmut = mutmut.pytestplugin',
-        ]
-    },
+    # TODO: if I add this, my coverage report gets screwed up. FML
+    # entry_points={
+    #     'pytest11': [
+    #         'mutmut = mutmut.pytestplugin',
+    #     ]
+    # },
     scripts=['bin/mutmut'],
 )

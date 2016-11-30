@@ -1,5 +1,3 @@
-importlib2
 baron
 tri.declarative
-#numpy
 click
