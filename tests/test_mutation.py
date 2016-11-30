@@ -64,11 +64,8 @@ def test_function():
 
 
 def test_pragma_no_mutate():
-    source = """
-def foo():
-    return 1+1  # pragma: no mutate
-    """
-    assert mutate(source, ALL) == source
+    source = """def foo():\n    return 1+1  # pragma: no mutate\n"""
+    assert mutate(source, ALL) == (source, 0)
 
 
 # def test_mutate_files():

@@ -1,6 +1,4 @@
 # import numpy
-from copy import deepcopy
-
 from baron import parse, dumps
 from tri.declarative import evaluate
 
@@ -36,9 +34,8 @@ def int_mutation(value, **_):
     return result
 
 
-def comparison_mutation(value, **_):
-    result = deepcopy(value)
-    result['first'] = {
+def comparison_mutation(first, **_):
+    return {
         '<': '<=',
         '<=': '<',
         '>': '>=',
@@ -49,8 +46,7 @@ def comparison_mutation(value, **_):
         'in': 'not in',
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
-    }[value['first']]
-    return result
+    }[first]
 
 
 def float_exponant_mutation(value, **_):
@@ -119,8 +115,8 @@ mutations_by_type = {
             'False': 'True',
             # TODO: probably need to add a lot of things here... None, some builtins maybe, what more?
         }.get(value, value)),
-    'comparison': dict(
-        value=comparison_mutation,
+    'comparison_operator': dict(
+        first=comparison_mutation,
     ),
     'boolean_operator': dict(
         value=lambda value, **_: {
@@ -186,6 +182,11 @@ mutations_by_type = {
     'argument_generator_comprehension': {},
     'float_exponant_complex': {},  # TODO
     'yield_atom': {},
+    'space': {},
+    'name_as_name': {},
+    'dotted_as_name': {},
+    'comparison': {},
+    'except': {},
     'return': {},  # TODO: we should mutate "return foo" -> "return None"
     'yield': {},  # TODO: we should mutate "yield foo" -> "yield None"
 }
@@ -211,62 +212,11 @@ def mutate(source, mutate_index):
     result = parse(source)
     context = Context(mutate_index=mutate_index)
     context.pragma_no_mutate_lines = {i+1 for i, line in enumerate(source.split('\n')) if '# pragma: no mutate' in line}  # lines are 1 based indexed
-    context.top_node = result
     mutate_list_of_nodes(result, context=context)
     result_source = dumps(result).replace(' not not ', ' ')
     if context.performed_mutations:
         assert source != result_source
     return result_source, context.performed_mutations
-
-mutate_and_recurse = {
-    'return': ['value'],
-    'tuple': ['value'],
-    'list': ['value'],
-    'set': ['value'],
-    'dict': ['value'],
-    'ifelseblock': ['value'],
-    'if': ['value'],
-    'comprehension_if': ['value'],
-    'elif': ['value'],
-    'else': ['value'],
-    'binary_operator': ['first', 'second'],
-    'comparison': ['first', 'second'],
-    'dict_comprehension': ['generators', 'result'],
-    'list_comprehension': ['generators', 'result'],
-    'set_comprehension': ['generators', 'result'],
-    'generator_comprehension': ['generators', 'result'],
-    'comprehension_loop': ['ifs', 'iterator', 'target'],
-    'unitary_operator': ['target'],
-    'dictitem': ['key', 'value'],
-    'for': ['else', 'iterator', 'target', 'value'],
-    'raise': ['instance', 'value'],
-    'try': ['else', 'finally', 'value'],
-    'finally': ['value'],
-    'class': ['inherit_from', 'decorators', 'value'],
-    'decorator': ['value', 'call'],
-    'print': ['value'],
-    'ternary_operator': ['value', 'first', 'second'],
-    'call': ['value'],
-    'call_argument': ['value', 'target'],
-    'lambda': ['value', 'arguments'],
-    'def_argument': ['value', 'target'],
-    'dict_argument': ['value'],
-    'with': ['value', 'contexts'],
-    'with_context_item': ['value', 'as'],
-    'associative_parenthesis': ['value'],
-    'boolean_operator': ['first', 'second'],
-    'while': ['test', 'value', 'else'],
-    'string_chain': ['value'],
-    'exec': ['globals', 'locals', 'value'],
-    'def': ['value'],
-    'atomtrailers': ['value'],
-    'getitem': ['value'],
-    'assignment': ['value', 'target'],
-    'slice': ['upper', 'step', 'lower'],
-    'list_argument': ['value'],
-    'argument_generator_comprehension': ['generators', 'result'],
-    'yield_atom': ['value'],
-}
 
 
 def mutate_node(i, context):
@@ -278,31 +228,31 @@ def mutate_node(i, context):
     if t == 'endl':
         context.current_line += 1
 
-    # print 'mutate_node', context.index, i
-
     assert t in mutations_by_type, (t, i.keys(), dumps(i))
     m = mutations_by_type[t]
 
-    if t in mutate_and_recurse:
-        for x in mutate_and_recurse[t]:
-            if i[x] is None:
-                continue
+    for _, x in sorted(i.items()):
+        if x is None:
+            continue
 
-            if isinstance(i[x], list):
-                mutate_list_of_nodes(i[x], context=context)
-            else:
-                assert isinstance(i[x], dict), (i, type(i[x]), dumps(i))
-                mutate_node(i[x], context=context)
+        if isinstance(x, list):
+            if x:
+                mutate_list_of_nodes(x, context=context)
+        elif isinstance(x, dict):
+            mutate_node(x, context=context)
+        else:
+            assert isinstance(x, (str, unicode, bool))
 
-            if context.performed_mutations and context.mutate_index != ALL:
-                return
+        if context.performed_mutations and context.mutate_index != ALL:
+            return
 
-    for key, value in m.items():
+    for key, value in sorted(m.items()):
         old = i[key]
         if context.current_line in context.pragma_no_mutate_lines:
             continue
 
         new = evaluate(value, node=i, **i)
+        assert not callable(new)
         if new != old:
             if context.mutate_index in (ALL, context.index):
                 context.performed_mutations += 1
