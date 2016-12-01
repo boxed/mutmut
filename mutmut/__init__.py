@@ -49,8 +49,8 @@ def comparison_mutation(first, **_):
 
 
 def float_exponant_mutation(value, **_):
-    a, b = value.upper().split('E')
-    return '%s-%s' % (a, (int(b) if b else 0) + 1)
+    a, b = value.lower().split('e')
+    return '%se%s' % (a, (int(b) if b else 0) + 1)
 
 
 def complex_mutation(value, **_):
@@ -61,9 +61,9 @@ def complex_mutation(value, **_):
 
 
 def string_mutation(value, context, **_):
-    context.current_line += value.count('\n')
+    context.current_line += value.count('\n')  # Advance line count!
     if value.startswith('"""') or value.startswith("'''"):
-        return value #value[:3] + 'XX' + value[3:-3] + 'XX' + value[-3:]
+        return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -233,7 +233,7 @@ def mutate_node(i, context):
 
     for _, x in sorted(i.items()):
         if x is None:
-            continue
+            continue  # pragma: no cover
 
         if isinstance(x, list):
             if x:
@@ -275,7 +275,7 @@ def count_mutations(source):
     return mutate(source, ALL)[1]
 
 
-def mutate_file(backup, mutation, filename):
+def mutate_file(backup, mutation, filename):  # pragma: no cover
     code = open(filename).read()
     if backup:
         open(filename + '.bak', 'w').write(code)

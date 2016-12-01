@@ -63,6 +63,8 @@ class ReleaseCheck(Command):
 
         print("Ok to distribute files")
 
+import inspect
+running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
 # NB: _don't_ add namespace_packages to setup(), it'll break
 #     everything using imp.find_module
@@ -95,11 +97,11 @@ setup(
     test_suite='tests',
     cmdclass={'tag': Tag,
               'release_check': ReleaseCheck},
-    # TODO: if I add this, my coverage report gets screwed up. FML
-    # entry_points={
-    #     'pytest11': [
-    #         'mutmut = mutmut.pytestplugin',
-    #     ]
-    # },
+    # if I add entry_points while pytest runs, it imports before the coverage collecting starts
+    entry_points={
+        'pytest11': [
+            'mutmut = mutmut.pytestplugin',
+        ]
+    } if running_inside_tests else {},
     scripts=['bin/mutmut'],
 )

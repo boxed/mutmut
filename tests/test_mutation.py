@@ -34,6 +34,11 @@ import pytest
         ('s[0] = a', 's[1] = a'),
         ('s[1:]', 's[2:]'),
         ('1j', '2j'),
+        ('1.0j', '2.0j'),
+        ('0o1', '2'),
+        ('010', '9'),
+        ('1.0e10', '1.0e11'),
+        ("'''foo'''", "'''foo'''"),
     ]
 )
 def test_basic_mutations(actual, expected):
