@@ -1,9 +1,15 @@
+import sys
 from baron import parse, dumps
 from tri.declarative import evaluate
 
 __version__ = '0.0.1'
 
 ALL = 'all'
+
+if sys.version_info < (3, 0):
+    text_types = (str, unicode)
+else:
+    text_types = (str,)
 
 
 def int_mutation(value, **_):
@@ -241,7 +247,7 @@ def mutate_node(i, context):
         elif isinstance(x, dict):
             mutate_node(x, context=context)
         else:
-            assert isinstance(x, (str, unicode, bool))
+            assert isinstance(x, text_types + (bool,))
 
         if context.performed_mutations and context.mutate_index != ALL:
             return
