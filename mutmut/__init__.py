@@ -2,7 +2,7 @@ import sys
 from baron import parse, dumps
 from tri.declarative import evaluate
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 ALL = 'all'
 
