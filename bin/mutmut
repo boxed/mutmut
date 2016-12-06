@@ -38,7 +38,8 @@ print_status = status_printer(sys.stdout)
 @click.option('--mutation', type=click.INT)
 @click.option('--runner', default='py.test')
 @click.option('--testsdir', default='tests/')
-def main(paths_to_mutate, apply, mutation, backup, runner, testsdir):
+@click.option('-s', help='turn off output capture', is_flag=True)
+def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
     if apply:
         assert mutation is not None
         assert len(paths_to_mutate) == 1
@@ -68,7 +69,9 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir):
             try:
                 assert mutate_file(backup=True, mutation=mutation_index, filename=filename)
                 try:
-                    check_call('%s %s' % (runner, testsdir), shell=True, stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
+                    stdout = open('/dev/null', 'w') if not s else None
+                    stderr = open('/dev/null', 'w') if not s else None
+                    check_call('%s %s' % (runner, testsdir), shell=True, stdout=stdout, stderr=stderr)
                     print_status('')
                     print '\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index)
                 except CalledProcessError:
