@@ -40,12 +40,13 @@ print_status = status_printer(sys.stdout)
 @click.option('--testsdir', default='tests/')
 @click.option('-s', help='turn off output capture', is_flag=True)
 def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     if apply:
         assert mutation is not None
         assert len(paths_to_mutate) == 1
         mutations_performed = mutate_file(backup, mutation, paths_to_mutate[0])
         if mutations_performed == 0:
-            print 'ERROR: no mutations performed. Are you sure the index is not too big?'
+            print('ERROR: no mutations performed. Are you sure the index is not too big?')
         return
 
     mutations_by_file = {}
@@ -56,7 +57,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
 
     total = sum(mutations_by_file.values())
 
-    print '--- starting mutation ---'
+    print('--- starting mutation ---')
     progress = 0
     for filename, mutations in mutations_by_file.items():
         # print filename
@@ -73,8 +74,8 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
                     stderr = open('/dev/null', 'w') if not s else None
                     check_call('%s %s' % (runner, testsdir), shell=True, stdout=stdout, stderr=stderr)
                     print_status('')
-                    print '\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index)
-                except CalledProcessError:
+                    print('\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index))
+                except CalledProcessError as e:
                     pass
                 os.remove(filename)
                 try:
