@@ -49,6 +49,20 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
             print('ERROR: no mutations performed. Are you sure the index is not too big?')
         return
 
+    null_stdout = open('/dev/null', 'w') if not s else None
+    null_stderr = open('/dev/null', 'w') if not s else None
+
+    test_command = '%s %s' % (runner, testsdir)
+
+    def run_tests():
+        check_call(test_command, shell=True, stdout=null_stdout, stderr=null_stderr)
+
+    try:
+        run_tests()
+    except CalledProcessError:
+        print("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
+        return
+
     mutations_by_file = {}
 
     for path in paths_to_mutate:
@@ -70,9 +84,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
             try:
                 assert mutate_file(backup=True, mutation=mutation_index, filename=filename)
                 try:
-                    stdout = open('/dev/null', 'w') if not s else None
-                    stderr = open('/dev/null', 'w') if not s else None
-                    check_call('%s %s' % (runner, testsdir), shell=True, stdout=stdout, stderr=stderr)
+                    run_tests()
                     print_status('')
                     print('\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index))
                 except CalledProcessError as e:
