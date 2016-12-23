@@ -1,6 +1,6 @@
 import sys
 from baron import parse, dumps
-from tri.declarative import evaluate
+from tri.declarative import evaluate, dispatch, Namespace
 
 __version__ = '0.0.2'
 
@@ -201,22 +201,30 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, mutate_index):
+    def __init__(self, mutate_index, filename=None, exclude=lambda context: False):
         self.index = 0
         self.performed_mutations = 0
         self.mutate_index = mutate_index
         self.current_line = 1
         self.pragma_no_mutate_lines = set()
+        self.filename = filename
+        self.exclude = exclude
+
+    def exclude_line(self):
+        return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
 
 
-def mutate(source, mutate_index):
+@dispatch(
+    context=Namespace(),
+)
+def mutate(source, mutate_index, context):
     """
     :param source: source code
     :param mutate_index: the index of the mutation to be performed, if ALL mutates all available places
     :return: tuple: mutated source code, number of mutations performed
     """
     result = parse(source)
-    context = Context(mutate_index=mutate_index)
+    context = Context(mutate_index=mutate_index, **context)
     context.pragma_no_mutate_lines = {i+1 for i, line in enumerate(source.split('\n')) if '# pragma: no mutate' in line}  # lines are 1 based indexed
     mutate_list_of_nodes(result, context=context)
     result_source = dumps(result).replace(' not not ', ' ')
@@ -254,7 +262,7 @@ def mutate_node(i, context):
 
     for key, value in sorted(m.items()):
         old = i[key]
-        if context.current_line in context.pragma_no_mutate_lines:
+        if context.exclude_line():
             continue
 
         new = evaluate(value, context=context, node=i, **i)
@@ -277,14 +285,21 @@ def mutate_list_of_nodes(result, context):
             return
 
 
-def count_mutations(source):
-    return mutate(source, ALL)[1]
+@dispatch(
+    context=Namespace(),
+)
+def count_mutations(source, context):
+    return mutate(source, ALL, context=context)[1]
 
 
-def mutate_file(backup, mutation, filename):  # pragma: no cover
+@dispatch(
+    context=Namespace(),
+)
+def mutate_file(backup, mutation, filename, context):  # pragma: no cover
     code = open(filename).read()
     if backup:
         open(filename + '.bak', 'w').write(code)
-    result, mutations_performed = mutate(code, mutation)
+    context.filename = filename
+    result, mutations_performed = mutate(code, mutation, context=context)
     open(filename, 'w').write(result)
     return mutations_performed

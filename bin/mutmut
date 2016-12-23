@@ -37,9 +37,10 @@ print_status = status_printer(sys.stdout)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--mutation', type=click.INT)
 @click.option('--runner', default='py.test')
+@click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--testsdir', default='tests/')
 @click.option('-s', help='turn off output capture', is_flag=True)
-def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
+def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s, use_coverage):
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     if apply:
         assert mutation is not None
@@ -63,11 +64,28 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
         print("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
         return
 
+    coverage_data = None
+    if use_coverage:
+        print('Using coverage data from .coverage file')
+        import coverage
+        coverage_data = coverage.CoverageData()
+        coverage_data.read_file('.coverage')
+
+    def exclude(context):
+        if use_coverage:
+            measured_lines = coverage_data.lines(os.path.abspath(context.filename))
+            if measured_lines is None:
+                return True
+            if context.current_line not in measured_lines:
+                return True
+
+        return False
+
     mutations_by_file = {}
 
     for path in paths_to_mutate:
         for filename in python_source_files(path):
-            mutations_by_file[filename] = count_mutations(open(filename).read())
+            mutations_by_file[filename] = count_mutations(open(filename).read(), context__filename=filename, context__exclude=exclude)
 
     total = sum(mutations_by_file.values())
 
@@ -82,7 +100,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
             print_status('%s out of %s' % (progress, total))
             # result = check_call('py.test tests/ --mutate="%s:%s" -s' % (filename, mutation_index), shell=True)  # TODO: fix plugin, then use this instead
             try:
-                assert mutate_file(backup=True, mutation=mutation_index, filename=filename)
+                assert mutate_file(backup=True, mutation=mutation_index, filename=filename, context__exclude=exclude)
                 try:
                     run_tests()
                     print_status('')
@@ -95,7 +113,10 @@ def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s):
                 except OSError:
                     pass
             finally:
-                move(filename+'.bak', filename)
+                try:
+                    move(filename+'.bak', filename)
+                except IOError:
+                    pass
 
 
 def python_source_files(path):
