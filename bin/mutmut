@@ -41,6 +41,10 @@ print_status = status_printer(sys.stdout)
 @click.option('--testsdir', default='tests/')
 @click.option('-s', help='turn off output capture', is_flag=True)
 def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s, use_coverage):
+    if not paths_to_mutate:
+        print('You must specify a list of paths to mutate')
+        return
+
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     if apply:
         assert mutation is not None
