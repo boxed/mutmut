@@ -4,6 +4,7 @@ venv
 table.css.map
 .idea
 .cache
+.DS_Store
 
 # C extensions
 *.so

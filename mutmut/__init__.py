@@ -119,6 +119,7 @@ mutations_by_type = {
         value=lambda value, **_: {
             'True': 'False',
             'False': 'True',
+            'deepcopy': 'copy',
             # TODO: probably need to add a lot of things here... None, some builtins maybe, what more?
         }.get(value, value)),
     'comparison_operator': dict(
