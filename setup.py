@@ -50,7 +50,7 @@ class ReleaseCheck(Command):
 
     def run(self):
         from subprocess import check_output
-        tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip()
+        tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
         version = read_version()
         if tag != version:
             print('Missing %s tag on release' % version)
@@ -104,4 +104,14 @@ setup(
         ]
     } if running_inside_tests else {},
     scripts=['bin/mutmut'],
+    data_files=[
+        'README.rst',
+        'HISTORY.rst',
+        'LICENSE',
+        'requirements.txt',
+        'venv_requirements.txt',
+        'test_requirements.txt',
+        'setup.cfg',
+        'tox.ini',
+    ],
 )

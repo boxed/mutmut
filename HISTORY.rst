@@ -34,6 +34,19 @@ Changelog
 
 * Fixes failing attempts to mutate parentheses. (Thanks Hristo Georgiev!)
 
+
+0.0.5 (2017-05-06)
+~~~~~~~~~~~~~~~~~~
+
+* Try to fix pypi package
+
+
+0.0.4 (2017-05-06)
+~~~~~~~~~~~~~~~~~~
+
+* Try to fix pypi package
+
+
 0.0.3 (2017-05-05)
 ~~~~~~~~~~~~~~~~~~
 
