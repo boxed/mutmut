@@ -108,5 +108,10 @@ setup(
         'README.rst',
         'HISTORY.rst',
         'LICENSE',
+        'requirements.txt',
+        'venv_requirements.txt',
+        'test_requirements.txt',
+        'setup.cfg',
+        'tox.ini',
     ],
 )
