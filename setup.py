@@ -104,4 +104,9 @@ setup(
         ]
     } if running_inside_tests else {},
     scripts=['bin/mutmut'],
+    data_files=[
+        'README.rst',
+        'HISTORY.rst',
+        'LICENSE',
+    ],
 )
