@@ -175,6 +175,8 @@ mutations_by_type = {
     'with': {},
     'with_context_item': {},
     'associative_parenthesis': {},
+    'left_parenthesis': {},
+    'right_parenthesis': {},
     'pass': {},
     'semicolon': {},
     'string_chain': {},
