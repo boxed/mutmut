@@ -73,6 +73,11 @@ def test_pragma_no_mutate():
     assert mutate(source, ALL) == (source, 0)
 
 
+def test_mutate_decorator():
+    source = """@foo\ndef foo():\n    pass\n"""
+    assert mutate(source, ALL) == (source.replace('@foo', ''), 1)
+
+
 # def test_mutate_files():
 #     import os
 #     for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):

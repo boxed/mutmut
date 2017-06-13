@@ -1,6 +1,15 @@
 Changelog
 ---------
 
+0.0.4 (2017-06-13)
+~~~~~~~~~~~~~~~~~~
+
+* New mutation: remove decorators!
+
+* Improved status while running. This should make it easier to handle when you hit mutants that cause infinite loops.
+
+* Fixes failing attempts to mutate parentheses. (Thanks Hristo Georgiev!)
+
 0.0.3 (2017-05-05)
 ~~~~~~~~~~~~~~~~~~
 

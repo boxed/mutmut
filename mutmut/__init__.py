@@ -2,7 +2,7 @@ import sys
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 
 ALL = 'all'
 
@@ -73,6 +73,8 @@ def string_mutation(value, context, **_):
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
+NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
+
 mutations_by_type = {
     'binary_operator': dict(
         value=lambda value, **_: {
@@ -131,6 +133,7 @@ mutations_by_type = {
             'and': 'or',
         }[value],
     ),
+    'decorator': dict(replace_entire_node_with=NEWLINE),
 
     # Don't mutate:
     'tuple': {},
@@ -162,7 +165,6 @@ mutations_by_type = {
     'del': {},
     'assert': {},
     'raise': {},
-    'decorator': {},
     'dotted_name': {},
     'global': {},
     'print': {},
@@ -247,6 +249,15 @@ def mutate_node(i, context):
 
     assert t in mutations_by_type, (t, i.keys(), dumps(i))
     m = mutations_by_type[t]
+
+    if 'replace_entire_node_with' in m:
+        if context.mutate_index in (ALL, context.index):
+            i.clear()
+            for k, v in m['replace_entire_node_with'].items():
+                i[k] = v
+            context.performed_mutations += 1
+        context.index += 1
+        return
 
     for _, x in sorted(i.items()):
         if x is None:
