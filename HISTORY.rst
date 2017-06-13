@@ -1,7 +1,7 @@
 Changelog
 ---------
 
-0.0.4 (2017-06-13)
+0.0.6 (2017-06-13)
 ~~~~~~~~~~~~~~~~~~
 
 * New mutation: remove decorators!
