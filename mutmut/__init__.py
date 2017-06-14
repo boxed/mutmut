@@ -251,6 +251,9 @@ def mutate_node(i, context):
     m = mutations_by_type[t]
 
     if 'replace_entire_node_with' in m:
+        if context.exclude_line():
+            return
+
         if context.mutate_index in (ALL, context.index):
             i.clear()
             for k, v in m['replace_entire_node_with'].items():
