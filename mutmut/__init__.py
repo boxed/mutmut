@@ -1,10 +1,24 @@
 import sys
+from ConfigParser import ConfigParser
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
+from tri.struct import Struct
 
 __version__ = '0.0.6'
 
 ALL = 'all'
+
+
+def read_config():
+    config_parser = ConfigParser()
+    config_parser.read('setup.cfg')
+    s = 'mutmut'
+    return Struct(
+        dict_synonyms=[x.strip() for x in config_parser.get(s, 'dict_synonyms').split(',')] + ['dict'],
+    )
+
+config = read_config()
+
 
 if sys.version_info < (3, 0):
     text_types = (str, unicode)
@@ -73,6 +87,18 @@ def string_mutation(value, context, **_):
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
+
+def call_argument_mutation(target, context, **_):
+    assert context.stack[-2]['type'] == 'call'
+    assert context.stack[-3]['value'][0]['type'] == 'name'
+    if context.stack[-3]['value'][0]['value'] in config.dict_synonyms:
+        target['value'] += 'XX'
+        return target
+    else:
+        return target
+
+
+
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 mutations_by_type = {
@@ -134,6 +160,7 @@ mutations_by_type = {
         }[value],
     ),
     'decorator': dict(replace_entire_node_with=NEWLINE),
+    'call_argument': dict(target=call_argument_mutation),
 
     # Don't mutate:
     'tuple': {},
@@ -170,7 +197,6 @@ mutations_by_type = {
     'print': {},
     'ternary_operator': {},
     'call': {},
-    'call_argument': {},
     'lambda': {},
     'def_argument': {},
     'dict_argument': {},
@@ -214,6 +240,7 @@ class Context(object):
         self.pragma_no_mutate_lines = set()
         self.filename = filename
         self.exclude = exclude
+        self.stack = []
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
@@ -242,56 +269,61 @@ def mutate_node(i, context):
     if not i:
         return
 
-    t = i['type']
+    context.stack.append(i)
+    try:
 
-    if t == 'endl':
-        context.current_line += 1
+        t = i['type']
 
-    assert t in mutations_by_type, (t, i.keys(), dumps(i))
-    m = mutations_by_type[t]
+        if t == 'endl':
+            context.current_line += 1
 
-    if 'replace_entire_node_with' in m:
-        if context.exclude_line():
-            return
+        assert t in mutations_by_type, (t, i.keys(), dumps(i))
+        m = mutations_by_type[t]
 
-        if context.mutate_index in (ALL, context.index):
-            i.clear()
-            for k, v in m['replace_entire_node_with'].items():
-                i[k] = v
-            context.performed_mutations += 1
-        context.index += 1
-        return
+        if 'replace_entire_node_with' in m:
+            if context.exclude_line():
+                return
 
-    for _, x in sorted(i.items()):
-        if x is None:
-            continue  # pragma: no cover
-
-        if isinstance(x, list):
-            if x:
-                mutate_list_of_nodes(x, context=context)
-        elif isinstance(x, dict):
-            mutate_node(x, context=context)
-        else:
-            assert isinstance(x, text_types + (bool,))
-
-        if context.performed_mutations and context.mutate_index != ALL:
-            return
-
-    for key, value in sorted(m.items()):
-        old = i[key]
-        if context.exclude_line():
-            continue
-
-        new = evaluate(value, context=context, node=i, **i)
-        assert not callable(new)
-        if new != old:
             if context.mutate_index in (ALL, context.index):
+                i.clear()
+                for k, v in m['replace_entire_node_with'].items():
+                    i[k] = v
                 context.performed_mutations += 1
-                i[key] = new
             context.index += 1
-
-        if context.performed_mutations and context.mutate_index != ALL:
             return
+
+        for _, x in sorted(i.items()):
+            if x is None:
+                continue  # pragma: no cover
+
+            if isinstance(x, list):
+                if x:
+                    mutate_list_of_nodes(x, context=context)
+            elif isinstance(x, dict):
+                mutate_node(x, context=context)
+            else:
+                assert isinstance(x, text_types + (bool,))
+
+            if context.performed_mutations and context.mutate_index != ALL:
+                return
+
+        for key, value in sorted(m.items()):
+            old = i[key]
+            if context.exclude_line():
+                continue
+
+            new = evaluate(value, context=context, node=i, **i)
+            assert not callable(new)
+            if new != old:
+                if context.mutate_index in (ALL, context.index):
+                    context.performed_mutations += 1
+                    i[key] = new
+                context.index += 1
+
+            if context.performed_mutations and context.mutate_index != ALL:
+                return
+    finally:
+        context.stack.pop()
 
 
 def mutate_list_of_nodes(result, context):

@@ -38,7 +38,11 @@ import pytest
         ('0o1', '2'),
         ('010', '9'),
         ('1.0e10', '1.0e11'),
-        ("'''foo'''", "'''foo'''"),
+        ("'''foo'''", "'''foo'''"),  # don't mutate things we assume to be docstrings
+        ("dict(a=b)", "dict(aXX=b)"),
+        ("Struct(a=b)", "Struct(aXX=b)"),
+        ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
+        ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),  # shouldn't be mutated
     ]
 )
 def test_basic_mutations(actual, expected):
