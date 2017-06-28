@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+0.0.8 (2017-06-28)
+~~~~~~~~~~~~~~~~~~
+
+* Previous version had broken version on pypi
+
+
 0.0.7 (2017-06-28)
 ~~~~~~~~~~~~~~~~~~
 
