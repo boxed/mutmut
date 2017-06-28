@@ -1,6 +1,16 @@
 Changelog
 ---------
 
+0.0.7 (2017-06-28)
+~~~~~~~~~~~~~~~~~~
+
+* Fixed bug where pragma didn't work for decorator mutations
+
+* Dict literals looking like `dict(a=foo)` now have mutated keys. You can also declare synonyms in setup.cfg.
+
+* Fix "from x import *"
+
+
 0.0.6 (2017-06-13)
 ~~~~~~~~~~~~~~~~~~
 

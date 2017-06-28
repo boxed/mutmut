@@ -4,7 +4,7 @@ from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 from tri.struct import Struct
 
-__version__ = '0.0.6'
+__version__ = '0.0.7'
 
 ALL = 'all'
 
