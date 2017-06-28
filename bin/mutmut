@@ -7,7 +7,7 @@ from subprocess import check_call, CalledProcessError
 import click
 import sys
 
-from mutmut import mutate, ALL, count_mutations, mutate_file
+from mutmut import mutate, ALL, count_mutations, mutate_file, config
 from shutil import move
 
 
@@ -37,13 +37,18 @@ print_status = status_printer(sys.stdout)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--mutation', type=click.INT)
-@click.option('--runner', default='py.test')
+@click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
-@click.option('--testsdir', default='tests/')
+@click.option('--testsdir')
 @click.option('-s', help='turn off output capture', is_flag=True)
 def main(paths_to_mutate, apply, mutation, backup, runner, testsdir, s, use_coverage):
+    # defaults from setup.cfg
+    paths_to_mutate = paths_to_mutate or config.paths_to_mutate
+    runner = runner or config.runner
+    testsdir = testsdir or config.tests_dirs
+
     if not paths_to_mutate:
-        print('You must specify a list of paths to mutate')
+        print('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
         return
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'

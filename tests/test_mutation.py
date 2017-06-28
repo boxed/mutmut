@@ -43,6 +43,7 @@ import pytest
         ("Struct(a=b)", "Struct(aXX=b)"),
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
         ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),  # shouldn't be mutated
+        ('from foo import *', 'from foo import *'),
     ]
 )
 def test_basic_mutations(actual, expected):

@@ -1,5 +1,5 @@
 import sys
-from ConfigParser import ConfigParser
+from ConfigParser import ConfigParser, NoOptionError
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 from tri.struct import Struct
@@ -12,9 +12,21 @@ ALL = 'all'
 def read_config():
     config_parser = ConfigParser()
     config_parser.read('setup.cfg')
-    s = 'mutmut'
+    def s(key, default):
+        try:
+            return config_parser.get('mutmut', key)
+        except NoOptionError:
+            return default
+
+    paths_to_mutate = s('paths_to_mutate', None)
+    if paths_to_mutate:
+        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
+
     return Struct(
-        dict_synonyms=[x.strip() for x in config_parser.get(s, 'dict_synonyms').split(',')] + ['dict'],
+        dict_synonyms=[x.strip() for x in s('dict_synonyms', '').split(',')] + ['dict'],
+        runner=s('runner', 'python -m pytest'),
+        paths_to_mutate=paths_to_mutate,
+        tests_dirs=s('tests_dir', 'tests/'),
     )
 
 config = read_config()
@@ -89,9 +101,7 @@ def string_mutation(value, context, **_):
 
 
 def call_argument_mutation(target, context, **_):
-    assert context.stack[-2]['type'] == 'call'
-    assert context.stack[-3]['value'][0]['type'] == 'name'
-    if context.stack[-3]['value'][0]['value'] in config.dict_synonyms:
+    if context.stack[-2]['type'] == 'call' and context.stack[-3]['value'][0]['type'] == 'name' and context.stack[-3]['value'][0]['value'] in config.dict_synonyms and 'value' in target:
         target['value'] += 'XX'
         return target
     else:
@@ -224,6 +234,7 @@ mutations_by_type = {
     'dotted_as_name': {},
     'comparison': {},
     'except': {},
+    'star': {},
     'return': {},  # TODO: we should mutate "return foo" -> "return None"
     'yield': {},  # TODO: we should mutate "yield foo" -> "yield None"
 }
