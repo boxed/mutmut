@@ -108,6 +108,12 @@ def call_argument_mutation(target, context, **_):
         return target
 
 
+def lambda_mutation(value, **_):
+    if (value.get('type'), value.get('value')) == ('name', 'None'):
+        return {'section': 'number', 'type': 'int', 'value': '0'}
+    else:
+        return {'type': 'name', 'value': 'None'}
+
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
@@ -171,6 +177,7 @@ mutations_by_type = {
     ),
     'decorator': dict(replace_entire_node_with=NEWLINE),
     'call_argument': dict(target=call_argument_mutation),
+    'lambda': dict(value=lambda_mutation),
 
     # Don't mutate:
     'tuple': {},
@@ -207,7 +214,6 @@ mutations_by_type = {
     'print': {},
     'ternary_operator': {},
     'call': {},
-    'lambda': {},
     'def_argument': {},
     'dict_argument': {},
     'with': {},

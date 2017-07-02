@@ -44,6 +44,8 @@ import pytest
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
         ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),  # shouldn't be mutated
         ('from foo import *', 'from foo import *'),
+        ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
+        ('lambda **kwargs: None', 'lambda **kwargs: 0'),
     ]
 )
 def test_basic_mutations(actual, expected):
