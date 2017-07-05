@@ -4,7 +4,7 @@ from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 from tri.struct import Struct
 
-__version__ = '0.0.8'
+__version__ = '0.0.9'
 
 ALL = 'all'
 
@@ -102,6 +102,7 @@ def string_mutation(value, context, **_):
 
 def call_argument_mutation(target, context, **_):
     if context.stack[-2]['type'] == 'call' and context.stack[-3]['value'][0]['type'] == 'name' and context.stack[-3]['value'][0]['value'] in config.dict_synonyms and 'value' in target:
+        target = target.copy()
         target['value'] += 'XX'
         return target
     else:

@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+0.0.9 (2017-07-05)
+~~~~~~~~~~~~~~~~~~
+
+* Bug with dict param mutations: it mutated all parameters, this could vastly decrease the odds of finding a mutant
+
+* New mutation: remove the body or return 0 instead of None
+
+
 0.0.8 (2017-06-28)
 ~~~~~~~~~~~~~~~~~~
 

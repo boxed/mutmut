@@ -85,6 +85,12 @@ def test_mutate_decorator():
     assert mutate(source, ALL) == (source.replace('@foo', ''), 1)
 
 
+def test_mutate_dict():
+    source = "dict(a=b, c=d)"
+    assert mutate(source, 1) == ("dict(a=b, cXX=d)", 1)
+
+
+
 # def test_mutate_files():
 #     import os
 #     for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
