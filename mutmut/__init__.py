@@ -1,5 +1,10 @@
 import sys
-from ConfigParser import ConfigParser, NoOptionError
+if sys.version_info < (3, 0):
+    # noinspection PyCompatibility
+    from ConfigParser import ConfigParser, NoOptionError
+else:
+    # noinspection PyUnresolvedReferences
+    from configparser import ConfigParser, NoOptionError
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 from tri.struct import Struct
