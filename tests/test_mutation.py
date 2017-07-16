@@ -49,7 +49,7 @@ import pytest
     ]
 )
 def test_basic_mutations(actual, expected):
-    assert mutate(actual, ALL)[0] == expected
+    assert mutate(actual, ALL, context__dict_synonyms=['Struct', 'FooBarDict'])[0] == expected
 
 
 def test_mutate_all():

@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+0.0.10 (2017-07-16)
+~~~~~~~~~~~~~~~~~~~
+
+- Renamed parameter `--testsdir` to `--tests-dir`
+
+- Refactored handling of setup.cfg file. Much cleaner solution and adds `--dict-synonyms` command line parameter
+
+
 0.0.9 (2017-07-05)
 ~~~~~~~~~~~~~~~~~~
 

@@ -1,4 +1,6 @@
 import sys
+from functools import wraps
+
 if sys.version_info < (3, 0):
     # noinspection PyCompatibility
     from ConfigParser import ConfigParser, NoOptionError
@@ -7,34 +9,33 @@ else:
     from configparser import ConfigParser, NoOptionError
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
-from tri.struct import Struct
 
-__version__ = '0.0.9'
+__version__ = '0.0.10'
 
 ALL = 'all'
 
 
-def read_config():
-    config_parser = ConfigParser()
-    config_parser.read('setup.cfg')
-    def s(key, default):
-        try:
-            return config_parser.get('mutmut', key)
-        except NoOptionError:
-            return default
+# decorator
+def config_from_setup_cfg(**defaults):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            config_parser = ConfigParser()
+            config_parser.read('setup.cfg')
 
-    paths_to_mutate = s('paths_to_mutate', None)
-    if paths_to_mutate:
-        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
+            def s(key, default):
+                try:
+                    return config_parser.get('mutmut', key)
+                except NoOptionError:
+                    return default
 
-    return Struct(
-        dict_synonyms=[x.strip() for x in s('dict_synonyms', '').split(',')] + ['dict'],
-        runner=s('runner', 'python -m pytest'),
-        paths_to_mutate=paths_to_mutate,
-        tests_dirs=s('tests_dir', 'tests/'),
-    )
+            for k in list(kwargs.keys()):
+                if not kwargs[k]:
+                    kwargs[k] = s(k, defaults.get(k))
+            f(*args, **kwargs)
 
-config = read_config()
+        return wrapper
+    return decorator
 
 
 if sys.version_info < (3, 0):
@@ -104,9 +105,8 @@ def string_mutation(value, context, **_):
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
-
 def call_argument_mutation(target, context, **_):
-    if context.stack[-2]['type'] == 'call' and context.stack[-3]['value'][0]['type'] == 'name' and context.stack[-3]['value'][0]['value'] in config.dict_synonyms and 'value' in target:
+    if context.stack[-2]['type'] == 'call' and context.stack[-3]['value'][0]['type'] == 'name' and context.stack[-3]['value'][0]['value'] in context.dict_synonyms and 'value' in target:
         target = target.copy()
         target['value'] += 'XX'
         return target
@@ -255,7 +255,7 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, mutate_index, filename=None, exclude=lambda context: False):
+    def __init__(self, mutate_index, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
         self.performed_mutations = 0
         self.mutate_index = mutate_index
@@ -264,6 +264,7 @@ class Context(object):
         self.filename = filename
         self.exclude = exclude
         self.stack = []
+        self.dict_synonyms = (dict_synonyms or []) + ['dict']
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
