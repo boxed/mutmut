@@ -3,14 +3,14 @@ from functools import wraps
 
 if sys.version_info < (3, 0):
     # noinspection PyCompatibility
-    from ConfigParser import ConfigParser, NoOptionError
+    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
 else:
     # noinspection PyUnresolvedReferences
-    from configparser import ConfigParser, NoOptionError
+    from configparser import ConfigParser, NoOptionError, NoSectionError
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 
-__version__ = '0.0.10'
+__version__ = '0.0.11'
 
 ALL = 'all'
 
@@ -26,7 +26,7 @@ def config_from_setup_cfg(**defaults):
             def s(key, default):
                 try:
                     return config_parser.get('mutmut', key)
-                except NoOptionError:
+                except (NoOptionError, NoSectionError):
                     return default
 
             for k in list(kwargs.keys()):

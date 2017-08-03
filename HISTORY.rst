@@ -1,12 +1,18 @@
 Changelog
 ---------
 
+0.0.11 (2017-08-03)
+~~~~~~~~~~~~~~~~~~~
+
+* Fixed bug that made mutmut crash when setup.cfg was missing
+
+
 0.0.10 (2017-07-16)
 ~~~~~~~~~~~~~~~~~~~
 
-- Renamed parameter `--testsdir` to `--tests-dir`
+* Renamed parameter `--testsdir` to `--tests-dir`
 
-- Refactored handling of setup.cfg file. Much cleaner solution and adds `--dict-synonyms` command line parameter
+* Refactored handling of setup.cfg file. Much cleaner solution and adds `--dict-synonyms` command line parameter
 
 
 0.0.9 (2017-07-05)
