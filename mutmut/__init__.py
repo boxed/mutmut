@@ -10,7 +10,7 @@ else:
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 
-__version__ = '0.0.11'
+__version__ = '0.0.12'
 
 ALL = 'all'
 

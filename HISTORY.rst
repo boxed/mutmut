@@ -1,6 +1,18 @@
 Changelog
 ---------
 
+0.0.12 (2017-08-27)
+~~~~~~~~~~~~~~~~~~~
+
+* Changed default runner to add `-x` flag to pytest. Could radically speed up tests if you're lucky!
+
+* New flag: `--show-times`
+
+* Now warns if a mutation triggers very long test times
+
+* Added a workaround for pytest-testmon (all tests deselected is return code 5 even though it's a success)
+
+
 0.0.11 (2017-08-03)
 ~~~~~~~~~~~~~~~~~~~
 
