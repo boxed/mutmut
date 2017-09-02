@@ -72,7 +72,7 @@ setup(
     name='mutmut',
     version=read_version(),
     description='',
-    long_description=readme + '\n\n' + history,
+    long_description=readme,
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
     url='https://github.com/boxed/mutmut',

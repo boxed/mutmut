@@ -2,13 +2,15 @@
 from __future__ import print_function
 
 import os
-from subprocess import check_call, CalledProcessError
+from subprocess import check_call, CalledProcessError, check_output
 
 import click
 import sys
 
+from datetime import datetime
+
 from mutmut import mutate, ALL, count_mutations, mutate_file, config_from_setup_cfg
-from shutil import move
+from shutil import move, copy
 
 
 # this function is stolen and modified from tqdm
@@ -41,13 +43,15 @@ print_status = status_printer(sys.stdout)
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
 @click.option('-s', help='turn off output capture', is_flag=True)
+@click.option('--show-times', help='show times for each mutation', is_flag=True)
 @click.option('--dict-synonyms')
 @config_from_setup_cfg(
     dict_synonyms='',
-    runner='python -m pytest',
+    runner='python -m pytest -x',
     tests_dir='tests/',
+    show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
@@ -71,14 +75,27 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     test_command = '%s %s' % (runner, tests_dir)
 
+    using_testmon = '--testmon' in test_command
+
     def run_tests():
+        if using_testmon:
+            copy('.testmondata-initial', '.testmondata')
         check_call(test_command, shell=True, stdout=null_stdout, stderr=null_stderr)
 
+    start_time = datetime.now()
     try:
-        run_tests()
-    except CalledProcessError:
-        print("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
-        return
+        check_output(test_command, shell=True)
+        baseline_time_elapsed = datetime.now() - start_time
+    except CalledProcessError as e:
+        if using_testmon and e.returncode == 5:
+            baseline_time_elapsed = datetime.now() - start_time
+        else:
+            print("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
+            print(e.output)
+            return
+
+    if using_testmon:
+        copy('.testmondata', '.testmondata-initial')
 
     coverage_data = None
     if use_coverage:
@@ -108,14 +125,14 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     print('--- starting mutation ---')
     progress = 0
     for filename, mutations in mutations_by_file.items():
-        # print filename
         for mutation_index in range(mutations):
             if mutation is not None and mutation != mutation_index:
                 continue
+            start_time = datetime.now()
             progress += 1
             print_status('%s out of %s  (file: %s, mutation: %s)' % (progress, total, filename, mutation_index))
-            # result = check_call('py.test tests/ --mutate="%s:%s" -s' % (filename, mutation_index), shell=True)  # TODO: fix plugin, then use this instead
             try:
+                apply_line = 'mutmut %s --mutation %s --apply' % (filename, mutation_index)
                 assert mutate_file(
                     backup=True,
                     mutation=mutation_index,
@@ -126,9 +143,15 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                 try:
                     run_tests()
                     print_status('')
-                    print('\rFAILED: mutmut %s --mutation %s --apply' % (filename, mutation_index))
+                    time_elapsed = (datetime.now() - start_time)
+                    print('\rFAILED: %s' % apply_line)
                 except CalledProcessError as e:
-                    pass
+                    if using_testmon and e.returncode == 5:
+                        print('\rFAILED (all tests skipped, uncovered line?): %s' % apply_line)
+                    time_elapsed = (datetime.now() - start_time)
+
+                if time_elapsed > baseline_time_elapsed * 2:
+                    print('\nSUSPICIOUS LONG TIME: %s > expected %s (%s)' % (time_elapsed, baseline_time_elapsed, apply_line))
                 os.remove(filename)
                 try:
                     os.remove(filename+'c')  # remove .pyc file
@@ -137,6 +160,9 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
             finally:
                 try:
                     move(filename+'.bak', filename)
+
+                    if show_times:
+                        print('time: %s' % time_elapsed)
                 except IOError:
                     pass
 
