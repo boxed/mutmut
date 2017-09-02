@@ -84,8 +84,8 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
             print('ERROR: no mutations performed. Are you sure the index is not too big?')
         return
 
-    null_stdout = open('/dev/null', 'w') if not s else None
-    null_stderr = open('/dev/null', 'w') if not s else None
+    null_stdout = open(os.devnull, 'w') if not s else None
+    null_stderr = open(os.devnull, 'w') if not s else None
 
     test_command = '%s %s' % (runner, tests_dir)
 
