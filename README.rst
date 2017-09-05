@@ -1,3 +1,6 @@
+.. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
+    :target: https://travis-ci.org/boxed/mutmut
+
 Mutmut
 ======
 
