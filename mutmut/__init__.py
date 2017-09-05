@@ -1,41 +1,11 @@
 import sys
-from functools import wraps
 
-if sys.version_info < (3, 0):
-    # noinspection PyCompatibility
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
-else:
-    # noinspection PyUnresolvedReferences
-    from configparser import ConfigParser, NoOptionError, NoSectionError
 from baron import parse, dumps
 from tri.declarative import evaluate, dispatch, Namespace
 
 __version__ = '0.0.14'
 
 ALL = 'all'
-
-
-# decorator
-def config_from_setup_cfg(**defaults):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            config_parser = ConfigParser()
-            config_parser.read('setup.cfg')
-
-            def s(key, default):
-                try:
-                    return config_parser.get('mutmut', key)
-                except (NoOptionError, NoSectionError):
-                    return default
-
-            for k in list(kwargs.keys()):
-                if not kwargs[k]:
-                    kwargs[k] = s(k, defaults.get(k))
-            f(*args, **kwargs)
-
-        return wrapper
-    return decorator
 
 
 if sys.version_info < (3, 0):

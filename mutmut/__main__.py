@@ -2,17 +2,44 @@ from __future__ import print_function
 
 import os
 from subprocess import check_call, CalledProcessError, check_output
+import sys
+from datetime import datetime
+from shutil import move, copy
+from os.path import isdir
+from functools import wraps
 
 import click
-import sys
 
-from datetime import datetime
+from mutmut import mutate, ALL, count_mutations, mutate_file
 
-from os.path import isdir, dirname
+if sys.version_info < (3, 0):
+    # noinspection PyCompatibility
+    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+else:
+    # noinspection PyUnresolvedReferences
+    from configparser import ConfigParser, NoOptionError, NoSectionError
 
-from mutmut import mutate, ALL, count_mutations, mutate_file, config_from_setup_cfg
-from shutil import move, copy
+# decorator
+def config_from_setup_cfg(**defaults):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            config_parser = ConfigParser()
+            config_parser.read('setup.cfg')
 
+            def s(key, default):
+                try:
+                    return config_parser.get('mutmut', key)
+                except (NoOptionError, NoSectionError):
+                    return default
+
+            for k in list(kwargs.keys()):
+                if not kwargs[k]:
+                    kwargs[k] = s(k, defaults.get(k))
+            f(*args, **kwargs)
+
+        return wrapper
+    return decorator
 
 # this function is stolen and modified from tqdm
 def status_printer(file):
@@ -114,6 +141,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     coverage_data = None
     if use_coverage:
         print('Using coverage data from .coverage file')
+        # noinspection PyPackageRequirements
         import coverage
         coverage_data = coverage.CoverageData()
         coverage_data.read_file('.coverage')
