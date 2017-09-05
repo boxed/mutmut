@@ -17,15 +17,27 @@ Usage
 
 .. code-block::
 
-    mutmut path/to/directory/you/want/to/mutate
+    mutmut
 
-This will by default run py.test on tests in the "tests" folder. Run
+This will by default run py.test on tests in the "tests" folder and it will try to figure out where the code to mutate lies. Run
 
 .. code-block::
 
     mutmut --help
 
-for the available flags to use other runners, etc.
+for the available flags to use other runners, etc. The recommended way to use mutmut if 
+the defaults aren't working for you is to add a block in `setup.cfg`. Then when you 
+come back to mutmut weeks later you don't have to figure out the flags again, just run 
+`mutmut` and it works. Like this:
+
+.. code-block::
+
+    [mutmut]
+    paths_to_mutate=src/
+    backup=False
+    runner=python -m pytest
+    tests_dir=tests/
+    dict_synonyms=Struct, NamedStruct
 
 The output of the mutation tests (if you have surviving mutants) looks like:
 
@@ -37,6 +49,9 @@ I've made is to you can just copy paste everything after "FAILED:" and run it di
 mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!
 
 You should start from the bottom of the list, because if you start from the top, the indexes of the mutations change.
+
+Whitelisting
+------------
 
 You can mark lines like this:
 
@@ -58,13 +73,3 @@ Example mutations
 - break is changed to continue and vice versa
 
 In general the idea is that the mutations should be as subtle as possible.
-
-
-Future plan
------------
-
-- Custom importer that will mutate the code on the way in
-- Plug in to py.test (and nose, etc?) to make it use the importer
-- Optimization: Keep a cache of hashes to know which files have changed since they were tested, so we can skip testing files which are already done
-- Optimization: Use testmon to know which tests to rerun for each mutation
-- Speed up: Make the runner itself a part of py.test so we can use py.test test parallelization/distribution
