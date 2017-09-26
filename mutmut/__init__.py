@@ -1,6 +1,6 @@
 import sys
 
-from baron import parse, dumps
+from baron import parse, dumps, BaronError
 from tri.declarative import evaluate, dispatch, Namespace
 
 __version__ = '0.0.14'
@@ -249,7 +249,12 @@ def mutate(source, mutate_index, context):
     :param mutate_index: the index of the mutation to be performed, if ALL mutates all available places
     :return: tuple: mutated source code, number of mutations performed
     """
-    result = parse(source)
+    try:
+        result = parse(source)
+    except BaronError:
+        print('Failed to parse %s. Internal error from baron follows, please report this to the baron project at https://github.com/PyCQA/baron/issues!' % context.filename)
+        print('----------------------------------')
+        raise
     context = Context(mutate_index=mutate_index, **context)
     context.pragma_no_mutate_lines = {i+1 for i, line in enumerate(source.split('\n')) if '# pragma: no mutate' in line}  # lines are 1 based indexed
     mutate_list_of_nodes(result, context=context)
