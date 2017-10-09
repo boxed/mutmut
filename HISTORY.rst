@@ -1,6 +1,22 @@
 Changelog
 ---------
 
+0.0.15 (2017-10-09)
+~~~~~~~~~~~~~~~~~~~
+
+* Improve error message when baron crashes a bit (fixes #10)
+
+* New mutation: right hand side of assignments
+
+* Fixed nasty bug where applying a mutation could apply a different mutation than the one that was found during mutation testing
+
+
+0.0.14 (2017-09-02)
+~~~~~~~~~~~~~~~~~~~
+
+* Don't assume UNIX (fixes github issue #9: didn't work on windows)
+
+
 0.0.12 (2017-08-27)
 ~~~~~~~~~~~~~~~~~~~
 

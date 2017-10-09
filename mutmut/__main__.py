@@ -174,7 +174,6 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     print('--- starting mutation ---')
     progress = 0
-    print(mutations_by_file)
     for filename, mutations in mutations_by_file.items():
         for mutation_index in range(mutations):
             if mutation is not None and mutation != mutation_index:
@@ -196,7 +195,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                     print_status('')
                     time_elapsed = (datetime.now() - start_time)
                     print('\rFAILED: %s' % apply_line)
-                    print(check_output(['/usr/local/bin/git', 'diff']))
+                    # print(check_output(['/usr/local/bin/git', 'diff']))
                 except CalledProcessError as e:
                     if using_testmon and e.returncode == 5:
                         print('\rFAILED (all tests skipped, uncovered line?): %s' % apply_line)
