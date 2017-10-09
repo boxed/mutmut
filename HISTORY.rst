@@ -1,7 +1,7 @@
 Changelog
 ---------
 
-0.0.15 (2017-10-09)
+0.0.16 (2017-10-09)
 ~~~~~~~~~~~~~~~~~~~
 
 * Improve error message when baron crashes a bit (fixes #10)
