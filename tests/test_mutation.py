@@ -30,8 +30,9 @@ import pytest
         ("None is not None", "None is None"),
         ("x if a else b", "x if a else b"),
         ('a or b', 'a and b'),
+        ('a = b', 'a = None'),
         ('s[0]', 's[1]'),
-        ('s[0] = a', 's[1] = a'),
+        ('s[0] = a', 's[1] = None'),
         ('s[1:]', 's[2:]'),
         ('1j', '2j'),
         ('1.0j', '2.0j'),
@@ -46,6 +47,8 @@ import pytest
         ('from foo import *', 'from foo import *'),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
+        ('a = {x for x in y}', 'a = None'),
+        ('a = None', 'a = 7')
     ]
 )
 def test_basic_mutations(actual, expected):
@@ -89,6 +92,24 @@ def test_mutate_dict():
     source = "dict(a=b, c=d)"
     assert mutate(source, 1) == ("dict(a=b, cXX=d)", 1)
 
+
+def test_mutation_index():
+    source = '''
+    
+a = b
+b = c + a 
+d = 4 - 1
+
+    
+    '''.strip()
+    num_mutations = count_mutations(source=source)
+    mutants = [mutate(source=source, mutate_index=i) for i in range(num_mutations)]
+    assert len(mutants) == len(set(mutants))  # no two mutants should be the same
+
+    # invalid mutation index should not mutate anything
+    mutated_source, count = mutate(source=source, mutate_index=num_mutations + 1)
+    assert mutated_source.strip() == source
+    assert count == 0
 
 
 # def test_mutate_files():

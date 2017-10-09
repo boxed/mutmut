@@ -93,6 +93,14 @@ def lambda_mutation(value, **_):
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
+
+def assignment_mutation(value, **_):
+    if 'value' in value and value['value'] == 'None':
+        return {'section': 'number', 'type': 'int', 'value': '7'}
+    else:
+        return {'type': 'name', 'value': 'None'}
+
+
 mutations_by_type = {
     'binary_operator': dict(
         value=lambda value, **_: {
@@ -154,6 +162,7 @@ mutations_by_type = {
     'decorator': dict(replace_entire_node_with=NEWLINE),
     'call_argument': dict(target=call_argument_mutation),
     'lambda': dict(value=lambda_mutation),
+    'assignment': dict(value=assignment_mutation),
 
     # Don't mutate:
     'tuple': {},
@@ -163,7 +172,6 @@ mutations_by_type = {
     'comma': {},
     'from_import': {},
     'import': {},
-    'assignment': {},
     'ifelseblock': {},
     'if': {},
     'elif': {},
@@ -276,7 +284,7 @@ def mutate_node(i, context):
         if t == 'endl':
             context.current_line += 1
 
-        assert t in mutations_by_type, (t, i.keys(), dumps(i))
+        assert t in mutations_by_type, (t, i.keys(), (dumps(i)), i)
         m = mutations_by_type[t]
 
         if 'replace_entire_node_with' in m:
