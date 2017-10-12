@@ -83,6 +83,11 @@ def test_pragma_no_mutate():
     assert mutate(source, ALL) == (source, 0)
 
 
+def test_pragma_no_mutate_and_no_cover():
+    source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n"""
+    assert mutate(source, ALL) == (source, 0)
+
+
 def test_mutate_decorator():
     source = """@foo\ndef foo():\n    pass\n"""
     assert mutate(source, ALL) == (source.replace('@foo', ''), 1)

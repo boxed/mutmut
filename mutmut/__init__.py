@@ -233,7 +233,7 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, mutate_index, dict_synonyms=None, filename=None, exclude=lambda context: False):
+    def __init__(self, mutate_index, source, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
         self.performed_mutations = 0
         self.mutate_index = mutate_index
@@ -242,7 +242,14 @@ class Context(object):
         self.filename = filename
         self.exclude = exclude
         self.stack = []
+        self.source_by_line = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
+        self.source_by_line = source.split('\n')
+        self.pragma_no_mutate_lines = {
+            i + 1  # lines are 1 based indexed
+            for i, line in enumerate(self.source_by_line)
+            if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
+        }
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
@@ -263,8 +270,7 @@ def mutate(source, mutate_index, context):
         print('Failed to parse %s. Internal error from baron follows, please report this to the baron project at https://github.com/PyCQA/baron/issues!' % context.filename)
         print('----------------------------------')
         raise
-    context = Context(mutate_index=mutate_index, **context)
-    context.pragma_no_mutate_lines = {i+1 for i, line in enumerate(source.split('\n')) if '# pragma: no mutate' in line}  # lines are 1 based indexed
+    context = Context(mutate_index=mutate_index, source=source, **context)
     mutate_list_of_nodes(result, context=context)
     result_source = dumps(result).replace(' not not ', ' ')
     if context.performed_mutations:
