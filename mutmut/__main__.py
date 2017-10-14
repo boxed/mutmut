@@ -10,7 +10,7 @@ from functools import wraps
 
 import click
 
-from mutmut import mutate, ALL, count_mutations, mutate_file
+from mutmut import mutate, ALL, count_mutations, mutate_file, Context
 
 if sys.version_info < (3, 0):
     # noinspection PyCompatibility
@@ -82,7 +82,7 @@ print_status = status_printer(sys.stdout)
     tests_dir='tests/',
     show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, this_dir):
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -99,13 +99,14 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
-    dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
-
     if not paths_to_mutate:
         print('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
         return
 
-    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+    dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
+
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
+
     if apply:
         assert mutation is not None
         assert len(paths_to_mutate) == 1
@@ -231,7 +232,7 @@ def python_source_files(path):
 def number_of_mutations(path):
     total = 0
     for filename in python_source_files(path):
-        _, c = mutate(open(filename).read(), ALL)
+        _, c = mutate(Context(source=open(filename).read(), mutate_index=ALL))
         total += c
     return total
 

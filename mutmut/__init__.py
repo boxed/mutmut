@@ -235,6 +235,7 @@ mutations_by_type = {
 class Context(object):
     def __init__(self, mutate_index, source, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
+        self.source = source
         self.performed_mutations = 0
         self.mutate_index = mutate_index
         self.current_line = 1
@@ -255,26 +256,22 @@ class Context(object):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
 
 
-@dispatch(
-    context=Namespace(),
-)
-def mutate(source, mutate_index, context):
+def mutate(context):
     """
     :param source: source code
     :param mutate_index: the index of the mutation to be performed, if ALL mutates all available places
     :return: tuple: mutated source code, number of mutations performed
     """
     try:
-        result = parse(source)
+        result = parse(context.source)
     except BaronError:
         print('Failed to parse %s. Internal error from baron follows, please report this to the baron project at https://github.com/PyCQA/baron/issues!' % context.filename)
         print('----------------------------------')
         raise
-    context = Context(mutate_index=mutate_index, source=source, **context)
     mutate_list_of_nodes(result, context=context)
     result_source = dumps(result).replace(' not not ', ' ')
     if context.performed_mutations:
-        assert source != result_source
+        assert context.source != result_source
     return result_source, context.performed_mutations
 
 
@@ -351,7 +348,7 @@ def mutate_list_of_nodes(result, context):
     context=Namespace(),
 )
 def count_mutations(source, context):
-    return mutate(source, ALL, context=context)[1]
+    return mutate(Context(source=source, mutate_index=ALL, **context))[1]
 
 
 @dispatch(
@@ -362,6 +359,6 @@ def mutate_file(backup, mutation, filename, context):  # pragma: no cover
     if backup:
         open(filename + '.bak', 'w').write(code)
     context.filename = filename
-    result, mutations_performed = mutate(code, mutation, context=context)
+    result, mutations_performed = mutate(Context(source=code, mutate_index=mutation, **context))
     open(filename, 'w').write(result)
     return mutations_performed
