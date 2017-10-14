@@ -82,7 +82,7 @@ print_status = status_printer(sys.stdout)
     tests_dir='tests/',
     show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, this_dir):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -112,9 +112,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         assert len(paths_to_mutate) == 1
         mutations_performed = mutate_file(
             backup=backup,
-            mutation=mutation,
-            filename=paths_to_mutate[0],
-            context__dict_synonyms=dict_synonyms,
+            context=Context(
+                mutate_index=mutation,
+                filename=paths_to_mutate[0],
+                dict_synonyms=dict_synonyms,
+            ),
         )
         if mutations_performed == 0:
             print('ERROR: no mutations performed. Are you sure the index is not too big?')
@@ -169,7 +171,14 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     for path in paths_to_mutate:
         for filename in python_source_files(path):
-            mutations_by_file[filename] = count_mutations(open(filename).read(), context__filename=filename, context__exclude=exclude)
+            mutations_by_file[filename] = count_mutations(
+                Context(
+                    source=open(filename).read(),
+                    filename=filename,
+                    exclude=exclude,
+                    dict_synonyms=dict_synonyms,
+                )
+            )
 
     total = sum(mutations_by_file.values())
 
@@ -186,10 +195,12 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                 apply_line = 'mutmut %s --mutation %s --apply' % (filename, mutation_index)
                 assert mutate_file(
                     backup=True,
-                    mutation=mutation_index,
-                    filename=filename,
-                    context__exclude=exclude,
-                    context__dict_synonyms=dict_synonyms,
+                    context=Context(
+                        mutate_index=mutation_index,
+                        filename=filename,
+                        exclude=exclude,
+                        dict_synonyms=dict_synonyms,
+                    )
                 )
                 try:
                     run_tests()

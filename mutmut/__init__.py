@@ -233,27 +233,37 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, mutate_index, source, dict_synonyms=None, filename=None, exclude=lambda context: False):
+    def __init__(self, source=None, mutate_index=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
         self.source = source
         self.performed_mutations = 0
         self.mutate_index = mutate_index
         self.current_line = 1
-        self.pragma_no_mutate_lines = set()
         self.filename = filename
         self.exclude = exclude
         self.stack = []
-        self.source_by_line = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
-        self.source_by_line = source.split('\n')
-        self.pragma_no_mutate_lines = {
-            i + 1  # lines are 1 based indexed
-            for i, line in enumerate(self.source_by_line)
-            if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
-        }
+        self._source_by_line = None
+        self._pragma_no_mutate_lines = None
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
+
+    @property
+    def source_by_line(self):
+        if self._source_by_line is None:
+            self._source_by_line = self.source.split('\n')
+        return self._source_by_line
+
+    @property
+    def pragma_no_mutate_lines(self):
+        if self._pragma_no_mutate_lines is None:
+            self._pragma_no_mutate_lines = {
+                i + 1  # lines are 1 based indexed
+                for i, line in enumerate(self.source_by_line)
+                if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
+            }
+        return self._pragma_no_mutate_lines
 
 
 def mutate(context):
@@ -344,21 +354,16 @@ def mutate_list_of_nodes(result, context):
             return
 
 
-@dispatch(
-    context=Namespace(),
-)
-def count_mutations(source, context):
-    return mutate(Context(source=source, mutate_index=ALL, **context))[1]
+def count_mutations(context):
+    assert context.mutate_index == ALL
+    return mutate(context)[1]
 
 
-@dispatch(
-    context=Namespace(),
-)
-def mutate_file(backup, mutation, filename, context):  # pragma: no cover
-    code = open(filename).read()
+def mutate_file(backup, context):
+    code = open(context.filename).read()
+    context.source = code
     if backup:
-        open(filename + '.bak', 'w').write(code)
-    context.filename = filename
-    result, mutations_performed = mutate(Context(source=code, mutate_index=mutation, **context))
-    open(filename, 'w').write(result)
+        open(context.filename + '.bak', 'w').write(code)
+    result, mutations_performed = mutate(context)
+    open(context.filename, 'w').write(result)
     return mutations_performed

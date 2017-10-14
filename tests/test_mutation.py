@@ -60,7 +60,7 @@ def test_mutate_all():
 
 
 def test_count_available_mutations():
-    assert count_mutations('def foo():\n    return 1+1') == 3
+    assert count_mutations(Context(source='def foo():\n    return 1+1')) == 3
 
 
 def test_perform_one_indexed_mutation():
@@ -106,7 +106,7 @@ d = 4 - 1
 
     
     '''.strip()
-    num_mutations = count_mutations(source=source)
+    num_mutations = count_mutations(Context(source=source))
     mutants = [mutate(Context(source=source, mutate_index=i)) for i in range(num_mutations)]
     assert len(mutants) == len(set(mutants))  # no two mutants should be the same
 
