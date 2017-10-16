@@ -271,6 +271,8 @@ class Context(object):
         return self._source
 
     def exclude_line(self):
+        print(self.current_line)
+        print(self.pragma_no_mutate_lines)
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
@@ -324,7 +326,7 @@ class Context(object):
     def pragma_no_mutate_lines(self):
         if self._pragma_no_mutate_lines is None:
             self._pragma_no_mutate_lines = {
-                i + 1  # lines are 1 based indexed
+                i
                 for i, line in enumerate(self.source_by_line_number)
                 if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
             }
