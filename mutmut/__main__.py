@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import json
 import os
 import sqlite3
 from subprocess import check_call, CalledProcessError, check_output
@@ -10,6 +11,7 @@ from os.path import isdir
 from functools import wraps
 
 import click
+from collections import defaultdict
 
 from mutmut import mutate, ALL, count_mutations, mutate_file, Context
 
@@ -161,12 +163,27 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         coverage_data = coverage.CoverageData()
         coverage_data.read_file('.coverage')
 
+    # Cache file
+    db = sqlite3.connect('.mutmut_db.sqlite', isolation_level=None)
+    db_cursor = db.cursor()
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS surviving_mutants (filename TEXT, path TEXT)')
+    skip_based_on_previous_information_by_filename = defaultdict(set)
+    for filename, path in db_cursor.execute('SELECT filename, path FROM surviving_mutants'):
+        skip_based_on_previous_information_by_filename[filename].add((filename,) + tuple(json.loads(path)))
+    if skip_based_on_previous_information_by_filename:
+        print('Skipping mutation on some lines, due to cached information in `.mutmut_db.sqlite`. If you want to run a full mutation testing run, please delete this file and restart mutmut.')
+
+    #
     def exclude(context):
         if use_coverage:
             measured_lines = coverage_data.lines(os.path.abspath(context.filename))
             if measured_lines is None:
                 return True
             if context.current_line not in measured_lines:
+                return True
+
+        if context.filename in skip_based_on_previous_information_by_filename:
+            if context.path_by_line_number[context.current_line] in skip_based_on_previous_information_by_filename[filename]:
                 return True
 
         return False
@@ -188,10 +205,6 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     print('--- starting mutation ---')
     progress = 0
-
-    db = sqlite3.connect('.mutmut_db.sqlite')
-    db_cursor = db.cursor()
-    db_cursor.execute('CREATE TABLE IF NOT EXISTS surviving_mutants (filename TEXT, path TEXT)')
 
     for filename, mutations in mutations_by_file.items():
         context = Context(
