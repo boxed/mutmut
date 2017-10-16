@@ -271,8 +271,6 @@ class Context(object):
         return self._source
 
     def exclude_line(self):
-        print(self.current_line)
-        print(self.pragma_no_mutate_lines)
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
