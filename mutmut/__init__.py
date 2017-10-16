@@ -245,31 +245,76 @@ class Context(object):
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
         self._source_by_line = None
         self._pragma_no_mutate_lines = None
+        self._path_by_line = None
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
-    def source_by_line(self):
+    def source_by_line_number(self):
         if self._source_by_line is None:
             self._source_by_line = self.source.split('\n')
         return self._source_by_line
+
+    @property
+    def path_by_line_number(self):
+        """
+        A "path" is a list of strings of all the increasing indent lines above the line in question.
+        The first entry is the filename, and the last is the full line. An example is easier (comments
+        are the paths for the line):
+
+        ```
+        def foo():         # ('file.py',                                  'def foo():')
+            if a:          # ('file.py', 'def foo():',                    '    if a:')
+                if b:      # ('file.py', 'def foo():', 'if a:',           '        if b:')
+                    bar()  # ('file.py', 'def foo():', 'if a:',           '# foo')
+                baz()      # ('file.py', 'def foo():', 'if a:', 'if b:',  '            bar()')
+            quux()         # ('file.py', 'def foo():', 'if a:',           '        baz()')
+        ```
+        """
+        if self._path_by_line is None:
+            self._path_by_line = []
+            stack = [self.filename]
+            last_line = None
+            last_indent = 0
+            for l in self.source_by_line_number:
+                stripped = l.strip(' \n "')
+                if not stripped or stripped.startswith('#'):
+                    self._path_by_line.append(tuple(stack) + (l,))
+                    continue
+
+                indent = count_indents(l)
+                if indent > last_indent:
+                    stack.append(last_line)
+                elif indent < last_indent:
+                    stack.pop(-1)
+
+                self._path_by_line.append(tuple(stack) + (l,))
+
+                last_line = l.strip()
+                last_indent = count_indents(l)
+
+            assert len(self._path_by_line) == len(self.source_by_line_number)
+        return self._path_by_line
 
     @property
     def pragma_no_mutate_lines(self):
         if self._pragma_no_mutate_lines is None:
             self._pragma_no_mutate_lines = {
                 i + 1  # lines are 1 based indexed
-                for i, line in enumerate(self.source_by_line)
+                for i, line in enumerate(self.source_by_line_number)
                 if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
             }
         return self._pragma_no_mutate_lines
 
 
+def count_indents(l):
+    without = l.replace('\t', '    ').lstrip(' ')
+    return len(l) - len(without)
+
+
 def mutate(context):
     """
-    :param source: source code
-    :param mutate_index: the index of the mutation to be performed, if ALL mutates all available places
     :return: tuple: mutated source code, number of mutations performed
     """
     try:
@@ -279,10 +324,11 @@ def mutate(context):
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)
-    result_source = dumps(result).replace(' not not ', ' ')
+    mutated_source = dumps(result).replace(' not not ', ' ')
     if context.performed_mutations:
-        assert context.source != result_source
-    return result_source, context.performed_mutations
+        assert context.source != mutated_source
+    context.mutated_source = mutated_source
+    return mutated_source, context.performed_mutations
 
 
 def mutate_node(i, context):

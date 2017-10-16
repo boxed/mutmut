@@ -116,24 +116,25 @@ d = 4 - 1
     assert count == 0
 
 
-# def test_mutate_files():
-#     import os
-#     for dirpath, dirnames, filenames in os.walk('/Users/andersh/triresolve/'):
-#         for f in filenames:
-#             if f.endswith('.py'):
-#                 fullpath = os.path.join(dirpath, f)
-#                 if fullpath in {
-#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/PublicKey/_slowmath.py',
-#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/Crypto/SelfTest/Util/test_number.py',
-#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/ecdsa.py',
-#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/ecdsa/numbertheory.py',
-#                     '/Users/andersh/triresolve/.tox/py27/lib/python2.7/site-packages/numpy/core/tests/test_umath.py',
-#                 }:
-#                     continue
-#                 if 'py3' in fullpath:
-#                     continue
-#                 # print fullpath
-#                 full_source = open(fullpath).read()
-#                 if 'yield from' in full_source:
-#                     continue
-#                 mutate(full_source, ALL)
+def test_path_by_line():
+    source = """
+def foo():
+    if a:
+        if b:
+# foo
+            bar()
+        baz()
+    quux()
+foo()
+""".strip()
+    c = Context(source=source, filename='file.py')
+    assert c.path_by_line_number == [
+        ('file.py',                                  'def foo():'),
+        ('file.py', 'def foo():',                    '    if a:'),
+        ('file.py', 'def foo():', 'if a:',           '        if b:'),
+        ('file.py', 'def foo():', 'if a:',           '# foo'),
+        ('file.py', 'def foo():', 'if a:', 'if b:',  '            bar()'),
+        ('file.py', 'def foo():', 'if a:',           '        baz()'),
+        ('file.py', 'def foo():',                    '    quux()'),
+        ('file.py',                                  'foo()'),
+    ]
