@@ -202,11 +202,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     for path in paths_to_mutate:
         if isfile(path) and path.endswith('.py'):
-                filename = path
-                add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
-                continue
-        for filename in python_source_files(path):
+            filename = path
             add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
+        else:
+            for filename in python_source_files(path):
+                add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
 
     total = sum(mutations_by_file.values())
 
