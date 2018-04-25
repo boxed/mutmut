@@ -7,7 +7,7 @@ from subprocess import check_call, CalledProcessError, check_output
 import sys
 from datetime import datetime
 from shutil import move, copy
-from os.path import isdir
+from os.path import isdir, isfile
 from functools import wraps
 
 import click
@@ -190,16 +190,23 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     mutations_by_file = {}
 
-    for path in paths_to_mutate:
-        for filename in python_source_files(path):
-            mutations_by_file[filename] = count_mutations(
-                Context(
-                    source=open(filename).read(),
-                    filename=filename,
-                    exclude=exclude,
-                    dict_synonyms=dict_synonyms,
-                )
+    def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+        mutations_by_file[filename] = count_mutations(
+            Context(
+                source=open(filename).read(),
+                filename=filename,
+                exclude=exclude,
+                dict_synonyms=dict_synonyms,
             )
+        )
+
+    for path in paths_to_mutate:
+        if isfile(path) and path.endswith('.py'):
+                filename = path
+                add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
+                continue
+        for filename in python_source_files(path):
+            add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
 
     total = sum(mutations_by_file.values())
 
