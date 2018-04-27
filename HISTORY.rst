@@ -1,12 +1,14 @@
 Changelog
 ---------
 
-0.0.17 (2017-??-??)
+0.0.18 (2018-04-27)
 ~~~~~~~~~~~~~~~~~~~
 
 * Fixed bug where initial mutation count was wrong, which caused mutmut to miss mutants at the end of the file
 
 * Changed mutation API to always require a `Context` object. This makes is much easier to pass additional data out to the caller
+
+* Support specifying individual files to mutate (thanks Felipe Pontes!)
 
 
 0.0.16 (2017-10-09)

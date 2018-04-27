@@ -3,9 +3,9 @@ import sys
 
 from baron import parse, dumps, BaronError
 from collections import defaultdict
-from tri.declarative import evaluate, dispatch, Namespace
+from tri.declarative import evaluate
 
-__version__ = '0.0.17'
+__version__ = '0.0.18'
 
 ALL = 'all'
 
