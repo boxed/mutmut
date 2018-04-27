@@ -1,14 +1,17 @@
 from __future__ import print_function
 
+import json
 import os
+import sqlite3
 from subprocess import check_call, CalledProcessError, check_output
 import sys
 from datetime import datetime
 from shutil import move, copy
-from os.path import isdir
+from os.path import isdir, isfile
 from functools import wraps
 
 import click
+from collections import defaultdict
 
 from mutmut import mutate, ALL, count_mutations, mutate_file, Context
 
@@ -69,7 +72,7 @@ print_status = status_printer(sys.stdout)
 @click.argument('paths_to_mutate', nargs=-1)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
 @click.option('--backup/--no-backup', default=False)
-@click.option('--mutation', type=click.INT)
+@click.option('--mutation')
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
@@ -83,6 +86,9 @@ print_status = status_printer(sys.stdout)
     show_times=False,
 )
 def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
+    if mutation is not None:
+        mutation = int(mutation)  # click.INT parses "0" as None
+
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -157,6 +163,17 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         coverage_data = coverage.CoverageData()
         coverage_data.read_file('.coverage')
 
+    # Cache file
+    db = sqlite3.connect('.mutmut_db.sqlite', isolation_level=None)
+    db_cursor = db.cursor()
+    db_cursor.execute('CREATE TABLE IF NOT EXISTS surviving_mutants (filename TEXT, path TEXT)')
+    skip_based_on_previous_information_by_filename = defaultdict(set)
+    for filename, path in db_cursor.execute('SELECT filename, path FROM surviving_mutants'):
+        skip_based_on_previous_information_by_filename[filename].add((filename,) + tuple(json.loads(path)))
+    if skip_based_on_previous_information_by_filename:
+        print('Skipping mutation on some lines, due to cached information in `.mutmut_db.sqlite`. If you want to run a full mutation testing run, please delete this file and restart mutmut.')
+
+    #
     def exclude(context):
         if use_coverage:
             measured_lines = coverage_data.lines(os.path.abspath(context.filename))
@@ -165,29 +182,53 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
             if context.current_line not in measured_lines:
                 return True
 
+        if context.filename in skip_based_on_previous_information_by_filename:
+            if context.path_by_line_number[context.current_line] in skip_based_on_previous_information_by_filename[filename]:
+                return True
+
         return False
 
     mutations_by_file = {}
 
-    for path in paths_to_mutate:
-        for filename in python_source_files(path):
-            mutations_by_file[filename] = count_mutations(
-                Context(
-                    source=open(filename).read(),
-                    filename=filename,
-                    exclude=exclude,
-                    dict_synonyms=dict_synonyms,
-                )
+    def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+        mutations_by_file[filename] = count_mutations(
+            Context(
+                source=open(filename).read(),
+                filename=filename,
+                exclude=exclude,
+                dict_synonyms=dict_synonyms,
             )
+        )
+
+    for path in paths_to_mutate:
+        if isfile(path) and path.endswith('.py'):
+            filename = path
+            add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
+        else:
+            for filename in python_source_files(path):
+                add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
 
     total = sum(mutations_by_file.values())
 
     print('--- starting mutation ---')
     progress = 0
+
     for filename, mutations in mutations_by_file.items():
+        context = Context(
+            filename=filename,
+            exclude=exclude,
+            dict_synonyms=dict_synonyms,
+            db_cursor=db_cursor,
+        )
+
+        last_line_number = 0
+
         for mutation_index in range(mutations):
             if mutation is not None and mutation != mutation_index:
                 continue
+
+            context.mutate_index = mutation_index
+
             start_time = datetime.now()
             progress += 1
             print_status('%s out of %s  (file: %s, mutation: %s)' % (progress, total, filename, mutation_index))
@@ -195,12 +236,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                 apply_line = 'mutmut %s --mutation %s --apply' % (filename, mutation_index)
                 assert mutate_file(
                     backup=True,
-                    context=Context(
-                        mutate_index=mutation_index,
-                        filename=filename,
-                        exclude=exclude,
-                        dict_synonyms=dict_synonyms,
-                    )
+                    context=context,
                 )
                 try:
                     run_tests()
@@ -208,6 +244,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                     time_elapsed = (datetime.now() - start_time)
                     print('\rFAILED: %s' % apply_line)
                     # print(check_output(['/usr/local/bin/git', 'diff']))
+
+                    # Surviving mutant!
+                    assert len(context.performed_mutations_line_numbers) == 1
+                    context.surviving_mutants_by_line_number[context.performed_mutations_line_numbers[0]] += 1
+
                 except CalledProcessError as e:
                     if using_testmon and e.returncode == 5:
                         print('\rFAILED (all tests skipped, uncovered line?): %s' % apply_line)
@@ -221,6 +262,8 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                 except OSError:
                     pass
             finally:
+                context.save_progress()
+
                 try:
                     move(filename+'.bak', filename)
 
@@ -228,6 +271,14 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                         print('time: %s' % time_elapsed)
                 except IOError:
                     pass
+
+            if last_line_number != context.current_line:
+                if last_line_number not in context.surviving_mutants_by_line_number:
+                    # Record a line that had zero surviving mutants
+                    context.surviving_mutants_by_line_number[last_line_number] = 0
+            last_line_number = context.current_line
+
+        context.save_progress()
 
 
 def python_source_files(path):
