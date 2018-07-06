@@ -1,8 +1,6 @@
-import json
 import sys
 
 from baron import parse, dumps, BaronError
-from collections import defaultdict
 from tri.declarative import evaluate
 
 __version__ = '0.0.18'
@@ -235,9 +233,10 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, source=None, mutate_index=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, db_cursor=None):
+    def __init__(self, source=None, mutate_index=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
-        self._source = source
+        self.source = source
+        self.performed_mutations = 0
         self.mutate_index = mutate_index
         self.current_line = 1
         self.filename = filename
@@ -247,28 +246,6 @@ class Context(object):
         self._source_by_line = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
-        self.surviving_mutants_by_line_number = defaultdict(int)
-        self.performed_mutations_line_numbers = []
-        self.performed_mutations = 0
-        self.db_cursor = db_cursor
-
-    def prepare_new_mutation(self):
-        self.performed_mutations = 0
-        self.performed_mutations_line_numbers = []
-        self.current_line = 0
-        self.index = 0
-
-    def save_progress(self):
-        if self.db_cursor:
-            for line_number, surviving_mutants in self.surviving_mutants_by_line_number.items():
-                if surviving_mutants == 0:
-                    self.db_cursor.execute('INSERT INTO surviving_mutants (filename, path) VALUES (?, ?)', (self.path_by_line_number[line_number][0], json.dumps(self.path_by_line_number[line_number][1:])))
-
-    @property
-    def source(self):
-        if self._source is None:
-            self._source = open(self.filename).read()
-        return self._source
 
     def exclude_line(self):
         return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
@@ -340,7 +317,6 @@ def mutate(context):
     """
     :return: tuple: mutated source code, number of mutations performed
     """
-    context.prepare_new_mutation()
     try:
         result = parse(context.source)
     except BaronError:
@@ -379,7 +355,6 @@ def mutate_node(i, context):
                 for k, v in m['replace_entire_node_with'].items():
                     i[k] = v
                 context.performed_mutations += 1
-                context.performed_mutations_line_numbers.append(context.current_line)
             context.index += 1
             return
 
@@ -408,7 +383,6 @@ def mutate_node(i, context):
             if new != old:
                 if context.mutate_index in (ALL, context.index):
                     context.performed_mutations += 1
-                    context.performed_mutations_line_numbers.append(context.current_line)
                     i[key] = new
                 context.index += 1
 
@@ -432,8 +406,10 @@ def count_mutations(context):
 
 
 def mutate_file(backup, context):
+    code = open(context.filename).read()
+    context.source = code
     if backup:
-        open(context.filename + '.bak', 'w').write(context.source)
+        open(context.filename + '.bak', 'w').write(code)
     result, mutations_performed = mutate(context)
     open(context.filename, 'w').write(result)
     return mutations_performed
