@@ -114,27 +114,3 @@ d = 4 - 1
     mutated_source, count = mutate(Context(source=source, mutate_index=num_mutations + 1))
     assert mutated_source.strip() == source
     assert count == 0
-
-
-def test_path_by_line():
-    source = """
-def foo():
-    if a:
-        if b:
-# foo
-            bar()
-        baz()
-    quux()
-foo()
-""".strip()
-    c = Context(source=source, filename='file.py')
-    assert c.path_by_line_number == [
-        ('file.py',                                  'def foo():'),
-        ('file.py', 'def foo():',                    '    if a:'),
-        ('file.py', 'def foo():', 'if a:',           '        if b:'),
-        ('file.py', 'def foo():', 'if a:',           '# foo'),
-        ('file.py', 'def foo():', 'if a:', 'if b:',  '            bar()'),
-        ('file.py', 'def foo():', 'if a:',           '        baz()'),
-        ('file.py', 'def foo():',                    '    quux()'),
-        ('file.py',                                  'foo()'),
-    ]

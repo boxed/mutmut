@@ -257,51 +257,10 @@ class Context(object):
         return self._source_by_line
 
     @property
-    def path_by_line_number(self):
-        """
-        A "path" is a list of strings of all the increasing indent lines above the line in question.
-        The first entry is the filename, and the last is the full line. An example is easier (comments
-        are the paths for the line):
-
-        ```
-        def foo():         # ('file.py',                                  'def foo():')
-            if a:          # ('file.py', 'def foo():',                    '    if a:')
-                if b:      # ('file.py', 'def foo():', 'if a:',           '        if b:')
-                    bar()  # ('file.py', 'def foo():', 'if a:',           '# foo')
-                baz()      # ('file.py', 'def foo():', 'if a:', 'if b:',  '            bar()')
-            quux()         # ('file.py', 'def foo():', 'if a:',           '        baz()')
-        ```
-        """
-        if self._path_by_line is None:
-            self._path_by_line = []
-            stack = [self.filename]
-            last_line = None
-            last_indent = 0
-            for l in self.source_by_line_number:
-                stripped = l.strip(' \n "')
-                if not stripped or stripped.startswith('#'):
-                    self._path_by_line.append(tuple(stack) + (l,))
-                    continue
-
-                indent = count_indents(l)
-                if indent > last_indent:
-                    stack.append(last_line)
-                elif indent < last_indent:
-                    stack.pop(-1)
-
-                self._path_by_line.append(tuple(stack) + (l,))
-
-                last_line = l.strip()
-                last_indent = count_indents(l)
-
-            assert len(self._path_by_line) == len(self.source_by_line_number)
-        return self._path_by_line
-
-    @property
     def pragma_no_mutate_lines(self):
         if self._pragma_no_mutate_lines is None:
             self._pragma_no_mutate_lines = {
-                i
+                i + 1  # lines are 1 based indexed
                 for i, line in enumerate(self.source_by_line_number)
                 if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
             }
