@@ -5,7 +5,7 @@ from tri.declarative import evaluate
 
 __version__ = '0.0.18'
 
-ALL = 'all'
+ALL = ('all', -1)
 
 
 if sys.version_info < (3, 0):
@@ -69,13 +69,22 @@ def complex_mutation(value, **_):
 
 
 def string_mutation(value, context, **_):
-    context.current_line += value.count('\n')  # Advance line count!
+    """
+
+    :type context: Context
+    """
+    context.current_line_index += value.count('\n')  # Advance line count!
+    context.index = 0  # indexes are unique per line, so start over here!
     if value.startswith('"""') or value.startswith("'''"):
         return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
     return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
 def call_argument_mutation(target, context, **_):
+    """
+
+    :type context: Context
+    """
     if context.stack[-2]['type'] == 'call' and context.stack[-3]['value'][0]['type'] == 'name' and context.stack[-3]['value'][0]['value'] in context.dict_synonyms and 'value' in target:
         target = target.copy()
         target['value'] += 'XX'
@@ -233,38 +242,56 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, source=None, mutate_index=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False):
+    def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False):
         self.index = 0
         self.source = source
-        self.performed_mutations = 0
-        self.mutate_index = mutate_index
-        self.current_line = 1
+        self.mutate_id = mutate_id
+        self.number_of_performed_mutations = 0
+        self.performed_mutation_ids = []
+        assert isinstance(mutate_id, tuple)
+        assert isinstance(mutate_id[0], text_types)
+        assert isinstance(mutate_id[1], int)
+        self.current_line_index = 0
         self.filename = filename
         self.exclude = exclude
         self.stack = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
-        self._source_by_line = None
+        self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
 
     def exclude_line(self):
-        return self.current_line in self.pragma_no_mutate_lines or self.exclude(context=self)
+        return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
     def source_by_line_number(self):
-        if self._source_by_line is None:
-            self._source_by_line = self.source.split('\n')
-        return self._source_by_line
+        if self._source_by_line_number is None:
+            self._source_by_line_number = self.source.split('\n')
+        return self._source_by_line_number
+
+    @property
+    def current_source_line(self):
+        return self.source_by_line_number[self.current_line_index]
+
+    @property
+    def mutate_id_of_current_index(self):
+        return self.current_source_line, self.index
 
     @property
     def pragma_no_mutate_lines(self):
         if self._pragma_no_mutate_lines is None:
             self._pragma_no_mutate_lines = {
-                i + 1  # lines are 1 based indexed
+                i
                 for i, line in enumerate(self.source_by_line_number)
                 if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
             }
         return self._pragma_no_mutate_lines
+
+    def should_mutate(self):
+        if self.mutate_id == ALL:
+            return True
+
+        return self.mutate_id in (ALL, self.mutate_id_of_current_index)
 
 
 def count_indents(l):
@@ -274,6 +301,7 @@ def count_indents(l):
 
 def mutate(context):
     """
+    :type context: Context
     :return: tuple: mutated source code, number of mutations performed
     """
     try:
@@ -284,13 +312,17 @@ def mutate(context):
         raise
     mutate_list_of_nodes(result, context=context)
     mutated_source = dumps(result).replace(' not not ', ' ')
-    if context.performed_mutations:
+    if context.number_of_performed_mutations:
+        # Check that if we said we mutated the code, that it has actually changed
         assert context.source != mutated_source
     context.mutated_source = mutated_source
-    return mutated_source, context.performed_mutations
+    return mutated_source, context.number_of_performed_mutations
 
 
 def mutate_node(i, context):
+    """
+    :type context: Context
+    """
     if not i:
         return
 
@@ -300,7 +332,8 @@ def mutate_node(i, context):
         t = i['type']
 
         if t == 'endl':
-            context.current_line += 1
+            context.current_line_index += 1
+            context.index = 0  # indexes are unique per line, so start over here!
 
         assert t in mutations_by_type, (t, i.keys(), (dumps(i)), i)
         m = mutations_by_type[t]
@@ -309,11 +342,12 @@ def mutate_node(i, context):
             if context.exclude_line():
                 return
 
-            if context.mutate_index in (ALL, context.index):
+            if context.should_mutate():
                 i.clear()
                 for k, v in m['replace_entire_node_with'].items():
                     i[k] = v
-                context.performed_mutations += 1
+                context.number_of_performed_mutations += 1
+                context.performed_mutation_ids.append(context.mutate_id_of_current_index)
             context.index += 1
             return
 
@@ -329,7 +363,8 @@ def mutate_node(i, context):
             else:
                 assert isinstance(x, text_types + (bool,))
 
-            if context.performed_mutations and context.mutate_index != ALL:
+            # this is just an optimization to stop early
+            if context.number_of_performed_mutations and context.mutate_id != ALL:
                 return
 
         for key, value in sorted(m.items()):
@@ -340,31 +375,55 @@ def mutate_node(i, context):
             new = evaluate(value, context=context, node=i, **i)
             assert not callable(new)
             if new != old:
-                if context.mutate_index in (ALL, context.index):
-                    context.performed_mutations += 1
+                if context.should_mutate():
+                    context.number_of_performed_mutations += 1
+                    context.performed_mutation_ids.append(context.mutate_id_of_current_index)
                     i[key] = new
                 context.index += 1
 
-            if context.performed_mutations and context.mutate_index != ALL:
+            # this is just an optimization to stop early
+            if context.number_of_performed_mutations and context.mutate_id != ALL:
                 return
     finally:
         context.stack.pop()
 
 
 def mutate_list_of_nodes(result, context):
+    """
+    :type context: Context
+    """
     for i in result:
         mutate_node(i, context=context)
 
-        if context.performed_mutations and context.mutate_index != ALL:
+        # this is just an optimization to stop early
+        if context.number_of_performed_mutations and context.mutate_id != ALL:
             return
 
 
 def count_mutations(context):
-    assert context.mutate_index == ALL
-    return mutate(context)[1]
+    """
+    :type context: Context
+    """
+    assert context.mutate_id == ALL
+    mutate(context)
+    return context.number_of_performed_mutations
+
+
+def list_mutations(context):
+    """
+    :type context: Context
+    """
+    assert context.mutate_id == ALL
+    mutate(context)
+    return context.performed_mutation_ids
 
 
 def mutate_file(backup, context):
+    """
+
+    :type backup: bool
+    :type context: Context
+    """
     code = open(context.filename).read()
     context.source = code
     if backup:

@@ -5,6 +5,8 @@ table.css.map
 .idea
 .cache
 .DS_Store
+.pytest_cache
+testreport.xml
 
 # C extensions
 *.so

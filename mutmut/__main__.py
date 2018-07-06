@@ -1,3 +1,4 @@
+# coding=utf-8
 from __future__ import print_function
 
 import os
@@ -5,12 +6,12 @@ from subprocess import check_call, CalledProcessError, check_output
 import sys
 from datetime import datetime
 from shutil import move, copy
-from os.path import isdir, isfile
+from os.path import isdir
 from functools import wraps
 
 import click
 
-from mutmut import mutate, ALL, count_mutations, mutate_file, Context
+from . import mutate, mutate_file, Context, list_mutations
 
 if sys.version_info < (3, 0):
     # noinspection PyCompatibility
@@ -44,32 +45,74 @@ def config_from_setup_cfg(**defaults):
 
 
 # this function is stolen and modified from tqdm
-def status_printer(file):
+def status_printer():
     """
     Manage the printing and in-place updating of a line of characters.
     Note that if the string is longer than a line, then in-place
     updating may not work (it will print a new line at each refresh).
     """
-    fp = file
-
     last_len = [0]
 
-    def print_status(s):
+    def p(s):
         len_s = len(s)
-        fp.write('\r' + s + (' ' * max(last_len[0] - len_s, 0)))
-        fp.flush()
+        sys.stdout.write('\r' + s + (' ' * max(last_len[0] - len_s, 0)))
+        sys.stdout.flush()
         last_len[0] = len_s
-    return print_status
+    return p
 
 
-print_status = status_printer(sys.stdout)
+print_status = status_printer()
+
+
+def get_or_guess_paths_to_mutate(paths_to_mutate):
+    if paths_to_mutate is None:
+        # Guess path with code
+        this_dir = os.getcwd().split(os.sep)[-1]
+        if isdir('lib'):
+            return 'lib'
+        elif isdir('src'):
+            return 'src'
+        elif isdir(this_dir):
+            return this_dir
+        else:
+            raise ErrorMessage('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+    else:
+        return paths_to_mutate
+
+
+mutation_id_separator = u'⤑'
+
+
+def do_apply(mutation, paths_to_mutate, dict_synonyms, backup):
+    assert mutation is not None
+
+    mutation_id = mutation.split(mutation_id_separator)
+    mutation_id[1] = int(mutation_id[1])
+    mutation_id = tuple(mutation_id)
+
+    assert len(paths_to_mutate) == 1
+    context = Context(
+        mutate_id=mutation_id,
+        filename=paths_to_mutate[0],
+        dict_synonyms=dict_synonyms,
+    )
+    mutate_file(
+        backup=backup,
+        context=context,
+    )
+    if context.number_of_performed_mutations == 0:
+        raise ErrorMessage('ERROR: no mutations performed. Are you sure the index is not too big?')
+
+
+class ErrorMessage(Exception):
+    pass
 
 
 @click.command()
 @click.argument('paths_to_mutate', nargs=-1)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
 @click.option('--backup/--no-backup', default=False)
-@click.option('--mutation', type=click.INT)
+@click.option('--mutation', type=click.STRING)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
@@ -83,44 +126,23 @@ print_status = status_printer(sys.stdout)
     show_times=False,
 )
 def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
-    if paths_to_mutate is None:
-        # Guess path with code
-        this_dir = os.getcwd().split(os.sep)[-1]
-        if isdir('lib'):
-            paths_to_mutate = 'lib'
-        elif isdir('src'):
-            paths_to_mutate = 'src'
-        elif isdir(this_dir):
-            paths_to_mutate = this_dir
-        else:
-            print('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
-            return
+    paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        print('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
-        return
+        raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
     if apply:
-        assert mutation is not None
-        assert len(paths_to_mutate) == 1
-        mutations_performed = mutate_file(
-            backup=backup,
-            context=Context(
-                mutate_index=mutation,
-                filename=paths_to_mutate[0],
-                dict_synonyms=dict_synonyms,
-            ),
-        )
-        if mutations_performed == 0:
-            print('ERROR: no mutations performed. Are you sure the index is not too big?')
+        do_apply(mutation, paths_to_mutate, dict_synonyms, backup)
         return
+
+    del mutation
 
     null_stdout = open(os.devnull, 'w') if not s else None
     null_stderr = open(os.devnull, 'w') if not s else None
@@ -134,78 +156,42 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
             copy('.testmondata-initial', '.testmondata')
         check_call(test_command, shell=True, stdout=null_stdout, stderr=null_stderr)
 
-    start_time = datetime.now()
-    try:
-        check_output(test_command, shell=True)
-        baseline_time_elapsed = datetime.now() - start_time
-    except CalledProcessError as e:
-        if using_testmon and e.returncode == 5:
-            baseline_time_elapsed = datetime.now() - start_time
-        else:
-            print("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
-            print(e.output.decode())
-            return
+    baseline_time_elapsed = time_test_suite(test_command, using_testmon)
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
 
-    coverage_data = None
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-
-    def exclude(context):
-        if use_coverage:
-            measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-            if measured_lines is None:
-                return True
-            if context.current_line not in measured_lines:
-                return True
-
-        return False
+    coverage_data = read_coverage_data(use_coverage)
 
     mutations_by_file = {}
 
-    def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
-        mutations_by_file[filename] = count_mutations(
-            Context(
-                source=open(filename).read(),
-                filename=filename,
-                exclude=exclude,
-                dict_synonyms=dict_synonyms,
-            )
-        )
+    def _exclude(context):
+        return exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
 
     for path in paths_to_mutate:
-        if isfile(path) and path.endswith('.py'):
-            filename = path
-            add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
-        else:
-            for filename in python_source_files(path):
-                add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms)
+        for filename in python_source_files(path):
+            add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
 
-    total = sum(mutations_by_file.values())
+    total = sum(len(mutations) for mutations in mutations_by_file.values())
 
     print('--- starting mutation ---')
     progress = 0
     for filename, mutations in mutations_by_file.items():
-        for mutation_index in range(mutations):
-            if mutation is not None and mutation != mutation_index:
+        for mutation_id in mutations:
+            if mutation_id is not None and mutation_id != mutation_id:
                 continue
             start_time = datetime.now()
             progress += 1
-            print_status('%s out of %s  (file: %s, mutation: %s)' % (progress, total, filename, mutation_index))
+            print_status('%s out of %s  (file: %s)' % (progress, total, filename))
+            time_elapsed = None
             try:
-                apply_line = 'mutmut %s --mutation %s --apply' % (filename, mutation_index)
+                apply_line = 'mutmut %s --mutation "%s%s%s" --apply' % (filename, mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
                 assert mutate_file(
                     backup=True,
                     context=Context(
-                        mutate_index=mutation_index,
+                        mutate_id=mutation_id,
                         filename=filename,
-                        exclude=exclude,
+                        exclude=_exclude,
                         dict_synonyms=dict_synonyms,
                     )
                 )
@@ -214,7 +200,6 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                     print_status('')
                     time_elapsed = (datetime.now() - start_time)
                     print('\rFAILED: %s' % apply_line)
-                    # print(check_output(['/usr/local/bin/git', 'diff']))
                 except CalledProcessError as e:
                     if using_testmon and e.returncode == 5:
                         print('\rFAILED (all tests skipped, uncovered line?): %s' % apply_line)
@@ -237,6 +222,53 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                     pass
 
 
+def read_coverage_data(use_coverage):
+    if use_coverage:
+        print('Using coverage data from .coverage file')
+        # noinspection PyPackageRequirements,PyUnresolvedReferences
+        import coverage
+        coverage_data = coverage.CoverageData()
+        coverage_data.read_file('.coverage')
+        return coverage_data
+    else:
+        return None
+
+
+def time_test_suite(test_command, using_testmon):
+    start_time = datetime.now()
+    try:
+        check_output(test_command, shell=True)
+        baseline_time_elapsed = datetime.now() - start_time
+    except CalledProcessError as e:
+        if using_testmon and e.returncode == 5:
+            baseline_time_elapsed = datetime.now() - start_time
+        else:
+            raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\n%s" % (test_command, e.output.decode()))
+    return baseline_time_elapsed
+
+
+def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    mutations_by_file[filename] = list_mutations(
+        Context(
+            source=open(filename).read(),
+            filename=filename,
+            exclude=exclude,
+            dict_synonyms=dict_synonyms,
+        )
+    )
+
+
+def exclude_callback(context, use_coverage, coverage_data):
+    if use_coverage:
+        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
+        if measured_lines is None:
+            return True
+        if context.current_line not in measured_lines:
+            return True
+
+    return False
+
+
 def python_source_files(path):
     if isdir(path):
         for root, dirs, files in os.walk(path):
@@ -250,10 +282,14 @@ def python_source_files(path):
 def number_of_mutations(path):
     total = 0
     for filename in python_source_files(path):
-        _, c = mutate(Context(source=open(filename).read(), mutate_index=ALL))
-        total += c
+        context = Context(source=open(filename).read())
+        mutate(context)
+        total += context.number_of_performed_mutations
     return total
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except ErrorMessage as main_error:
+        print(str(main_error))

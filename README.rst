@@ -46,7 +46,7 @@ The output of the mutation tests (if you have surviving mutants) looks like:
 
 .. code-block::
 
-    FAILED: mutmut path/filename.py --mutation 10 --apply
+    FAILED: mutmut path/filename.py --mutation "    f(1)/10" --apply
 
 I've made is to you can just copy paste everything after "FAILED:" and run it directly and you'll get the
 mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!

@@ -1,0 +1,34 @@
+Mutmut cached results plan:
+
+- Change apply logic from "file/index" to "file/{line source}/index"
+
+class SurvivingMutant:
+    line: str
+    mutants: [indexes: int]
+    
+
+- Store lines with no surviving mutants {filepath: set[SurvivingMutant]}
+- Store hashes of source files {filepath: hash}
+- Store hash of entire tests directory (for now... otherwise I need to build specific support for each test runner?)
+
+
+def changed_file(file_to_mutate):
+    for line in file_to_mutate:
+        if line is old:
+            report set of surviving mutants for line
+        else:
+            run mutation tests on line
+    
+for file_to_mutate in ...:
+    if hash of tests is unchanged: 
+        if hash of file is unchanged:
+            report set of surviving mutants for file
+        else:
+            changed_file(file_to_mutate)
+        
+    else:  # tests have changed
+        if hash of file is unchanged:
+            rerun tests for the cached surviving mutants
+        else:
+            changed_file(file_to_mutate)
+            
