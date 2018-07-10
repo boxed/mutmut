@@ -8,6 +8,7 @@ from datetime import datetime
 from shutil import move, copy
 from os.path import isdir
 from functools import wraps
+from io import open
 
 import click
 
@@ -178,52 +179,73 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
     print('--- starting mutation ---')
+    os.mkdir('.mutmut-cache')
     progress = 0
     for filename, mutations in mutations_by_file.items():
-        for mutation_id in mutations:
-            if mutation_id is not None and mutation_id != mutation_id:
-                continue
-            start_time = datetime.now()
-            progress += 1
-            print_status('%s out of %s  (file: %s)' % (progress, total, filename))
-            time_elapsed = None
-            try:
-                apply_line = 'mutmut %s --mutation "%s%s%s" --apply' % (filename, mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
-                context = Context(
-                    mutate_id=mutation_id,
-                    filename=filename,
-                    exclude=_exclude,
-                    dict_synonyms=dict_synonyms,
-                )
-                assert mutate_file(
-                    backup=True,
-                    context=context
-                )
-                try:
-                    run_tests()
-                    print_status('')
-                    time_elapsed = (datetime.now() - start_time)
-                    print('\rFAILED: %s' % apply_line)
-                except CalledProcessError as e:
-                    if using_testmon and e.returncode == 5:
-                        print('\rFAILED (all tests skipped, uncovered line?)\n   %s' % apply_line)
-                    time_elapsed = (datetime.now() - start_time)
+        with open('.mutmut-cache/%s-surviving-mutants' % filename, 'w') as surviving_mutants_file, open('.mutmut-cache/%s-ok-lines' % filename, 'w') as ok_lines_file:
+            last_mutation_id = None
+            line_ok = False
+            mutation_id = None
+            for mutation_id in mutations:
+                if last_mutation_id is None or last_mutation_id[0] != mutation_id[0]:
+                    # We haven't seen this line before
+                    line_ok = True
 
-                if time_elapsed > baseline_time_elapsed * 2:
-                    print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, baseline_time_elapsed, apply_line))
-                os.remove(filename)
+                if mutation_id is not None and mutation_id != mutation_id:
+                    continue
+                mutation_id_str = '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
+                start_time = datetime.now()
+                progress += 1
+                print_status('%s out of %s  (file: %s)' % (progress, total, filename))
+                time_elapsed = None
                 try:
-                    os.remove(filename+'c')  # remove .pyc file
-                except OSError:
-                    pass
-            finally:
-                try:
-                    move(filename+'.bak', filename)
+                    apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, mutation_id_str)
+                    context = Context(
+                        mutate_id=mutation_id,
+                        filename=filename,
+                        exclude=_exclude,
+                        dict_synonyms=dict_synonyms,
+                    )
+                    assert mutate_file(
+                        backup=True,
+                        context=context
+                    )
+                    try:
+                        run_tests()
+                        print_status('')
+                        time_elapsed = (datetime.now() - start_time)
+                        print('\rFAILED: %s' % apply_line)
+                        line_ok = False
+                        surviving_mutants_file.write(mutation_id_str + '\n')
+                    except CalledProcessError as e:
+                        if using_testmon and e.returncode == 5:
+                            print('\rFAILED (all tests skipped, uncovered line?)\n   %s' % apply_line)
+                            line_ok = False
+                        time_elapsed = (datetime.now() - start_time)
 
-                    if show_times:
-                        print('time: %s' % time_elapsed)
-                except IOError:
-                    pass
+                    if time_elapsed > baseline_time_elapsed * 2:
+                        print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, baseline_time_elapsed, apply_line))
+                    os.remove(filename)
+                    try:
+                        os.remove(filename+'c')  # remove .pyc file
+                    except OSError:
+                        pass
+                finally:
+                    try:
+                        move(filename+'.bak', filename)
+
+                        if show_times:
+                            print('time: %s' % time_elapsed)
+                    except IOError:
+                        pass
+                if line_ok:
+                    last_mutation_id = mutation_id
+                    if last_mutation_id and last_mutation_id[0] != mutation_id:
+                        ok_lines_file.write(mutation_id_str + '\n')
+            # after loop
+            if line_ok:
+                if last_mutation_id and last_mutation_id[0] != mutation_id:
+                    ok_lines_file.write(mutation_id[0] + '\n')
 
 
 def read_coverage_data(use_coverage):

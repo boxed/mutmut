@@ -3,7 +3,8 @@ Mutmut cached results plan:
 DONE: - Change apply logic from "file/index" to "file/{line source}/index"
 DONE: - Improve tests to cover __main__.py
 
-- Store lines with no surviving mutants {filepath: set[line source]}
+DONE: - Store lines with no surviving mutants {filepath: set[line source]}
+DONE: - Store surviving mutants: {filepath: set[(line, index)]}
 - Store hashes of source files {filepath: hash}
 - Store hash of entire tests directory (for now... otherwise I need to build specific support for each test runner?)
 
