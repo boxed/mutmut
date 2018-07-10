@@ -7,6 +7,7 @@ table.css.map
 .DS_Store
 .pytest_cache
 testreport.xml
+test_fs/
 
 # C extensions
 *.so

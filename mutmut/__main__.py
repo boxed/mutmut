@@ -11,11 +11,14 @@ from functools import wraps
 
 import click
 
-from . import mutate, mutate_file, Context, list_mutations
+from . import mutate_file, Context, list_mutations
 
 if sys.version_info < (3, 0):
     # noinspection PyCompatibility
     from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+    # This little hack is needed to get the click tester working on python 2.7
+    orig_print = print
+    print = lambda x: orig_print(x.encode('utf8'))
 else:
     # noinspection PyUnresolvedReferences
     from configparser import ConfigParser, NoOptionError, NoSectionError
@@ -186,14 +189,15 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
             time_elapsed = None
             try:
                 apply_line = 'mutmut %s --mutation "%s%s%s" --apply' % (filename, mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
+                context = Context(
+                    mutate_id=mutation_id,
+                    filename=filename,
+                    exclude=_exclude,
+                    dict_synonyms=dict_synonyms,
+                )
                 assert mutate_file(
                     backup=True,
-                    context=Context(
-                        mutate_id=mutation_id,
-                        filename=filename,
-                        exclude=_exclude,
-                        dict_synonyms=dict_synonyms,
-                    )
+                    context=context
                 )
                 try:
                     run_tests()
@@ -202,11 +206,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                     print('\rFAILED: %s' % apply_line)
                 except CalledProcessError as e:
                     if using_testmon and e.returncode == 5:
-                        print('\rFAILED (all tests skipped, uncovered line?): %s' % apply_line)
+                        print('\rFAILED (all tests skipped, uncovered line?)\n   %s' % apply_line)
                     time_elapsed = (datetime.now() - start_time)
 
                 if time_elapsed > baseline_time_elapsed * 2:
-                    print('\nSUSPICIOUS LONG TIME: %s > expected %s (%s)' % (time_elapsed, baseline_time_elapsed, apply_line))
+                    print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, baseline_time_elapsed, apply_line))
                 os.remove(filename)
                 try:
                     os.remove(filename+'c')  # remove .pyc file
@@ -277,15 +281,6 @@ def python_source_files(path):
                     yield os.path.join(root, filename)
     else:
         yield path
-
-
-def number_of_mutations(path):
-    total = 0
-    for filename in python_source_files(path):
-        context = Context(source=open(filename).read())
-        mutate(context)
-        total += context.number_of_performed_mutations
-    return total
 
 
 if __name__ == '__main__':

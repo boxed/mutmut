@@ -428,6 +428,7 @@ def mutate_file(backup, context):
     context.source = code
     if backup:
         open(context.filename + '.bak', 'w').write(code)
-    result, mutations_performed = mutate(context)
-    open(context.filename, 'w').write(result)
-    return mutations_performed
+    result, number_of_mutations_performed = mutate(context)
+    with open(context.filename, 'w') as f:
+        f.write(result)
+    return number_of_mutations_performed
