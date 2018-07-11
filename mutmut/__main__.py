@@ -1,6 +1,7 @@
 # coding=utf-8
 from __future__ import print_function
 
+import hashlib
 import os
 from subprocess import check_call, CalledProcessError, check_output
 import sys
@@ -112,6 +113,73 @@ class ErrorMessage(Exception):
     pass
 
 
+def hash_of(filename):
+    with open(filename, 'rb') as f:
+        m = hashlib.sha256()
+        m.update(f.read())
+        return m.hexdigest()
+
+
+def hash_of_tests(tests_dir):
+    m = hashlib.sha256()
+    for root, dirs, files in os.walk(tests_dir):
+        for filename in files:
+            with open(os.path.join(root, filename), 'rb') as f:
+                m.update(f.read())
+    return m.hexdigest()
+
+
+def update_hash_of_source_file(filename, hash_of_file, hashes):
+    hashes[filename] = hash_of_file
+    with open('.mutmut-cache/hashes', 'w') as f:
+        f.writelines(':'.join([k, v]) for k, v in hashes.items())
+
+
+def load_hash_of_source_file():
+    try:
+        with open('.mutmut-cache/hashes') as f:
+            return dict(line.split(':') for line in f.readlines())
+    except IOError:
+        return {}
+
+
+def write_tests_hash(tests_hash):
+    with open('.mutmut-cache/tests-hash', 'wb') as f:
+        f.write(tests_hash)
+
+
+def load_hash_of_tests():
+    try:
+        with open('.mutmut-cache/tests-hash') as f:
+            return f.read()
+    except IOError:
+        return None
+
+
+def parse_mutation_id_str(s):
+    m = s.split(mutation_id_separator)
+    m[1] = int(m[1])
+    return m
+
+
+def load_surviving_mutants(filename):
+    try:
+        with open(filename) as f:
+            lines = f.read().splitlines()
+            return [parse_mutation_id_str(x) for x in lines]
+
+    except IOError:
+        return {}
+
+
+def load_ok_lines(filename):
+    try:
+        with open(filename) as f:
+            return f.read().splitlines()
+    except IOError:
+        return {}
+
+
 @click.command()
 @click.argument('paths_to_mutate', nargs=-1)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
@@ -146,6 +214,8 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         do_apply(mutation, paths_to_mutate, dict_synonyms, backup)
         return
 
+    os.mkdir('.mutmut-cache')
+
     del mutation
 
     null_stdout = open(os.devnull, 'w') if not s else None
@@ -178,11 +248,25 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
+    old_hash_of_tests = load_hash_of_tests()
+    old_hashes_of_source_files = load_hash_of_source_file()
+
+    tests_hash = hash_of_tests(tests_dir)
+    write_tests_hash(tests_hash)
+
     print('--- starting mutation ---')
-    os.mkdir('.mutmut-cache')
     progress = 0
+    hashes = {}
     for filename, mutations in mutations_by_file.items():
-        with open('.mutmut-cache/%s-surviving-mutants' % filename, 'w') as surviving_mutants_file, open('.mutmut-cache/%s-ok-lines' % filename, 'w') as ok_lines_file:
+        hash_of_file = hash_of(filename)
+
+
+
+        surviving_mutants_filename = '.mutmut-cache/%s-surviving-mutants' % filename
+        ok_lines_filename = '.mutmut-cache/%s-ok-lines' % filename
+        old_surviving_mutants = load_surviving_mutants(surviving_mutants_filename)
+        old_ok_lines = load_ok_lines(ok_lines_filename)
+        with open(surviving_mutants_filename, 'w') as surviving_mutants_file, open(ok_lines_filename, 'w') as ok_lines_file:
             last_mutation_id = None
             line_ok = False
             mutation_id = None
@@ -241,11 +325,13 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
                 if line_ok:
                     last_mutation_id = mutation_id
                     if last_mutation_id and last_mutation_id[0] != mutation_id:
-                        ok_lines_file.write(mutation_id_str + '\n')
+                        ok_lines_file.write(mutation_id_str[0] + '\n')
             # after loop
             if line_ok:
                 if last_mutation_id and last_mutation_id[0] != mutation_id:
                     ok_lines_file.write(mutation_id[0] + '\n')
+
+            update_hash_of_source_file(filename, hashes=hashes, hash_of_file=hash_of_file)
 
 
 def read_coverage_data(use_coverage):

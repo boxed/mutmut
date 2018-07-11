@@ -4,9 +4,13 @@ DONE: - Change apply logic from "file/index" to "file/{line source}/index"
 DONE: - Improve tests to cover __main__.py
 
 DONE: - Store lines with no surviving mutants {filepath: set[line source]}
+DONE:    load
 DONE: - Store surviving mutants: {filepath: set[(line, index)]}
-- Store hashes of source files {filepath: hash}
-- Store hash of entire tests directory (for now... otherwise I need to build specific support for each test runner?)
+DONE:    load
+DONE: - Store hashes of source files {filepath: hash}
+DONE:    load
+DONE: - Store hash of entire tests directory (for now... otherwise I need to build specific support for each test runner?)
+DONE:    load
 
 
 def changed_file(file_to_mutate):
