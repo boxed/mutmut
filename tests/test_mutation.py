@@ -1,4 +1,4 @@
-from mutmut import mutate, count_mutations, ALL, Context
+from mutmut import mutate, count_mutations, ALL, Context, list_mutations
 import pytest
 
 
@@ -57,6 +57,14 @@ def test_basic_mutations(actual, expected):
 
 def test_mutate_all():
     assert mutate(Context(source='def foo():\n    return 1+1', mutate_id=ALL)) == ('def foo():\n    return 2-2\n', 3)
+
+
+def test_mutate_both():
+    source = 'a = b + c'
+    mutations = list_mutations(Context(source=source))
+    assert len(mutations) == 2
+    assert mutate(Context(source=source, mutate_id=mutations[0])) == ('a = b - c', 1)
+    assert mutate(Context(source=source, mutate_id=mutations[1])) == ('a = None', 1)
 
 
 def test_count_available_mutations():

@@ -1,8 +1,12 @@
 # coding=utf-8
+
+# NOTE: to persistently print to screen, you must first print_status('') and then begin your line with \r
+
 from __future__ import print_function
 
 import hashlib
 import os
+from itertools import groupby
 from subprocess import check_call, CalledProcessError, check_output
 import sys
 from datetime import datetime
@@ -20,7 +24,7 @@ if sys.version_info < (3, 0):
     from ConfigParser import ConfigParser, NoOptionError, NoSectionError
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
-    print = lambda x: orig_print(x.encode('utf8'))
+    print = lambda x, **kwargs: orig_print(x.encode('utf8'), **kwargs)
 else:
     # noinspection PyUnresolvedReferences
     from configparser import ConfigParser, NoOptionError, NoSectionError
@@ -132,13 +136,13 @@ def hash_of_tests(tests_dir):
 def update_hash_of_source_file(filename, hash_of_file, hashes):
     hashes[filename] = hash_of_file
     with open('.mutmut-cache/hashes', 'w') as f:
-        f.writelines(':'.join([k, v]) for k, v in hashes.items())
+        f.writelines(u':'.join([k, v]) + '\n' for k, v in hashes.items())
 
 
 def load_hash_of_source_file():
     try:
         with open('.mutmut-cache/hashes') as f:
-            return dict(line.split(':') for line in f.readlines())
+            return dict(line.strip().split(':') for line in f.readlines())
     except IOError:
         return {}
 
@@ -162,9 +166,17 @@ def parse_mutation_id_str(s):
     return m
 
 
+def surviving_mutants_filename(f):
+    return '.mutmut-cache/%s-surviving-mutants' % f.replace(os.sep, '__')
+
+
+def ok_lines_filename(f):
+    return '.mutmut-cache/%s-ok-lines' % f.replace(os.sep, '__')
+
+
 def load_surviving_mutants(filename):
     try:
-        with open(filename) as f:
+        with open(surviving_mutants_filename(filename)) as f:
             lines = f.read().splitlines()
             return [parse_mutation_id_str(x) for x in lines]
 
@@ -174,10 +186,35 @@ def load_surviving_mutants(filename):
 
 def load_ok_lines(filename):
     try:
-        with open(filename) as f:
+        with open(ok_lines_filename(filename)) as f:
             return f.read().splitlines()
     except IOError:
         return {}
+
+
+def write_ok_line(filename, line):
+    with open(ok_lines_filename(filename), 'a') as f:
+        f.write(line + '\n')
+
+
+null_out = open(os.devnull, 'w')
+
+
+class Config(object):
+    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon):
+        self.swallow_output = swallow_output
+        self.test_command = test_command
+        self.exclude_callback = exclude_callback
+        self.baseline_time_elapsed = baseline_time_elapsed
+        self.backup = backup
+        self.dict_synonyms = dict_synonyms
+        self.total = total
+        self.using_testmon = using_testmon
+        self.progress = 0
+        self.skipped = 0
+
+    def print_progress(self, file_to_mutate):
+        print_status('%s out of %s  (file: %s)' % (self.progress, self.total, file_to_mutate))
 
 
 @click.command()
@@ -214,21 +251,16 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         do_apply(mutation, paths_to_mutate, dict_synonyms, backup)
         return
 
-    os.mkdir('.mutmut-cache')
+    try:
+        os.mkdir('.mutmut-cache')
+    except OSError:
+        pass
 
     del mutation
-
-    null_stdout = open(os.devnull, 'w') if not s else None
-    null_stderr = open(os.devnull, 'w') if not s else None
 
     test_command = '%s %s' % (runner, tests_dir)
 
     using_testmon = '--testmon' in test_command
-
-    def run_tests():
-        if using_testmon:
-            copy('.testmondata-initial', '.testmondata')
-        check_call(test_command, shell=True, stdout=null_stdout, stderr=null_stderr)
 
     baseline_time_elapsed = time_test_suite(test_command, using_testmon)
 
@@ -248,24 +280,143 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
+    print('--- starting mutation ---')
+    config = Config(
+        swallow_output=not s,
+        test_command=test_command,
+        exclude_callback=_exclude,
+        baseline_time_elapsed=baseline_time_elapsed,
+        backup=backup,
+        dict_synonyms=dict_synonyms,
+        total=total,
+        using_testmon=using_testmon,
+    )
+
+    run_mutation_tests(config=config, mutations_by_file=mutations_by_file, tests_dir=tests_dir)
+
+
+def get_mutation_id_str(mutation_id):
+    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
+
+
+def tests_pass(config):
+    if config.using_testmon:
+        copy('.testmondata-initial', '.testmondata')
+
+    try:
+        check_call(
+            config.test_command,
+            shell=True,
+            stdout=null_out if config.swallow_output else None,
+            stderr=null_out if config.swallow_output else None,
+        )
+
+        return True
+    except CalledProcessError as e:
+        return False
+
+
+def write_surviving_mutant(filename, mutation_id):
+    with open(surviving_mutants_filename(filename), 'a') as f:
+        f.write(get_mutation_id_str(mutation_id) + '\n')
+
+
+SURVIVING_MUTANT = 'surviving_mutant'
+OK = 'ok'
+
+
+def run_mutation(config, filename, mutation_id):
+    context = Context(
+        mutate_id=mutation_id,
+        filename=filename,
+        exclude=config.exclude_callback,
+        dict_synonyms=config.dict_synonyms,
+    )
+    try:
+        assert mutate_file(
+            backup=True,
+            context=context
+        )
+        survived = not tests_pass(config)
+        apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, get_mutation_id_str(mutation_id))
+        if survived:
+            print_status('')
+            print('\rFAILED: %s' % apply_line)
+            write_surviving_mutant(filename, mutation_id)
+            return SURVIVING_MUTANT
+        else:
+            return OK
+    finally:
+        move(filename + '.bak', filename)
+
+
+def changed_file(config, file_to_mutate, mutations):
+    old_surviving_mutants = load_surviving_mutants(file_to_mutate)
+    old_ok_lines = load_ok_lines(file_to_mutate)
+
+    for line, mutations in groupby(mutations, key=lambda x: x[0]):
+        line_state = OK
+        if line in old_surviving_mutants or line in old_ok_lines:
+            # report set of surviving mutants for line
+            print_status('')
+            print('\rold line')
+            config.progress += len(str(mutations))
+            config.print_progress(file_to_mutate)
+        else:
+            # run mutation tests on line
+            for mutation in mutations:
+                config.progress += 1
+                config.print_progress(file_to_mutate)
+                x = run_mutation(config, file_to_mutate, mutation)
+                if x == SURVIVING_MUTANT:
+                    line_state = SURVIVING_MUTANT
+        if line_state is OK:
+            write_ok_line(file_to_mutate, line)
+
+
+def run_mutation_tests(config, mutations_by_file, tests_dir):
+    """
+
+    :type config: Config
+    """
     old_hash_of_tests = load_hash_of_tests()
     old_hashes_of_source_files = load_hash_of_source_file()
+    new_hashes_of_source_files = {}
 
-    tests_hash = hash_of_tests(tests_dir)
-    write_tests_hash(tests_hash)
+    new_hash_of_tests = hash_of_tests(tests_dir)
+    # TODO: it's wrong to write this here.. need to write down the proper order of updating the cache
+    write_tests_hash(new_hash_of_tests)
 
-    print('--- starting mutation ---')
+    for file_to_mutate, mutations in mutations_by_file.items():
+        old_hash = old_hashes_of_source_files.get(file_to_mutate)
+        new_hash = hash_of(file_to_mutate)
+        config.print_progress(file_to_mutate)
+        if new_hash_of_tests == old_hash_of_tests:
+            if new_hash == old_hash:
+                # TODO: report set of surviving mutants for file
+                print_status('')
+                print('\rUnchanged file %s' % file_to_mutate)
+            else:
+                changed_file(config, file_to_mutate, mutations)
+
+        else:
+            # tests have changed
+            if new_hash == old_hash:
+                # TODO: rerun tests for the cached surviving mutants
+                pass
+            else:
+                changed_file(config, file_to_mutate, mutations)
+        update_hash_of_source_file(file_to_mutate, new_hash, new_hashes_of_source_files)
+
+
+def old_mutation_implementation(mutations_by_file, total, _exclude, dict_synonyms, using_testmon, run_tests, baseline_time_elapsed, show_times):
     progress = 0
     hashes = {}
     for filename, mutations in mutations_by_file.items():
         hash_of_file = hash_of(filename)
 
-
-
-        surviving_mutants_filename = '.mutmut-cache/%s-surviving-mutants' % filename
-        ok_lines_filename = '.mutmut-cache/%s-ok-lines' % filename
-        old_surviving_mutants = load_surviving_mutants(surviving_mutants_filename)
-        old_ok_lines = load_ok_lines(ok_lines_filename)
+        old_surviving_mutants = load_surviving_mutants(filename)
+        old_ok_lines = load_ok_lines(filename)
         with open(surviving_mutants_filename, 'w') as surviving_mutants_file, open(ok_lines_filename, 'w') as ok_lines_file:
             last_mutation_id = None
             line_ok = False
@@ -347,6 +498,7 @@ def read_coverage_data(use_coverage):
 
 
 def time_test_suite(test_command, using_testmon):
+    print('Running tests without mutations...', end='')
     start_time = datetime.now()
     try:
         check_output(test_command, shell=True)
@@ -356,6 +508,7 @@ def time_test_suite(test_command, using_testmon):
             baseline_time_elapsed = datetime.now() - start_time
         else:
             raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\n%s" % (test_command, e.output.decode()))
+    print(' Done')
     return baseline_time_elapsed
 
 
