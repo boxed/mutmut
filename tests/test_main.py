@@ -47,7 +47,7 @@ def test_simple_apply():
 @pytest.mark.usefixtures('test_fs')
 def test_full_run():
     result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
-    assert result.output == u'--- starting mutation ---\n\r1 out of 4  (file: foo.py)\r                          \rFAILED: mutmut foo.py --mutation "a = b + c\u29110" --apply\n\r2 out of 4  (file: foo.py)\r                          \rFAILED: mutmut foo.py --mutation "a = b + c\u29111" --apply\n\r3 out of 4  (file: foo.py)\r                          \rFAILED: mutmut foo.py --mutation "d = dict(e=f)\u29110" --apply\n\r4 out of 4  (file: foo.py)\r                          \rFAILED: mutmut foo.py --mutation "d = dict(e=f)\u29111" --apply\n'
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 4  (file: foo.py)\r1 out of 4  (file: foo.py)\r2 out of 4  (file: foo.py)\r3 out of 4  (file: foo.py)\r4 out of 4  (file: foo.py)'
 
 
 @pytest.mark.usefixtures('test_fs')

@@ -338,16 +338,20 @@ def run_mutation(config, filename, mutation_id):
             context=context
         )
         survived = not tests_pass(config)
-        apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, get_mutation_id_str(mutation_id))
         if survived:
             print_status('')
-            print('\rFAILED: %s' % apply_line)
+            print('\rFAILED: %s' % get_apply_line(filename, mutation_id))
             write_surviving_mutant(filename, mutation_id)
             return SURVIVING_MUTANT
         else:
             return OK
     finally:
         move(filename + '.bak', filename)
+
+
+def get_apply_line(filename, mutation_id):
+    apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, get_mutation_id_str(mutation_id))
+    return apply_line
 
 
 def changed_file(config, file_to_mutate, mutations):
@@ -396,6 +400,8 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
                 # TODO: report set of surviving mutants for file
                 print_status('')
                 print('\rUnchanged file %s' % file_to_mutate)
+                for surviving_mutant in load_surviving_mutants(file_to_mutate):
+                    print('\r(cached existing) FAILED: %s' % get_apply_line(file_to_mutate, surviving_mutant))
             else:
                 changed_file(config, file_to_mutate, mutations)
 
