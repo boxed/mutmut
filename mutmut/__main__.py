@@ -95,9 +95,7 @@ mutation_id_separator = u'⤑'
 def do_apply(mutation, paths_to_mutate, dict_synonyms, backup):
     assert mutation is not None
 
-    mutation_id = mutation.split(mutation_id_separator)
-    mutation_id[1] = int(mutation_id[1])
-    mutation_id = tuple(mutation_id)
+    mutation_id = parse_mutation_id_str(mutation)
 
     assert len(paths_to_mutate) == 1
     context = Context(
@@ -148,7 +146,7 @@ def load_hash_of_source_file():
 
 
 def write_tests_hash(tests_hash):
-    with open('.mutmut-cache/tests-hash', 'wb') as f:
+    with open('.mutmut-cache/tests-hash', 'w') as f:
         f.write(tests_hash)
 
 
@@ -162,8 +160,14 @@ def load_hash_of_tests():
 
 def parse_mutation_id_str(s):
     m = s.split(mutation_id_separator)
+    m[0] = m[0].replace('\\"', '"')
     m[1] = int(m[1])
-    return m
+    assert len(m) == 2
+    return tuple(m)
+
+
+def get_mutation_id_str(mutation_id):
+    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
 
 
 def surviving_mutants_filename(f):
@@ -213,8 +217,8 @@ class Config(object):
         self.progress = 0
         self.skipped = 0
 
-    def print_progress(self, file_to_mutate):
-        print_status('%s out of %s  (file: %s)' % (self.progress, self.total, file_to_mutate))
+    def print_progress(self, file_to_mutate, mutation=None):
+        print_status('%s out of %s  (%s%s)' % (self.progress, self.total, file_to_mutate, ' ' + get_mutation_id_str(mutation) if mutation else ''))
 
 
 @click.command()
@@ -295,10 +299,6 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file, tests_dir=tests_dir)
 
 
-def get_mutation_id_str(mutation_id):
-    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
-
-
 def tests_pass(config):
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
@@ -317,6 +317,11 @@ def tests_pass(config):
 
 
 def write_surviving_mutant(filename, mutation_id):
+    surviving_mutants = load_surviving_mutants(filename)
+    if mutation_id in surviving_mutants:
+        # Avoid storing the same mutant again
+        return
+
     with open(surviving_mutants_filename(filename), 'a') as f:
         f.write(get_mutation_id_str(mutation_id) + '\n')
 
@@ -333,10 +338,13 @@ def run_mutation(config, filename, mutation_id):
         dict_synonyms=config.dict_synonyms,
     )
     try:
-        assert mutate_file(
+        number_of_mutations_performed = mutate_file(
             backup=True,
             context=context
         )
+        if not number_of_mutations_performed:
+            import ipdb; ipdb.set_trace()
+        assert number_of_mutations_performed
         survived = not tests_pass(config)
         if survived:
             print_status('')
@@ -350,7 +358,7 @@ def run_mutation(config, filename, mutation_id):
 
 
 def get_apply_line(filename, mutation_id):
-    apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, get_mutation_id_str(mutation_id))
+    apply_line = 'mutmut %s --apply --mutation "%s"' % (filename, get_mutation_id_str(mutation_id))
     return apply_line
 
 
@@ -370,7 +378,7 @@ def changed_file(config, file_to_mutate, mutations):
             # run mutation tests on line
             for mutation in mutations:
                 config.progress += 1
-                config.print_progress(file_to_mutate)
+                config.print_progress(file_to_mutate, mutation)
                 x = run_mutation(config, file_to_mutate, mutation)
                 if x == SURVIVING_MUTANT:
                     line_state = SURVIVING_MUTANT
@@ -397,7 +405,6 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
         config.print_progress(file_to_mutate)
         if new_hash_of_tests == old_hash_of_tests:
             if new_hash == old_hash:
-                # TODO: report set of surviving mutants for file
                 print_status('')
                 print('\rUnchanged file %s' % file_to_mutate)
                 for surviving_mutant in load_surviving_mutants(file_to_mutate):
@@ -408,8 +415,7 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
         else:
             # tests have changed
             if new_hash == old_hash:
-                # TODO: rerun tests for the cached surviving mutants
-                pass
+                changed_file(config, file_to_mutate, load_surviving_mutants(file_to_mutate))
             else:
                 changed_file(config, file_to_mutate, mutations)
         update_hash_of_source_file(file_to_mutate, new_hash, new_hashes_of_source_files)

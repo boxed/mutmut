@@ -1,6 +1,8 @@
 from mutmut import mutate, count_mutations, ALL, Context, list_mutations
 import pytest
 
+from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
+
 
 @pytest.mark.parametrize(
     'actual, expected', [
@@ -113,6 +115,10 @@ def test_performed_mutation_ids():
     # we found two mutation points: mutate "a" and "c"
     assert context.performed_mutation_ids == [(source, 0), (source, 1)]
 
+
+def test_mutation_id_str_roundtrip():
+    mutation_id = ('    foo = "bar"', 7)
+    assert mutation_id == parse_mutation_id_str(get_mutation_id_str(mutation_id))
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
 # def test_mutation_index():

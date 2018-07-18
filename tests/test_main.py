@@ -47,7 +47,8 @@ def test_simple_apply():
 @pytest.mark.usefixtures('test_fs')
 def test_full_run():
     result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 4  (file: foo.py)\r1 out of 4  (file: foo.py)\r2 out of 4  (file: foo.py)\r3 out of 4  (file: foo.py)\r4 out of 4  (file: foo.py)'
+    print(repr(result.output))
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 4  (foo.py)\r1 out of 4  (foo.py a = b + c⤑0)\r2 out of 4  (foo.py a = b + c⤑1)\r3 out of 4  (foo.py d = dict(e=f)⤑0)\r4 out of 4  (foo.py d = dict(e=f)⤑1)'
 
 
 @pytest.mark.usefixtures('test_fs')
