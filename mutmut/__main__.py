@@ -25,9 +25,11 @@ if sys.version_info < (3, 0):
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
     print = lambda x, **kwargs: orig_print(x.encode('utf8'), **kwargs)
+    text_type = unicode
 else:
     # noinspection PyUnresolvedReferences
     from configparser import ConfigParser, NoOptionError, NoSectionError
+    text_type = str
 
 
 # decorator
@@ -64,7 +66,10 @@ def status_printer():
 
     def p(s):
         len_s = len(s)
-        sys.stdout.write('\r' + s + (' ' * max(last_len[0] - len_s, 0)))
+        output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
+        if sys.version_info < (3, 0):
+            output = output.encode('utf8')
+        sys.stdout.write(output)
         sys.stdout.flush()
         last_len[0] = len_s
     return p
@@ -140,6 +145,7 @@ def update_hash_of_source_file(filename, hash_of_file, hashes):
 def load_hash_of_source_file():
     try:
         with open('.mutmut-cache/hashes') as f:
+            # noinspection PyTypeChecker
             return dict(line.strip().split(':') for line in f.readlines())
     except IOError:
         return {}
@@ -147,7 +153,7 @@ def load_hash_of_source_file():
 
 def write_tests_hash(tests_hash):
     with open('.mutmut-cache/tests-hash', 'w') as f:
-        f.write(tests_hash)
+        f.write(text_type(tests_hash))
 
 
 def load_hash_of_tests():
@@ -205,7 +211,7 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon):
+    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -214,6 +220,7 @@ class Config(object):
         self.dict_synonyms = dict_synonyms
         self.total = total
         self.using_testmon = using_testmon
+        self.show_times = show_times
         self.progress = 0
         self.skipped = 0
 
@@ -294,6 +301,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         dict_synonyms=dict_synonyms,
         total=total,
         using_testmon=using_testmon,
+        show_times=show_times,
     )
 
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file, tests_dir=tests_dir)
@@ -342,10 +350,16 @@ def run_mutation(config, filename, mutation_id):
             backup=True,
             context=context
         )
-        if not number_of_mutations_performed:
-            import ipdb; ipdb.set_trace()
         assert number_of_mutations_performed
+        start = datetime.now()
         survived = not tests_pass(config)
+        time_elapsed = datetime.now() - start
+        if time_elapsed > config.baseline_time_elapsed * 2:
+            print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, config.baseline_time_elapsed, get_apply_line(filename, mutation_id)))
+
+        if config.show_times:
+            print('time: %s' % time_elapsed)
+
         if survived:
             print_status('')
             print('\rFAILED: %s' % get_apply_line(filename, mutation_id))
@@ -419,82 +433,6 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
             else:
                 changed_file(config, file_to_mutate, mutations)
         update_hash_of_source_file(file_to_mutate, new_hash, new_hashes_of_source_files)
-
-
-def old_mutation_implementation(mutations_by_file, total, _exclude, dict_synonyms, using_testmon, run_tests, baseline_time_elapsed, show_times):
-    progress = 0
-    hashes = {}
-    for filename, mutations in mutations_by_file.items():
-        hash_of_file = hash_of(filename)
-
-        old_surviving_mutants = load_surviving_mutants(filename)
-        old_ok_lines = load_ok_lines(filename)
-        with open(surviving_mutants_filename, 'w') as surviving_mutants_file, open(ok_lines_filename, 'w') as ok_lines_file:
-            last_mutation_id = None
-            line_ok = False
-            mutation_id = None
-            for mutation_id in mutations:
-                if last_mutation_id is None or last_mutation_id[0] != mutation_id[0]:
-                    # We haven't seen this line before
-                    line_ok = True
-
-                if mutation_id is not None and mutation_id != mutation_id:
-                    continue
-                mutation_id_str = '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
-                start_time = datetime.now()
-                progress += 1
-                print_status('%s out of %s  (file: %s)' % (progress, total, filename))
-                time_elapsed = None
-                try:
-                    apply_line = 'mutmut %s --mutation "%s" --apply' % (filename, mutation_id_str)
-                    context = Context(
-                        mutate_id=mutation_id,
-                        filename=filename,
-                        exclude=_exclude,
-                        dict_synonyms=dict_synonyms,
-                    )
-                    assert mutate_file(
-                        backup=True,
-                        context=context
-                    )
-                    try:
-                        run_tests()
-                        print_status('')
-                        time_elapsed = (datetime.now() - start_time)
-                        print('\rFAILED: %s' % apply_line)
-                        line_ok = False
-                        surviving_mutants_file.write(mutation_id_str + '\n')
-                    except CalledProcessError as e:
-                        if using_testmon and e.returncode == 5:
-                            print('\rFAILED (all tests skipped, uncovered line?)\n   %s' % apply_line)
-                            line_ok = False
-                        time_elapsed = (datetime.now() - start_time)
-
-                    if time_elapsed > baseline_time_elapsed * 2:
-                        print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, baseline_time_elapsed, apply_line))
-                    os.remove(filename)
-                    try:
-                        os.remove(filename+'c')  # remove .pyc file
-                    except OSError:
-                        pass
-                finally:
-                    try:
-                        move(filename+'.bak', filename)
-
-                        if show_times:
-                            print('time: %s' % time_elapsed)
-                    except IOError:
-                        pass
-                if line_ok:
-                    last_mutation_id = mutation_id
-                    if last_mutation_id and last_mutation_id[0] != mutation_id:
-                        ok_lines_file.write(mutation_id_str[0] + '\n')
-            # after loop
-            if line_ok:
-                if last_mutation_id and last_mutation_id[0] != mutation_id:
-                    ok_lines_file.write(mutation_id[0] + '\n')
-
-            update_hash_of_source_file(filename, hashes=hashes, hash_of_file=hash_of_file)
 
 
 def read_coverage_data(use_coverage):

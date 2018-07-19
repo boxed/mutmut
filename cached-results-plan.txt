@@ -1,35 +1,4 @@
 Mutmut cached results plan:
 
-DONE: - Change apply logic from "file/index" to "file/{line source}/index"
-DONE: - Improve tests to cover __main__.py
-
-DONE: - Store lines with no surviving mutants {filepath: set[line source]}
-DONE:    load
-DONE: - Store surviving mutants: {filepath: set[(line, index)]}
-DONE:    load
-DONE: - Store hashes of source files {filepath: hash}
-DONE:    load
-DONE: - Store hash of entire tests directory (for now... otherwise I need to build specific support for each test runner?)
-DONE:    load
-
-
-def changed_file(file_to_mutate):
-    for line in file_to_mutate:
-        if line is old:
-            report set of surviving mutants for line
-        else:
-            run mutation tests on line
-    
-for file_to_mutate in ...:
-    if hash of tests is unchanged: 
-        if hash of file is unchanged:
-            report set of surviving mutants for file
-        else:
-            changed_file(file_to_mutate)
-        
-    else:  # tests have changed
-        if hash of file is unchanged:
-            rerun tests for the cached surviving mutants
-        else:
-            changed_file(file_to_mutate)
-            
+Unanswered question: 
+    When do we update the cache? It must be safe so that you can quit mutmut at any time and the cache won't be broken.
