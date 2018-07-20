@@ -22,13 +22,13 @@ Usage
 
     mutmut
 
-This will by default run py.test on tests in the "tests" folder and it will try to figure out where the code to mutate lies. Run
+This will by default run pytest on tests in the "tests" folder and it will try to figure out where the code to mutate lies. Run
 
 .. code-block::
 
     mutmut --help
 
-for the available flags to use other runners, etc. The recommended way to use mutmut if 
+for the available flags, to use other runners, etc. The recommended way to use mutmut if
 the defaults aren't working for you is to add a block in `setup.cfg`. Then when you 
 come back to mutmut weeks later you don't have to figure out the flags again, just run 
 `mutmut` and it works. Like this:
@@ -46,12 +46,11 @@ The output of the mutation tests (if you have surviving mutants) looks like:
 
 .. code-block::
 
-    FAILED: mutmut path/filename.py --mutation "    f(1)/10" --apply
+    FAILED: mutmut path/filename.py --apply --mutation "    if foo > bar:⤑0"
 
 I've made is to you can just copy paste everything after "FAILED:" and run it directly and you'll get the
 mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!
 
-You should start from the bottom of the list, because if you start from the top, the indexes of the mutations change.
 
 Whitelisting
 ------------
@@ -75,4 +74,4 @@ Example mutations
 - < is changed to <=
 - break is changed to continue and vice versa
 
-In general the idea is that the mutations should be as subtle as possible.
+In general the idea is that the mutations should be as subtle as possible. See `__init__.py` for the full list.

@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+0.0.19 (2018-07-20)
+~~~~~~~~~~~~~~~~~~~
+
+* Caching of mutation testing results. This is still rather primitive but can in some cases cut down on rerunning mutmut drastically.
+
+* New mutation IDs. They are now indexed per line instead of an index for the entire file. This means you can apply your mutations in any order you see fit and the rest of the apply commands will be unaffected.
+
+
 0.0.18 (2018-04-27)
 ~~~~~~~~~~~~~~~~~~~
 
