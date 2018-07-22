@@ -211,7 +211,7 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times):
+    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times, cache_only):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -223,6 +223,7 @@ class Config(object):
         self.show_times = show_times
         self.progress = 0
         self.skipped = 0
+        self.cache_only = cache_only
 
     def print_progress(self, file_to_mutate, mutation=None):
         print_status('%s out of %s  (%s%s)' % (self.progress, self.total, file_to_mutate, ' ' + get_mutation_id_str(mutation) if mutation else ''))
@@ -239,13 +240,14 @@ class Config(object):
 @click.option('-s', help='turn off output capture', is_flag=True)
 @click.option('--show-times', help='show times for each mutation', is_flag=True)
 @click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir='tests/',
     show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only):
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
     if not isinstance(paths_to_mutate, (list, tuple)):
@@ -302,6 +304,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         total=total,
         using_testmon=using_testmon,
         show_times=show_times,
+        cache_only=cache_only,
     )
 
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file, tests_dir=tests_dir)
@@ -400,6 +403,13 @@ def changed_file(config, file_to_mutate, mutations):
             write_ok_line(file_to_mutate, line)
 
 
+def fail_on_cache_only(config):
+    if config.cache_only:
+        print_status('')
+        print('\rFAILED: changes detected in cache only mode')
+        exit(2)
+
+
 def run_mutation_tests(config, mutations_by_file, tests_dir):
     """
 
@@ -411,7 +421,8 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
 
     new_hash_of_tests = hash_of_tests(tests_dir)
     # TODO: it's wrong to write this here.. need to write down the proper order of updating the cache
-    write_tests_hash(new_hash_of_tests)
+    if not config.cache_only:
+        write_tests_hash(new_hash_of_tests)
 
     for file_to_mutate, mutations in mutations_by_file.items():
         old_hash = old_hashes_of_source_files.get(file_to_mutate)
@@ -424,9 +435,13 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
                 for surviving_mutant in load_surviving_mutants(file_to_mutate):
                     print('\r(cached existing) FAILED: %s' % get_apply_line(file_to_mutate, surviving_mutant))
             else:
+                fail_on_cache_only(config)
+
                 changed_file(config, file_to_mutate, mutations)
 
         else:
+            fail_on_cache_only(config)
+
             # tests have changed
             if new_hash == old_hash:
                 changed_file(config, file_to_mutate, load_surviving_mutants(file_to_mutate))
