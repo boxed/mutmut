@@ -1,6 +1,6 @@
 import sys
 
-from baron import parse, dumps, BaronError
+from parso import parse
 from tri.declarative import evaluate
 
 __version__ = '0.0.19'
@@ -41,6 +41,43 @@ def int_mutation(value, **_):
     return result
 
 
+def number_mutation(value, **_):
+    suffix = ''
+    if value.upper().endswith('L'):
+        suffix = value[-1]
+        value = value[:-1]
+
+    if value.upper().endswith('J'):
+        suffix = value[-1]
+        value = value[:-1]
+
+    if value.startswith('0o'):
+        base = 8
+        value = value[2:]
+    elif value.startswith('0x'):
+        base = 16
+        value = value[2:]
+    elif value.startswith('0b'):
+        base = 2
+        value = value[2:]
+    elif value.startswith('0') and len(value) > 1:
+        base = 8
+        value = value[1:]
+    else:
+        base = 10
+
+    if '.' in value:
+        assert base == 10
+        parsed = float(value)
+    else:
+        parsed = int(value, base=base)
+
+    result = repr(parsed + 1)
+    if not result.endswith(suffix):
+        result += suffix
+    return result
+
+
 def comparison_mutation(first, **_):
     return {
         '<': '<=',
@@ -73,11 +110,14 @@ def string_mutation(value, context, **_):
 
     :type context: Context
     """
+    prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
+    value = value[len(prefix):]
+
     context.current_line_index += value.count('\n')  # Advance line count!
     context.index = 0  # indexes are unique per line, so start over here!
     if value.startswith('"""') or value.startswith("'''"):
         return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
-    return value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
+    return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
 def call_argument_mutation(target, context, **_):
@@ -110,8 +150,97 @@ def assignment_mutation(value, **_):
         return {'type': 'name', 'value': 'None'}
 
 
+def argument_mutation(children, context, **_):
+    """
+
+    :type context: Context
+    """
+    if context.stack[-3].type == 'power' and context.stack[-3].children[0].type == 'name' and context.stack[-3].children[0].value in context.dict_synonyms:
+        children = children[:]
+        from parso.python.tree import Name
+        c = children[0]
+        children[0] = Name(c.value + 'XX', start_pos=c.start_pos, prefix=c.prefix)
+
+    return children
+
+
 mutations_by_type = {
-    'binary_operator': dict(
+    'operator': dict(
+        value=lambda value, **_: {
+            '+': '-',
+            '-': '+',
+            '*': '/',
+            '/': '*',
+            '//': '/',
+            '%': '/',
+            '<<': '>>',
+            '>>': '<<',
+            '&': '|',
+            '|': '&',
+            '^': '&',
+            '**': '*',
+            '~': '',
+            '<': '<=',
+            '<=': '<',
+            '>': '>=',
+            '>=': '>',
+            '==': '!=',
+            '!=': '==',
+            '<>': '==',
+
+            # Don't mutate
+            '(': '(',
+            ')': ')',
+            ',': ',',
+            '[': '[',
+            ']': ']',
+            ':': ':',
+            '=': '=',
+            '{': '{',
+            '}': '}',
+        }[value],
+    ),
+    'keyword': dict(
+        value=lambda value, **_: {
+            # 'not': 'not not',
+            'not': '',
+            'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
+            'in': 'not in',
+        }.get(value, value),
+    ),
+    'number': dict(value=number_mutation),
+    'name': dict(
+        value=lambda value, **_: {
+            'True': 'False',
+            'False': 'True',
+            'deepcopy': 'copy',
+            # TODO: probably need to add a lot of things here... None, some builtins maybe, what more?
+        }.get(value, value)),
+    'string': dict(value=string_mutation),
+    'argument': dict(children=argument_mutation),
+
+    # Don't mutate
+    'comp_op': {},  # things like "not in"
+    'arith_expr': {},
+    'endmarker': {},
+    'term': {},
+    'comparison': {},
+    'atom': {},
+    'testlist_comp': {},
+    'power': {},
+    'trailer': {},
+    'subscript': {},
+    'or_test': {},  # TODO: !!
+    'and_test': {},  # TODO: !!
+    'test': {},
+    'expr_stmt': {},
+    'import_from': {},
+    'lambdef': {},
+    'dictorsetmaker': {},  # TODO: ?
+}
+
+mutations_by_type_old = {
+    'operator': dict(
         value=lambda value, **_: {
             '+': '-',
             '-': '+',
@@ -306,12 +435,12 @@ def mutate(context):
     """
     try:
         result = parse(context.source)
-    except BaronError:
-        print('Failed to parse %s. Internal error from baron follows, please report this to the baron project at https://github.com/PyCQA/baron/issues!' % context.filename)
+    except Exception:
+        print('Failed to parse %s. Internal error from parso follows.' % context.filename)
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)
-    mutated_source = dumps(result).replace(' not not ', ' ')
+    mutated_source = result.get_code().replace(' not not ', ' ')
     if context.number_of_performed_mutations:
         # Check that if we said we mutated the code, that it has actually changed
         assert context.source != mutated_source
@@ -329,14 +458,18 @@ def mutate_node(i, context):
     context.stack.append(i)
     try:
 
-        t = i['type']
+        t = i.type
+
+        # import pytest; pytest.set_trace()
 
         if t == 'endl':
             context.current_line_index += 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        assert t in mutations_by_type, (t, i.keys(), (dumps(i)), i)
-        m = mutations_by_type[t]
+        # TODO:
+        # assert t in mutations_by_type, (t, (i.get_code()), i)
+        # m = mutations_by_type[t]
+        m = mutations_by_type.get(t, {})
 
         if 'replace_entire_node_with' in m:
             if context.exclude_line():
@@ -351,34 +484,34 @@ def mutate_node(i, context):
             context.index += 1
             return
 
-        for _, x in sorted(i.items()):
-            if x is None:
-                continue  # pragma: no cover
-
-            if isinstance(x, list):
-                if x:
-                    mutate_list_of_nodes(x, context=context)
-            elif isinstance(x, dict):
-                mutate_node(x, context=context)
-            else:
-                assert isinstance(x, text_types + (bool,))
+        if hasattr(i, 'children'):
+            mutate_list_of_nodes(i, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutate_id != ALL:
                 return
 
+        if m == {}:
+            return
+
         for key, value in sorted(m.items()):
-            old = i[key]
+            old = getattr(i, key)
             if context.exclude_line():
                 continue
 
-            new = evaluate(value, context=context, node=i, **i)
+            new = evaluate(
+                value,
+                context=context,
+                node=i,
+                value=getattr(i, 'value', None),
+                children=getattr(i, 'children', None),
+            )
             assert not callable(new)
             if new != old:
                 if context.should_mutate():
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(context.mutate_id_of_current_index)
-                    i[key] = new
+                    setattr(i, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
@@ -392,7 +525,7 @@ def mutate_list_of_nodes(result, context):
     """
     :type context: Context
     """
-    for i in result:
+    for i in result.children:
         mutate_node(i, context=context)
 
         # this is just an optimization to stop early

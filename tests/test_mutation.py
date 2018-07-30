@@ -6,19 +6,21 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
 
 @pytest.mark.parametrize(
     'actual, expected', [
+        ("1 in (1, 2)", "2 not in (2, 3)"),
         ('1+1', '2-2'),
+        ('1', '2'),
         ('1-1', '2+2'),
         ('1*1', '2/2'),
         ('1/1', '2*2'),
         # ('1.0', '1.0000000000000002'),  # using numpy features
-        ('1.0', '101.0'),
+        ('1.0', '2.0'),
         ('True', 'False'),
         ('False', 'True'),
         ('"foo"', '"XXfooXX"'),
         ("'foo'", "'XXfooXX'"),
         ("u'foo'", "u'XXfooXX'"),
         ("0", "1"),
-        ("1L", "2L"),
+        # ("1L", "2L"),
         # ("0L", "1L"),
         # ("0o0", "0o1"),
         ("0", "1"),
@@ -26,7 +28,6 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ("0b0", "1"),
         ("1<2", "2<=3"),
         ('(1, 2)', '(2, 3)'),
-        ("1 in (1, 2)", "2 not in (2, 3)"),
         ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
         ("None is None", "None is not None"),
         ("None is not None", "None is None"),
@@ -40,7 +41,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('1.0j', '2.0j'),
         ('0o1', '2'),
         ('010', '9'),
-        ('1.0e10', '1.0e11'),
+        ('1.0e10', '10000000001.0'),
         ("'''foo'''", "'''foo'''"),  # don't mutate things we assume to be docstrings
         ("dict(a=b)", "dict(aXX=b)"),
         ("Struct(a=b)", "Struct(aXX=b)"),
