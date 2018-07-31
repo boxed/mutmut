@@ -5,7 +5,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
 
 
 @pytest.mark.parametrize(
-    'actual, expected', [
+    'original, expected', [
         ("1 in (1, 2)", "2 not in (2, 3)"),
         ('1+1', '2-2'),
         ('1', '2'),
@@ -30,7 +30,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('(1, 2)', '(2, 3)'),
         ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
         ("None is None", "None is not None"),
-        ("None is not None", "None is None"),
+        ("None is not None", "None is  None"),
         ("x if a else b", "x if a else b"),
         ('a or b', 'a and b'),
         ('a = b', 'a = None'),
@@ -54,8 +54,9 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('a = None', 'a = 7')
     ]
 )
-def test_basic_mutations(actual, expected):
-    assert mutate(Context(source=actual, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0] == expected
+def test_basic_mutations(original, expected):
+    actual = mutate(Context(source=original, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
+    assert actual == expected
 
 
 def test_mutate_all():

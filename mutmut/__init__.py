@@ -133,11 +133,12 @@ def call_argument_mutation(target, context, **_):
         return target
 
 
-def lambda_mutation(value, **_):
-    if (value.get('type'), value.get('value')) == ('name', 'None'):
-        return {'section': 'number', 'type': 'int', 'value': '0'}
+def lambda_mutation(children, context, **_):
+    from parso.python.tree import Name
+    if len(children) != 4 or getattr(children[-1], 'value', '---') != 'None':
+        return children[:3] + [Name(value=' None', start_pos=children[0].start_pos)]
     else:
-        return {'type': 'name', 'value': 'None'}
+        return children[:3] + [Name(value=' 0', start_pos=children[0].start_pos)]
 
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
@@ -164,49 +165,89 @@ def argument_mutation(children, context, **_):
     return children
 
 
+def keyword_mutation(value, context, **_):
+
+    if context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
+        return value
+
+    return {
+        # 'not': 'not not',
+        'not': '',
+        'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
+        'in': 'not in',
+    }.get(value, value)
+
+
+def operator_mutation(value, context, **_):
+    if context.stack[-2].type in ('import_from', 'param'):
+        return value
+
+    return {
+        '+': '-',
+        '-': '+',
+        '*': '/',
+        '/': '*',
+        '//': '/',
+        '%': '/',
+        '<<': '>>',
+        '>>': '<<',
+        '&': '|',
+        '|': '&',
+        '^': '&',
+        '**': '*',
+        '~': '',
+        '<': '<=',
+        '<=': '<',
+        '>': '>=',
+        '>=': '>',
+        '==': '!=',
+        '!=': '==',
+        '<>': '==',
+
+        # Don't mutate
+        '(': '(',
+        ')': ')',
+        ',': ',',
+        '[': '[',
+        ']': ']',
+        ':': ':',
+        '=': '=',
+        '{': '{',
+        '}': '}',
+        '.': '.',
+    }[value]
+
+
+def and_or_test_mutation(children, node, **_):
+    children = children[:]
+    from parso.python.tree import Keyword
+    children[1] = Keyword(
+        value={'and': ' or', 'or': ' and'}[children[1].value],
+        start_pos=node.start_pos,
+    )
+    return children
+
+
+def expression_mutation(children, **_):
+    assert children[1].type == 'operator'
+    if children[1].value == '=':
+        if getattr(children[2], 'value', '---') != 'None':
+            x = ' None'
+        else:
+            x = ' 7'
+        children = children[:]
+        from parso.python.tree import Name
+        children[2] = Name(value=x, start_pos=children[2].start_pos)
+
+    return children
+
+
 mutations_by_type = {
     'operator': dict(
-        value=lambda value, **_: {
-            '+': '-',
-            '-': '+',
-            '*': '/',
-            '/': '*',
-            '//': '/',
-            '%': '/',
-            '<<': '>>',
-            '>>': '<<',
-            '&': '|',
-            '|': '&',
-            '^': '&',
-            '**': '*',
-            '~': '',
-            '<': '<=',
-            '<=': '<',
-            '>': '>=',
-            '>=': '>',
-            '==': '!=',
-            '!=': '==',
-            '<>': '==',
-
-            # Don't mutate
-            '(': '(',
-            ')': ')',
-            ',': ',',
-            '[': '[',
-            ']': ']',
-            ':': ':',
-            '=': '=',
-            '{': '{',
-            '}': '}',
-        }[value],
+        value=operator_mutation,
     ),
     'keyword': dict(
-        value=lambda value, **_: {
-            # 'not': 'not not',
-            'not': '',
-            'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
-            'in': 'not in',
-        }.get(value, value),
+        value=keyword_mutation,
     ),
     'number': dict(value=number_mutation),
     'name': dict(
@@ -218,6 +259,10 @@ mutations_by_type = {
         }.get(value, value)),
     'string': dict(value=string_mutation),
     'argument': dict(children=argument_mutation),
+    'or_test': dict(children=and_or_test_mutation),  # TODO: !!
+    'and_test': {},  # TODO: !!
+    'lambdef': dict(children=lambda_mutation),
+    'expr_stmt': dict(children=expression_mutation),
 
     # Don't mutate
     'comp_op': {},  # things like "not in"
@@ -230,12 +275,8 @@ mutations_by_type = {
     'power': {},
     'trailer': {},
     'subscript': {},
-    'or_test': {},  # TODO: !!
-    'and_test': {},  # TODO: !!
     'test': {},
-    'expr_stmt': {},
     'import_from': {},
-    'lambdef': {},
     'dictorsetmaker': {},  # TODO: ?
 }
 
