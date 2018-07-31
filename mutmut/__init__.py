@@ -156,7 +156,14 @@ def argument_mutation(children, context, **_):
 
     :type context: Context
     """
-    if context.stack[-3].type == 'power' and context.stack[-3].children[0].type == 'name' and context.stack[-3].children[0].value in context.dict_synonyms:
+    if context.stack[-3].type == 'power':
+        stack_pos_of_power_node = -3
+    elif context.stack[-4].type == 'power':
+        stack_pos_of_power_node = -4
+    else:
+        stack_pos_of_power_node = None
+
+    if stack_pos_of_power_node and context.stack[stack_pos_of_power_node].children[0].type == 'name' and context.stack[stack_pos_of_power_node].children[0].value in context.dict_synonyms:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -215,6 +222,7 @@ def operator_mutation(value, context, **_):
         '{': '{',
         '}': '}',
         '.': '.',
+        '@': '@',
     }[value]
 
 

@@ -60,7 +60,7 @@ def test_basic_mutations(original, expected):
 
 
 def test_mutate_all():
-    assert mutate(Context(source='def foo():\n    return 1+1', mutate_id=ALL)) == ('def foo():\n    return 2-2\n', 3)
+    assert mutate(Context(source='def foo():\n    return 1+1', mutate_id=ALL)) == ('def foo():\n    return 2-2', 3)
 
 
 def test_mutate_both():
@@ -77,8 +77,8 @@ def test_count_available_mutations():
 
 def test_perform_one_indexed_mutation():
     assert mutate(Context(source='1+1', mutate_id=('1+1', 0))) == ('2+1', 1)
-    assert mutate(Context(source='1+1', mutate_id=('1+1', 1))) == ('1+2', 1)
-    assert mutate(Context(source='1+1', mutate_id=('1+1', 2))) == ('1-1', 1)
+    assert mutate(Context(source='1+1', mutate_id=('1+1', 1))) == ('1-1', 1)
+    assert mutate(Context(source='1+1', mutate_id=('1+1', 2))) == ('1+2', 1)
 
     # TODO: should this case raise an exception?
     # assert mutate(Context(source='def foo():\n    return 1', mutate_id=2)) == ('def foo():\n    return 1\n', 0)
