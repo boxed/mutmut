@@ -53,6 +53,9 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('a = {x for x in y}', 'a = None'),
         ('a = None', 'a = 7'),
         ('break', 'continue'),
+        ('import foo', 'import foo'),
+        ('import foo as bar', 'import foo as bar'),
+        ('foo.bar', 'foo.bar'),
     ]
 )
 def test_basic_mutations(original, expected):
