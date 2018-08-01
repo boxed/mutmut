@@ -229,6 +229,9 @@ class Config(object):
         print_status('%s out of %s  (%s%s)' % (self.progress, self.total, file_to_mutate, ' ' + get_mutation_id_str(mutation) if mutation else ''))
 
 
+DEFAULT_TESTS_DIR = 'tests/'
+
+
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('paths_to_mutate', nargs=-1)
 @click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
@@ -244,11 +247,17 @@ class Config(object):
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
-    tests_dir='tests/',
+    tests_dir=DEFAULT_TESTS_DIR,
     show_times=False,
 )
 def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only):
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
+
+    if tests_dir == DEFAULT_TESTS_DIR and not os.path.exists(DEFAULT_TESTS_DIR):
+        if not os.path.exists('test/'):
+            raise ErrorMessage('Could not find tests directory, please specify it')
+
+        tests_dir = 'test/'
 
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
