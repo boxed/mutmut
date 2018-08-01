@@ -113,8 +113,6 @@ def string_mutation(value, context, **_):
     prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
     value = value[len(prefix):]
 
-    context.current_line_index += value.count('\n')  # Advance line count!
-    context.index = 0  # indexes are unique per line, so start over here!
     if value.startswith('"""') or value.startswith("'''"):
         return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
@@ -163,7 +161,9 @@ def argument_mutation(children, context, **_):
     else:
         stack_pos_of_power_node = None
 
-    if stack_pos_of_power_node and context.stack[stack_pos_of_power_node].children[0].type == 'name' and context.stack[stack_pos_of_power_node].children[0].value in context.dict_synonyms:
+    power_node = context.stack[stack_pos_of_power_node] if stack_pos_of_power_node is not None else None
+
+    if power_node and power_node.children[0].type == 'name' and power_node.children[0].value in context.dict_synonyms:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -174,7 +174,7 @@ def argument_mutation(children, context, **_):
 
 def keyword_mutation(value, context, **_):
 
-    if context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
+    if len(context.stack) > 2 and context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
         return value
 
     return {
@@ -182,6 +182,8 @@ def keyword_mutation(value, context, **_):
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
+        'break': 'continue',
+        'continue': 'break',
     }.get(value, value)
 
 
@@ -250,6 +252,11 @@ def expression_mutation(children, **_):
     return children
 
 
+def decorator_mutation(children, **_):
+    assert children[-1].type == 'newline'
+    return children[-1:]
+
+
 mutations_by_type = {
     'operator': dict(
         value=operator_mutation,
@@ -271,6 +278,7 @@ mutations_by_type = {
     'and_test': {},  # TODO: !!
     'lambdef': dict(children=lambda_mutation),
     'expr_stmt': dict(children=expression_mutation),
+    'decorator': dict(children=decorator_mutation),
 
     # Don't mutate
     'comp_op': {},  # things like "not in"
@@ -286,134 +294,16 @@ mutations_by_type = {
     'test': {},
     'import_from': {},
     'dictorsetmaker': {},  # TODO: ?
-}
-
-mutations_by_type_old = {
-    'operator': dict(
-        value=lambda value, **_: {
-            '+': '-',
-            '-': '+',
-            '*': '/',
-            '/': '*',
-            '//': '/',
-            '%': '/',
-            '<<': '>>',
-            '>>': '<<',
-            '&': '|',
-            '|': '&',
-            '^': '&',
-            '**': '*',
-        }[value],
-    ),
-    'unitary_operator': dict(
-        value=lambda value, **_: {
-            'not': 'not not',
-            '-': '+',
-            '+': '-',
-            '~': '',
-        }[value],
-    ),
-    'int': dict(value=int_mutation),
-    'long': dict(value=int_mutation),
-    'octa': dict(value=int_mutation),
-    'hexa': dict(value=int_mutation),
-    'binary': dict(value=int_mutation),
-    # 'float': dict(value=lambda value, **_: repr(numpy.nextafter(float(value), float(value) + 1000.0))),  # this might be a bit brutal :P
-    'float': dict(value=lambda value, **_: repr(float(value) + 100.0)),
-    'float_exponant': dict(value=float_exponant_mutation),
-    'string': dict(value=string_mutation),
-    'unicode_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
-    'binary_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
-    'raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
-    'unicode_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
-    'binary_raw_string': dict(value=lambda value, **_: value[0:2] + 'XX' + value[2:-1] + 'XX' + value[-1]),
-    'complex': dict(value=complex_mutation),
-    'continue': dict(type='break'),
-    'break': dict(type='continue'),
-    'name': dict(
-        value=lambda value, **_: {
-            'True': 'False',
-            'False': 'True',
-            'deepcopy': 'copy',
-            # TODO: probably need to add a lot of things here... None, some builtins maybe, what more?
-        }.get(value, value)),
-    'comparison_operator': dict(
-        first=comparison_mutation,
-    ),
-    'boolean_operator': dict(
-        value=lambda value, **_: {
-            'or': 'and',
-            'and': 'or',
-        }[value],
-    ),
-    'decorator': dict(replace_entire_node_with=NEWLINE),
-    'call_argument': dict(target=call_argument_mutation),
-    'lambda': dict(value=lambda_mutation),
-    'assignment': dict(value=assignment_mutation),
-
-    # Don't mutate:
-    'tuple': {},
-    'list': {},
-    'dict': {},
-    'set': {},
-    'comma': {},
-    'from_import': {},
-    'import': {},
-    'ifelseblock': {},
-    'if': {},
-    'elif': {},
-    'else': {},
-    'atomtrailers': {},  # http://redbaron.readthedocs.io/en/latest/nodes_reference.html#atomtrailersnode
-    'dict_comprehension': {},
-    'list_comprehension': {},
-    'set_comprehension': {},
-    'generator_comprehension': {},
-    'comprehension_loop': {},
-    'comprehension_if': {},
-    'dictitem': {},
-    'for': {},
-    'try': {},
-    'finally': {},
-    'while': {},
-    'class': {},
-    'comment': {},
-    'del': {},
-    'assert': {},
-    'raise': {},
-    'dotted_name': {},
-    'global': {},
-    'print': {},
-    'ternary_operator': {},
-    'call': {},
-    'def_argument': {},
-    'dict_argument': {},
-    'with': {},
-    'with_context_item': {},
-    'associative_parenthesis': {},
-    'left_parenthesis': {},
-    'right_parenthesis': {},
-    'pass': {},
-    'semicolon': {},
-    'string_chain': {},
-    'exec': {},
-    'endl': {},
-    'def': {},
-    'getitem': {},
-    'slice': {},
-    'dot': {},
-    'list_argument': {},
-    'ellipsis': {},
-    'argument_generator_comprehension': {},
-    'float_exponant_complex': {},  # TODO
-    'yield_atom': {},
-    'space': {},
-    'name_as_name': {},
-    'dotted_as_name': {},
-    'comparison': {},
-    'except': {},
-    'star': {},
-    'return': {},  # TODO: we should mutate "return foo" -> "return None"
-    'yield': {},  # TODO: we should mutate "yield foo" -> "yield None"
+    'decorated': {},
+    'newline': {},
+    'funcdef': {},
+    'parameters': {},
+    'suite': {},
+    'simple_stmt': {},
+    'param': {},
+    'comp_for': {},
+    'return_stmt': {},
+    'arglist': {},
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
@@ -511,14 +401,14 @@ def mutate_node(i, context):
 
         # import pytest; pytest.set_trace()
 
-        if t == 'endl':
-            context.current_line_index += 1
+        if i.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = i.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
         # TODO:
-        # assert t in mutations_by_type, (t, (i.get_code()), i)
-        # m = mutations_by_type[t]
-        m = mutations_by_type.get(t, {})
+        assert t in mutations_by_type, (t, (i.get_code()), i)
+        m = mutations_by_type[t]
+        # m = mutations_by_type.get(t, {})
 
         if 'replace_entire_node_with' in m:
             if context.exclude_line():

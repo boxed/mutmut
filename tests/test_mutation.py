@@ -51,7 +51,8 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('a = {x for x in y}', 'a = None'),
-        ('a = None', 'a = 7')
+        ('a = None', 'a = 7'),
+        ('break', 'continue'),
     ]
 )
 def test_basic_mutations(original, expected):
@@ -87,7 +88,8 @@ def test_perform_one_indexed_mutation():
 def test_function():
     source = "def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n"
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 0))) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1)
-    assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
+    assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 1))) == ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s\n", 1)
+    assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 2))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
 
 def test_pragma_no_mutate():
