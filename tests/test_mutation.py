@@ -29,10 +29,11 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ("1<2", "2<=3"),
         ('(1, 2)', '(2, 3)'),
         ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
-        ("None is None", "None is not None"),
-        ("None is not None", "None is  None"),
+        ("foo is foo", "foo is not foo"),
+        ("foo is not foo", "foo is  foo"),
         ("x if a else b", "x if a else b"),
         ('a or b', 'a and b'),
+        ('a and b', 'a or b'),
         ('a = b', 'a = None'),
         ('s[0]', 's[1]'),
         ('s[0] = a', 's[1] = None'),
