@@ -14,33 +14,6 @@ else:
     text_types = (str,)
 
 
-def int_mutation(value, **_):
-    suffix = ''
-    if value.upper().endswith('L'):
-        value = value[:-1]
-        suffix = 'L'
-
-    if value.startswith('0o'):
-        base = 8
-        value = value[2:]
-    elif value.startswith('0x'):
-        base = 16
-        value = value[2:]
-    elif value.startswith('0b'):
-        base = 2
-        value = value[2:]
-    elif value.startswith('0') and len(value) > 1:
-        base = 8
-        value = value[1:]
-    else:
-        base = 10
-
-    result = repr(int(value, base=base) + 1)
-    if not result.endswith(suffix):
-        result += suffix
-    return result
-
-
 def number_mutation(value, **_):
     suffix = ''
     if value.upper().endswith('L'):
@@ -76,21 +49,6 @@ def number_mutation(value, **_):
     if not result.endswith(suffix):
         result += suffix
     return result
-
-
-def comparison_mutation(first, **_):
-    return {
-        '<': '<=',
-        '<=': '<',
-        '>': '>=',
-        '>=': '>',
-        '==': '!=',
-        '!=': '==',
-        '<>': '==',
-        'in': 'not in',
-        'not': '',
-        'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
-    }[first]
 
 
 def string_mutation(value, **_):
@@ -299,11 +257,6 @@ class Context(object):
         return self.mutate_id in (ALL, self.mutate_id_of_current_index)
 
 
-def count_indents(l):
-    without = l.replace('\t', '    ').lstrip(' ')
-    return len(l) - len(without)
-
-
 def mutate(context):
     """
     :type context: Context
@@ -343,19 +296,6 @@ def mutate_node(i, context):
             context.index = 0  # indexes are unique per line, so start over here!
 
         m = mutations_by_type.get(t, {})
-
-        if 'replace_entire_node_with' in m:
-            if context.exclude_line():
-                return
-
-            if context.should_mutate():
-                i.clear()
-                for k, v in m['replace_entire_node_with'].items():
-                    i[k] = v
-                context.number_of_performed_mutations += 1
-                context.performed_mutation_ids.append(context.mutate_id_of_current_index)
-            context.index += 1
-            return
 
         if hasattr(i, 'children'):
             mutate_list_of_nodes(i, context=context)
