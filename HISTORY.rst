@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+0.0.20 (2018-08-02)
+~~~~~~~~~~~~~~~~~~~
+
+* Changed AST library from baron to parso
+
+* Some usability enhancements suggested by David M. Howcraft
+
+
 0.0.19 (2018-07-20)
 ~~~~~~~~~~~~~~~~~~~
 
