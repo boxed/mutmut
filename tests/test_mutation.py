@@ -20,9 +20,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ("'foo'", "'XXfooXX'"),
         ("u'foo'", "u'XXfooXX'"),
         ("0", "1"),
-        # ("1L", "2L"),
-        # ("0L", "1L"),
-        # ("0o0", "0o1"),
+        ("0o0", "1"),
         ("0", "1"),
         ("0x0", "1"),
         ("0b0", "1"),
@@ -47,13 +45,15 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ("dict(a=b)", "dict(aXX=b)"),
         ("Struct(a=b)", "Struct(aXX=b)"),
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
-        ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),  # shouldn't be mutated
-        ('from foo import *', 'from foo import *'),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('a = {x for x in y}', 'a = None'),
         ('a = None', 'a = 7'),
         ('break', 'continue'),
+
+        # shouldn't be mutated
+        ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),
+        ('from foo import *', 'from foo import *'),
         ('import foo', 'import foo'),
         ('import foo as bar', 'import foo as bar'),
         ('foo.bar', 'foo.bar'),
