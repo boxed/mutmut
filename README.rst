@@ -4,7 +4,7 @@
 Mutmut
 ======
 
-Mutmut is a mutation testing library/tool. It aims to be usable as a program directly, but also to have an easy to use API.
+Mutmut is a mutation testing library/tool.
 
 
 Install
@@ -48,7 +48,7 @@ The output of the mutation tests (if you have surviving mutants) looks like:
 
     FAILED: mutmut path/filename.py --apply --mutation "    if foo > bar:⤑0"
 
-I've made is to you can just copy paste everything after "FAILED:" and run it directly and you'll get the
+You can just copy paste everything after "FAILED:" and run it directly and you'll get the
 mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!
 
 

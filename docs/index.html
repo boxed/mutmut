@@ -1,0 +1,458 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.14: http://docutils.sourceforge.net/" />
+<title>mutmut - python mutation tester</title>
+<style type="text/css">
+
+/*
+:Author: David Goodger (goodger@python.org)
+:Id: $Id: html4css1.css 7952 2016-07-26 18:15:59Z milde $
+:Copyright: This stylesheet has been placed in the public domain.
+
+Default cascading style sheet for the HTML output of Docutils.
+
+See http://docutils.sf.net/docs/howto/html-stylesheets.html for how to
+customize this style sheet.
+*/
+
+/* used to remove borders from tables and images */
+.borderless, table.borderless td, table.borderless th {
+  border: 0 }
+
+table.borderless td, table.borderless th {
+  /* Override padding for "table.docutils td" with "! important".
+     The right padding separates the table cells. */
+  padding: 0 0.5em 0 0 ! important }
+
+.first {
+  /* Override more specific margin styles with "! important". */
+  margin-top: 0 ! important }
+
+.last, .with-subtitle {
+  margin-bottom: 0 ! important }
+
+.hidden {
+  display: none }
+
+.subscript {
+  vertical-align: sub;
+  font-size: smaller }
+
+.superscript {
+  vertical-align: super;
+  font-size: smaller }
+
+a.toc-backref {
+  text-decoration: none ;
+  color: black }
+
+blockquote.epigraph {
+  margin: 2em 5em ; }
+
+dl.docutils dd {
+  margin-bottom: 0.5em }
+
+object[type="image/svg+xml"], object[type="application/x-shockwave-flash"] {
+  overflow: hidden;
+}
+
+/* Uncomment (and remove this text!) to get bold-faced definition list terms
+dl.docutils dt {
+  font-weight: bold }
+*/
+
+div.abstract {
+  margin: 2em 5em }
+
+div.abstract p.topic-title {
+  font-weight: bold ;
+  text-align: center }
+
+div.admonition, div.attention, div.caution, div.danger, div.error,
+div.hint, div.important, div.note, div.tip, div.warning {
+  margin: 2em ;
+  border: medium outset ;
+  padding: 1em }
+
+div.admonition p.admonition-title, div.hint p.admonition-title,
+div.important p.admonition-title, div.note p.admonition-title,
+div.tip p.admonition-title {
+  font-weight: bold ;
+  font-family: sans-serif }
+
+div.attention p.admonition-title, div.caution p.admonition-title,
+div.danger p.admonition-title, div.error p.admonition-title,
+div.warning p.admonition-title, .code .error {
+  color: red ;
+  font-weight: bold ;
+  font-family: sans-serif }
+
+/* Uncomment (and remove this text!) to get reduced vertical space in
+   compound paragraphs.
+div.compound .compound-first, div.compound .compound-middle {
+  margin-bottom: 0.5em }
+
+div.compound .compound-last, div.compound .compound-middle {
+  margin-top: 0.5em }
+*/
+
+div.dedication {
+  margin: 2em 5em ;
+  text-align: center ;
+  font-style: italic }
+
+div.dedication p.topic-title {
+  font-weight: bold ;
+  font-style: normal }
+
+div.figure {
+  margin-left: 2em ;
+  margin-right: 2em }
+
+div.footer, div.header {
+  clear: both;
+  font-size: smaller }
+
+div.line-block {
+  display: block ;
+  margin-top: 1em ;
+  margin-bottom: 1em }
+
+div.line-block div.line-block {
+  margin-top: 0 ;
+  margin-bottom: 0 ;
+  margin-left: 1.5em }
+
+div.sidebar {
+  margin: 0 0 0.5em 1em ;
+  border: medium outset ;
+  padding: 1em ;
+  background-color: #ffffee ;
+  width: 40% ;
+  float: right ;
+  clear: right }
+
+div.sidebar p.rubric {
+  font-family: sans-serif ;
+  font-size: medium }
+
+div.system-messages {
+  margin: 5em }
+
+div.system-messages h1 {
+  color: red }
+
+div.system-message {
+  border: medium outset ;
+  padding: 1em }
+
+div.system-message p.system-message-title {
+  color: red ;
+  font-weight: bold }
+
+div.topic {
+  margin: 2em }
+
+h1.section-subtitle, h2.section-subtitle, h3.section-subtitle,
+h4.section-subtitle, h5.section-subtitle, h6.section-subtitle {
+  margin-top: 0.4em }
+
+h1.title {
+  text-align: center }
+
+h2.subtitle {
+  text-align: center }
+
+hr.docutils {
+  width: 75% }
+
+img.align-left, .figure.align-left, object.align-left, table.align-left {
+  clear: left ;
+  float: left ;
+  margin-right: 1em }
+
+img.align-right, .figure.align-right, object.align-right, table.align-right {
+  clear: right ;
+  float: right ;
+  margin-left: 1em }
+
+img.align-center, .figure.align-center, object.align-center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+table.align-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.align-left {
+  text-align: left }
+
+.align-center {
+  clear: both ;
+  text-align: center }
+
+.align-right {
+  text-align: right }
+
+/* reset inner alignment in figures */
+div.align-right {
+  text-align: inherit }
+
+/* div.align-center * { */
+/*   text-align: left } */
+
+.align-top    {
+  vertical-align: top }
+
+.align-middle {
+  vertical-align: middle }
+
+.align-bottom {
+  vertical-align: bottom }
+
+ol.simple, ul.simple {
+  margin-bottom: 1em }
+
+ol.arabic {
+  list-style: decimal }
+
+ol.loweralpha {
+  list-style: lower-alpha }
+
+ol.upperalpha {
+  list-style: upper-alpha }
+
+ol.lowerroman {
+  list-style: lower-roman }
+
+ol.upperroman {
+  list-style: upper-roman }
+
+p.attribution {
+  text-align: right ;
+  margin-left: 50% }
+
+p.caption {
+  font-style: italic }
+
+p.credits {
+  font-style: italic ;
+  font-size: smaller }
+
+p.label {
+  white-space: nowrap }
+
+p.rubric {
+  font-weight: bold ;
+  font-size: larger ;
+  color: maroon ;
+  text-align: center }
+
+p.sidebar-title {
+  font-family: sans-serif ;
+  font-weight: bold ;
+  font-size: larger }
+
+p.sidebar-subtitle {
+  font-family: sans-serif ;
+  font-weight: bold }
+
+p.topic-title {
+  font-weight: bold }
+
+pre.address {
+  margin-bottom: 0 ;
+  margin-top: 0 ;
+  font: inherit }
+
+pre.literal-block, pre.doctest-block, pre.math, pre.code {
+  margin-left: 2em ;
+  margin-right: 2em }
+
+pre.code .ln { color: grey; } /* line numbers */
+pre.code, code { background-color: #eeeeee }
+pre.code .comment, code .comment { color: #5C6576 }
+pre.code .keyword, code .keyword { color: #3B0D06; font-weight: bold }
+pre.code .literal.string, code .literal.string { color: #0C5404 }
+pre.code .name.builtin, code .name.builtin { color: #352B84 }
+pre.code .deleted, code .deleted { background-color: #DEB0A1}
+pre.code .inserted, code .inserted { background-color: #A3D289}
+
+span.classifier {
+  font-family: sans-serif ;
+  font-style: oblique }
+
+span.classifier-delimiter {
+  font-family: sans-serif ;
+  font-weight: bold }
+
+span.interpreted {
+  font-family: sans-serif }
+
+span.option {
+  white-space: nowrap }
+
+span.pre {
+  white-space: pre }
+
+span.problematic {
+  color: red }
+
+span.section-subtitle {
+  /* font-size relative to parent (h1..h6 element) */
+  font-size: 80% }
+
+table.citation {
+  border-left: solid 1px gray;
+  margin-left: 1px }
+
+table.docinfo {
+  margin: 2em 4em }
+
+table.docutils {
+  margin-top: 0.5em ;
+  margin-bottom: 0.5em }
+
+table.footnote {
+  border-left: solid 1px black;
+  margin-left: 1px }
+
+table.docutils td, table.docutils th,
+table.docinfo td, table.docinfo th {
+  padding-left: 0.5em ;
+  padding-right: 0.5em ;
+  vertical-align: top }
+
+table.docutils th.field-name, table.docinfo th.docinfo-name {
+  font-weight: bold ;
+  text-align: left ;
+  white-space: nowrap ;
+  padding-left: 0 }
+
+/* "booktabs" style (no vertical lines) */
+table.docutils.booktabs {
+  border: 0px;
+  border-top: 2px solid;
+  border-bottom: 2px solid;
+  border-collapse: collapse;
+}
+table.docutils.booktabs * {
+  border: 0px;
+}
+table.docutils.booktabs th {
+  border-bottom: thin solid;
+  text-align: left;
+}
+
+h1 tt.docutils, h2 tt.docutils, h3 tt.docutils,
+h4 tt.docutils, h5 tt.docutils, h6 tt.docutils {
+  font-size: 100% }
+
+ul.auto-toc {
+  list-style-type: none }
+
+</style>
+</head>
+<body>
+<div class="document" id="mutmut-python-mutation-tester">
+<h1 class="title">mutmut - python mutation tester</h1>
+
+<p>Mutmut is a mutation testing system for Python 2 and 3, with a strong focus on
+ease of use. If you don't know what mutation testing is try starting with <a class="reference external" href="https://hackernoon.com/mutmut-a-python-mutation-testing-system-9b9639356c78">this article</a>.</p>
+<p>Some highlight features:</p>
+<ul class="simple">
+<li>Found mutants can be applied on disk with a simple command making it very easy to work with the results</li>
+<li>Supports all test runners (because mutmut only needs an exit code from the test command)</li>
+<li>Extremely small and simple implementation (less than a thousand lines)</li>
+<li>Battle tested on tri.struct, tri.declarative, tri.form and tri.table</li>
+<li>Can use coverage data to only do mutation testing on covered lines</li>
+</ul>
+<div class="section" id="install-and-run">
+<h1>Install and run</h1>
+<p>You can get started with a simple:</p>
+<pre class="code shell literal-block">
+&gt; pip install python
+&gt; mutmut
+</pre>
+<p>This will by default run pytest on tests in the &quot;tests&quot; or &quot;test&quot; folder and it will try to figure out where the code to mutate lies. Run</p>
+<pre class="code shell literal-block">
+mutmut --help
+</pre>
+<p>for the available flags, to use other runners, etc. The recommended way to use mutmut if
+the defaults aren't working for you is to add a block in <cite>setup.cfg</cite>. Then when you
+come back to mutmut weeks later you don't have to figure out the flags again, just run
+<cite>mutmut</cite> and it works. Like this:</p>
+<pre class="code ini literal-block">
+<span class="keyword">[mutmut]</span>
+<span class="name attribute">paths_to_mutate</span><span class="operator">=</span><span class="literal string">src/</span>
+<span class="name attribute">backup</span><span class="operator">=</span><span class="literal string">False</span>
+<span class="name attribute">runner</span><span class="operator">=</span><span class="literal string">python -m pytest</span>
+<span class="name attribute">tests_dir</span><span class="operator">=</span><span class="literal string">tests/</span>
+<span class="name attribute">dict_synonyms</span><span class="operator">=</span><span class="literal string">Struct, NamedStruct</span>
+</pre>
+<p>The output of the mutation tests (if you have surviving mutants) looks like:</p>
+<pre class="code shell literal-block">
+FAILED: mutmut f/bar.py --apply --mutation <span class="literal string double">&quot;    if foo &gt; bar:⤑0&quot;</span>
+</pre>
+<p>You can just copy paste everything after &quot;FAILED:&quot; and run it directly and you'll get the
+mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!</p>
+</div>
+<div class="section" id="whitelisting">
+<h1>Whitelisting</h1>
+<p>You can mark lines like this:</p>
+<pre class="code python literal-block">
+<span class="name">some_code_here</span><span class="punctuation">()</span>  <span class="comment single"># pragma: no mutate</span>
+</pre>
+<p>to stop mutation on those lines. Some cases we've found where you need to whitelist lines are:</p>
+<ul class="simple">
+<li>The version string on your library. You really shouldn't have a test for this :P</li>
+<li>Optimizing break instead of continue. The code runs fine when mutating break to continue, but it's slower.</li>
+</ul>
+</div>
+<div class="section" id="example-mutations">
+<h1>Example mutations</h1>
+<ul class="simple">
+<li>Integer literals are changed by adding 1. So 0 becomes 1, 5 becomes 6, etc.</li>
+<li>&lt; is changed to &lt;=</li>
+<li>break is changed to continue and vice versa</li>
+</ul>
+<p>In general the idea is that the mutations should be as subtle as possible. See <cite>__init__.py</cite> for the full list.</p>
+</div>
+<div class="section" id="workflow">
+<h1>Workflow</h1>
+<p>This section describes how to work with mutmut to enhance your test suite.</p>
+<ol class="arabic simple">
+<li>Run mutmut. A full run is preferred but if you're just getting started you can exit in the middle and start working with what you have found so far.</li>
+<li>Apply a surviving mutant to disk by copying and running the apply command from the output.</li>
+<li>Write a new test that fails</li>
+<li>Revert the mutant on disk</li>
+<li>Rerun the new test to see that it now passes</li>
+<li>Go back to point 2.</li>
+</ol>
+<p>Mutmut keeps a result cache in <cite>.mutmut-cache/</cite> so if you want to make sure you run a full mutmut run just delete this directory.</p>
+<p>To get a list of the found mutants without rerunning the full mutation testing run:</p>
+<pre class="code shell literal-block">
+&gt; mutmut --print-cached
+</pre>
+<p>You can also tell mutmut to just check a single mutant:</p>
+<pre class="code shell literal-block">
+&gt; mutmut f/bar.py --apply --mutation <span class="literal string double">&quot;    if foo &gt; bar:⤑0&quot;</span>
+</pre>
+</div>
+<div class="section" id="resources">
+<span id="toc"></span><h1>Resources</h1>
+<ul class="simple">
+<li><a class="reference external" href="https://github.com/boxed/github">Source Code on Github</a></li>
+<li><a class="reference external" href="https://travis-ci.org/boxed/mutmut">Travis Testing</a></li>
+<li><a class="reference external" href="http://pypi.org/pypi/mutmut/">Python Package Index</a></li>
+</ul>
+</div>
+</div>
+</body>
+</html>

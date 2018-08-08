@@ -1,6 +1,16 @@
 Changelog
 ---------
 
+0.0.20 (2018-08-08)
+~~~~~~~~~~~~~~~~~~~
+
+* Ability to test a single mutation
+
+* Feature to print the cache (--print-cache)
+
+* Turned off error recovery mode for parso. You will now get exceptions for invalid or unsupported python code.
+
+
 0.0.20 (2018-08-02)
 ~~~~~~~~~~~~~~~~~~~
 

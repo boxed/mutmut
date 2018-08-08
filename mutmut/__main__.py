@@ -24,7 +24,10 @@ if sys.version_info < (3, 0):
     from ConfigParser import ConfigParser, NoOptionError, NoSectionError
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
-    print = lambda x, **kwargs: orig_print(x.encode('utf8'), **kwargs)
+
+    def print(x, **kwargs):
+        orig_print(x.encode('utf8'), **kwargs)
+
     text_type = unicode
 else:
     # noinspection PyUnresolvedReferences
@@ -97,11 +100,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 mutation_id_separator = u'⤑'
 
 
-def do_apply(mutation, paths_to_mutate, dict_synonyms, backup):
-    assert mutation is not None
-
-    mutation_id = parse_mutation_id_str(mutation)
-
+def do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup):
     assert len(paths_to_mutate) == 1
     context = Context(
         mutate_id=mutation_id,
@@ -244,13 +243,14 @@ DEFAULT_TESTS_DIR = 'tests/'
 @click.option('--show-times', help='show times for each mutation', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
+@click.option('--print-cache', is_flag=True, default=False)
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
     show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only, print_cache):
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
     if tests_dir == DEFAULT_TESTS_DIR and not os.path.exists(DEFAULT_TESTS_DIR):
@@ -265,20 +265,35 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     if not paths_to_mutate:
         raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
+    if print_cache:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path):
+                for surviving_mutant in load_surviving_mutants(filename):
+                    print('(cached existing) FAILED: %s' % get_apply_line(filename, surviving_mutant))
+        return 0
+
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
+    mutation_id = None
+    if mutation:
+        if len(paths_to_mutate) > 1 or len(list(python_source_files(paths_to_mutate[0]))) > 1:
+            print('When supplying a mutation ID you must only specify one filename')
+            exit(1)
+
+        mutation_id = parse_mutation_id_str(mutation)
+
+    del mutation
+
     if apply:
-        do_apply(mutation, paths_to_mutate, dict_synonyms, backup)
+        do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup)
         return
 
     try:
         os.mkdir('.mutmut-cache')
     except OSError:
         pass
-
-    del mutation
 
     test_command = '%s %s' % (runner, tests_dir)
 
@@ -294,11 +309,16 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     mutations_by_file = {}
 
     def _exclude(context):
-        return exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
+        return coverage_exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
 
-    for path in paths_to_mutate:
-        for filename in python_source_files(path):
-            add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
+    if mutation_id is None:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path):
+                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
+    else:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path):
+                mutations_by_file[filename] = [mutation_id]
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
@@ -332,7 +352,7 @@ def tests_pass(config):
         )
 
         return True
-    except CalledProcessError as e:
+    except CalledProcessError:
         return False
 
 
@@ -393,6 +413,7 @@ def changed_file(config, file_to_mutate, mutations):
     old_ok_lines = load_ok_lines(file_to_mutate)
 
     for line, mutations in groupby(mutations, key=lambda x: x[0]):
+        assert isinstance(line, unicode), repr(line)
         line_state = OK
         if line in old_surviving_mutants or line in old_ok_lines:
             # report set of surviving mutants for line
@@ -405,8 +426,8 @@ def changed_file(config, file_to_mutate, mutations):
             for mutation in mutations:
                 config.progress += 1
                 config.print_progress(file_to_mutate, mutation)
-                x = run_mutation(config, file_to_mutate, mutation)
-                if x == SURVIVING_MUTANT:
+                result = run_mutation(config, file_to_mutate, mutation)
+                if result == SURVIVING_MUTANT:
                     line_state = SURVIVING_MUTANT
         if line_state is OK:
             write_ok_line(file_to_mutate, line)
@@ -421,8 +442,9 @@ def fail_on_cache_only(config):
 
 def run_mutation_tests(config, mutations_by_file, tests_dir):
     """
-
     :type config: Config
+    :type mutations_by_file: dict[str, list[tuple]]
+    :type tests_dir: str
     """
     old_hash_of_tests = load_hash_of_tests()
     old_hashes_of_source_files = load_hash_of_source_file()
@@ -432,6 +454,9 @@ def run_mutation_tests(config, mutations_by_file, tests_dir):
     # TODO: it's wrong to write this here.. need to write down the proper order of updating the cache
     if not config.cache_only:
         write_tests_hash(new_hash_of_tests)
+
+    if new_hash_of_tests == old_hash_of_tests:
+        print('\rUnchanged tests, using cache')
 
     for file_to_mutate, mutations in mutations_by_file.items():
         old_hash = old_hashes_of_source_files.get(file_to_mutate)
@@ -497,7 +522,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
     )
 
 
-def exclude_callback(context, use_coverage, coverage_data):
+def coverage_exclude_callback(context, use_coverage, coverage_data):
     if use_coverage:
         measured_lines = coverage_data.lines(os.path.abspath(context.filename))
         if measured_lines is None:
