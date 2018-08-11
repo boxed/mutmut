@@ -1,11 +1,12 @@
-.. only:: readme
-
-    .. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
-        :target: https://travis-ci.org/boxed/mutmut
-
-
 mutmut - python mutation tester
 ===============================
+
+.. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
+    :target: https://travis-ci.org/boxed/mutmut
+ 
+.. image:: https://readthedocs.org/projects/mutmut/badge/?version=latest
+    :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 Mutmut is a mutation testing system for Python 2 and 3, with a strong focus on
 ease of use. If you don't know what mutation testing is try starting with `this article <https://hackernoon.com/mutmut-a-python-mutation-testing-system-9b9639356c78>`_.
