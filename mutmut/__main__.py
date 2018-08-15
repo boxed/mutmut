@@ -6,6 +6,7 @@ from __future__ import print_function
 
 import hashlib
 import os
+from glob import glob
 from itertools import groupby
 from subprocess import check_call, CalledProcessError, check_output
 import sys
@@ -126,12 +127,13 @@ def hash_of(filename):
         return m.hexdigest()
 
 
-def hash_of_tests(tests_dir):
+def hash_of_tests(tests_dirs):
     m = hashlib.sha256()
-    for root, dirs, files in os.walk(tests_dir):
-        for filename in files:
-            with open(os.path.join(root, filename), 'rb') as f:
-                m.update(f.read())
+    for tests_dir in tests_dirs:
+        for root, dirs, files in os.walk(tests_dir):
+            for filename in files:
+                with open(os.path.join(root, filename), 'rb') as f:
+                    m.update(f.read())
     return m.hexdigest()
 
 
@@ -210,7 +212,7 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times, cache_only):
+    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times, cache_only, tests_dirs):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -223,12 +225,13 @@ class Config(object):
         self.progress = 0
         self.skipped = 0
         self.cache_only = cache_only
+        self.tests_dirs = tests_dirs
 
     def print_progress(self, file_to_mutate, mutation=None):
         print_status('%s out of %s  (%s%s)' % (self.progress, self.total, file_to_mutate, ' ' + get_mutation_id_str(mutation) if mutation else ''))
 
 
-DEFAULT_TESTS_DIR = 'tests/'
+DEFAULT_TESTS_DIR = '**/tests/:**/test/'
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -253,11 +256,10 @@ DEFAULT_TESTS_DIR = 'tests/'
 def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only, print_cache):
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
-    if tests_dir == DEFAULT_TESTS_DIR and not os.path.exists(DEFAULT_TESTS_DIR):
-        if not os.path.exists('test/'):
-            raise ErrorMessage('Could not find tests directory, please specify it')
-
-        tests_dir = 'test/'
+    tests_dirs = []
+    for p in tests_dir.split(':'):
+        tests_dirs.extend(glob(p))
+    del tests_dir
 
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
@@ -267,7 +269,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     if print_cache:
         for path in paths_to_mutate:
-            for filename in python_source_files(path):
+            for filename in python_source_files(path, tests_dirs):
                 for surviving_mutant in load_surviving_mutants(filename):
                     print('(cached existing) FAILED: %s' % get_apply_line(filename, surviving_mutant))
         return 0
@@ -278,7 +280,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     mutation_id = None
     if mutation:
-        if len(paths_to_mutate) > 1 or len(list(python_source_files(paths_to_mutate[0]))) > 1:
+        if len(paths_to_mutate) > 1 or len(list(python_source_files(paths_to_mutate[0], tests_dirs))) > 1:
             print('When supplying a mutation ID you must only specify one filename')
             exit(1)
 
@@ -295,11 +297,9 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     except OSError:
         pass
 
-    test_command = '%s %s' % (runner, tests_dir)
+    using_testmon = '--testmon' in runner
 
-    using_testmon = '--testmon' in test_command
-
-    baseline_time_elapsed = time_test_suite(test_command, using_testmon)
+    baseline_time_elapsed = time_test_suite(runner, using_testmon)
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
@@ -313,11 +313,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     if mutation_id is None:
         for path in paths_to_mutate:
-            for filename in python_source_files(path):
+            for filename in python_source_files(path, tests_dirs):
                 add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
     else:
         for path in paths_to_mutate:
-            for filename in python_source_files(path):
+            for filename in python_source_files(path, tests_dirs):
                 mutations_by_file[filename] = [mutation_id]
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
@@ -325,7 +325,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     print('--- starting mutation ---')
     config = Config(
         swallow_output=not s,
-        test_command=test_command,
+        test_command=runner,
         exclude_callback=_exclude,
         baseline_time_elapsed=baseline_time_elapsed,
         backup=backup,
@@ -334,9 +334,10 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         using_testmon=using_testmon,
         show_times=show_times,
         cache_only=cache_only,
+        tests_dirs=tests_dirs,
     )
 
-    run_mutation_tests(config=config, mutations_by_file=mutations_by_file, tests_dir=tests_dir)
+    run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
 
 def tests_pass(config):
@@ -440,17 +441,16 @@ def fail_on_cache_only(config):
         exit(2)
 
 
-def run_mutation_tests(config, mutations_by_file, tests_dir):
+def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
     :type mutations_by_file: dict[str, list[tuple]]
-    :type tests_dir: str
     """
     old_hash_of_tests = load_hash_of_tests()
     old_hashes_of_source_files = load_hash_of_source_file()
     new_hashes_of_source_files = {}
 
-    new_hash_of_tests = hash_of_tests(tests_dir)
+    new_hash_of_tests = hash_of_tests(config.tests_dirs)
     # TODO: it's wrong to write this here.. need to write down the proper order of updating the cache
     if not config.cache_only:
         write_tests_hash(new_hash_of_tests)
@@ -533,9 +533,10 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
     return False
 
 
-def python_source_files(path):
+def python_source_files(path, tests_dirs):
     if isdir(path):
         for root, dirs, files in os.walk(path):
+            dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
             for filename in files:
                 if filename.endswith('.py'):
                     yield os.path.join(root, filename)

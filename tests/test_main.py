@@ -53,5 +53,6 @@ def test_full_run():
 
 @pytest.mark.usefixtures('test_fs')
 def test_python_source_files():
-    assert list(python_source_files('foo.py')) == ['foo.py']
-    assert list(python_source_files('.')) == ['./foo.py', './tests/test_foo.py']
+    assert list(python_source_files('foo.py', [])) == ['foo.py']
+    assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
+    assert list(python_source_files('.', ['./tests'])) == ['./foo.py']

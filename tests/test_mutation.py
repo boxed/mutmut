@@ -128,6 +128,11 @@ def test_mutation_id_str_roundtrip():
     mutation_id = ('    foo = "bar"', 7)
     assert mutation_id == parse_mutation_id_str(get_mutation_id_str(mutation_id))
 
+
+def test_syntax_error():
+    with pytest.raises(Exception) as e:
+        mutate(Context(source=':!'))
+
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
 # def test_mutation_index():
 #     source = '''
