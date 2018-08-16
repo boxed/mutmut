@@ -6,7 +6,7 @@ from __future__ import print_function
 
 import hashlib
 import os
-from glob import glob
+from glob2 import glob
 from itertools import groupby
 from subprocess import check_call, CalledProcessError, check_output
 import sys
@@ -258,7 +258,7 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     tests_dirs = []
     for p in tests_dir.split(':'):
-        tests_dirs.extend(glob(p))
+        tests_dirs.extend(glob(p, recursive=True))
     del tests_dir
 
     if not isinstance(paths_to_mutate, (list, tuple)):
