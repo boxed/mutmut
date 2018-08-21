@@ -75,16 +75,16 @@ def argument_mutation(children, context, **_):
     """
     :type context: Context
     """
-    if context.stack[-3].type == 'power':
+    if len(context.stack) >= 3 and context.stack[-3].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -3
-    elif context.stack[-4].type == 'power':
+    elif len(context.stack) >= 4 and context.stack[-4].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -4
     else:
-        stack_pos_of_power_node = None
+        return children
 
-    power_node = context.stack[stack_pos_of_power_node] if stack_pos_of_power_node is not None else None
+    power_node = context.stack[stack_pos_of_power_node]
 
-    if power_node and power_node.children[0].type == 'name' and power_node.children[0].value in context.dict_synonyms:
+    if power_node.children[0].type == 'name' and power_node.children[0].value in context.dict_synonyms:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -105,6 +105,8 @@ def keyword_mutation(value, context, **_):
         'in': 'not in',
         'break': 'continue',
         'continue': 'break',
+        'True': 'False',
+        'False': 'True',
     }.get(value, value)
 
 
@@ -288,8 +290,6 @@ def mutate_node(i, context):
     try:
 
         t = i.type
-
-        # import pytest; pytest.set_trace()
 
         if i.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = i.start_pos[0] - 1

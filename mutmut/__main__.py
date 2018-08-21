@@ -414,7 +414,6 @@ def changed_file(config, file_to_mutate, mutations):
     old_ok_lines = load_ok_lines(file_to_mutate)
 
     for line, mutations in groupby(mutations, key=lambda x: x[0]):
-        assert isinstance(line, unicode), repr(line)
         line_state = OK
         if line in old_surviving_mutants or line in old_ok_lines:
             # report set of surviving mutants for line

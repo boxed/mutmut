@@ -39,9 +39,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('1j', '2j'),
         ('1.0j', '2.0j'),
         ('0o1', '2'),
-        ('010', '9'),
         ('1.0e10', '10000000001.0'),
-        ("'''foo'''", "'''foo'''"),  # don't mutate things we assume to be docstrings
         ("dict(a=b)", "dict(aXX=b)"),
         ("Struct(a=b)", "Struct(aXX=b)"),
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
@@ -52,6 +50,7 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('break', 'continue'),
 
         # shouldn't be mutated
+        ("'''foo'''", "'''foo'''"),  # don't mutate things we assume to be docstrings
         ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),
         ('from foo import *', 'from foo import *'),
         ('import foo', 'import foo'),
@@ -116,6 +115,11 @@ def test_mutate_dict():
     assert mutate(Context(source=source, mutate_id=(source, 1))) == ("dict(a=b, cXX=d)", 1)
 
 
+def test_mutate_dict2():
+    source = "dict(a=b, c=d, e=f, g=h)"
+    assert mutate(Context(source=source, mutate_id=(source, 3))) == ("dict(a=b, c=d, e=f, gXX=h)", 1)
+
+
 def test_performed_mutation_ids():
     source = "dict(a=b, c=d)"
     context = Context(source=source)
@@ -151,3 +155,13 @@ def test_syntax_error():
 #     mutated_source, count = mutate(Context(source=source, mutate_id=num_mutations + 1))
 #     assert mutated_source.strip() == source
 #     assert count == 0
+
+
+def test_bug_github_issue_18():
+    source = """@register.simple_tag(name='icon')
+def icon(name):
+    if name is None:
+        return ''
+    tpl = '<span class="glyphicon glyphicon-{}"></span>'
+    return format_html(tpl, name)"""
+    mutate(Context(source=source))
