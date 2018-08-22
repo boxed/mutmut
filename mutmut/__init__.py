@@ -88,7 +88,8 @@ def argument_mutation(children, context, **_):
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
-        children[0] = Name(c.value + 'XX', start_pos=c.start_pos, prefix=c.prefix)
+        if c.type == 'name':
+            children[0] = Name(c.value + 'XX', start_pos=c.start_pos, prefix=c.prefix)
 
     return children
 
