@@ -165,3 +165,9 @@ def icon(name):
     tpl = '<span class="glyphicon glyphicon-{}"></span>'
     return format_html(tpl, name)"""
     mutate(Context(source=source))
+
+
+def test_bug_github_issue_19():
+    source = """key = lambda a: "foo"  
+filters = dict((key(field), False) for field in fields)"""
+    mutate(Context(source=source))
