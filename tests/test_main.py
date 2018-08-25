@@ -9,20 +9,29 @@ from mutmut.__main__ import main, mutation_id_separator, python_source_files
 from click.testing import CliRunner
 
 file_to_mutate_lines = [
-    "a = b + c",
+    "def foo(a, b):",
+    "   return a < b",
+    "e = 1",
+    "f = 3",
     "d = dict(e=f)",
 ]
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
-test_file_lines = [
-    "def test_foo():",
-    "   assert True",
-]
-test_file_contents = '\n'.join(test_file_lines) + '\n'
+test_file_contents = '''
+from foo import *
+
+def test_foo():
+   assert foo(1, 2) is True
+   assert foo(2, 2) is False
+   
+   assert e == 1
+   assert f == 3
+   assert d == dict(e=f)
+'''
 
 
 @pytest.fixture
-def test_fs():
+def filesystem():
     shutil.rmtree('test_fs', ignore_errors=True)
     os.mkdir('test_fs')
     with open('test_fs/foo.py', 'w') as f:
@@ -37,21 +46,31 @@ def test_fs():
     os.chdir('..')
 
 
-@pytest.mark.usefixtures('test_fs')
+@pytest.mark.usefixtures('filesystem')
 def test_simple_apply():
     CliRunner().invoke(main, ['foo.py', '--apply', '--mutation', mutation_id_separator.join([file_to_mutate_lines[0], '0'])])
     with open('foo.py') as f:
         assert f.read() == mutate(Context(source=file_to_mutate_contents, mutate_id=(file_to_mutate_lines[0], 0)))[0]
 
 
-@pytest.mark.usefixtures('test_fs')
-def test_full_run():
+@pytest.mark.usefixtures('filesystem')
+def test_full_run_no_surviving_mutants():
     result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 4  (foo.py)\r1 out of 4  (foo.py a = b + c⤑0)\r2 out of 4  (foo.py a = b + c⤑1)\r3 out of 4  (foo.py d = dict(e=f)⤑0)\r4 out of 4  (foo.py d = dict(e=f)⤑1)'
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 7  (foo.py)\r1 out of 7  (foo.py    return a < b⤑0)\r2 out of 7  (foo.py e = 1⤑0)          \r3 out of 7  (foo.py e = 1⤑1)\r4 out of 7  (foo.py f = 3⤑0)\r5 out of 7  (foo.py f = 3⤑1)\r6 out of 7  (foo.py d = dict(e=f)⤑0)\r7 out of 7  (foo.py d = dict(e=f)⤑1)'
 
 
-@pytest.mark.usefixtures('test_fs')
+@pytest.mark.usefixtures('filesystem')
+def test_full_run_one_surviving_mutant():
+    with open('tests/test_foo.py', 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 7  (foo.py)                \r1 out of 7  (foo.py    return a < b⤑0)\r                                      \rFAILED: mutmut foo.py --apply --mutation "   return a < b⤑0"\n\r2 out of 7  (foo.py e = 1⤑0)\r3 out of 7  (foo.py e = 1⤑1)\r4 out of 7  (foo.py f = 3⤑0)\r5 out of 7  (foo.py f = 3⤑1)\r6 out of 7  (foo.py d = dict(e=f)⤑0)\r7 out of 7  (foo.py d = dict(e=f)⤑1)'
+
+
+@pytest.mark.usefixtures('filesystem')
 def test_python_source_files():
     assert list(python_source_files('foo.py', [])) == ['foo.py']
     assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']

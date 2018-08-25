@@ -385,7 +385,7 @@ def run_mutation(config, filename, mutation_id):
         )
         assert number_of_mutations_performed
         start = datetime.now()
-        survived = not tests_pass(config)
+        survived = tests_pass(config)
         time_elapsed = datetime.now() - start
         if time_elapsed > config.baseline_time_elapsed * 2:
             print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, config.baseline_time_elapsed, get_apply_line(filename, mutation_id)))
