@@ -1,12 +1,22 @@
 Changelog
 ---------
 
-0.0.20 (2018-08-08)
+0.0.21 (2018-08-25)
 ~~~~~~~~~~~~~~~~~~~
 
-* Ability to test a single mutation
+* Fixed critical bug: mutmut reported killed mutants as surviving and vice versa.
 
-* Feature to print the cache (--print-cache)
+* Fixed an issue where the install failed on some systems.
+
+* Handle tests dirs spread out in the file system. This is the normal case for django projects for example.
+
+* Fixes for supporting both python 3 and 2.
+
+* Misc mutation fixes.
+
+* Ability to test a single mutation.
+
+* Feature to print the cache (--print-cache).
 
 * Turned off error recovery mode for parso. You will now get exceptions for invalid or unsupported python code.
 
