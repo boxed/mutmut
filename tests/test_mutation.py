@@ -48,19 +48,27 @@ from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
         ('a = {x for x in y}', 'a = None'),
         ('a = None', 'a = 7'),
         ('break', 'continue'),
-
-        # shouldn't be mutated
-        ("'''foo'''", "'''foo'''"),  # don't mutate things we assume to be docstrings
-        ("NotADictSynonym(a=b)", "NotADictSynonym(a=b)"),
-        ('from foo import *', 'from foo import *'),
-        ('import foo', 'import foo'),
-        ('import foo as bar', 'import foo as bar'),
-        ('foo.bar', 'foo.bar'),
     ]
 )
 def test_basic_mutations(original, expected):
     actual = mutate(Context(source=original, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    'source', [
+        "'''foo'''",  # don't mutate things we assume to be docstrings
+        "NotADictSynonym(a=b)",
+        'from foo import *',
+        'import foo',
+        'import foo as bar',
+        'foo.bar',
+        'for x in y: pass',
+    ]
+)
+def test_do_not_mutate(source):
+    actual = mutate(Context(source=source, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
+    assert actual == source
 
 
 def test_mutate_all():
