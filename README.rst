@@ -27,7 +27,7 @@ You can get started with a simple:
 
 .. code-block:: shell
 
-   > pip install python
+   > pip install mutmut
    > mutmut
 
 This will by default run pytest on tests in the "tests" or "test" folder and it will try to figure out where the code to mutate lies. Run
