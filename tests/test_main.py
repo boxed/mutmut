@@ -44,6 +44,7 @@ def filesystem():
     os.chdir('test_fs')
     yield
     os.chdir('..')
+    shutil.rmtree('test_fs')
 
 
 @pytest.mark.usefixtures('filesystem')
