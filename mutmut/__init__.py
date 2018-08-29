@@ -8,7 +8,8 @@ __version__ = '0.0.21'
 ALL = ('all', -1)
 
 
-if sys.version_info < (3, 0):
+if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+    # noinspection PyUnresolvedReferences
     text_types = (str, unicode)
 else:
     text_types = (str,)
@@ -16,7 +17,7 @@ else:
 
 def number_mutation(value, **_):
     suffix = ''
-    if value.upper().endswith('L'):
+    if value.upper().endswith('L'):  # pragma: no cover (python 2 specific)
         suffix = value[-1]
         value = value[:-1]
 
@@ -33,7 +34,7 @@ def number_mutation(value, **_):
     elif value.startswith('0b'):
         base = 2
         value = value[2:]
-    elif value.startswith('0') and len(value) > 1:
+    elif value.startswith('0') and len(value) > 1:  # pragma: no cover (python 2 specific)
         base = 8
         value = value[1:]
     else:
@@ -287,9 +288,6 @@ def mutate_node(i, context):
     """
     :type context: Context
     """
-    if not i:
-        return
-
     context.stack.append(i)
     try:
 
@@ -382,3 +380,18 @@ def mutate_file(backup, context):
     with open(context.filename, 'w') as f:
         f.write(result)
     return number_of_mutations_performed
+
+
+mutation_id_separator = u'⤑'
+
+
+def parse_mutation_id_str(s):
+    m = s.split(mutation_id_separator)
+    m[0] = m[0].replace('\\"', '"')
+    m[1] = int(m[1])
+    assert len(m) == 2
+    return tuple(m)
+
+
+def get_mutation_id_str(mutation_id):
+    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])

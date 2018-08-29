@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from mutmut import mutate, Context
-from mutmut.__main__ import main, mutation_id_separator, python_source_files
+from mutmut import mutate, Context, mutation_id_separator
+from mutmut.__main__ import main, python_source_files
 from click.testing import CliRunner
 
 file_to_mutate_lines = [

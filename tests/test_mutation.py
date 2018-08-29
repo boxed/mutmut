@@ -1,7 +1,5 @@
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations
+from mutmut import mutate, count_mutations, ALL, Context, list_mutations, parse_mutation_id_str, get_mutation_id_str
 import pytest
-
-from mutmut.__main__ import parse_mutation_id_str, get_mutation_id_str
 
 
 @pytest.mark.parametrize(

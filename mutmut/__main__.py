@@ -4,7 +4,6 @@
 
 from __future__ import print_function
 
-import hashlib
 import os
 from glob2 import glob
 from itertools import groupby
@@ -18,10 +17,12 @@ from io import open
 
 import click
 
-from . import mutate_file, Context, list_mutations
+from mutmut.cache import write_surviving_mutant
+from . import parse_mutation_id_str, get_mutation_id_str, mutate_file, Context, list_mutations
+from .cache import hash_of, hash_of_tests, update_hash_of_source_file, load_hash_of_source_file, write_tests_hash, load_hash_of_tests, load_surviving_mutants, load_ok_lines, write_ok_line
 
-if sys.version_info < (3, 0):
-    # noinspection PyCompatibility
+if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+    # noinspection PyCompatibility,PyUnresolvedReferences
     from ConfigParser import ConfigParser, NoOptionError, NoSectionError
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
@@ -29,11 +30,9 @@ if sys.version_info < (3, 0):
     def print(x, **kwargs):
         orig_print(x.encode('utf8'), **kwargs)
 
-    text_type = unicode
 else:
     # noinspection PyUnresolvedReferences
     from configparser import ConfigParser, NoOptionError, NoSectionError
-    text_type = str
 
 
 # decorator
@@ -71,7 +70,7 @@ def status_printer():
     def p(s):
         len_s = len(s)
         output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
-        if sys.version_info < (3, 0):
+        if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
             output = output.encode('utf8')
         sys.stdout.write(output)
         sys.stdout.flush()
@@ -98,9 +97,6 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         return paths_to_mutate
 
 
-mutation_id_separator = u'⤑'
-
-
 def do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup):
     assert len(paths_to_mutate) == 1
     context = Context(
@@ -118,94 +114,6 @@ def do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup):
 
 class ErrorMessage(Exception):
     pass
-
-
-def hash_of(filename):
-    with open(filename, 'rb') as f:
-        m = hashlib.sha256()
-        m.update(f.read())
-        return m.hexdigest()
-
-
-def hash_of_tests(tests_dirs):
-    m = hashlib.sha256()
-    for tests_dir in tests_dirs:
-        for root, dirs, files in os.walk(tests_dir):
-            for filename in files:
-                with open(os.path.join(root, filename), 'rb') as f:
-                    m.update(f.read())
-    return m.hexdigest()
-
-
-def update_hash_of_source_file(filename, hash_of_file, hashes):
-    hashes[filename] = hash_of_file
-    with open('.mutmut-cache/hashes', 'w') as f:
-        f.writelines(u':'.join([k, v]) + '\n' for k, v in hashes.items())
-
-
-def load_hash_of_source_file():
-    try:
-        with open('.mutmut-cache/hashes') as f:
-            # noinspection PyTypeChecker
-            return dict(line.strip().split(':') for line in f.readlines())
-    except IOError:
-        return {}
-
-
-def write_tests_hash(tests_hash):
-    with open('.mutmut-cache/tests-hash', 'w') as f:
-        f.write(text_type(tests_hash))
-
-
-def load_hash_of_tests():
-    try:
-        with open('.mutmut-cache/tests-hash') as f:
-            return f.read()
-    except IOError:
-        return None
-
-
-def parse_mutation_id_str(s):
-    m = s.split(mutation_id_separator)
-    m[0] = m[0].replace('\\"', '"')
-    m[1] = int(m[1])
-    assert len(m) == 2
-    return tuple(m)
-
-
-def get_mutation_id_str(mutation_id):
-    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
-
-
-def surviving_mutants_filename(f):
-    return '.mutmut-cache/%s-surviving-mutants' % f.replace(os.sep, '__')
-
-
-def ok_lines_filename(f):
-    return '.mutmut-cache/%s-ok-lines' % f.replace(os.sep, '__')
-
-
-def load_surviving_mutants(filename):
-    try:
-        with open(surviving_mutants_filename(filename)) as f:
-            lines = f.read().splitlines()
-            return [parse_mutation_id_str(x) for x in lines]
-
-    except IOError:
-        return {}
-
-
-def load_ok_lines(filename):
-    try:
-        with open(ok_lines_filename(filename)) as f:
-            return f.read().splitlines()
-    except IOError:
-        return {}
-
-
-def write_ok_line(filename, line):
-    with open(ok_lines_filename(filename), 'a') as f:
-        f.write(line + '\n')
 
 
 null_out = open(os.devnull, 'w')
@@ -355,16 +263,6 @@ def tests_pass(config):
         return True
     except CalledProcessError:
         return False
-
-
-def write_surviving_mutant(filename, mutation_id):
-    surviving_mutants = load_surviving_mutants(filename)
-    if mutation_id in surviving_mutants:
-        # Avoid storing the same mutant again
-        return
-
-    with open(surviving_mutants_filename(filename), 'a') as f:
-        f.write(get_mutation_id_str(mutation_id) + '\n')
 
 
 SURVIVING_MUTANT = 'surviving_mutant'
