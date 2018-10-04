@@ -46,6 +46,8 @@ import pytest
         ('a = {x for x in y}', 'a = None'),
         ('a = None', 'a = 7'),
         ('break', 'continue'),
+        ('a: int = 1', 'a: int = None'),
+        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
     ]
 )
 def test_basic_mutations(original, expected):
