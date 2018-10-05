@@ -14,6 +14,7 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
+    "g: int = 2",
 ]
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
@@ -27,6 +28,7 @@ def test_foo():
    assert e == 1
    assert f == 3
    assert d == dict(e=f)
+   assert g == 2
 '''
 
 
@@ -58,7 +60,7 @@ def test_simple_apply():
 def test_full_run_no_surviving_mutants():
     result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 7  (foo.py)\r1 out of 7  (foo.py    return a < b⤑0)\r2 out of 7  (foo.py e = 1⤑0)          \r3 out of 7  (foo.py e = 1⤑1)\r4 out of 7  (foo.py f = 3⤑0)\r5 out of 7  (foo.py f = 3⤑1)\r6 out of 7  (foo.py d = dict(e=f)⤑0)\r7 out of 7  (foo.py d = dict(e=f)⤑1)'
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 8  (foo.py)\r1 out of 8  (foo.py    return a < b⤑0)\r2 out of 8  (foo.py e = 1⤑0)          \r3 out of 8  (foo.py e = 1⤑1)\r4 out of 8  (foo.py f = 3⤑0)\r5 out of 8  (foo.py f = 3⤑1)\r6 out of 8  (foo.py d = dict(e=f)⤑0)\r7 out of 8  (foo.py d = dict(e=f)⤑1)\r8 out of 8  (foo.py g: int = 2⤑0)   '
 
 
 @pytest.mark.usefixtures('filesystem')
@@ -68,7 +70,7 @@ def test_full_run_one_surviving_mutant():
 
     result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 7  (foo.py)                \r1 out of 7  (foo.py    return a < b⤑0)\r                                      \rFAILED: mutmut foo.py --apply --mutation "   return a < b⤑0"\n\r2 out of 7  (foo.py e = 1⤑0)\r3 out of 7  (foo.py e = 1⤑1)\r4 out of 7  (foo.py f = 3⤑0)\r5 out of 7  (foo.py f = 3⤑1)\r6 out of 7  (foo.py d = dict(e=f)⤑0)\r7 out of 7  (foo.py d = dict(e=f)⤑1)'
+    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 8  (foo.py)             \r1 out of 8  (foo.py    return a < b⤑0)\r                                      \rFAILED: mutmut foo.py --apply --mutation "   return a < b⤑0"\n\r2 out of 8  (foo.py e = 1⤑0)\r3 out of 8  (foo.py e = 1⤑1)\r4 out of 8  (foo.py f = 3⤑0)\r5 out of 8  (foo.py f = 3⤑1)\r6 out of 8  (foo.py d = dict(e=f)⤑0)\r7 out of 8  (foo.py d = dict(e=f)⤑1)\r8 out of 8  (foo.py g: int = 2⤑0)   '
 
 
 @pytest.mark.usefixtures('filesystem')

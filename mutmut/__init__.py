@@ -169,8 +169,7 @@ def and_or_test_mutation(children, node, **_):
 
 
 def expression_mutation(children, **_):
-    assert children[1].type == 'operator'
-    if children[1].value == '=':
+    def handle_assignment(children):
         if getattr(children[2], 'value', '---') != 'None':
             x = ' None'
         else:
@@ -178,6 +177,14 @@ def expression_mutation(children, **_):
         children = children[:]
         from parso.python.tree import Name
         children[2] = Name(value=x, start_pos=children[2].start_pos)
+
+        return children
+
+    if children[0].type == 'operator' and children[0].value == ':':
+        if children[2].value == '=':
+            children[1:] = handle_assignment(children[1:])
+    elif children[1].type == 'operator' and children[1].value == '=':
+        children = handle_assignment(children)
 
     return children
 
@@ -206,6 +213,7 @@ mutations_by_type = {
     'lambdef': dict(children=lambda_mutation),
     'expr_stmt': dict(children=expression_mutation),
     'decorator': dict(children=decorator_mutation),
+    'annassign': dict(children=expression_mutation),
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
