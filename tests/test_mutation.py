@@ -48,6 +48,7 @@ import pytest
         ('break', 'continue'),
         ('a: int = 1', 'a: int = None'),
         ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass')
     ]
 )
 def test_basic_mutations(original, expected):
@@ -64,6 +65,7 @@ def test_basic_mutations(original, expected):
         'import foo as bar',
         'foo.bar',
         'for x in y: pass',
+        'def foo(s: str): pass'
     ]
 )
 def test_do_not_mutate(source):
@@ -101,6 +103,11 @@ def test_function():
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 0))) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1)
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 1))) == ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s\n", 1)
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 2))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
+
+
+def test_function_with_annotation():
+    source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
+    assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 0))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
 
 
 def test_pragma_no_mutate():
