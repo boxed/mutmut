@@ -3,7 +3,7 @@ import sys
 from parso import parse
 from tri.declarative import evaluate
 
-__version__ = '0.0.21'
+__version__ = '0.0.22'
 
 ALL = ('all', -1)
 

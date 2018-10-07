@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+0.0.22 (2018-10-07)
+~~~~~~~~~~~~~~~~~~~
+
+* Handle annotated assignment in Python 3.6. Thanks William Orr!
+
+
 0.0.21 (2018-08-25)
 ~~~~~~~~~~~~~~~~~~~
 
