@@ -39,12 +39,13 @@ def number_mutation(value, **_):
         value = value[1:]
     else:
         base = 10
-
-    if '.' in value:
-        assert base == 10
-        parsed = float(value)
-    else:
+    
+    try:
         parsed = int(value, base=base)
+    except ValueError:
+        # Since it wasn't an int, it must be a float
+        base = 10
+        parsed = float(value)
 
     result = repr(parsed + 1)
     if not result.endswith(suffix):
