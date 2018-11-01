@@ -12,6 +12,8 @@ import pytest
         ('1/1', '2*2'),
         # ('1.0', '1.0000000000000002'),  # using numpy features
         ('1.0', '2.0'),
+        ('0.1', '1.1'),
+        ('1e-3', '1.001'),
         ('True', 'False'),
         ('False', 'True'),
         ('"foo"', '"XXfooXX"'),
