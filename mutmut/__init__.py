@@ -182,7 +182,7 @@ def expression_mutation(children, **_):
         return children
 
     if children[0].type == 'operator' and children[0].value == ':':
-        if children[2].value == '=':
+        if len(children) > 2 and children[2].value == '=':
             children[1:] = handle_assignment(children[1:])
     elif children[1].type == 'operator' and children[1].value == '=':
         children = handle_assignment(children)

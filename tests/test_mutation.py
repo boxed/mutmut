@@ -188,3 +188,11 @@ def test_bug_github_issue_19():
     source = """key = lambda a: "foo"  
 filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
+
+
+def test_bug_github_issue_26():
+    source = """
+class ConfigurationOptions(Protocol):
+    min_name_length: int
+    """
+    mutate(Context(source=source))

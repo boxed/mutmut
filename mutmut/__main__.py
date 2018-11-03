@@ -409,14 +409,18 @@ def time_test_suite(test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
-    mutations_by_file[filename] = list_mutations(
-        Context(
-            source=open(filename).read(),
-            filename=filename,
-            exclude=exclude,
-            dict_synonyms=dict_synonyms,
-        )
+    context = Context(
+        source=open(filename).read(),
+        filename=filename,
+        exclude=exclude,
+        dict_synonyms=dict_synonyms,
     )
+
+    try:
+        mutations_by_file[filename] = list_mutations(context)
+    except Exception:
+        print('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line))
+        raise
 
 
 def coverage_exclude_callback(context, use_coverage, coverage_data):
