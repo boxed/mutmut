@@ -1,6 +1,15 @@
 Changelog
 ---------
 
+0.0.23 (2018-11-03)
+~~~~~~~~~~~~~~~~~~~
+
+* Make number_mutation more robust to floats (Thanks Trevin Gandhi!)
+
+* Fixed crash when using Python 3 typing to declare a type but not assigning to that variable
+
+
+
 0.0.22 (2018-10-07)
 ~~~~~~~~~~~~~~~~~~~
 
