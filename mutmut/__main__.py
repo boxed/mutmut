@@ -253,8 +253,8 @@ def tests_pass(config):
         copy('.testmondata-initial', '.testmondata')
 
     kwargs = {}
-    if sys.version >= (3.3):
-        kwargs['timeout'] = config.baseline_time_elapsed * 10
+    if sys.version_info >= (3, 3):
+        kwargs['timeout'] = config.baseline_time_elapsed.total_seconds() * 10
 
     try:
         check_call(

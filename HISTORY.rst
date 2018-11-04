@@ -1,7 +1,7 @@
 Changelog
 ---------
 
-0.0.24 (2018-11-??)
+0.0.24 (2018-11-04)
 ~~~~~~~~~~~~~~~~~~~
 
 * Stopped mutation of type annotation
