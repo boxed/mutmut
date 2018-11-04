@@ -302,6 +302,9 @@ def mutate_node(i, context):
 
         t = i.type
 
+        if i.type == 'tfpdef':
+            return
+
         if i.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = i.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
@@ -350,6 +353,10 @@ def mutate_list_of_nodes(result, context):
     :type context: Context
     """
     for i in result.children:
+
+        if i.type == 'operator' and i.value == '->':
+            return
+
         mutate_node(i, context=context)
 
         # this is just an optimization to stop early

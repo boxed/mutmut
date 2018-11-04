@@ -196,3 +196,11 @@ class ConfigurationOptions(Protocol):
     min_name_length: int
     """
     mutate(Context(source=source))
+
+
+def test_bug_github_issue_30():
+    source = """
+def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
+    pass
+"""
+    assert mutate(Context(source=source)) == (source, 0)
