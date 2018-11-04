@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+0.0.24 (2018-11-??)
+~~~~~~~~~~~~~~~~~~~
+
+* Stopped mutation of type annotation
+
+* Simple infinite loop detection: timeout on 10x the baseline time
+
+
 0.0.23 (2018-11-03)
 ~~~~~~~~~~~~~~~~~~~
 

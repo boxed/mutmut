@@ -7,7 +7,7 @@ from __future__ import print_function
 import os
 from glob2 import glob
 from itertools import groupby
-from subprocess import check_call, CalledProcessError, check_output
+from subprocess import check_call, CalledProcessError, check_output, TimeoutExpired
 import sys
 from datetime import datetime
 from shutil import move, copy
@@ -252,12 +252,17 @@ def tests_pass(config):
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
+    kwargs = {}
+    if sys.version >= (3.3):
+        kwargs['timeout'] = config.baseline_time_elapsed * 10
+
     try:
         check_call(
             config.test_command,
             shell=True,
             stdout=null_out if config.swallow_output else None,
             stderr=null_out if config.swallow_output else None,
+            **kwargs
         )
 
         return True
@@ -283,9 +288,16 @@ def run_mutation(config, filename, mutation_id):
         )
         assert number_of_mutations_performed
         start = datetime.now()
-        survived = tests_pass(config)
+        try:
+            survived = tests_pass(config)
+        except TimeoutExpired:
+            print_status('')
+            print('\rTIMEOUT: %s' % get_apply_line(filename, mutation_id))
+            return SURVIVING_MUTANT
+
         time_elapsed = datetime.now() - start
         if time_elapsed > config.baseline_time_elapsed * 2:
+            print_status('')
             print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, config.baseline_time_elapsed, get_apply_line(filename, mutation_id)))
 
         if config.show_times:
