@@ -413,6 +413,7 @@ def read_coverage_data(use_coverage):
 
 def time_test_suite(test_command, using_testmon):
     print('Running tests without mutations...', end='')
+    sys.stdout.flush()
     start_time = datetime.now()
     try:
         check_output(test_command, shell=True)
