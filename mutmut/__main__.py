@@ -18,7 +18,7 @@ from io import open
 import click
 
 from mutmut.cache import write_surviving_mutant
-from . import parse_mutation_id_str, get_mutation_id_str, mutate_file, Context, list_mutations
+from . import parse_mutation_id_str, get_mutation_id_str, mutate_file, Context, list_mutations, __version__
 from .cache import hash_of, hash_of_tests, update_hash_of_source_file, load_hash_of_source_file, write_tests_hash, load_hash_of_tests, load_surviving_mutants, load_ok_lines, write_ok_line
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
@@ -155,13 +155,19 @@ DEFAULT_TESTS_DIR = '**/tests/:**/test/'
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--print-cache', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
     show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only, print_cache):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only, print_cache, version):
+
+    if version:
+        print("mutmut version %s" % __version__)
+        return
+
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
     tests_dirs = []
