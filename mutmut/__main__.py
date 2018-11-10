@@ -11,7 +11,7 @@ from subprocess import check_call, CalledProcessError, check_output, TimeoutExpi
 import sys
 from datetime import datetime
 from shutil import move, copy
-from os.path import isdir
+from os.path import isdir, exists
 from functools import wraps
 from io import open
 
@@ -166,6 +166,10 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     if version:
         print("mutmut version %s" % __version__)
+        return
+
+    if use_coverage and not exists('.coverage'):
+        print('No .coverage file found. You must generate a coverage file to use this feature.')
         return
 
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
