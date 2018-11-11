@@ -15,6 +15,22 @@ else:
     text_types = (str,)
 
 
+UNTESTED = 'untested'
+OK_KILLED = 'ok_killed'
+OK_SUSPICIOUS = 'ok_suspicious'
+BAD_TIMEOUT = 'bad_timeout'
+BAD_SURVIVED = 'bad_survived'
+
+
+mutant_statuses = [
+    UNTESTED,
+    OK_KILLED,
+    OK_SUSPICIOUS,
+    BAD_TIMEOUT,
+    BAD_SURVIVED,
+]
+
+
 def number_mutation(value, **_):
     suffix = ''
     if value.upper().endswith('L'):  # pragma: no cover (python 2 specific)
@@ -411,3 +427,8 @@ def parse_mutation_id_str(s):
 
 def get_mutation_id_str(mutation_id):
     return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
+
+
+def get_apply_line(filename, mutation_id):
+    apply_line = 'mutmut %s --apply --mutation "%s"' % (filename, get_mutation_id_str(mutation_id))
+    return apply_line

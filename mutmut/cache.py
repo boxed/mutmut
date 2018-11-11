@@ -3,13 +3,40 @@ import os
 import sys
 from io import open
 
-from mutmut import parse_mutation_id_str, get_mutation_id_str
+from pony.orm import Database, Required, db_session, Set, Optional
+
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, get_apply_line, UNTESTED
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
 else:
     text_type = str
+
+
+db = Database()
+db.bind(provider='sqlite', filename=os.path.join(os.getcwd(), '.mutmut-cache'), create_db=True)
+
+
+class SourceFile(db.Entity):
+    filename = Required(str)
+    lines = Set('Line')
+
+
+class Line(db.Entity):
+    sourcefile = Required(SourceFile)
+    line = Required(text_type)
+    mutants = Set('Mutant')
+
+
+class Mutant(db.Entity):
+    line = Required(Line)
+    index = Required(int)
+    tested_against_hash = Optional(text_type)
+    status = Required(text_type)  # really an enum of mutant_statuses
+
+
+db.generate_mapping(create_tables=True)
 
 
 def hash_of(filename):
@@ -29,78 +56,71 @@ def hash_of_tests(tests_dirs):
     return m.hexdigest()
 
 
-def update_hash_of_source_file(filename, hash_of_file, hashes):
-    hashes[filename] = hash_of_file
-    with open('.mutmut-cache/hashes', 'w') as f:
-        f.writelines(u':'.join([k, v]) + '\n' for k, v in hashes.items())
+def enumerate_mutants():
+    for sourcefile in SourceFile.select():
+        for line in sourcefile.lines:
+            for mutant in line.mutants:
+                yield mutant
 
 
-def load_hash_of_source_file():
-    try:
-        with open('.mutmut-cache/hashes') as f:
-            # noinspection PyTypeChecker
-            return dict(line.strip().split(':') for line in f.readlines())
-    except IOError:
-        return {}
+@db_session
+def print_result_cache():
+    print('Timed out ⏰')
+    for mutant in enumerate_mutants():
+        if mutant.status == BAD_TIMEOUT:
+            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
+
+    print()
+    print('Suspicious 🤔')
+    for mutant in enumerate_mutants():
+        if mutant.status == OK_SUSPICIOUS:
+            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
+
+    print()
+    print('Survived 🙁')
+    for mutant in enumerate_mutants():
+        if mutant.status == BAD_SURVIVED:
+            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
 
 
-def write_tests_hash(tests_hash):
-    with open('.mutmut-cache/tests-hash', 'w') as f:
-        f.write(text_type(tests_hash))
+def get_or_create(model, defaults=None, **params):
+    if defaults is None:
+        defaults = {}
+    obj = model.get(**params)
+    if obj is None:
+        params = params.copy()
+        for k, v in defaults.items():
+            if k not in params:
+                params[k] = v
+        return model(**params)
+    else:
+        return obj
 
 
-def load_hash_of_tests():
-    try:
-        with open('.mutmut-cache/tests-hash') as f:
-            return f.read()
-    except IOError:
-        return None
+@db_session
+def register_mutant(filename, mutation_id):
+    sourcefile = get_or_create(SourceFile, filename=filename)
+
+    line = get_or_create(Line, sourcefile=sourcefile, line=mutation_id[0])
+    get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status='unknown'))
 
 
-def surviving_mutants_filename(f):
-    return '.mutmut-cache/%s-surviving-mutants' % f.replace(os.sep, '__')
+@db_session
+def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
+    sourcefile = SourceFile.get(filename=file_to_mutate)
+    line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
+    mutant = Mutant.get(line=line, index=mutation_id[1])
+    mutant.status = status
+    mutant.tested_against_hash = tests_hash
 
 
-def ok_lines_filename(f):
-    return '.mutmut-cache/%s-ok-lines' % f.replace(os.sep, '__')
+@db_session
+def cached_mutation_status(filename, mutation_id, hash_of_tests):
+    sourcefile = SourceFile.get(filename=filename)
+    line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
+    mutant = Mutant.get(line=line, index=mutation_id[1])
 
+    if mutant.tested_against_hash != hash_of_tests:
+        return UNTESTED
 
-def load_surviving_mutants(filename):
-    try:
-        with open(surviving_mutants_filename(filename)) as f:
-            lines = f.read().splitlines()
-            return [parse_mutation_id_str(x) for x in lines]
-
-    except IOError:
-        return {}
-
-
-def load_ok_lines(filename):
-    try:
-        with open(ok_lines_filename(filename)) as f:
-            return f.read().splitlines()
-    except IOError:
-        return {}
-
-
-def write_ok_line(filename, line):
-    with open(ok_lines_filename(filename), 'a') as f:
-        f.write(line + '\n')
-
-
-def write_surviving_mutant(filename, mutation_id):
-    surviving_mutants = load_surviving_mutants(filename)
-    if mutation_id in surviving_mutants:
-        # Avoid storing the same mutant again
-        return
-
-    with open(surviving_mutants_filename(filename), 'a') as f:
-        f.write(get_mutation_id_str(mutation_id) + '\n')
-
-
-def write_timed_out_mutant(filename, mutation_id):
-    pass
-
-
-def write_suspicious_mutant(filename, mutation_id):
-    pass
+    return mutant.status

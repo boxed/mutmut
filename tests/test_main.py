@@ -58,9 +58,16 @@ def test_simple_apply():
 
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants():
-    result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
+    CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['foo.py', '--print-results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 8  (foo.py)\r1 out of 8  (foo.py    return a < b⤑0)\r2 out of 8  (foo.py e = 1⤑0)          \r3 out of 8  (foo.py e = 1⤑1)\r4 out of 8  (foo.py f = 3⤑0)\r5 out of 8  (foo.py f = 3⤑1)\r6 out of 8  (foo.py d = dict(e=f)⤑0)\r7 out of 8  (foo.py d = dict(e=f)⤑1)\r8 out of 8  (foo.py g: int = 2⤑0)   '
+    assert result.output.strip() == u"""
+Timed out ⏰
+
+Suspicious 🤔
+
+Survived 🙁
+""".strip()
 
 
 @pytest.mark.usefixtures('filesystem')
@@ -68,9 +75,17 @@ def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
-    result = CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
+    CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['foo.py', '--print-results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output == u'Running tests without mutations... Done\n--- starting mutation ---\n\r0 out of 8  (foo.py)             \r1 out of 8  (foo.py    return a < b⤑0)\r                                      \rFAILED: mutmut foo.py --apply --mutation "   return a < b⤑0"\n\r2 out of 8  (foo.py e = 1⤑0)\r3 out of 8  (foo.py e = 1⤑1)\r4 out of 8  (foo.py f = 3⤑0)\r5 out of 8  (foo.py f = 3⤑1)\r6 out of 8  (foo.py d = dict(e=f)⤑0)\r7 out of 8  (foo.py d = dict(e=f)⤑1)\r8 out of 8  (foo.py g: int = 2⤑0)   '
+    assert result.output.strip() == u"""
+Timed out ⏰
+
+Suspicious 🤔
+
+Survived 🙁
+mutmut foo.py --apply --mutation "return a < b⤑0"
+""".strip()
 
 
 @pytest.mark.usefixtures('filesystem')
