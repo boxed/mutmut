@@ -451,7 +451,8 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
         measured_lines = coverage_data.lines(os.path.abspath(context.filename))
         if measured_lines is None:
             return True
-        if context.current_line not in measured_lines:
+        current_line = context.current_line_index + 1
+        if current_line not in measured_lines:
             return True
 
     return False
