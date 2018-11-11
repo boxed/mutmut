@@ -3,7 +3,7 @@ import sys
 from parso import parse
 from tri.declarative import evaluate
 
-__version__ = '0.0.24'
+__version__ = '0.0.25'
 
 ALL = ('all', -1)
 
@@ -44,7 +44,6 @@ def number_mutation(value, **_):
         parsed = int(value, base=base)
     except ValueError:
         # Since it wasn't an int, it must be a float
-        base = 10
         parsed = float(value)
 
     result = repr(parsed + 1)
@@ -221,7 +220,7 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False):
+    def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
         self.index = 0
         self.source = source
         self.mutate_id = mutate_id
@@ -238,6 +237,7 @@ class Context(object):
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
+        self.config = config
 
     def exclude_line(self):
         return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)

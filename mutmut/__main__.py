@@ -1,25 +1,26 @@
 # coding=utf-8
 
-# NOTE: to persistently print to screen, you must first print_status('') and then begin your line with \r
-
 from __future__ import print_function
 
+import itertools
 import os
-from glob2 import glob
-from itertools import groupby
-from subprocess import check_call, CalledProcessError, check_output, TimeoutExpired
 import sys
 from datetime import datetime
-from shutil import move, copy
-from os.path import isdir, exists
 from functools import wraps
 from io import open
+from itertools import groupby
+from os.path import isdir, exists
+from shutil import move, copy
+from subprocess import TimeoutExpired, Popen
 
 import click
+from glob2 import glob
 
-from mutmut.cache import write_surviving_mutant
+from mutmut.cache import write_surviving_mutant, write_timed_out_mutant, write_suspicious_mutant
 from . import parse_mutation_id_str, get_mutation_id_str, mutate_file, Context, list_mutations, __version__
 from .cache import hash_of, hash_of_tests, update_hash_of_source_file, load_hash_of_source_file, write_tests_hash, load_hash_of_tests, load_surviving_mutants, load_ok_lines, write_ok_line
+
+spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
@@ -27,11 +28,11 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
-    def print(x, **kwargs):
+    def print(x='', **kwargs):
         orig_print(x.encode('utf8'), **kwargs)
 
 else:
-    # noinspection PyUnresolvedReferences
+    # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
 
 
@@ -68,6 +69,7 @@ def status_printer():
     last_len = [0]
 
     def p(s):
+        s = next(spinner) + ' ' + s
         len_s = len(s)
         output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
         if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
@@ -120,7 +122,7 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, show_times, cache_only, tests_dirs):
+    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, cache_only, tests_dirs):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -129,14 +131,17 @@ class Config(object):
         self.dict_synonyms = dict_synonyms
         self.total = total
         self.using_testmon = using_testmon
-        self.show_times = show_times
         self.progress = 0
         self.skipped = 0
         self.cache_only = cache_only
         self.tests_dirs = tests_dirs
+        self.killed_mutants = 0
+        self.surviving_mutants = 0
+        self.surviving_mutants_timeout = 0
+        self.suspicious_mutants = 0
 
-    def print_progress(self, file_to_mutate, mutation=None):
-        print_status('%s out of %s  (%s%s)' % (self.progress, self.total, file_to_mutate, ' ' + get_mutation_id_str(mutation) if mutation else ''))
+    def print_progress(self):
+        print_status('%s/%s  🎉 %s  ⏰ %s  🙁 %s  🤔 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.surviving_mutants, self.suspicious_mutants))
 
 
 DEFAULT_TESTS_DIR = '**/tests/:**/test/'
@@ -151,18 +156,16 @@ DEFAULT_TESTS_DIR = '**/tests/:**/test/'
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
 @click.option('-s', help='turn off output capture', is_flag=True)
-@click.option('--show-times', help='show times for each mutation', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
-@click.option('--print-cache', is_flag=True, default=False)
+@click.option('--print-results', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
-    show_times=False,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, show_times, cache_only, print_cache, version):
+def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, print_results, version):
 
     if version:
         print("mutmut version %s" % __version__)
@@ -185,11 +188,11 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     if not paths_to_mutate:
         raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
-    if print_cache:
+    if print_results:
         for path in paths_to_mutate:
             for filename in python_source_files(path, tests_dirs):
                 for surviving_mutant in load_surviving_mutants(filename):
-                    print('(cached existing) FAILED: %s' % get_apply_line(filename, surviving_mutant))
+                    print('%s' % get_apply_line(filename, surviving_mutant))
         return 0
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
@@ -217,7 +220,26 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     using_testmon = '--testmon' in runner
 
-    baseline_time_elapsed = time_test_suite(runner, using_testmon)
+    print("""
+- Mutation testing starting - 
+
+These are the steps:
+1. A full test suite run will be made to make sure we 
+   can run the tests successfully and we know how long 
+   it takes (to detect infinite loops for example)
+2. Mutants will be generated and checked
+
+Mutants are written to the cache in the .mutmut-cache 
+directory. Print found mutants with `mutmut --print-result`.
+
+Legend for output:
+🎉 Killed mutants. The goal is for everything to end up in this bucket. 
+⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.  
+🙁 Survived. This means your tests needs to be expanded. 
+🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
+""")
+
+    baseline_time_elapsed = time_test_suite(swallow_output=not s, test_command=runner, using_testmon=using_testmon)
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
@@ -240,7 +262,8 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    print('--- starting mutation ---')
+    print()
+    print('2. Checking mutants')
     config = Config(
         swallow_output=not s,
         test_command=runner,
@@ -250,12 +273,31 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         dict_synonyms=dict_synonyms,
         total=total,
         using_testmon=using_testmon,
-        show_times=show_times,
         cache_only=cache_only,
         tests_dirs=tests_dirs,
     )
 
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+
+
+def popen_streaming_output(cmd, callback):
+    master, slave = os.openpty()
+
+    p = Popen(
+        cmd,
+        shell=True,
+        stdout=slave,
+        stderr=slave,
+    )
+    stdout = os.fdopen(master)
+    os.close(slave)
+    while p.returncode is None:
+        line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+        callback(line)
+
+        p.poll()
+
+    return p.returncode
 
 
 def tests_pass(config):
@@ -266,18 +308,13 @@ def tests_pass(config):
     if sys.version_info >= (3, 3):
         kwargs['timeout'] = config.baseline_time_elapsed.total_seconds() * 10
 
-    try:
-        check_call(
-            config.test_command,
-            shell=True,
-            stdout=null_out if config.swallow_output else None,
-            stderr=null_out if config.swallow_output else None,
-            **kwargs
-        )
+    def feedback(line):
+        if not config.swallow_output:
+            print(line)
+        config.print_progress()
 
-        return True
-    except CalledProcessError:
-        return False
+    returncode = popen_streaming_output(config.test_command, feedback)
+    return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
 SURVIVING_MUTANT = 'surviving_mutant'
@@ -290,6 +327,7 @@ def run_mutation(config, filename, mutation_id):
         filename=filename,
         exclude=config.exclude_callback,
         dict_synonyms=config.dict_synonyms,
+        config=config,
     )
     try:
         number_of_mutations_performed = mutate_file(
@@ -301,24 +339,22 @@ def run_mutation(config, filename, mutation_id):
         try:
             survived = tests_pass(config)
         except TimeoutExpired:
-            print_status('')
-            print('\rTIMEOUT: %s' % get_apply_line(filename, mutation_id))
+            write_timed_out_mutant(filename, mutation_id)
+            context.config.surviving_mutants_timeout += 1
             return SURVIVING_MUTANT
 
         time_elapsed = datetime.now() - start
         if time_elapsed > config.baseline_time_elapsed * 2:
-            print_status('')
-            print('\nSUSPICIOUS LONG TIME: %s > expected %s\n   %s' % (time_elapsed, config.baseline_time_elapsed, get_apply_line(filename, mutation_id)))
-
-        if config.show_times:
-            print('time: %s' % time_elapsed)
+            write_suspicious_mutant(filename, mutation_id)
+            config.suspicious_mutants += 1
+            return OK
 
         if survived:
-            print_status('')
-            print('\rFAILED: %s' % get_apply_line(filename, mutation_id))
             write_surviving_mutant(filename, mutation_id)
+            context.config.surviving_mutants += 1
             return SURVIVING_MUTANT
         else:
+            context.config.killed_mutants += 1
             return OK
     finally:
         move(filename + '.bak', filename)
@@ -337,15 +373,13 @@ def changed_file(config, file_to_mutate, mutations):
         line_state = OK
         if line in old_surviving_mutants or line in old_ok_lines:
             # report set of surviving mutants for line
-            print_status('')
-            print('\rold line')
             config.progress += len(str(mutations))
-            config.print_progress(file_to_mutate)
+            config.print_progress()
         else:
             # run mutation tests on line
             for mutation in mutations:
                 config.progress += 1
-                config.print_progress(file_to_mutate, mutation)
+                config.print_progress()
                 result = run_mutation(config, file_to_mutate, mutation)
                 if result == SURVIVING_MUTANT:
                     line_state = SURVIVING_MUTANT
@@ -380,14 +414,9 @@ def run_mutation_tests(config, mutations_by_file):
     for file_to_mutate, mutations in mutations_by_file.items():
         old_hash = old_hashes_of_source_files.get(file_to_mutate)
         new_hash = hash_of(file_to_mutate)
-        config.print_progress(file_to_mutate)
+        config.print_progress()
         if new_hash_of_tests == old_hash_of_tests:
-            if new_hash == old_hash:
-                print_status('')
-                print('\rUnchanged file %s' % file_to_mutate)
-                for surviving_mutant in load_surviving_mutants(file_to_mutate):
-                    print('\r(cached existing) FAILED: %s' % get_apply_line(file_to_mutate, surviving_mutant))
-            else:
+            if new_hash != old_hash:
                 fail_on_cache_only(config)
 
                 changed_file(config, file_to_mutate, mutations)
@@ -415,19 +444,24 @@ def read_coverage_data(use_coverage):
         return None
 
 
-def time_test_suite(test_command, using_testmon):
-    print('Running tests without mutations...', end='')
-    sys.stdout.flush()
+def time_test_suite(swallow_output, test_command, using_testmon):
+    print('1. Running tests without mutations')
     start_time = datetime.now()
-    try:
-        check_output(test_command, shell=True)
+
+    def feedback(line):
+        if not swallow_output:
+            print(line)
+        print_status('Running...')
+
+    returncode = popen_streaming_output(test_command, feedback)
+
+    if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = datetime.now() - start_time
-    except CalledProcessError as e:
-        if using_testmon and e.returncode == 5:
-            baseline_time_elapsed = datetime.now() - start_time
-        else:
-            raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\n%s" % (test_command, e.output.decode()))
+    else:
+        raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
+
     print(' Done')
+
     return baseline_time_elapsed
 
 

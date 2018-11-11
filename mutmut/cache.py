@@ -96,3 +96,11 @@ def write_surviving_mutant(filename, mutation_id):
 
     with open(surviving_mutants_filename(filename), 'a') as f:
         f.write(get_mutation_id_str(mutation_id) + '\n')
+
+
+def write_timed_out_mutant(filename, mutation_id):
+    pass
+
+
+def write_suspicious_mutant(filename, mutation_id):
+    pass
