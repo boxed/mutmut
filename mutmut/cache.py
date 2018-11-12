@@ -5,7 +5,7 @@ from io import open
 
 from pony.orm import Database, Required, db_session, Set, Optional
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, get_apply_line, UNTESTED
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, get_apply_line, UNTESTED, OK_KILLED
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -119,6 +119,10 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
     mutant = Mutant.get(line=line, index=mutation_id[1])
+
+    if mutant.status == OK_KILLED:
+        # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
+        return OK_KILLED
 
     if mutant.tested_against_hash != hash_of_tests:
         return UNTESTED
