@@ -1,3 +1,5 @@
+import sys
+
 from mutmut import mutate, count_mutations, ALL, Context, list_mutations, parse_mutation_id_str, get_mutation_id_str
 import pytest
 
@@ -48,12 +50,22 @@ import pytest
         ('a = {x for x in y}', 'a = None'),
         ('a = None', 'a = 7'),
         ('break', 'continue'),
+    ]
+)
+def test_basic_mutations(original, expected):
+    actual = mutate(Context(source=original, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
+    assert actual == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.parametrize(
+    'original, expected', [
         ('a: int = 1', 'a: int = None'),
         ('a: Optional[int] = None', 'a: Optional[int] = 7'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass')
     ]
 )
-def test_basic_mutations(original, expected):
+def test_basic_mutations_python3(original, expected):
     actual = mutate(Context(source=original, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == expected
 
@@ -67,10 +79,20 @@ def test_basic_mutations(original, expected):
         'import foo as bar',
         'foo.bar',
         'for x in y: pass',
-        'def foo(s: str): pass'
     ]
 )
 def test_do_not_mutate(source):
+    actual = mutate(Context(source=source, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
+    assert actual == source
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.parametrize(
+    'source', [
+        'def foo(s: str): pass'
+    ]
+)
+def test_do_not_mutate_python3(source):
     actual = mutate(Context(source=source, mutate_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == source
 
@@ -107,6 +129,7 @@ def test_function():
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 2))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
     assert mutate(Context(source=source, mutate_id=(source.split('\n')[1], 0))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
@@ -190,6 +213,7 @@ filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
@@ -198,6 +222,7 @@ class ConfigurationOptions(Protocol):
     mutate(Context(source=source))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_bug_github_issue_30():
     source = """
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':

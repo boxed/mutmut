@@ -1,6 +1,22 @@
 Changelog
 ---------
 
+1.0.0 (2018-11-12)
+~~~~~~~~~~~~~~~~~~~
+
+* Totally new user interface! Should be much easier to understand and it's easier to see that something is happening
+
+* Totally new cache handling. Mutmut will now know which mutants are already killed and not try them again, and it will know which mutants to retest if the tests change
+
+* Infinite loop detection now works in Python < 3.3
+
+* Added `--version` flag
+
+* Nice error message when no `.coverage` file is found when using the `--use-coverage` flag
+
+* Fixed crash when using `--use-coverage` flag. Thanks Daniel Hahler!
+
+
 0.0.24 (2018-11-04)
 ~~~~~~~~~~~~~~~~~~~
 

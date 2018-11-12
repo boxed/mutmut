@@ -1,6 +1,7 @@
 # coding=utf-8
 import os
 import shutil
+import sys
 from datetime import datetime
 
 import pytest
@@ -8,6 +9,9 @@ import pytest
 from mutmut import mutate, Context, mutation_id_separator
 from mutmut.__main__ import main, python_source_files, popen_streaming_output
 from click.testing import CliRunner
+
+pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
+
 
 file_to_mutate_lines = [
     "def foo(a, b):",
