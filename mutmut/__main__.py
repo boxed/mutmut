@@ -10,7 +10,9 @@ from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from subprocess import TimeoutExpired, Popen
+from subprocess import Popen
+from threading import Thread
+from time import sleep
 
 import click
 from glob2 import glob
@@ -278,7 +280,7 @@ Legend for output:
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
 
-def popen_streaming_output(cmd, callback):
+def popen_streaming_output(cmd, callback, timeout=None):
     master, slave = os.openpty()
 
     p = Popen(
@@ -289,11 +291,30 @@ def popen_streaming_output(cmd, callback):
     )
     stdout = os.fdopen(master)
     os.close(slave)
+
+    start = datetime.now()
+
+    foo = {'raise': False}
+
+    def timeout_killer():
+        while p.returncode is None:
+            sleep(0.1)
+            if (datetime.now() - start).total_seconds() > timeout:
+                foo['raise'] = True
+                p.kill()
+                return
+
+    if timeout:
+        Thread(target=timeout_killer).start()
+
     while p.returncode is None:
         line = stdout.readline()[:-1]  # -1 to remove the newline at the end
         callback(line)
 
         p.poll()
+
+    if foo['raise']:
+        raise TimeoutError()
 
     return p.returncode
 
@@ -302,16 +323,12 @@ def tests_pass(config):
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
-    kwargs = {}
-    if sys.version_info >= (3, 3):
-        kwargs['timeout'] = config.baseline_time_elapsed.total_seconds() * 10
-
     def feedback(line):
         if not config.swallow_output:
             print(line)
         config.print_progress()
 
-    returncode = popen_streaming_output(config.test_command, feedback)
+    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed.total_seconds() * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
@@ -350,7 +367,7 @@ def run_mutation(config, filename, mutation_id):
         start = datetime.now()
         try:
             survived = tests_pass(config)
-        except TimeoutExpired:
+        except TimeoutError:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 

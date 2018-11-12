@@ -1,11 +1,12 @@
 # coding=utf-8
 import os
 import shutil
+from datetime import datetime
 
 import pytest
 
 from mutmut import mutate, Context, mutation_id_separator
-from mutmut.__main__ import main, python_source_files
+from mutmut.__main__ import main, python_source_files, popen_streaming_output
 from click.testing import CliRunner
 
 file_to_mutate_lines = [
@@ -93,3 +94,12 @@ def test_python_source_files():
     assert list(python_source_files('foo.py', [])) == ['foo.py']
     assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
     assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
+
+
+def test_timeout():
+    start = datetime.now()
+
+    with pytest.raises(TimeoutError):
+        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+
+    assert (datetime.now() - start).total_seconds() < 3
