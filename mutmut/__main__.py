@@ -212,11 +212,6 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
         do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup)
         return
 
-    try:
-        os.mkdir('.mutmut-cache')
-    except OSError:
-        pass
-
     using_testmon = '--testmon' in runner
 
     print("""
@@ -351,7 +346,7 @@ def run_mutation(config, filename, mutation_id):
     elif cached_status == OK_SUSPICIOUS:
         config.suspicious_mutants += 1
     else:
-        assert cached_status == UNTESTED
+        assert cached_status == UNTESTED, cached_status
 
     config.print_progress()
 

@@ -1,6 +1,7 @@
 import hashlib
 import os
 import sys
+from functools import wraps
 from io import open
 
 from pony.orm import Database, Required, db_session, Set, Optional
@@ -15,7 +16,6 @@ else:
 
 
 db = Database()
-db.bind(provider='sqlite', filename=os.path.join(os.getcwd(), '.mutmut-cache'), create_db=True)
 
 
 class SourceFile(db.Entity):
@@ -36,7 +36,15 @@ class Mutant(db.Entity):
     status = Required(text_type)  # really an enum of mutant_statuses
 
 
-db.generate_mapping(create_tables=True)
+def init_db(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if db.provider is None:
+            db.bind(provider='sqlite', filename=os.path.join(os.getcwd(), '.mutmut-cache'), create_db=True)
+            db.generate_mapping(create_tables=True)
+
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def hash_of(filename):
@@ -63,6 +71,7 @@ def enumerate_mutants():
                 yield mutant
 
 
+@init_db
 @db_session
 def print_result_cache():
     print('Timed out ⏰')
@@ -97,6 +106,7 @@ def get_or_create(model, defaults=None, **params):
         return obj
 
 
+@init_db
 @db_session
 def register_mutant(filename, mutation_id):
     sourcefile = get_or_create(SourceFile, filename=filename)
@@ -105,6 +115,7 @@ def register_mutant(filename, mutation_id):
     get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status='unknown'))
 
 
+@init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     sourcefile = SourceFile.get(filename=file_to_mutate)
@@ -114,6 +125,7 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     mutant.tested_against_hash = tests_hash
 
 
+@init_db
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
