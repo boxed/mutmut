@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check 
 
 file_to_mutate_lines = [
     "def foo(a, b):",
-    "   return a < b",
+    "    return a < b",
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
@@ -99,7 +99,7 @@ Timed out ⏰
 Suspicious 🤔
 
 Survived 🙁
-mutmut foo.py --apply --mutation "return a < b⤑0"
+mutmut foo.py --apply --mutation "    return a < b⤑0"
 """.strip()
 
 

@@ -21,21 +21,21 @@ db = Database()
 
 
 class SourceFile(db.Entity):
-    filename = Required(str)
+    filename = Required(text_type, autostrip=False)
     lines = Set('Line')
 
 
 class Line(db.Entity):
     sourcefile = Required(SourceFile)
-    line = Required(text_type)
+    line = Required(text_type, autostrip=False)
     mutants = Set('Mutant')
 
 
 class Mutant(db.Entity):
     line = Required(Line)
     index = Required(int)
-    tested_against_hash = Optional(text_type)
-    status = Required(text_type)  # really an enum of mutant_statuses
+    tested_against_hash = Optional(text_type, autostrip=False)
+    status = Required(text_type, autostrip=False)  # really an enum of mutant_statuses
 
 
 def init_db(f):
