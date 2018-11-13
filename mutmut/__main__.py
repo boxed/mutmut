@@ -213,10 +213,6 @@ commands:\n
                 print(b)
         return
 
-    if argument and len(argument) > 1:
-        print('The %s command only takes a single argument' % command)
-        return
-
     if version:
         print("mutmut version %s" % __version__)
         return
