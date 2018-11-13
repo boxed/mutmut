@@ -31,7 +31,7 @@ You can get started with a simple:
 .. code-block:: shell
 
    > pip install mutmut
-   > mutmut
+   > mutmut run
 
 This will by default run pytest on tests in the "tests" or "test" folder and it will try to figure out where the code to mutate lies. Run
 
@@ -42,7 +42,7 @@ This will by default run pytest on tests in the "tests" or "test" folder and it 
 for the available flags, to use other runners, etc. The recommended way to use mutmut if
 the defaults aren't working for you is to add a block in `setup.cfg`. Then when you
 come back to mutmut weeks later you don't have to figure out the flags again, just run
-`mutmut` and it works. Like this:
+`mutmut run` and it works. Like this:
 
 .. code-block:: ini
 
@@ -53,14 +53,17 @@ come back to mutmut weeks later you don't have to figure out the flags again, ju
     tests_dir=tests/
     dict_synonyms=Struct, NamedStruct
 
-The output of the mutation tests (if you have surviving mutants) looks like:
+You can stop the mutation run at any time and mutmut will restart where you left off. It's
+also smart enough to retest only the surviving mutants when the test suite changes.
+
+To print the results run `mutmut results`. It will give you output in the form of the commands to apply a mutation:
 
 .. code-block:: shell
 
-    FAILED: mutmut f/bar.py --apply --mutation "    if foo > bar:⤑0"
+    mutmut apply 3
 
-You can just copy paste everything after "FAILED:" and run it directly and you'll get the
-mutant on disk. You should REALLY have the file you mutate under source code control and committed before you mutate it!
+You can just copy paste those lines and run and you'll get the mutant on disk. You should
+REALLY have the file you mutate under source code control and committed before you mutate it!
 
 
 Whitelisting
@@ -93,23 +96,17 @@ Workflow
 
 This section describes how to work with mutmut to enhance your test suite.
 
-1. Run mutmut. A full run is preferred but if you're just getting started you can exit in the middle and start working with what you have found so far.
-2. Apply a surviving mutant to disk by copying and running the apply command from the output.
+1. Run mutmut with `mutmut run`. A full run is preferred but if you're just getting started you can exit in the middle and start working with what you have found so far.
+2. Apply a surviving mutant to disk by copying and running the apply command from the output of `mutmut results`.
 3. Write a new test that fails
 4. Revert the mutant on disk
 5. Rerun the new test to see that it now passes
 6. Go back to point 2.
 
-Mutmut keeps a result cache in `.mutmut-cache/` so if you want to make sure you run a full mutmut run just delete this directory.
-
-To get a list of the found mutants without rerunning the full mutation testing run:
-
-.. code-block:: shell
-
-    > mutmut --print-cache
+Mutmut keeps a result cache in `.mutmut-cache` so if you want to make sure you run a full mutmut run just delete this file.
 
 You can also tell mutmut to just check a single mutant:
 
 .. code-block:: shell
 
-    > mutmut f/bar.py --mutation "    if foo > bar:⤑0"
+    > mutmut run 3

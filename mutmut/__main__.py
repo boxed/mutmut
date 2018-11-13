@@ -316,7 +316,12 @@ def popen_streaming_output(cmd, callback, timeout=None):
         Thread(target=timeout_killer).start()
 
     while p.returncode is None:
-        line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+        try:
+            line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+        except OSError:
+            # This seems to happen on some platforms, including TravisCI. It seems like
+            # it's ok to just let this pass here, you just won't get as nice feedback.
+            pass
         callback(line)
 
         p.poll()

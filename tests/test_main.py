@@ -36,7 +36,6 @@ def test_foo():
    assert g == 2
 '''
 
-in_travis = os.environ['PATH'].startswith('/home/travis/')
 
 
 @pytest.fixture
@@ -70,7 +69,6 @@ def test_simple_apply():
 
 
 @pytest.mark.usefixtures('filesystem')
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
 def test_full_run_no_surviving_mutants():
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
@@ -85,7 +83,6 @@ Survived 🙁
 
 
 @pytest.mark.usefixtures('filesystem')
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
 def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
@@ -110,7 +107,6 @@ def test_python_source_files():
     assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
 
 
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
 def test_timeout():
     start = datetime.now()
 
