@@ -202,7 +202,7 @@ commands:\n
         )
         mutated_source, number_of_mutations_performed = mutate(context)
         if not number_of_mutations_performed:
-            print('ERROR: No mutation performed')
+            print('No mutation performed')
             return
 
         for a, b in zip(source.split('\n'), mutated_source.split('\n')):
