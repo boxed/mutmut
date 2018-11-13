@@ -265,47 +265,50 @@ Legend for output:
 🙁 Survived. This means your tests needs to be expanded. 
 """)
 
-    baseline_time_elapsed = time_test_suite(swallow_output=not s, test_command=runner, using_testmon=using_testmon)
+    try:
+        baseline_time_elapsed = time_test_suite(swallow_output=not s, test_command=runner, using_testmon=using_testmon)
 
-    if using_testmon:
-        copy('.testmondata', '.testmondata-initial')
+        if using_testmon:
+            copy('.testmondata', '.testmondata-initial')
 
-    coverage_data = read_coverage_data(use_coverage)
+        coverage_data = read_coverage_data(use_coverage)
 
-    mutations_by_file = {}
+        mutations_by_file = {}
 
-    def _exclude(context):
-        return coverage_exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
+        def _exclude(context):
+            return coverage_exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
 
-    assert command == 'run'
+        assert command == 'run'
 
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs):
-                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
+        if argument is None:
+            for path in paths_to_mutate:
+                for filename in python_source_files(path, tests_dirs):
+                    add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
+        else:
+            filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+            mutations_by_file[filename] = [mutation_id]
 
-    total = sum(len(mutations) for mutations in mutations_by_file.values())
+        total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    print()
-    print('2. Checking mutants')
-    config = Config(
-        swallow_output=not s,
-        test_command=runner,
-        exclude_callback=_exclude,
-        baseline_time_elapsed=baseline_time_elapsed,
-        backup=backup,
-        dict_synonyms=dict_synonyms,
-        total=total,
-        using_testmon=using_testmon,
-        cache_only=cache_only,
-        tests_dirs=tests_dirs,
-        hash_of_tests=hash_of_tests(tests_dirs),
-    )
+        print()
+        print('2. Checking mutants')
+        config = Config(
+            swallow_output=not s,
+            test_command=runner,
+            exclude_callback=_exclude,
+            baseline_time_elapsed=baseline_time_elapsed,
+            backup=backup,
+            dict_synonyms=dict_synonyms,
+            total=total,
+            using_testmon=using_testmon,
+            cache_only=cache_only,
+            tests_dirs=tests_dirs,
+            hash_of_tests=hash_of_tests(tests_dirs),
+        )
 
-    run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+        run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+    except ErrorMessage as e:
+        print('\nERROR %s' % e)
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -461,17 +464,20 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     print('1. Running tests without mutations')
     start_time = datetime.now()
 
+    output = []
+
     def feedback(line):
         if not swallow_output:
             print(line)
         print_status('Running...')
+        output.append(line)
 
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = datetime.now() - start_time
     else:
-        raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s" % test_command)
+        raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
 
     print(' Done')
 
