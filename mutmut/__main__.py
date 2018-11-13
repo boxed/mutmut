@@ -17,8 +17,8 @@ from time import sleep
 import click
 from glob2 import glob
 
-from mutmut.cache import register_mutant, update_mutant_status, print_result_cache, cached_mutation_status
-from . import parse_mutation_id_str, mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from mutmut.cache import register_mutant, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -100,11 +100,11 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         return paths_to_mutate
 
 
-def do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup):
-    assert len(paths_to_mutate) == 1
+def do_apply(mutation_pk, dict_synonyms, backup):
+    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
     context = Context(
         mutate_id=mutation_id,
-        filename=paths_to_mutate[0],
+        filename=filename,
         dict_synonyms=dict_synonyms,
     )
     mutate_file(
@@ -150,24 +150,46 @@ DEFAULT_TESTS_DIR = '**/tests/:**/test/'
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('paths_to_mutate', nargs=-1)
-@click.option('--apply', help='apply the mutation to the given file. Must be used in combination with --mutation_number', is_flag=True)
+@click.argument('command', nargs=1)
+@click.argument('argument', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
-@click.option('--mutation', type=click.STRING)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
 @click.option('-s', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
-@click.option('--print-results', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, print_results, version):
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    """
+
+    if command == 'results' and argument:
+        print('The %s command takes no arguments' % command)
+        return
+
+    if command == 'show':
+        # TODO:
+        pass
+
+    if argument and len(argument) > 1:
+        print('The %s command only takes a single argument' % command)
+        return
 
     if version:
         print("mutmut version %s" % __version__)
@@ -175,6 +197,14 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
 
     if use_coverage and not exists('.coverage'):
         print('No .coverage file found. You must generate a coverage file to use this feature.')
+        return
+
+    if command == 'results':
+        print_result_cache()
+        return
+
+    if command == 'apply':
+        do_apply(argument, dict_synonyms, backup)
         return
 
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
@@ -190,27 +220,9 @@ def main(paths_to_mutate, apply, mutation, backup, runner, tests_dir, s, use_cov
     if not paths_to_mutate:
         raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
-    if print_results:
-        print_result_cache()
-        return
-
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
-
-    mutation_id = None
-    if mutation:
-        if len(paths_to_mutate) > 1 or len(list(python_source_files(paths_to_mutate[0], tests_dirs))) > 1:
-            print('When supplying a mutation ID you must only specify one filename')
-            exit(1)
-
-        mutation_id = parse_mutation_id_str(mutation)
-
-    del mutation
-
-    if apply:
-        do_apply(mutation_id, paths_to_mutate, dict_synonyms, backup)
-        return
 
     using_testmon = '--testmon' in runner
 
@@ -245,14 +257,15 @@ Legend for output:
     def _exclude(context):
         return coverage_exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
 
-    if mutation_id is None:
+    assert command == 'run'
+
+    if argument is None:
         for path in paths_to_mutate:
             for filename in python_source_files(path, tests_dirs):
                 add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
     else:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs):
-                mutations_by_file[filename] = [mutation_id]
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        mutations_by_file[filename] = [mutation_id]
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 

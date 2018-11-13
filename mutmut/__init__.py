@@ -414,23 +414,3 @@ def mutate_file(backup, context):
     with open(context.filename, 'w') as f:
         f.write(result)
     return number_of_mutations_performed
-
-
-mutation_id_separator = u'⤑'
-
-
-def parse_mutation_id_str(s):
-    m = s.split(mutation_id_separator)
-    m[0] = m[0].replace('\\"', '"')
-    m[1] = int(m[1])
-    assert len(m) == 2
-    return tuple(m)
-
-
-def get_mutation_id_str(mutation_id):
-    return '%s%s%s' % (mutation_id[0].replace('"', '\\"'), mutation_id_separator, mutation_id[1])
-
-
-def get_apply_line(filename, mutation_id):
-    apply_line = 'mutmut %s --apply --mutation "%s"' % (filename, get_mutation_id_str(mutation_id))
-    return apply_line

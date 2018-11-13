@@ -6,9 +6,9 @@ import sys
 from functools import wraps
 from io import open
 
-from pony.orm import Database, Required, db_session, Set, Optional
+from pony.orm import Database, Required, db_session, Set, Optional, select
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, get_apply_line, UNTESTED, OK_KILLED
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -66,32 +66,27 @@ def hash_of_tests(tests_dirs):
     return m.hexdigest()
 
 
-def enumerate_mutants():
-    for sourcefile in SourceFile.select():
-        for line in sourcefile.lines:
-            for mutant in line.mutants:
-                yield mutant
+def get_apply_line(mutant):
+    apply_line = 'mutmut apply %s' % mutant.id
+    return apply_line
 
 
 @init_db
 @db_session
 def print_result_cache():
     print('Timed out ⏰')
-    for mutant in enumerate_mutants():
-        if mutant.status == BAD_TIMEOUT:
-            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
+    for mutant in select(x for x in Mutant if x.status == BAD_TIMEOUT):
+        print(get_apply_line(mutant))
 
     print()
     print('Suspicious 🤔')
-    for mutant in enumerate_mutants():
-        if mutant.status == OK_SUSPICIOUS:
-            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
+    for mutant in select(x for x in Mutant if x.status == OK_SUSPICIOUS):
+        print(get_apply_line(mutant))
 
     print()
     print('Survived 🙁')
-    for mutant in enumerate_mutants():
-        if mutant.status == BAD_SURVIVED:
-            print(get_apply_line(mutant.line.sourcefile.filename, (mutant.line.line, mutant.index)))
+    for mutant in select(x for x in Mutant if x.status == BAD_SURVIVED):
+        print(get_apply_line(mutant))
 
 
 def get_or_create(model, defaults=None, **params):
@@ -142,3 +137,17 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
         return UNTESTED
 
     return mutant.status
+
+
+@init_db
+@db_session
+def mutation_id_from_pk(pk):
+    mutant = Mutant.get(id=pk)
+    return mutant.line.line, mutant.index
+
+
+@init_db
+@db_session
+def filename_and_mutation_id_from_pk(pk):
+    mutant = Mutant.get(id=pk)
+    return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)

@@ -1,6 +1,6 @@
 import sys
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, parse_mutation_id_str, get_mutation_id_str
+from mutmut import mutate, count_mutations, ALL, Context, list_mutations
 import pytest
 
 
@@ -166,11 +166,6 @@ def test_performed_mutation_ids():
     mutate(context)
     # we found two mutation points: mutate "a" and "c"
     assert context.performed_mutation_ids == [(source, 0), (source, 1)]
-
-
-def test_mutation_id_str_roundtrip():
-    mutation_id = ('    foo = "bar"', 7)
-    assert mutation_id == parse_mutation_id_str(get_mutation_id_str(mutation_id))
 
 
 def test_syntax_error():

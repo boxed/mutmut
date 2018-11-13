@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from mutmut import mutate, Context, mutation_id_separator
+from mutmut import mutate, Context
 from mutmut.__main__ import main, python_source_files, popen_streaming_output
 from click.testing import CliRunner
 
@@ -63,17 +63,17 @@ def filesystem():
 
 @pytest.mark.usefixtures('filesystem')
 def test_simple_apply():
-    CliRunner().invoke(main, ['foo.py', '--apply', '--mutation', mutation_id_separator.join([file_to_mutate_lines[0], '0'])])
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    CliRunner().invoke(main, ['apply', '1'])
     with open('foo.py') as f:
-        assert f.read() == mutate(Context(source=file_to_mutate_contents, mutate_id=(file_to_mutate_lines[0], 0)))[0]
+        assert f.read() != file_to_mutate_contents
 
 
 @pytest.mark.usefixtures('filesystem')
 @pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
 def test_full_run_no_surviving_mutants():
-    print(os.environ)
-    CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['foo.py', '--print-results'], catch_exceptions=False)
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.output.strip() == u"""
 Timed out ⏰
@@ -90,8 +90,8 @@ def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
-    CliRunner().invoke(main, ['foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['foo.py', '--print-results'], catch_exceptions=False)
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.output.strip() == u"""
 Timed out ⏰
@@ -99,7 +99,7 @@ Timed out ⏰
 Suspicious 🤔
 
 Survived 🙁
-mutmut foo.py --apply --mutation "    return a < b⤑0"
+mutmut apply 1
 """.strip()
 
 
