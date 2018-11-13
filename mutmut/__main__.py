@@ -18,7 +18,7 @@ import click
 from glob2 import glob
 
 from mutmut.cache import register_mutant, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -179,13 +179,39 @@ commands:\n
         Show a mutation diff.\n
     """
 
+    valid_commands = ['run', 'results', 'apply', 'show']
+    if command not in valid_commands:
+        print('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
+        return
+
     if command == 'results' and argument:
         print('The %s command takes no arguments' % command)
         return
 
+    dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
+
     if command == 'show':
-        # TODO:
-        pass
+        filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+        with open(filename) as f:
+            source = f.read()
+        context = Context(
+            source=source,
+            filename=filename,
+            mutate_id=mutation_id,
+            dict_synonyms=dict_synonyms,
+        )
+        mutated_source, number_of_mutations_performed = mutate(context)
+        if not number_of_mutations_performed:
+            print('ERROR: No mutation performed')
+            return
+
+        for a, b in zip(source.split('\n'), mutated_source.split('\n')):
+            if a != b:
+                print(a)
+                print('   |')
+                print('   V')
+                print(b)
+        return
 
     if argument and len(argument) > 1:
         print('The %s command only takes a single argument' % command)
@@ -219,8 +245,6 @@ commands:\n
 
     if not paths_to_mutate:
         raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
-
-    dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
