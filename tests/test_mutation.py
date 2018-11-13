@@ -150,6 +150,12 @@ def test_mutate_decorator():
     assert mutate(Context(source=source, mutate_id=ALL)) == (source.replace('@foo', ''), 1)
 
 
+# TODO: getting this test and the above to both pass is tricky
+# def test_mutate_decorator2():
+#     source = """\"""foo\"""\n\n@foo\ndef foo():\n    pass\n"""
+#     assert mutate(Context(source=source, mutate_id=ALL)) == (source.replace('@foo', ''), 1)
+
+
 def test_mutate_dict():
     source = "dict(a=b, c=d)"
     assert mutate(Context(source=source, mutate_id=(source, 1))) == ("dict(a=b, cXX=d)", 1)
