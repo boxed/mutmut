@@ -105,11 +105,20 @@ def get_or_create(model, defaults=None, **params):
 
 @init_db
 @db_session
-def register_mutant(filename, mutation_id):
-    sourcefile = get_or_create(SourceFile, filename=filename)
+def register_mutants(mutations_by_file):
+    for filename, mutation_ids in mutations_by_file.items():
+        sourcefile = get_or_create(SourceFile, filename=filename)
+        lines_to_be_removed = {x.id: x for x in sourcefile.lines}
+        for mutation_id in mutation_ids:
+            line = get_or_create(Line, sourcefile=sourcefile, line=mutation_id[0])
+            get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status='unknown'))
+            if line.id in lines_to_be_removed:
+                del lines_to_be_removed[line.id]
 
-    line = get_or_create(Line, sourcefile=sourcefile, line=mutation_id[0])
-    get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status='unknown'))
+        # These lines no longer exists in the code, clean them out
+        for line in lines_to_be_removed.values():
+            line.delete()
+
 
 
 @init_db

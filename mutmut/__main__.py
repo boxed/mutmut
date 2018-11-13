@@ -17,7 +17,7 @@ from time import sleep
 import click
 from glob2 import glob
 
-from mutmut.cache import register_mutant, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk
+from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk
 from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
 from .cache import hash_of_tests
 
@@ -492,8 +492,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
 
     try:
         mutations_by_file[filename] = list_mutations(context)
-        for mutation_id in mutations_by_file[filename]:
-            register_mutant(filename=filename, mutation_id=mutation_id)
+        register_mutants(mutations_by_file)
     except Exception:
         print('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line))
         raise
