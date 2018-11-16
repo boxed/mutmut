@@ -6,6 +6,7 @@ import pytest
 
 @pytest.mark.parametrize(
     'original, expected', [
+        ('a[b]', 'a[None]'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
         ('1+1', '2-2'),
         ('1', '2'),
@@ -61,7 +62,7 @@ def test_basic_mutations(original, expected):
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[None] = 7'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass')
     ]
 )
@@ -79,6 +80,7 @@ def test_basic_mutations_python3(original, expected):
         'import foo as bar',
         'foo.bar',
         'for x in y: pass',
+        'a[None]',
     ]
 )
 def test_do_not_mutate(source):

@@ -3,6 +3,7 @@
 import sys
 
 from parso import parse
+from parso.python.tree import Name
 from tri.declarative import evaluate
 
 __version__ = '1.0.0'
@@ -193,7 +194,6 @@ def expression_mutation(children, **_):
         else:
             x = ' 7'
         children = children[:]
-        from parso.python.tree import Name
         children[2] = Name(value=x, start_pos=children[2].start_pos)
 
         return children
@@ -210,6 +210,13 @@ def expression_mutation(children, **_):
 def decorator_mutation(children, **_):
     assert children[-1].type == 'newline'
     return children[-1:]
+
+
+def trailer_mutation(children, **_):
+    if len(children) == 3 and children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and children[0].parent.type == 'trailer' and children[1].type == 'name' and children[1].value != 'None':
+        # Something that looks like "foo[bar]"
+        return [children[0], Name(value='None', start_pos=children[0].start_pos), children[-1]]
+    return children
 
 
 mutations_by_type = {
@@ -232,6 +239,7 @@ mutations_by_type = {
     'expr_stmt': dict(children=expression_mutation),
     'decorator': dict(children=decorator_mutation),
     'annassign': dict(children=expression_mutation),
+    'trailer': dict(children=trailer_mutation)
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
@@ -327,8 +335,6 @@ def mutate_node(i, context):
             context.current_line_index = i.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        m = mutations_by_type.get(t, {})
-
         if hasattr(i, 'children'):
             mutate_list_of_nodes(i, context=context)
 
@@ -336,7 +342,9 @@ def mutate_node(i, context):
             if context.number_of_performed_mutations and context.mutate_id != ALL:
                 return
 
-        if m == {}:
+        m = mutations_by_type.get(t)
+
+        if m is None:
             return
 
         for key, value in sorted(m.items()):
