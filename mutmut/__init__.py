@@ -6,7 +6,7 @@ from parso import parse
 from parso.python.tree import Name
 from tri.declarative import evaluate
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 ALL = ('all', -1)
 
