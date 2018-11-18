@@ -16,6 +16,8 @@ Changelog
 
 * Fixed crash when using `--use-coverage` flag. Thanks Daniel Hahler!
 
+* Added mutation based on finding on tri.struct
+
 
 0.0.24 (2018-11-04)
 ~~~~~~~~~~~~~~~~~~~
