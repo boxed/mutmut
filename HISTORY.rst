@@ -6,6 +6,8 @@ Changelog
 
 * Minor UX fixes: --version command was broken, incorrect documentation shown, missing newline at the very end.
 
+* Caching the baseline test time. This makes restarting/rechecking existing mutants much faster, with a small risk of that time being out of date.
+
 
 1.0.0 (2018-11-12)
 ~~~~~~~~~~~~~~~~~~~

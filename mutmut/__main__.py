@@ -18,7 +18,7 @@ from time import sleep
 import click
 from glob2 import glob
 
-from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk
+from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time
 from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
 from .cache import hash_of_tests
 
@@ -335,7 +335,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
                 return
 
     if timeout:
-        Thread(target=timeout_killer).start()
+        t = Thread(target=timeout_killer)
+        t.daemon = True
+        t.start()
 
     while p.returncode is None:
         try:
@@ -363,7 +365,7 @@ def tests_pass(config):
             print(line)
         config.print_progress()
 
-    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed.total_seconds() * 10)
+    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
@@ -407,7 +409,7 @@ def run_mutation(config, filename, mutation_id):
             return BAD_TIMEOUT
 
         time_elapsed = datetime.now() - start
-        if time_elapsed > config.baseline_time_elapsed * 2:
+        if time_elapsed.total_seconds() > config.baseline_time_elapsed * 2:
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -460,6 +462,11 @@ def read_coverage_data(use_coverage):
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
+    cached_time = cached_test_time()
+    if cached_time is not None:
+        print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
+        return cached_time
+
     print('1. Running tests without mutations')
     start_time = datetime.now()
 
@@ -474,11 +481,13 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = datetime.now() - start_time
+        baseline_time_elapsed = (datetime.now() - start_time).total_seconds()
     else:
         raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
 
     print(' Done')
+
+    set_cached_test_time(baseline_time_elapsed)
 
     return baseline_time_elapsed
 

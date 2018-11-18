@@ -6,7 +6,7 @@ import sys
 from functools import wraps
 from io import open
 
-from pony.orm import Database, Required, db_session, Set, Optional, select
+from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
 
@@ -18,6 +18,11 @@ else:
 
 
 db = Database()
+
+
+class MiscData(db.Entity):
+    key = PrimaryKey(text_type, auto=True)
+    value = Optional(text_type, autostrip=False)
 
 
 class SourceFile(db.Entity):
@@ -160,3 +165,16 @@ def mutation_id_from_pk(pk):
 def filename_and_mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
     return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)
+
+
+@init_db
+@db_session
+def cached_test_time():
+    d = MiscData.get(key='baseline_time_elapsed')
+    return float(d.value) if d else None
+
+
+@init_db
+@db_session
+def set_cached_test_time(baseline_time_elapsed):
+    get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
