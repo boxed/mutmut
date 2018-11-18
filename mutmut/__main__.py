@@ -6,6 +6,7 @@ import itertools
 import os
 import sys
 from datetime import datetime
+from difflib import unified_diff
 from functools import wraps
 from io import open
 from os.path import isdir, exists
@@ -150,7 +151,7 @@ DEFAULT_TESTS_DIR = '**/tests/:**/test/'
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('command', nargs=1)
+@click.argument('command', nargs=1, required=False)
 @click.argument('argument', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
@@ -178,6 +179,9 @@ commands:\n
     show [mutation id]\n
         Show a mutation diff.\n
     """
+    if version:
+        print("mutmut version %s" % __version__)
+        return
 
     valid_commands = ['run', 'results', 'apply', 'show']
     if command not in valid_commands:
@@ -190,7 +194,7 @@ commands:\n
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
-    if command == 'show':
+    if command in ('show', 'diff'):
         filename, mutation_id = filename_and_mutation_id_from_pk(argument)
         with open(filename) as f:
             source = f.read()
@@ -205,16 +209,9 @@ commands:\n
             print('No mutation performed')
             return
 
-        for a, b in zip(source.split('\n'), mutated_source.split('\n')):
-            if a != b:
-                print(a)
-                print('   |')
-                print('   V')
-                print(b)
-        return
+        for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
+            print(line)
 
-    if version:
-        print("mutmut version %s" % __version__)
         return
 
     if use_coverage and not exists('.coverage'):
@@ -256,7 +253,7 @@ These are the steps:
 2. Mutants will be generated and checked
 
 Mutants are written to the cache in the .mutmut-cache 
-directory. Print found mutants with `mutmut --print-result`.
+directory. Print found mutants with `mutmut results`.
 
 Legend for output:
 🎉 Killed mutants. The goal is for everything to end up in this bucket. 
@@ -307,6 +304,8 @@ Legend for output:
         )
 
         run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+
+        print()
     except ErrorMessage as e:
         print('\nERROR %s' % e)
 

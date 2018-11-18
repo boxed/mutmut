@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+1.0.1 (2018-11-18)
+~~~~~~~~~~~~~~~~~~~
+
+* Minor UX fixes: --version command was broken, incorrect documentation shown, missing newline at the very end.
+
+
 1.0.0 (2018-11-12)
 ~~~~~~~~~~~~~~~~~~~
 
