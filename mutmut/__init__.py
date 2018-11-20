@@ -219,6 +219,12 @@ def trailer_mutation(children, **_):
     return children
 
 
+def arglist_mutation(children, **_):
+    if len(children) > 3 and children[0].type == 'name' and children[0].value != 'None':
+        return [Name(value='None', start_pos=children[0].start_pos)] + children[1:]
+    return children
+
+
 mutations_by_type = {
     'operator': dict(value=operator_mutation),
     'keyword': dict(value=keyword_mutation),
@@ -239,7 +245,8 @@ mutations_by_type = {
     'expr_stmt': dict(children=expression_mutation),
     'decorator': dict(children=decorator_mutation),
     'annassign': dict(children=expression_mutation),
-    'trailer': dict(children=trailer_mutation)
+    'trailer': dict(children=trailer_mutation),
+    'arglist': dict(children=arglist_mutation),
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes

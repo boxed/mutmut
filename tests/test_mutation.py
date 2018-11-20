@@ -6,6 +6,7 @@ import pytest
 
 @pytest.mark.parametrize(
     'original, expected', [
+        ('a(b, c, d, e, f)', 'a(None, c, d, e, f)'),
         ('a[b]', 'a[None]'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
         ('1+1', '2-2'),
@@ -81,6 +82,7 @@ def test_basic_mutations_python3(original, expected):
         'foo.bar',
         'for x in y: pass',
         'a[None]',
+        'a(None)',
     ]
 )
 def test_do_not_mutate(source):
