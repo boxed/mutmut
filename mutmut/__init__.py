@@ -53,12 +53,12 @@ def number_mutation(value, **_):
     elif value.startswith('0b'):
         base = 2
         value = value[2:]
-    elif value.startswith('0') and len(value) > 1:  # pragma: no cover (python 2 specific)
+    elif value.startswith('0') and len(value) > 1 and value[1] != '.':  # pragma: no cover (python 2 specific)
         base = 8
         value = value[1:]
     else:
         base = 10
-    
+
     try:
         parsed = int(value, base=base)
     except ValueError:
