@@ -268,14 +268,30 @@ Legend for output:
         if using_testmon:
             copy('.testmondata', '.testmondata-initial')
 
-        coverage_data = read_coverage_data(use_coverage)
+        if not use_coverage:
+            def _exclude(context):
+                return False
+        else:
+            _measured_lines_cache = {}
+            coverage_data = read_coverage_data(use_coverage)
 
-        mutations_by_file = {}
+            def _exclude(context):
+                try:
+                    measured_lines = _measured_lines_cache[context.filename]
+                except KeyError:
+                    measured_lines = coverage_data.lines(os.path.abspath(context.filename))
+                    _measured_lines_cache[context.filename] = measured_lines
 
-        def _exclude(context):
-            return coverage_exclude_callback(context=context, use_coverage=use_coverage, coverage_data=coverage_data)
+                if measured_lines is None:
+                    return True
+                current_line = context.current_line_index + 1
+                if current_line not in measured_lines:
+                    return True
+                return False
 
         assert command == 'run'
+
+        mutations_by_file = {}
 
         if argument is None:
             for path in paths_to_mutate:
