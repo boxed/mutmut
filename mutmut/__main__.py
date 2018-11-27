@@ -272,20 +272,20 @@ Legend for output:
             def _exclude(context):
                 return False
         else:
-            _measured_lines_cache = {}
+            covered_lines_by_filename = {}
             coverage_data = read_coverage_data(use_coverage)
 
             def _exclude(context):
                 try:
-                    measured_lines = _measured_lines_cache[context.filename]
+                    covered_lines = covered_lines_by_filename[context.filename]
                 except KeyError:
-                    measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-                    _measured_lines_cache[context.filename] = measured_lines
+                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
+                    covered_lines_by_filename[context.filename] = covered_lines
 
-                if measured_lines is None:
+                if covered_lines is None:
                     return True
                 current_line = context.current_line_index + 1
-                if current_line not in measured_lines:
+                if current_line not in covered_lines:
                     return True
                 return False
 
