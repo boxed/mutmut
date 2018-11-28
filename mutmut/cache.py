@@ -9,7 +9,7 @@ from itertools import groupby
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, mutant_statuses
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -91,16 +91,18 @@ def print_result_cache():
         l = list(query)
         if l:
             print()
-            print(title)
+            print(title, '(%s)' % len(l))
             for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+                mutants = list(mutants)
                 print()
-                print('-' * 4, '%s' % filename, '-' * 4)
+                print('-' * 4, '%s' % filename, '(%s)' % len(mutants), '-' * 4)
                 print()
                 print(', '.join([str(x.id) for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
+    print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
 def get_or_create(model, defaults=None, **params):
@@ -125,14 +127,13 @@ def register_mutants(mutations_by_file):
         lines_to_be_removed = {x.id: x for x in sourcefile.lines}
         for mutation_id in mutation_ids:
             line = get_or_create(Line, sourcefile=sourcefile, line=mutation_id[0])
-            get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status='unknown'))
+            get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status=UNTESTED))
             if line.id in lines_to_be_removed:
                 del lines_to_be_removed[line.id]
 
         # These lines no longer exists in the code, clean them out
         for line in lines_to_be_removed.values():
             line.delete()
-
 
 
 @init_db
