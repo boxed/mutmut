@@ -195,6 +195,10 @@ commands:\n
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     if command in ('show', 'diff'):
+        if not argument:
+            print_result_cache()
+            return
+
         filename, mutation_id = filename_and_mutation_id_from_pk(argument)
         with open(filename) as f:
             source = f.read()

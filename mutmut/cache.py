@@ -5,6 +5,7 @@ import os
 import sys
 from functools import wraps
 from io import open
+from itertools import groupby
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey
 
@@ -79,19 +80,27 @@ def get_apply_line(mutant):
 @init_db
 @db_session
 def print_result_cache():
-    print('Timed out ⏰')
-    for mutant in select(x for x in Mutant if x.status == BAD_TIMEOUT):
-        print(get_apply_line(mutant))
-
+    print('To apply a mutant on disk:')
+    print('    mutmut apply <id>')
     print()
-    print('Suspicious 🤔')
-    for mutant in select(x for x in Mutant if x.status == OK_SUSPICIOUS):
-        print(get_apply_line(mutant))
-
+    print('To show a mutant:')
+    print('    mutmut show <id>')
     print()
-    print('Survived 🙁')
-    for mutant in select(x for x in Mutant if x.status == BAD_SURVIVED):
-        print(get_apply_line(mutant))
+
+    def print_stuff(title, query):
+        l = list(query)
+        if l:
+            print()
+            print(title)
+            for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+                print()
+                print('-' * 4, '%s' % filename, '-' * 4)
+                print()
+                print(', '.join([str(x.id) for x in mutants]))
+
+    print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
+    print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
+    print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
 
 
 def get_or_create(model, defaults=None, **params):
