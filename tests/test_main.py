@@ -73,13 +73,13 @@ def test_full_run_no_surviving_mutants():
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output.strip() == u"""
-Timed out ⏰
+    assert u"""
+To apply a mutant on disk:
+    mutmut apply <id>
 
-Suspicious 🤔
-
-Survived 🙁
-""".strip()
+To show a mutant:
+    mutmut show <id>
+""".strip() == result.output.strip()
 
 
 @pytest.mark.usefixtures('filesystem')
@@ -90,14 +90,20 @@ def test_full_run_one_surviving_mutant():
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.output.strip() == u"""
-Timed out ⏰
+    assert u"""
+To apply a mutant on disk:
+    mutmut apply <id>
 
-Suspicious 🤔
+To show a mutant:
+    mutmut show <id>
 
-Survived 🙁
-mutmut apply 1
-""".strip()
+
+Survived 🙁 (1)
+
+---- foo.py (1) ----
+
+1
+""".strip() == result.output.strip()
 
 
 @pytest.mark.usefixtures('filesystem')
