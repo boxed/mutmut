@@ -37,7 +37,6 @@ def test_foo():
 '''
 
 
-
 @pytest.fixture
 def filesystem():
     shutil.rmtree('test_fs', ignore_errors=True)

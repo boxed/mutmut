@@ -147,7 +147,7 @@ class Config(object):
         print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
 
 
-DEFAULT_TESTS_DIR = '**/tests/:**/test/'
+DEFAULT_TESTS_DIR = 'tests/:test/'
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -232,16 +232,20 @@ commands:\n
 
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
-    tests_dirs = []
-    for p in tests_dir.split(':'):
-        tests_dirs.extend(glob(p, recursive=True))
-    del tests_dir
-
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
         raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+
+    tests_dirs = []
+    for p in tests_dir.split(':'):
+        tests_dirs.extend(glob(p, recursive=True))
+
+    for p in paths_to_mutate:
+        for pt in tests_dir.split(':'):
+            tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
+    del tests_dir
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
