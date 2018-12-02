@@ -7,9 +7,9 @@ from functools import wraps
 from io import open
 from itertools import groupby
 
-from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey
+from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, mutant_statuses
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -19,6 +19,8 @@ else:
 
 
 db = Database()
+
+current_db_version = 2
 
 
 class MiscData(db.Entity):
@@ -34,6 +36,7 @@ class SourceFile(db.Entity):
 class Line(db.Entity):
     sourcefile = Required(SourceFile)
     line = Required(text_type, autostrip=False)
+    line_number = Required(int)
     mutants = Set('Mutant')
 
 
@@ -48,8 +51,28 @@ def init_db(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         if db.provider is None:
-            db.bind(provider='sqlite', filename=os.path.join(os.getcwd(), '.mutmut-cache'), create_db=True)
-            db.generate_mapping(create_tables=True)
+            cache_filename = os.path.join(os.getcwd(), '.mutmut-cache')
+            db.bind(provider='sqlite', filename=cache_filename, create_db=True)
+            try:
+                db.generate_mapping(create_tables=True)
+            except OperationalError:
+                pass
+
+            # If the existing cache file is out of data, delete it and start over
+            with db_session:
+                try:
+                    existing_db_version = int(MiscData.get(key='version') or 1)
+                except (RowNotFound, ERDiagramError):
+                    existing_db_version = 1
+
+            if existing_db_version != current_db_version:
+                print('mutmut cache is out of date, clearing it...')
+                db.drop_all_tables(with_all_data=True)
+                db.schema = None  # Pony otherwise thinks we've already generated schemasregister_mutants
+                db.generate_mapping(create_tables=True)
+
+            with db_session:
+                MiscData(key='version', value=str(current_db_version))
 
         return f(*args, **kwargs)
     return wrapper
