@@ -1,10 +1,12 @@
 Changelog
 ---------
 
-1.1.0 (2018-11-??)
+1.1.0 (2018-12-10)
 ~~~~~~~~~~~~~~~~~~~
 
 * New mutant: mutate the first argument of function calls to None if it's not already None
+
+* Totally overhauled cache system: now handles duplicates lines correctly.
 
 
 1.0.1 (2018-11-18)

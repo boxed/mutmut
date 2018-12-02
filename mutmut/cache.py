@@ -3,13 +3,14 @@
 import hashlib
 import os
 import sys
+from difflib import SequenceMatcher
 from functools import wraps
 from io import open
-from itertools import groupby
+from itertools import groupby, zip_longest
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -35,7 +36,7 @@ class SourceFile(db.Entity):
 
 class Line(db.Entity):
     sourcefile = Required(SourceFile)
-    line = Required(text_type, autostrip=False)
+    line = Optional(text_type, autostrip=False)
     line_number = Required(int)
     mutants = Set('Mutant')
 
@@ -53,26 +54,33 @@ def init_db(f):
         if db.provider is None:
             cache_filename = os.path.join(os.getcwd(), '.mutmut-cache')
             db.bind(provider='sqlite', filename=cache_filename, create_db=True)
+
             try:
                 db.generate_mapping(create_tables=True)
             except OperationalError:
                 pass
 
-            # If the existing cache file is out of data, delete it and start over
-            with db_session:
-                try:
-                    existing_db_version = int(MiscData.get(key='version') or 1)
-                except (RowNotFound, ERDiagramError):
-                    existing_db_version = 1
+            if os.path.exists(cache_filename):
+                # If the existing cache file is out of data, delete it and start over
+                with db_session:
+                    try:
+                        v = MiscData.get(key='version')
+                        if v is None:
+                            existing_db_version = 1
+                        else:
+                            existing_db_version = int(v.value)
+                    except (RowNotFound, ERDiagramError, OperationalError):
+                        existing_db_version = 1
 
-            if existing_db_version != current_db_version:
-                print('mutmut cache is out of date, clearing it...')
-                db.drop_all_tables(with_all_data=True)
-                db.schema = None  # Pony otherwise thinks we've already generated schemasregister_mutants
-                db.generate_mapping(create_tables=True)
+                if existing_db_version != current_db_version:
+                    print('mutmut cache is out of date, clearing it...')
+                    db.drop_all_tables(with_all_data=True)
+                    db.schema = None  # Pony otherwise thinks we've already created the tables
+                    db.generate_mapping(create_tables=True)
 
             with db_session:
-                MiscData(key='version', value=str(current_db_version))
+                v = get_or_create(MiscData, key='version')
+                v.value = str(current_db_version)
 
         return f(*args, **kwargs)
     return wrapper
@@ -142,29 +150,73 @@ def get_or_create(model, defaults=None, **params):
         return obj
 
 
+def sequence_ops(a, b):
+    sequence_matcher = SequenceMatcher(a=a, b=b)
+
+    for tag, i1, i2, j1, j2 in sequence_matcher.get_opcodes():
+        a_sub_sequence = a[i1:i2]
+        b_sub_sequence = b[j1:j2]
+        for x in zip_longest(a_sub_sequence, range(i1, i2), b_sub_sequence, range(j1, j2)):
+            yield (tag,) + x
+
+
+@init_db
+@db_session
+def update_line_numbers(filename):
+    sourcefile = get_or_create(SourceFile, filename=filename)
+
+    cached_line_objects = list(sourcefile.lines.order_by(Line.line_number))
+
+    cached_lines = [x.line for x in cached_line_objects]
+
+    with open(filename) as f:
+        # :-1 to remove newline at the end
+        existing_lines = [x[:-1] for x in f.readlines()]
+
+    if not cached_lines:
+        for i, line in enumerate(existing_lines):
+            Line(sourcefile=sourcefile, line=line, line_number=i)
+        return
+
+    for command, a, a_index, b, b_index in sequence_ops(cached_lines, existing_lines):
+        if command == 'equal':
+            if a_index != b_index:
+                cached_obj = cached_line_objects[a_index]
+                assert cached_obj.line == existing_lines[b_index]
+                cached_obj.line_number = b_index
+
+        elif command == 'delete':
+            cached_line_objects[a_index].delete()
+
+        elif command == 'insert':
+            Line(sourcefile=sourcefile, line=b, line_number=b_index)
+
+        elif command == 'replace':
+            cached_line_objects[a_index].delete()
+            Line(sourcefile=sourcefile, line=b, line_number=b_index)
+
+        else:
+            assert False, 'unknown opcode from SequenceMatcher: %s' % tag
+
+
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
-        lines_to_be_removed = {x.id: x for x in sourcefile.lines}
-        for mutation_id in mutation_ids:
-            line = get_or_create(Line, sourcefile=sourcefile, line=mutation_id[0])
-            get_or_create(Mutant, line=line, index=mutation_id[1], defaults=dict(status=UNTESTED))
-            if line.id in lines_to_be_removed:
-                del lines_to_be_removed[line.id]
 
-        # These lines no longer exists in the code, clean them out
-        for line in lines_to_be_removed.values():
-            line.delete()
+        for mutation_id in mutation_ids:
+            line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+            assert line is not None
+            get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
 
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     sourcefile = SourceFile.get(filename=file_to_mutate)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
-    mutant = Mutant.get(line=line, index=mutation_id[1])
+    line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    mutant = Mutant.get(line=line, index=mutation_id.index)
     mutant.status = status
     mutant.tested_against_hash = tests_hash
 
@@ -173,8 +225,8 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
-    mutant = Mutant.get(line=line, index=mutation_id[1])
+    line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    mutant = Mutant.get(line=line, index=mutation_id.index)
 
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
@@ -190,7 +242,7 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @db_session
 def mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return mutant.line.line, mutant.index
+    return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
 
 
 @init_db

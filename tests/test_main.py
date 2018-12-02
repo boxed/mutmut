@@ -61,8 +61,8 @@ def filesystem():
 
 @pytest.mark.usefixtures('filesystem')
 def test_simple_apply():
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    CliRunner().invoke(main, ['apply', '1'])
+    result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    CliRunner().invoke(main, ['apply', '1'], catch_exceptions=False)
     with open('foo.py') as f:
         assert f.read() != file_to_mutate_contents
 
