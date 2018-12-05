@@ -117,13 +117,12 @@ def get_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--use-coverage", action="store_true",
                         dest="use_coverage")
-    parser.add_argument("-t", "--tests-dir")
     parser.add_argument("--paths-to-mutate", default=".", dest="mutate_paths")
     parser.add_argument("--runner", default="pytest")
     parser.add_argument("--results", action="store_true")
     parser.add_argument("--backup", action="store_true")
     parser.add_argument("--apply")
-    parser.add_argument("--tests-dir", dest="tests_dir")
+    parser.add_argument("--tests-dir", dest="tests_dir", default="tests")
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
     parser.add_argument("--cache-only", action="store_true", dest="cache_only")
