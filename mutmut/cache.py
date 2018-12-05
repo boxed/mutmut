@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+"""functionality for operating, populating and reading from the mutmut test
+and mutation cache"""
+
 import hashlib
 import os
 from functools import wraps
@@ -11,8 +14,8 @@ from logging import getLogger
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey
 
-from mutmut.mutators import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
-    OK_KILLED
+from mutmut.mutators import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, \
+    UNTESTED, OK_KILLED
 
 db = Database()
 

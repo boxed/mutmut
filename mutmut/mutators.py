@@ -3,6 +3,7 @@
 
 """mutation testing definitions and helpers"""
 
+from enum import Enum
 from logging import getLogger
 
 from parso import parse
@@ -26,6 +27,14 @@ mutant_statuses = [
     BAD_TIMEOUT,
     BAD_SURVIVED,
 ]
+
+
+class MutantStatus(Enum):
+    UNTESTED = 'untested'
+    OK_KILLED = 'ok_killed'
+    OK_SUSPICIOUS = 'ok_suspicious'
+    BAD_TIMEOUT = 'bad_timeout'
+    BAD_SURVIVED = 'bad_survived'
 
 
 def number_mutation(value, **_):
@@ -91,7 +100,7 @@ NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 def argument_mutation(children, context, **_):
     """
-    :type context: Context
+    :type context: MutationContext
     """
     if len(context.stack) >= 3 and \
             context.stack[-3].type in ('power', 'atom_expr'):
@@ -265,7 +274,7 @@ mutations_by_type = {
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
 
 
-class Context(object):
+class MutationContext(object):
     def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None,
                  filename=None, exclude=lambda context: False, config=None):
         self.index = 0
@@ -287,8 +296,8 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(
-            context=self)
+        return self.current_line_index in self.pragma_no_mutate_lines or \
+               self.exclude(context=self)
 
     @property
     def source_by_line_number(self):
@@ -325,7 +334,7 @@ class Context(object):
 
 def mutate(context):
     """
-    :type context: Context
+    :type context: MutationContext
     :return: tuple: mutated source code, number of mutations performed
     """
     try:
@@ -353,7 +362,7 @@ def mutate(context):
 
 def mutate_node(i, context):
     """
-    :type context: Context
+    :type context: MutationContext
     """
     context.stack.append(i)
     try:
@@ -410,7 +419,7 @@ def mutate_node(i, context):
 
 def mutate_list_of_nodes(result, context):
     """
-    :type context: Context
+    :type context: MutationContext
     """
     for i in result.children:
 
@@ -426,7 +435,7 @@ def mutate_list_of_nodes(result, context):
 
 def count_mutations(context):
     """
-    :type context: Context
+    :type context: MutationContext
     """
     assert context.mutate_id == ALL
     mutate(context)
@@ -435,7 +444,7 @@ def count_mutations(context):
 
 def list_mutations(context):
     """
-    :type context: Context
+    :type context: MutationContext
     """
     assert context.mutate_id == ALL
     mutate(context)
@@ -446,7 +455,7 @@ def mutate_file(backup, context):
     """
 
     :type backup: bool
-    :type context: Context
+    :type context: MutationContext
     """
     code = open(context.filename).read()
     context.source = code
