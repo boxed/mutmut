@@ -3,6 +3,10 @@
 
 """mutation testing definitions and helpers"""
 
+from parso import parse
+from parso.python.tree import Name
+from tri.declarative import evaluate
+
 ALL = ('all', -1)
 
 UNTESTED = 'untested'
@@ -264,7 +268,7 @@ class Context(object):
         self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
         assert isinstance(mutate_id, tuple)
-        assert isinstance(mutate_id[0], text_types)
+        assert isinstance(mutate_id[0], str)
         assert isinstance(mutate_id[1], int)
         self.current_line_index = 0
         self.filename = filename

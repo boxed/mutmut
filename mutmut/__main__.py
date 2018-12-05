@@ -455,7 +455,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = (datetime.now() - start_time).total_seconds()
     else:
-        raise ErrorMessage(
+        raise Exception(
             "Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (
                 test_command, '\n'.join(output)))
 
