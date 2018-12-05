@@ -1,5 +1,5 @@
-# coding=utf-8
-
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import argparse
 import os
@@ -144,7 +144,7 @@ def get_argparser() -> argparse.ArgumentParser:
 #     runner='python -m pytest -x',
 #     tests_dir=DEFAULT_TESTS_DIR,
 # )
-def main():
+def main(argv=sys.argv[1:]):
     """main entrypoint for mutmut
 commands:\n
     run [mutation id]\n
@@ -157,7 +157,7 @@ commands:\n
         Show a mutation diff.\n
     """
     parser = get_argparser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     dict_synonyms = [x.strip() for x in "".split(',')]
     runner = 'python -m pytest -x'
     if args.use_coverage and not exists('.coverage'):
