@@ -6,6 +6,7 @@ import os
 from functools import wraps
 from io import open
 from itertools import groupby
+from logging import getLogger
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey
@@ -14,6 +15,8 @@ from mutmut.mutators import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, 
     OK_KILLED
 
 db = Database()
+
+__log__ = getLogger(__name__)
 
 
 class MiscData(db.Entity):

@@ -3,9 +3,13 @@
 
 """mutation testing definitions and helpers"""
 
+from logging import getLogger
+
 from parso import parse
 from parso.python.tree import Name
 from tri.declarative import evaluate
+
+__log__ = getLogger(__name__)
 
 ALL = ('all', -1)
 
@@ -89,19 +93,19 @@ def argument_mutation(children, context, **_):
     """
     :type context: Context
     """
-    if len(context.stack) >= 3 and context.stack[-3].type in (
-    'power', 'atom_expr'):
+    if len(context.stack) >= 3 and \
+            context.stack[-3].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -3
-    elif len(context.stack) >= 4 and context.stack[-4].type in (
-    'power', 'atom_expr'):
+    elif len(context.stack) >= 4 and \
+            context.stack[-4].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -4
     else:
         return children
 
     power_node = context.stack[stack_pos_of_power_node]
 
-    if power_node.children[0].type == 'name' and power_node.children[
-        0].value in context.dict_synonyms:
+    if power_node.children[0].type == 'name' and \
+            power_node.children[0].value in context.dict_synonyms:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -113,8 +117,9 @@ def argument_mutation(children, context, **_):
 
 
 def keyword_mutation(value, context, **_):
-    if len(context.stack) > 2 and context.stack[
-        -2].type == 'comp_op' and value in ('in', 'is'):
+    if len(context.stack) > 2 and \
+            context.stack[-2].type == 'comp_op' and \
+            value in ('in', 'is'):
         return value
 
     if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
@@ -212,10 +217,11 @@ def decorator_mutation(children, **_):
 
 
 def trailer_mutation(children, **_):
-    if len(children) == 3 and children[0].type == 'operator' and children[
-        0].value == '[' and children[-1].type == 'operator' and children[
-        -1].value == ']' and children[0].parent.type == 'trailer' and children[
-        1].type == 'name' and children[1].value != 'None':
+    if len(children) == 3 and children[0].type == 'operator' and \
+            children[0].value == '[' and children[-1].type == 'operator' and \
+            children[-1].value == ']' and \
+            children[0].parent.type == 'trailer' and \
+            children[1].type == 'name' and children[1].value != 'None':
         # Something that looks like "foo[bar]"
         return [children[0],
                 Name(value='None', start_pos=children[0].start_pos),
@@ -224,8 +230,8 @@ def trailer_mutation(children, **_):
 
 
 def arglist_mutation(children, **_):
-    if len(children) > 3 and children[0].type == 'name' and children[
-        0].value != 'None':
+    if len(children) > 3 and children[0].type == 'name' and \
+            children[0].value != 'None':
         return [Name(value='None',
                      start_pos=children[0].start_pos)] + children[1:]
     return children
@@ -331,6 +337,13 @@ def mutate(context):
         raise
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
+
+    print("original source:")
+    print(context.source)
+
+    print("mutated source:")
+    print(mutated_source)
+
     if context.number_of_performed_mutations:
         # Check that if we said we mutated the code, that it has actually changed
         assert context.source != mutated_source
@@ -388,7 +401,8 @@ def mutate_node(i, context):
                 context.index += 1
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutate_id != ALL:
+            if context.number_of_performed_mutations and \
+                    context.mutate_id != ALL:
                 return
     finally:
         context.stack.pop()

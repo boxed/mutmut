@@ -4,10 +4,9 @@
 import argparse
 import os
 import sys
-from configparser import ConfigParser, NoOptionError, NoSectionError
 from datetime import datetime
-from functools import wraps
 from io import open
+from logging import getLogger
 from os.path import isdir, exists
 from shutil import move, copy
 from subprocess import Popen
@@ -23,29 +22,7 @@ from mutmut.mutators import mutate_file, Context, list_mutations, BAD_TIMEOUT, \
     OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
-
-# decorator
-def config_from_setup_cfg(**defaults):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            config_parser = ConfigParser()
-            config_parser.read('setup.cfg')
-
-            def s(key, default):
-                try:
-                    return config_parser.get('mutmut', key)
-                except (NoOptionError, NoSectionError):
-                    return default
-
-            for k in list(kwargs.keys()):
-                if not kwargs[k]:
-                    kwargs[k] = s(k, defaults.get(k))
-            f(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
+__log__ = getLogger(__name__)
 
 
 def get_or_guess_paths_to_mutate(paths_to_mutate):
@@ -129,21 +106,6 @@ def get_argparser() -> argparse.ArgumentParser:
     return parser
 
 
-# @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-# @click.argument('command', nargs=1, required=False)
-# @click.argument('argument', nargs=1, required=False)
-# @click.option('--paths-to-mutate', type=click.STRING)
-# @click.option('--backup/--no-backup', default=False)
-# @click.option('--use-coverage', is_flag=True, default=False)
-# @click.option('--tests-dir')
-# @click.option('-s', help='turn off output capture', is_flag=True)
-# @click.option('--dict-synonyms')
-# @click.option('--cache-only', is_flag=True, default=False)
-# @config_from_setup_cfg(
-#     dict_synonyms='',
-#     runner='python -m pytest -x',
-#     tests_dir=DEFAULT_TESTS_DIR,
-# )
 def main(argv=sys.argv[1:]):
     """main entrypoint for mutmut
 commands:\n
@@ -259,7 +221,7 @@ Legend for output:
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    print('2. Checking mutants')
+    print("Executing mutants: {}".format(total))
     config = Config(
         swallow_output=not args.output_capture,
         test_command=runner,
@@ -457,8 +419,6 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         raise Exception(
             "Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (
                 test_command, '\n'.join(output)))
-
-    print(' Done')
 
     set_cached_test_time(baseline_time_elapsed)
 
