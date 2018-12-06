@@ -35,7 +35,6 @@ jobs:
     - python: 3.6
     - python: 3.7
       dist: xenial
-    - python: pypy
     - python: pypy3
     - stage: linting
       python:
