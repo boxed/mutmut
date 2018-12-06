@@ -109,6 +109,7 @@ def register_mutants(mutations_by_file):
     """
 
     :param mutations_by_file:
+    :type mutations_by_file: dict[str, list[tuple[str, int]]]
 
     :return:
     """
@@ -129,7 +130,7 @@ def register_mutants(mutations_by_file):
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
-    """
+    """Update the status of the mutation test run within the database
 
     :param file_to_mutate:
     :type file_to_mutate: str
@@ -142,7 +143,6 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
     :param tests_hash:
     :type tests_hash: str
-    :return:
     """
     sourcefile = SourceFile.get(filename=file_to_mutate)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
@@ -152,13 +152,16 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 
 def get_mutation_diff(filename, mutation_id):
-    """
+    """Get the difference between source file and the source file mutated by
+    the mutation noted by ``mutation_id``
 
-    :param filename:
+    :param filename: thw source file's name
     :type filename: str
-    :param mutation_id:
+
+    :param mutation_id: id of the mutation on the source file
     :type mutation_id: tuple[str, int]
-    :return:
+
+    :return: TODO: type
     """
     with open(filename) as f:
         source = f.read()
@@ -221,7 +224,12 @@ def filename_and_mutation_id_from_pk(pk):
 
 @init_db
 @db_session
-def cached_test_time():
+def get_cached_test_time():
+    """Get the baseline tests (tests without mutations) execution time
+
+    :return: execution time of the baseline tests
+    :rtype: float
+    """
     d = MiscData.get(key='baseline_time_elapsed')
     return float(d.value) if d else None
 
@@ -229,4 +237,10 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
+    """Set the baseline tests (tests without mutations) execution time
+    within the database.
+
+    :param baseline_time_elapsed:
+    :type baseline_time_elapsed: float
+    """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)

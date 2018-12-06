@@ -94,7 +94,9 @@ def main(argv=sys.argv[1:]):
 
     if args.use_coverage and not exists('.coverage'):
         raise FileNotFoundError(
-            'No .coverage file found. You must generate a coverage file to use this feature.')
+            'No .coverage file found. You must generate a coverage '
+            'file to use this feature.'
+        )
 
     if args.file_or_dir:
         paths_to_mutate = args.file_or_dir

@@ -3,16 +3,29 @@
 import datetime
 import os
 import subprocess
+import time
+from logging import getLogger
 from os.path import isdir
 from shutil import move, copy
 
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
-    set_cached_test_time, register_mutants, cached_test_time, get_mutation_diff
+    set_cached_test_time, register_mutants, get_cached_test_time, \
+    get_mutation_diff
 from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
     OK_KILLED, OK_SUSPICIOUS, list_mutations, UNTESTED, mutate_file
 
+__log__ = getLogger(__name__)
+
 
 def popen_streaming_output(cmd, callback, timeout=None):
+    """
+
+    :param cmd:
+    :param callback:
+    :param timeout:
+    :type timeout: float
+    :return:
+    """
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -29,10 +42,12 @@ def popen_streaming_output(cmd, callback, timeout=None):
             line = output
             callback(line)
         except OSError:
+            __log__.exception("OSError during subprocess execution")
             # This seems to happen on some platforms, including TravisCI. It seems like
             # it's ok to just let this pass here, you just won't get as nice feedback.
             pass
         except subprocess.TimeoutExpired:
+            __log__.exception("subprocess timed out")
             p.kill()
             raise
 
@@ -40,11 +55,14 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def tests_pass(config):
-    """
+    """Run the test command and obtain a boolean noting if the test
+    suite has passed
 
     :param config:
     :type config: Config
-    :return:
+
+    :return: a boolean noting if the test suite has passed
+    :rtype: bool
     """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
@@ -90,7 +108,13 @@ def run_uncached_mutation(config, filename, mutation_id) -> str:
         start = datetime.datetime.now()
         try:
             survived = tests_pass(config)
-        except TimeoutError:
+        except subprocess.TimeoutExpired:
+            __log__.exception(
+                "mutation test run timed out: "
+                "mutation_id: {}, source filename: {}".format(
+                    mutation_id, filename
+                )
+            )
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
@@ -175,18 +199,6 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
         config.progress += 1
 
 
-def fail_on_cache_only(config):
-    """
-
-    :param config:
-    :type config: Config
-    :return:
-    """
-    if config.cache_only:
-        print('\rFAILED: changes detected in cache only mode')
-        exit(2)
-
-
 def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
@@ -197,11 +209,13 @@ def run_mutation_tests(config, mutations_by_file):
 
 
 def read_coverage_data(use_coverage):
-    """
+    """Read a coverage report a ``.coverage`` and return its coverage data.
 
     :param use_coverage:
     :type use_coverage: bool
+
     :return:
+    :rtype: CoverageData or None
     """
     if use_coverage:
         print('Using coverage data from .coverage file')
@@ -223,38 +237,46 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     :type swallow_output: bool
 
     :param test_command:
+    :type test_command: str
 
     :param using_testmon:
     :type using_testmon: bool
+
     :return:
+    :rtype: float
     """
-    cached_time = cached_test_time()
+    cached_time = get_cached_test_time()
     if cached_time is not None:
+        __log__.info("using cached baseline tests "
+                     "execution time: {}".format(cached_time))
         print('1. Using cached time for baseline tests, to run baseline '
               'again delete the cache file')
         return cached_time
 
+    __log__.info("running baseline tests (without mutations) to "
+                 "obtain their execution time")
     print('1. Running tests without mutations')
-    start_time = datetime.datetime.now()
+    start_time = time.time()
 
     output = []
 
     def feedback(line):
         if not swallow_output:
             print(line)
-        print('Running...')
         output.append(line)
 
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = (
-                    datetime.datetime.now() - start_time).total_seconds()
+        baseline_time_elapsed = time.time() - start_time
+        __log__.info("obtained baseline test "
+                     "execution time: {}".format(baseline_time_elapsed))
     else:
         raise Exception(
             "Tests don't run cleanly without mutations. "
-            "Test command was: {}\n\nOutput:\n\n{}".format(test_command,
-                                                           output)
+            "Test command was: {}\n\nOutput:\n\n{}".format(
+                test_command, output
+            )
         )
 
     set_cached_test_time(baseline_time_elapsed)
@@ -263,6 +285,16 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude):
+    """
+
+    :param mutations_by_file:
+    :type mutations_by_file: dict[str, list[tuple[str, int]]]
+
+    :param filename:
+    :type filename: str
+
+    :param exclude:
+    """
     context = MutationContext(
         source=open(filename).read(),
         filename=filename,
@@ -273,6 +305,11 @@ def add_mutations_by_file(mutations_by_file, filename, exclude):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception:
+        __log__.exception(
+            "failed creation mutations for file: {} on line: {}".format(
+                context.filename, context.current_source_line
+            )
+        )
         print('Failed while creating mutations for %s, for line "%s"' % (
             context.filename, context.current_source_line))
         raise
@@ -288,6 +325,7 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
     :type use_coverage: bool
 
     :param coverage_data: TODO
+
     :return:
     :rtype: bool
     """
