@@ -7,7 +7,7 @@ from os.path import isdir
 from shutil import move, copy
 
 from mutmut.cache import cached_mutation_status, update_mutant_status, \
-    set_cached_test_time, register_mutants, cached_test_time
+    set_cached_test_time, register_mutants, cached_test_time, get_mutation_diff
 from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
     OK_KILLED, OK_SUSPICIOUS, list_mutations, UNTESTED, mutate_file
 
@@ -63,6 +63,12 @@ def run_mutation(config, filename, mutation_id):
 
     cached_status = cached_mutation_status(filename, mutation_id,
                                            config.hash_of_tests)
+
+    mutation_diff = get_mutation_diff(filename, mutation_id)
+
+    # print("Mutation: {} source: {}".format(context.mutate_id_of_current_index, context.filename))
+    print(*mutation_diff)
+
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
@@ -145,8 +151,8 @@ def read_coverage_data(use_coverage):
 def time_test_suite(swallow_output, test_command, using_testmon):
     cached_time = cached_test_time()
     if cached_time is not None:
-        print(
-            '1. Using cached time for baseline tests, to run baseline again delete the cache file')
+        print('1. Using cached time for baseline tests, to run baseline '
+              'again delete the cache file')
         return cached_time
 
     print('1. Running tests without mutations')

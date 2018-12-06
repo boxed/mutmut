@@ -3,7 +3,6 @@
 
 """mutation testing definitions and helpers"""
 
-from difflib import unified_diff
 from enum import Enum
 from logging import getLogger
 
@@ -48,6 +47,7 @@ SKIP_NAMES = [
     "__version__",
     "__summary__"
 ]
+
 
 def number_mutation(value, **_):
     suffix = ''
@@ -373,16 +373,9 @@ def mutate(context):
             'Failed to parse %s. Internal error from parso follows.' % context.filename)
         print('----------------------------------')
         raise
+
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
-
-    print("mutated source: {}".format(context.filename))
-    print(
-        *unified_diff(
-            context.source.splitlines(keepends=True),
-            mutated_source.splitlines(keepends=True),
-        )
-    )
 
     if context.number_of_performed_mutations:
         # Check that if we said we mutated the code,
@@ -449,8 +442,6 @@ def mutate_node(i, context):
                 return
     finally:
         context.stack.pop()
-
-
 
 
 def mutate_list_of_nodes(result, context):

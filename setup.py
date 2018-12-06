@@ -87,7 +87,7 @@ class PyTest(test):
 
     def initialize_options(self):
         test.initialize_options(self)
-        self.pytest_args = "-v --cov={}".format("graypy")
+        self.pytest_args = "-v --cov={}".format("mutmut")
 
     def run_tests(self):
         import shlex
@@ -112,10 +112,14 @@ setup(
     packages=find_packages('.'),
     package_dir={'': '.'},
     include_package_data=True,
-    install_requires=read_reqs('requirements.txt'),
+    install_requires=[
+        "glob2",
+        "parso",
+        "tri.declarative",
+        "pony",
+    ],
     license="BSD",
     zip_safe=False,
-    keywords='',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

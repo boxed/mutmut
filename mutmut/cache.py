@@ -6,13 +6,14 @@ and mutation cache"""
 
 import hashlib
 import os
+from difflib import unified_diff
 from functools import wraps
 from io import open
 from logging import getLogger
 
 from pony.orm import Database, Required, db_session, Set, Optional, PrimaryKey
 
-from mutmut.mutators import UNTESTED, OK_KILLED
+from mutmut.mutators import UNTESTED, OK_KILLED, MutationContext, mutate
 
 db = Database()
 
@@ -117,6 +118,20 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     mutant.tested_against_hash = tests_hash
 
 
+def get_mutation_diff(filename, mutation_id):
+    with open(filename) as f:
+        source = f.read()
+    context = MutationContext(
+        source=source,
+        filename=filename,
+        mutate_id=mutation_id,
+    )
+    mutated_source, number_of_mutations_performed = mutate(context)
+    return unified_diff(source.splitlines(keepends=True),
+                        mutated_source.splitlines(keepends=True),
+                        fromfile=filename, tofile=filename)
+
+
 @init_db
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
@@ -125,7 +140,10 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     mutant = Mutant.get(line=line, index=mutation_id[1])
 
     if mutant.status == OK_KILLED:
-        # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
+        # We assume that if a mutant was killed, a change to the test
+        # suite will mean it's still killed
+
+        # TODO: is this flawed logic?
         return OK_KILLED
 
     if mutant.tested_against_hash != hash_of_tests:

@@ -12,72 +12,11 @@ from shutil import copy
 
 from glob2 import glob
 
-from mutmut.cache import filename_and_mutation_id_from_pk
 from mutmut.cache import hash_of_tests
-from mutmut.mutators import mutate_file, MutationContext
 from mutmut.runner import read_coverage_data, time_test_suite, \
     python_source_files, add_mutations_by_file, run_mutation_tests
 
 __log__ = getLogger(__name__)
-
-
-def guess_paths_to_mutate() -> str:
-    """guess the path of the source code to mutate"""
-    # Guess path with code
-    this_dir = os.getcwd().split(os.sep)[-1]
-    if isdir('lib'):
-        return 'lib'
-    elif isdir('src'):
-        return 'src'
-    elif isdir(this_dir):
-        return this_dir
-    else:
-        raise FileNotFoundError('Could not find code to mutate')
-
-
-def do_apply(mutation_pk, dict_synonyms, backup):
-    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-    context = MutationContext(
-        mutate_id=mutation_id,
-        filename=filename,
-        dict_synonyms=dict_synonyms,
-    )
-    mutate_file(
-        backup=backup,
-        context=context,
-    )
-    if context.number_of_performed_mutations == 0:
-        raise Exception(
-            'No mutations performed. Are you sure the index is not too big?')
-
-
-class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback,
-                 baseline_time_elapsed, backup, total,
-                 using_testmon, cache_only, tests_dirs, hash_of_tests):
-        self.swallow_output = swallow_output
-        self.test_command = test_command
-        self.exclude_callback = exclude_callback
-        self.baseline_time_elapsed = baseline_time_elapsed
-        self.backup = backup
-        self.total = total
-        self.using_testmon = using_testmon
-        self.progress = 0
-        self.skipped = 0
-        self.cache_only = cache_only
-        self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
-        self.killed_mutants = 0
-        self.surviving_mutants = 0
-        self.surviving_mutants_timeout = 0
-        self.suspicious_mutants = 0
-
-    def print_progress(self):
-        print(
-            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
-            self.progress, self.total, self.killed_mutants,
-            self.surviving_mutants_timeout, self.suspicious_mutants,
-            self.surviving_mutants))
 
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
@@ -232,8 +171,6 @@ directory. Print found mutants with `mutmut results`.
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    print("Executing mutants: {}".format(total))
-    print(mutations_by_file)
     config = Config(
         swallow_output=not args.output_capture,
         test_command=args.runner,
@@ -249,6 +186,49 @@ directory. Print found mutants with `mutmut results`.
 
     # TODO: return code based?
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+
+
+def guess_paths_to_mutate() -> str:
+    """guess the path of the source code to mutate"""
+    # Guess path with code
+    this_dir = os.getcwd().split(os.sep)[-1]
+    if isdir('lib'):
+        return 'lib'
+    elif isdir('src'):
+        return 'src'
+    elif isdir(this_dir):
+        return this_dir
+    else:
+        raise FileNotFoundError('Could not find code to mutate')
+
+
+class Config(object):
+    def __init__(self, swallow_output, test_command, exclude_callback,
+                 baseline_time_elapsed, backup, total,
+                 using_testmon, cache_only, tests_dirs, hash_of_tests):
+        self.swallow_output = swallow_output
+        self.test_command = test_command
+        self.exclude_callback = exclude_callback
+        self.baseline_time_elapsed = baseline_time_elapsed
+        self.backup = backup
+        self.total = total
+        self.using_testmon = using_testmon
+        self.progress = 0
+        self.skipped = 0
+        self.cache_only = cache_only
+        self.tests_dirs = tests_dirs
+        self.hash_of_tests = hash_of_tests
+        self.killed_mutants = 0
+        self.surviving_mutants = 0
+        self.surviving_mutants_timeout = 0
+        self.suspicious_mutants = 0
+
+    def print_progress(self):
+        print(
+            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
+                self.progress, self.total, self.killed_mutants,
+                self.surviving_mutants_timeout, self.suspicious_mutants,
+                self.surviving_mutants))
 
 
 if __name__ == '__main__':
