@@ -46,7 +46,7 @@ def filesystem(tmpdir):
     test_foo = tmpdir.mkdir(os.path.join("test_fs", "tests")).join("test_foo.py")
     test_foo.write(test_file_contents)
 
-    os.chdir(tmpdir.join('test_fs'))
+    os.chdir(str(tmpdir.join('test_fs')))
     yield
     os.chdir('..')
     # This is a hack to get pony to forget about the old db file
@@ -69,7 +69,6 @@ def test_full_run_one_surviving_mutant(capsys):
     main(['foo.py'])
     captured = capsys.readouterr()
     assert "ALIVE:    1" in captured.out
-
 
 @pytest.mark.usefixtures('filesystem')
 def test_python_source_files():
