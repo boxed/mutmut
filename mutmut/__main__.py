@@ -10,8 +10,8 @@ from shutil import copy
 
 from glob2 import glob
 
+from mutmut.cache import filename_and_mutation_id_from_pk
 from mutmut.cache import hash_of_tests
-from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, MutationContext
 from mutmut.runner import read_coverage_data, time_test_suite, \
     python_source_files, add_mutations_by_file, run_mutation_tests
@@ -75,7 +75,7 @@ class Config(object):
 
     def print_progress(self):
         print(
-            'Mutation: {}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
+            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
             self.progress, self.total, self.killed_mutants,
             self.surviving_mutants_timeout, self.suspicious_mutants,
             self.surviving_mutants))
@@ -187,18 +187,10 @@ directory. Print found mutants with `mutmut results`.
 
     mutations_by_file = {}
 
-    # TODO
-    argument = None
-
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs):
-                add_mutations_by_file(mutations_by_file, filename, _exclude,
-                                      dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
+    for path in paths_to_mutate:
+        for filename in python_source_files(path, tests_dirs):
+            add_mutations_by_file(mutations_by_file, filename, _exclude,
+                                  dict_synonyms)
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
