@@ -265,7 +265,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         raise Exception(
             "Tests don't run cleanly without mutations. "
             "Test command was: {}\n\nOutput:\n\n{}".format(
-                test_command, output
+                test_command, "".join(output)
             )
         )
 
