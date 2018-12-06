@@ -20,14 +20,6 @@ OK_SUSPICIOUS = 'ok_suspicious'
 BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
 
-mutant_statuses = [
-    UNTESTED,
-    OK_KILLED,
-    OK_SUSPICIOUS,
-    BAD_TIMEOUT,
-    BAD_SURVIVED,
-]
-
 
 # TODO: use
 class MutantStatus(Enum):
