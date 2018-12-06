@@ -226,7 +226,7 @@ class Config(object):
     def print_progress(self):
         print(
             'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
-                self.progress, self.total, self.killed_mutants,
+                self.progress + 1, self.total, self.killed_mutants,
                 self.surviving_mutants_timeout, self.suspicious_mutants,
                 self.surviving_mutants))
 
