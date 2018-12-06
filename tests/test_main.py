@@ -3,6 +3,7 @@
 
 import os
 import time
+from subprocess import TimeoutExpired
 
 import pytest
 
@@ -55,7 +56,7 @@ def filesystem(tmpdir):
 
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants(capsys):
-    main(['--paths-to-mutate=foo.py'])
+    main(['foo.py'])
     captured = capsys.readouterr()
     assert "ALIVE:     1" not in captured.out
 
@@ -64,9 +65,9 @@ def test_full_run_no_surviving_mutants(capsys):
 def test_full_run_one_surviving_mutant(capsys):
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
-    main(['--paths-to-mutate=foo.py'])
+    main(['foo.py'])
     captured = capsys.readouterr()
-    assert "ALIVE:     1" in captured.out
+    assert "ALIVE:    1" in captured.out
 
 
 @pytest.mark.usefixtures('filesystem')
@@ -76,12 +77,31 @@ def test_python_source_files():
     assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
 
 
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
-def test_timeout():
+def mock_callback_func(line):
+    """test call back function to be thrown into popen_streaming_output"""
+    print(line)
+
+
+def test_timeout(capsys):
     start = time.time()
-    with pytest.raises(TimeoutError):
+    with pytest.raises(TimeoutExpired):
         popen_streaming_output(
-            'python -c "import time; time.sleep(4)"',
-            lambda line: line, timeout=0.1
+            """python -c "import time; time.sleep(4); print('failure')""""",
+            mock_callback_func, timeout=0.1
         )
     assert (time.time() - start) < 3
+    # ensure we obtained nothing
+    captured = capsys.readouterr()
+    assert not captured.out
+
+
+def test_non_timeout(capsys):
+    start = time.time()
+    popen_streaming_output(
+        """python -c "import time; time.sleep(4); print('success')""""",
+        mock_callback_func, timeout=10
+    )
+    assert (time.time() - start) > 4
+    # ensure we captured the print of 'success'
+    captured = capsys.readouterr()
+    assert captured.out == "success\n"

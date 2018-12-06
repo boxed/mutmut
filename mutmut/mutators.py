@@ -3,6 +3,7 @@
 
 """mutation testing definitions and helpers"""
 
+from difflib import unified_diff
 from enum import Enum
 from logging import getLogger
 
@@ -29,6 +30,7 @@ mutant_statuses = [
 ]
 
 
+# TODO: use
 class MutantStatus(Enum):
     UNTESTED = 'untested'
     OK_KILLED = 'ok_killed'
@@ -36,6 +38,16 @@ class MutantStatus(Enum):
     BAD_TIMEOUT = 'bad_timeout'
     BAD_SURVIVED = 'bad_survived'
 
+
+# variable names we should skip modifying as we are sure that proper
+# python practice avoids this being sificant to mutate
+SKIP_NAMES = [
+    "__author__",
+    "__copyright__",
+    "__license__",
+    "__version__",
+    "__summary__"
+]
 
 def number_mutation(value, **_):
     suffix = ''
@@ -277,7 +289,7 @@ mutations_by_type = {
 
 
 class MutationContext(object):
-    def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None,
+    def __init__(self, source=None, mutate_id=ALL,
                  filename=None, exclude=lambda context: False, config=None):
         """
 
@@ -285,8 +297,6 @@ class MutationContext(object):
 
         :param mutate_id:
         :type mutate_id: tuple[str, int]
-
-        :param dict_synonyms:
 
         :param filename:
         :type filename: str
@@ -306,7 +316,8 @@ class MutationContext(object):
         self.filename = filename
         self.exclude = exclude
         self.stack = []
-        self.dict_synonyms = (dict_synonyms or []) + ['dict']
+        # TODO: refactor out?
+        self.dict_synonyms = ['dict']
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
@@ -365,11 +376,13 @@ def mutate(context):
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
 
-    print("original source:")
-    print(context.source)
-
-    print("mutated source:")
-    print(mutated_source)
+    print("mutated source: {}".format(context.filename))
+    print(
+        *unified_diff(
+            context.source.splitlines(keepends=True),
+            mutated_source.splitlines(keepends=True),
+        )
+    )
 
     if context.number_of_performed_mutations:
         # Check that if we said we mutated the code,
@@ -438,15 +451,6 @@ def mutate_node(i, context):
         context.stack.pop()
 
 
-# variable names we should skip modifying as we are sure that proper
-# python practice avoids this being sificant to mutate
-SKIP_NAMES = [
-    "__author__",
-    "__copyright__",
-    "__license__",
-    "__version__",
-    "__summary__"
-]
 
 
 def mutate_list_of_nodes(result, context):

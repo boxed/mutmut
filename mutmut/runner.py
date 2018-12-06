@@ -5,8 +5,6 @@ import os
 import subprocess
 from os.path import isdir
 from shutil import move, copy
-from threading import Thread
-from time import sleep
 
 from mutmut.cache import cached_mutation_status, update_mutant_status, \
     set_cached_test_time, register_mutants, cached_test_time
@@ -17,42 +15,26 @@ from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
 def popen_streaming_output(cmd, callback, timeout=None):
     p = subprocess.Popen(
         cmd,
-        shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        universal_newlines=True
     )
-
-    start = datetime.datetime.now()
-
-    foo = {'raise': False}
-
-    def timeout_killer():
-        while p.returncode is None:
-            sleep(0.1)
-            if (datetime.datetime.now() - start).total_seconds() > timeout:
-                foo['raise'] = True
-                p.kill()
-                return
-
-    if timeout:
-        t = Thread(target=timeout_killer)
-        t.daemon = True
-        t.start()
 
     while p.returncode is None:
         try:
-            line = p.stdout.readline()[
-                   :-1]  # -1 to remove the newline at the end
+            output, errors = p.communicate(timeout=timeout)
+            if output.endswith("\n"):
+                # -1 to remove the newline at the end
+                output = output[:-1]
+            line = output
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI. It seems like
             # it's ok to just let this pass here, you just won't get as nice feedback.
             pass
-
-        p.poll()
-
-    if foo['raise']:
-        raise TimeoutError()
+        except subprocess.TimeoutExpired:
+            p.kill()
+            raise
 
     return p.returncode
 
@@ -76,7 +58,6 @@ def run_mutation(config, filename, mutation_id):
         mutate_id=mutation_id,
         filename=filename,
         exclude=config.exclude_callback,
-        dict_synonyms=config.dict_synonyms,
         config=config,
     )
 
@@ -196,12 +177,11 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     return baseline_time_elapsed
 
 
-def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+def add_mutations_by_file(mutations_by_file, filename, exclude):
     context = MutationContext(
         source=open(filename).read(),
         filename=filename,
         exclude=exclude,
-        dict_synonyms=dict_synonyms,
     )
 
     try:
