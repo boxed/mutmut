@@ -6,7 +6,7 @@ import subprocess
 from os.path import isdir
 from shutil import move, copy
 
-from mutmut.cache import cached_mutation_status, update_mutant_status, \
+from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
     set_cached_test_time, register_mutants, cached_test_time, get_mutation_diff
 from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
     OK_KILLED, OK_SUSPICIOUS, list_mutations, UNTESTED, mutate_file
@@ -46,44 +46,19 @@ def tests_pass(config):
     def feedback(line):
         if not config.swallow_output:
             print(line)
-        config.print_progress()
 
     returncode = popen_streaming_output(config.test_command, feedback,
                                         timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config, filename, mutation_id):
+def run_uncached_mutation(config, filename, mutation_id):
     context = MutationContext(
         mutate_id=mutation_id,
         filename=filename,
         exclude=config.exclude_callback,
         config=config,
     )
-
-    cached_status = cached_mutation_status(filename, mutation_id,
-                                           config.hash_of_tests)
-
-    mutation_diff = get_mutation_diff(filename, mutation_id)
-
-    # print("Mutation: {} source: {}".format(context.mutate_id_of_current_index, context.filename))
-    print(*mutation_diff)
-
-    if cached_status == BAD_SURVIVED:
-        config.surviving_mutants += 1
-    elif cached_status == BAD_TIMEOUT:
-        config.surviving_mutants_timeout += 1
-    elif cached_status == OK_KILLED:
-        config.killed_mutants += 1
-    elif cached_status == OK_SUSPICIOUS:
-        config.suspicious_mutants += 1
-    else:
-        assert cached_status == UNTESTED, cached_status
-
-    config.print_progress()
-
-    if cached_status != UNTESTED:
-        return cached_status
 
     try:
         number_of_mutations_performed = mutate_file(
@@ -113,7 +88,57 @@ def run_mutation(config, filename, mutation_id):
         move(filename + '.bak', filename)
 
 
+def run_mutation(config, filename, mutation_id):
+    """
+
+    :param config:
+    :type config: Config
+    :param filename:
+    :type filename: str
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+    :return:
+    """
+    status = get_cached_mutation_status(filename, mutation_id,
+                                        config.hash_of_tests)
+    if status == BAD_SURVIVED:
+        config.surviving_mutants += 1
+    elif status == BAD_TIMEOUT:
+        config.surviving_mutants_timeout += 1
+    elif status == OK_KILLED:
+        config.killed_mutants += 1
+    elif status == OK_SUSPICIOUS:
+        config.suspicious_mutants += 1
+    elif status == UNTESTED:
+        status = run_uncached_mutation(config, filename, mutation_id)
+    else:
+        raise ValueError("unknown status obtained by "
+                         "get_cached_mutation_status: {}".format(status))
+
+    # at this point we are done the mutation test run
+    config.print_progress()
+
+    if not (status == OK_KILLED or status == OK_SUSPICIOUS):
+        mutation_diff = get_mutation_diff(filename, mutation_id)
+        print(
+            "Mutation test failure! Status: {} Mutation: {} source: {}".format(
+                status, config.progress + 1, filename))
+        print(*mutation_diff)
+
+    return status
+
+
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """
+
+    :param config:
+    :type config: Config
+    :param file_to_mutate:
+    :type file_to_mutate: str
+    :param mutations:
+    :type mutations: list[
+    :return:
+    """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status,
@@ -220,3 +245,32 @@ def python_source_files(path, tests_dirs):
                     yield os.path.join(root, filename)
     else:
         yield path
+
+
+class Config(object):
+    def __init__(self, swallow_output, test_command, exclude_callback,
+                 baseline_time_elapsed, backup, total,
+                 using_testmon, cache_only, tests_dirs, hash_of_tests):
+        self.swallow_output = swallow_output
+        self.test_command = test_command
+        self.exclude_callback = exclude_callback
+        self.baseline_time_elapsed = baseline_time_elapsed
+        self.backup = backup
+        self.total = total
+        self.using_testmon = using_testmon
+        self.progress = 0
+        self.skipped = 0
+        self.cache_only = cache_only
+        self.tests_dirs = tests_dirs
+        self.hash_of_tests = hash_of_tests
+        self.killed_mutants = 0
+        self.surviving_mutants = 0
+        self.surviving_mutants_timeout = 0
+        self.suspicious_mutants = 0
+
+    def print_progress(self):
+        print(
+            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
+                self.progress + 1, self.total, self.killed_mutants,
+                self.surviving_mutants_timeout, self.suspicious_mutants,
+                self.surviving_mutants))

@@ -94,6 +94,12 @@ def get_or_create(model, defaults=None, **params):
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
+    """
+
+    :param mutations_by_file:
+
+    :return:
+    """
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
         lines_to_be_removed = {x.id: x for x in sourcefile.lines}
@@ -111,6 +117,21 @@ def register_mutants(mutations_by_file):
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
+    """
+
+    :param file_to_mutate:
+    :type file_to_mutate: str
+
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+
+    :param status:
+    :type status: str
+
+    :param tests_hash:
+    :type tests_hash: str
+    :return:
+    """
     sourcefile = SourceFile.get(filename=file_to_mutate)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
     mutant = Mutant.get(line=line, index=mutation_id[1])
@@ -119,6 +140,14 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 
 def get_mutation_diff(filename, mutation_id):
+    """
+
+    :param filename:
+    :type filename: str
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+    :return:
+    """
     with open(filename) as f:
         source = f.read()
     context = MutationContext(
@@ -134,7 +163,19 @@ def get_mutation_diff(filename, mutation_id):
 
 @init_db
 @db_session
-def cached_mutation_status(filename, mutation_id, hash_of_tests):
+def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
+    """Get the status of a mutation test run from the cache.
+
+    :param filename:
+    :type filename: str
+
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+
+    :param hash_of_tests:
+    :type hash_of_tests: str
+    :return:
+    """
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
     mutant = Mutant.get(line=line, index=mutation_id[1])

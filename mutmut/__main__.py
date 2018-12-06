@@ -14,7 +14,7 @@ from glob2 import glob
 
 from mutmut.cache import hash_of_tests
 from mutmut.runner import read_coverage_data, time_test_suite, \
-    python_source_files, add_mutations_by_file, run_mutation_tests
+    python_source_files, add_mutations_by_file, run_mutation_tests, Config
 
 __log__ = getLogger(__name__)
 
@@ -200,35 +200,6 @@ def guess_paths_to_mutate() -> str:
         return this_dir
     else:
         raise FileNotFoundError('Could not find code to mutate')
-
-
-class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback,
-                 baseline_time_elapsed, backup, total,
-                 using_testmon, cache_only, tests_dirs, hash_of_tests):
-        self.swallow_output = swallow_output
-        self.test_command = test_command
-        self.exclude_callback = exclude_callback
-        self.baseline_time_elapsed = baseline_time_elapsed
-        self.backup = backup
-        self.total = total
-        self.using_testmon = using_testmon
-        self.progress = 0
-        self.skipped = 0
-        self.cache_only = cache_only
-        self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
-        self.killed_mutants = 0
-        self.surviving_mutants = 0
-        self.surviving_mutants_timeout = 0
-        self.suspicious_mutants = 0
-
-    def print_progress(self):
-        print(
-            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
-                self.progress + 1, self.total, self.killed_mutants,
-                self.surviving_mutants_timeout, self.suspicious_mutants,
-                self.surviving_mutants))
 
 
 if __name__ == '__main__':
