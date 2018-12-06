@@ -416,12 +416,26 @@ def mutate_node(i, context):
     finally:
         context.stack.pop()
 
+# variable names we should skip modifying as we are sure that proper
+# python practice avoids this being sificant to mutate
+SKIP_NAMES = [
+    "__author__",
+    "__copyright__",
+    "__license__",
+    "__version__",
+    "__summary__"
+]
+
 
 def mutate_list_of_nodes(result, context):
     """
     :type context: MutationContext
     """
     for i in result.children:
+
+        # TODO: move to a filter?
+        if i.type == 'name' and i.value in SKIP_NAMES:
+            continue
 
         if i.type == 'operator' and i.value == '->':
             return
