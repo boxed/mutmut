@@ -13,7 +13,7 @@ from logging import getLogger
 
 from pony.orm import Database, Required, db_session, Set, Optional, PrimaryKey
 
-from mutmut.mutators import UNTESTED, OK_KILLED, MutationContext, mutate
+from mutmut.mutators import MutationContext, mutate
 
 db = Database()
 
@@ -196,7 +196,6 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
     mutant = Mutant.get(line=line, index=mutation_id[1])
-
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test
         # suite will mean it's still killed
@@ -246,3 +245,10 @@ def set_cached_test_time(baseline_time_elapsed):
     :type baseline_time_elapsed: float
     """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
+
+
+UNTESTED = "UNTESTED"
+OK_SUSPICIOUS = "OK_SUSPICIOUS"
+OK_KILLED = "OK_KILLED"
+BAD_SURVIVED = "BAD_SURVIVED"
+BAD_TIMEOUT = "BAD_TIMEOUT"

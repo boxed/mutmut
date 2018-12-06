@@ -3,7 +3,6 @@
 
 """mutation testing definitions and helpers"""
 
-from enum import Enum
 from logging import getLogger
 
 from parso import parse
@@ -13,21 +12,6 @@ from tri.declarative import evaluate
 __log__ = getLogger(__name__)
 
 ALL = ('all', -1)
-
-UNTESTED = 'untested'
-OK_KILLED = 'ok_killed'
-OK_SUSPICIOUS = 'ok_suspicious'
-BAD_TIMEOUT = 'bad_timeout'
-BAD_SURVIVED = 'bad_survived'
-
-
-# TODO: use
-class MutantStatus(Enum):
-    UNTESTED = 'untested'
-    OK_KILLED = 'ok_killed'
-    OK_SUSPICIOUS = 'ok_suspicious'
-    BAD_TIMEOUT = 'bad_timeout'
-    BAD_SURVIVED = 'bad_survived'
 
 
 # variable names we should skip modifying as we are sure that proper

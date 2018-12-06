@@ -12,9 +12,9 @@ from shutil import move, copy
 
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
     set_cached_test_time, register_mutants, get_cached_test_time, \
-    get_mutation_diff
-from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
-    OK_KILLED, OK_SUSPICIOUS, list_mutations, UNTESTED, mutate_file
+    get_mutation_diff, UNTESTED, OK_SUSPICIOUS, OK_KILLED, BAD_SURVIVED, \
+    BAD_TIMEOUT
+from mutmut.mutators import MutationContext, list_mutations, mutate_file
 
 __log__ = getLogger(__name__)
 
@@ -52,7 +52,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
             line = output
             callback(line)
         except OSError:
-            __log__.exception("OSError during subprocess execution")
+            __log__.exception(
+                "OSError during subprocess execution: {}".format(cmd))
             # This seems to happen on some platforms, including TravisCI. It seems like
             # it's ok to just let this pass here, you just won't get as nice feedback.
             pass
