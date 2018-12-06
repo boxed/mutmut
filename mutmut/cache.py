@@ -189,7 +189,9 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
 
     :param hash_of_tests:
     :type hash_of_tests: str
-    :return:
+
+    :return: the status of the cached mutation test run
+    :rtype: str
     """
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id[0])
