@@ -70,12 +70,19 @@ def test_full_run_one_surviving_mutant(capsys):
     captured = capsys.readouterr()
     assert "ALIVE:    1" in captured.out
 
+
+@pytest.mark.parametrize("expected, source_path, tests_dirs",
+                         [
+                             (["foo.py"], "foo.py", []),
+                             ([os.path.join(".", "foo.py"),
+                               os.path.join(".", "tests", "test_foo.py")], ".",
+                              []),
+                             ([os.path.join(".", "foo.py")], ".",
+                              [os.path.join(".", "tests")])
+                         ])
 @pytest.mark.usefixtures('filesystem')
-def test_python_source_files():
-    assert list(get_python_source_files('foo.py', [])) == ['foo.py']
-    assert list(get_python_source_files('.', [])) == ['./foo.py',
-                                                      './tests/test_foo.py']
-    assert list(get_python_source_files('.', ['./tests'])) == ['./foo.py']
+def test_python_source_files(expected, source_path, tests_dirs):
+    assert expected == list(get_python_source_files(source_path, tests_dirs))
 
 
 def mock_callback_func(line):
