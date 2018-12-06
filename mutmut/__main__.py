@@ -1,10 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+"""main entrypoint for mutmut"""
+
 import argparse
+import logging
 import os
 import sys
 from logging import getLogger
+from logging.handlers import TimedRotatingFileHandler
 from os.path import isdir, exists
 from shutil import copy
 
@@ -82,6 +86,20 @@ class Config(object):
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
 
+LOG_LEVEL_STRINGS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
+
+
+def log_level(log_level_string: str):
+    """Argparse type function for determining the specified logging level"""
+    if log_level_string not in LOG_LEVEL_STRINGS:
+        raise argparse.ArgumentTypeError(
+            "invalid choice: {} (choose from {})".format(
+                log_level_string,
+                LOG_LEVEL_STRINGS
+            )
+        )
+    return getattr(logging, log_level_string, logging.INFO)
+
 
 def get_argparser() -> argparse.ArgumentParser:
     """get the main arguement parser for mutmut"""
@@ -97,7 +115,43 @@ def get_argparser() -> argparse.ArgumentParser:
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
     parser.add_argument("--cache-only", action="store_true", dest="cache_only")
+
+    group = parser.add_argument_group(title="Logging")
+    group.add_argument("--log-level", dest="log_level", default="INFO",
+                       type=log_level, help="Set the logging output level")
+    group.add_argument("--log-dir", dest="log_dir",
+                       help="Enable TimeRotatingLogging at the directory "
+                            "specified")
+    group.add_argument("-v", "--verbose", action="store_true",
+                       help="Enable verbose logging")
+
     return parser
+
+
+def init_logging(args):
+    """Initilize logging for the running mutmut process"""
+    handlers_ = []
+    log_format = logging.Formatter(
+        fmt="[%(asctime)s] [%(levelname)s] - %(message)s")
+    if args.log_dir:
+        os.makedirs(args.log_dir, exist_ok=True)
+        file_handler = TimedRotatingFileHandler(
+            os.path.join(args.log_dir, "mini_project_2.log"),
+            when="d", interval=1, backupCount=7, encoding="UTF-8",
+        )
+        file_handler.setFormatter(log_format)
+        file_handler.setLevel(args.log_level)
+        handlers_.append(file_handler)
+    if args.verbose:
+        stream_handler = logging.StreamHandler(stream=sys.stderr)
+        stream_handler.setFormatter(log_format)
+        stream_handler.setLevel(args.log_level)
+        handlers_.append(stream_handler)
+
+    logging.basicConfig(
+        handlers=handlers_,
+        level=args.log_level
+    )
 
 
 def main(argv=sys.argv[1:]):
@@ -114,6 +168,7 @@ commands:\n
     """
     parser = get_argparser()
     args = parser.parse_args(argv)
+
     dict_synonyms = [x.strip() for x in "".split(',')]
     runner = 'python -m pytest -x'
     if args.use_coverage and not exists('.coverage'):
@@ -147,7 +202,6 @@ commands:\n
     # stop python from creating .pyc files
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
-    # TODO:
     using_testmon = '--testmon' in runner
 
     print("""
@@ -201,18 +255,10 @@ Legend for output:
 
     mutations_by_file = {}
 
-    # TODO
-    argument = None
-
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs):
-                add_mutations_by_file(mutations_by_file, filename, _exclude,
-                                      dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
+    for path in paths_to_mutate:
+        for filename in python_source_files(path, tests_dirs):
+            add_mutations_by_file(mutations_by_file, filename, _exclude,
+                                  dict_synonyms)
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
