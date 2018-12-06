@@ -56,6 +56,12 @@ def init_db(f):
 
 
 def hash_of(filename):
+    """
+
+    :param filename:
+    :type filename: str
+    :return:
+    """
     with open(filename, 'rb') as f:
         m = hashlib.sha256()
         m.update(f.read())
@@ -63,6 +69,12 @@ def hash_of(filename):
 
 
 def hash_of_tests(tests_dirs):
+    """
+
+    :param tests_dirs:
+    :type tests_dirs: list[str]
+    :return:
+    """
     m = hashlib.sha256()
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):

@@ -40,6 +40,12 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def tests_pass(config):
+    """
+
+    :param config:
+    :type config: Config
+    :return:
+    """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
@@ -52,7 +58,22 @@ def tests_pass(config):
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_uncached_mutation(config, filename, mutation_id):
+def run_uncached_mutation(config, filename, mutation_id) -> str:
+    """Run a mutation test that is currently not existing within the cache
+    or reported to be ``UNTESTED``
+
+    :param config:
+    :type config: Config
+
+    :param filename:
+    :type filename: str
+
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+
+    :return: the status of running the mutation test
+    :rtype: str
+    """
     context = MutationContext(
         mutate_id=mutation_id,
         filename=filename,
@@ -88,16 +109,21 @@ def run_uncached_mutation(config, filename, mutation_id):
         move(filename + '.bak', filename)
 
 
-def run_mutation(config, filename, mutation_id):
-    """
+def get_mutation_test_status(config, filename, mutation_id) -> str:
+    """Obtain a mutation test's status by either obtaining the cached result
+    or by running the mutation test.
 
     :param config:
     :type config: Config
+
     :param filename:
     :type filename: str
+
     :param mutation_id:
     :type mutation_id: tuple[str, int]
+
     :return:
+    :rtype: str
     """
     status = get_cached_mutation_status(filename, mutation_id,
                                         config.hash_of_tests)
@@ -133,20 +159,29 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
 
     :param config:
     :type config: Config
+
     :param file_to_mutate:
     :type file_to_mutate: str
+
     :param mutations:
     :type mutations: list[
+
     :return:
     """
     for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id)
+        status = get_mutation_test_status(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status,
                              config.hash_of_tests)
         config.progress += 1
 
 
 def fail_on_cache_only(config):
+    """
+
+    :param config:
+    :type config: Config
+    :return:
+    """
     if config.cache_only:
         print('\rFAILED: changes detected in cache only mode')
         exit(2)
@@ -155,13 +190,19 @@ def fail_on_cache_only(config):
 def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
-    :type mutations_by_file: dict[str, list[tuple]]
+    :type mutations_by_file: dict[str, list[tuple[str, int]]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
         run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
 def read_coverage_data(use_coverage):
+    """
+
+    :param use_coverage:
+    :type use_coverage: bool
+    :return:
+    """
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
@@ -174,6 +215,19 @@ def read_coverage_data(use_coverage):
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
+    """Obtain the run-time of a test suite on a non mutated code source.
+    This is used to obtain an approximate run-time for setting the mutation
+    test run timeout value.
+
+    :param swallow_output:
+    :type swallow_output: bool
+
+    :param test_command:
+
+    :param using_testmon:
+    :type using_testmon: bool
+    :return:
+    """
     cached_time = cached_test_time()
     if cached_time is not None:
         print('1. Using cached time for baseline tests, to run baseline '
@@ -225,6 +279,18 @@ def add_mutations_by_file(mutations_by_file, filename, exclude):
 
 
 def coverage_exclude_callback(context, use_coverage, coverage_data):
+    """
+
+    :param context:
+    :type context: MutationContext
+
+    :param use_coverage:
+    :type use_coverage: bool
+
+    :param coverage_data: TODO
+    :return:
+    :rtype: bool
+    """
     if use_coverage:
         measured_lines = coverage_data.lines(os.path.abspath(context.filename))
         if measured_lines is None:
@@ -236,6 +302,17 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
 
 
 def python_source_files(path, tests_dirs):
+    """
+
+    :param path:
+    :type path: str
+
+    :param tests_dirs:
+    :type tests_dirs: list[str]
+
+    :return:
+    :rtype:
+    """
     if isdir(path):
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if
