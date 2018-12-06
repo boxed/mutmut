@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""setup.py for mutmut"""
+
+import codecs
 import os
 import re
+import sys
+
 from setuptools import setup, find_packages, Command
+from setuptools.command.test import test
 
 readme = open('README.rst').read()
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
@@ -13,12 +20,16 @@ def read_reqs(name):
         return [line for line in f.read().split('\n') if line and not line.strip().startswith('#')]
 
 
-def read_version():
-    with open(os.path.join('mutmut', '__init__.py')) as f:
-        m = re.search(r'''__version__\s*=\s*['"]([^'"]*)['"]''', f.read())
-        if m:
-            return m.group(1)
-        raise ValueError("couldn't find version")
+def find_version(*file_paths):
+    with codecs.open(os.path.join(os.path.abspath(os.path.dirname(__file__)), *file_paths), 'r') as fp:
+        version_file = fp.read()
+    m = re.search(r"^__version__ = \((\d+), ?(\d+), ?(\d+)\)", version_file, re.M)
+    if m:
+        return "{}.{}.{}".format(*m.groups())
+    raise RuntimeError("Unable to find a valid version")
+
+
+VERSION = find_version("mutmut", "__init__.py")
 
 
 class Tag(Command):
@@ -32,7 +43,7 @@ class Tag(Command):
 
     def run(self):
         from subprocess import call
-        version = read_version()
+        version = VERSION
         errno = call(['git', 'tag', '--annotate', version, '--message', 'Version %s' % version])
         if errno == 0:
             print("Added tag for version %s" % version)
@@ -51,7 +62,7 @@ class ReleaseCheck(Command):
     def run(self):
         from subprocess import check_output
         tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
-        version = read_version()
+        version = VERSION
         if tag != version:
             print('Missing %s tag on release' % version)
             raise SystemExit(1)
@@ -63,6 +74,28 @@ class ReleaseCheck(Command):
 
         print("Ok to distribute files")
 
+
+class Pylint(test):
+    def run_tests(self):
+        from pylint.lint import Run
+        Run(["mutmut", "--persistent", "y", "--rcfile", ".pylintrc",
+             "--output-format", "colorized"])
+
+
+class PyTest(test):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
+
+    def initialize_options(self):
+        test.initialize_options(self)
+        self.pytest_args = "-v --cov={}".format("graypy")
+
+    def run_tests(self):
+        import shlex
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(shlex.split(self.pytest_args))
+        sys.exit(errno)
+
 import inspect
 running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
@@ -70,9 +103,9 @@ running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 #     everything using imp.find_module
 setup(
     name='mutmut',
-    version=read_version(),
+    version=VERSION,
     description='',
-    long_description=readme,
+    long_description=open("README.rst").read(),
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
     url='https://github.com/boxed/mutmut',
@@ -88,15 +121,15 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         "Framework :: Pytest",
     ],
     test_suite='tests',
     cmdclass={'tag': Tag,
-              'release_check': ReleaseCheck},
+              'release_check': ReleaseCheck, "test": PyTest, "lint": Pylint},
     # if I add entry_points while pytest runs, it imports before the coverage collecting starts
     entry_points={
         'pytest11': [

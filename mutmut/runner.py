@@ -1,14 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-"""functionality for driving mutation tests"""
-
 import datetime
 import os
-import traceback
+import subprocess
 from os.path import isdir
 from shutil import move, copy
-from subprocess import Popen
 from threading import Thread
 from time import sleep
 
@@ -19,16 +15,12 @@ from mutmut.mutators import MutationContext, BAD_SURVIVED, BAD_TIMEOUT, \
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
-    master, slave = os.openpty()
-
-    p = Popen(
+    p = subprocess.Popen(
         cmd,
         shell=True,
-        stdout=slave,
-        stderr=slave,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
-    stdout = os.fdopen(master)
-    os.close(slave)
 
     start = datetime.datetime.now()
 
@@ -49,7 +41,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while p.returncode is None:
         try:
-            line = stdout.readline()[
+            line = p.stdout.readline()[
                    :-1]  # -1 to remove the newline at the end
             callback(line)
         except OSError:
@@ -140,7 +132,6 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
         update_mutant_status(file_to_mutate, mutation_id, status,
                              config.hash_of_tests)
         config.progress += 1
-        config.print_progress()
 
 
 def fail_on_cache_only(config):
@@ -155,8 +146,6 @@ def run_mutation_tests(config, mutations_by_file):
     :type mutations_by_file: dict[str, list[tuple]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
-        config.print_progress()
-
         run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
@@ -219,14 +208,8 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception:
-        print(
-            'Failed while creating mutations for '
-            'file: {}, on line: "{}", traceback: {}'.format(
-                context.filename,
-                context.current_source_line,
-                traceback.format_exc()
-            )
-        )
+        print('Failed while creating mutations for %s, for line "%s"' % (
+            context.filename, context.current_source_line))
         raise
 
 
@@ -238,7 +221,6 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
         current_line = context.current_line_index + 1
         if current_line not in measured_lines:
             return True
-
     return False
 
 

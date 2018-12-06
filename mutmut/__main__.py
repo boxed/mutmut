@@ -1,24 +1,20 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""main entrypoint for mutmut"""
-
 import argparse
-import logging
 import os
 import sys
 from logging import getLogger
-from logging.handlers import TimedRotatingFileHandler
 from os.path import isdir, exists
 from shutil import copy
 
 from glob2 import glob
 
-from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk
+from mutmut.cache import filename_and_mutation_id_from_pk
+from mutmut.cache import hash_of_tests
 from mutmut.mutators import mutate_file, MutationContext
 from mutmut.runner import read_coverage_data, time_test_suite, \
     python_source_files, add_mutations_by_file, run_mutation_tests
-from .cache import hash_of_tests
 
 __log__ = getLogger(__name__)
 
@@ -78,27 +74,14 @@ class Config(object):
         self.suspicious_mutants = 0
 
     def print_progress(self):
-        print('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
+        print(
+            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
             self.progress, self.total, self.killed_mutants,
             self.surviving_mutants_timeout, self.suspicious_mutants,
             self.surviving_mutants))
 
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
-
-LOG_LEVEL_STRINGS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
-
-
-def log_level(log_level_string: str):
-    """Argparse type function for determining the specified logging level"""
-    if log_level_string not in LOG_LEVEL_STRINGS:
-        raise argparse.ArgumentTypeError(
-            "invalid choice: {} (choose from {})".format(
-                log_level_string,
-                LOG_LEVEL_STRINGS
-            )
-        )
-    return getattr(logging, log_level_string, logging.INFO)
 
 
 def get_argparser() -> argparse.ArgumentParser:
@@ -107,7 +90,9 @@ def get_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--use-coverage", action="store_true",
                         dest="use_coverage")
     parser.add_argument("--paths-to-mutate", default=".", dest="mutate_paths")
-    parser.add_argument("--runner", default="pytest")
+    parser.add_argument("--runner", default='python -m pytest -x',
+                        help="The python test runner (and its arguments) to "
+                             "invoke each mutation test run")
     parser.add_argument("--results", action="store_true")
     parser.add_argument("--backup", action="store_true")
     parser.add_argument("--apply")
@@ -115,64 +100,16 @@ def get_argparser() -> argparse.ArgumentParser:
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
     parser.add_argument("--cache-only", action="store_true", dest="cache_only")
-
-    group = parser.add_argument_group(title="Logging")
-    group.add_argument("--log-level", dest="log_level", default="INFO",
-                       type=log_level, help="Set the logging output level")
-    group.add_argument("--log-dir", dest="log_dir",
-                       help="Enable TimeRotatingLogging at the directory "
-                            "specified")
-    group.add_argument("-v", "--verbose", action="store_true",
-                       help="Enable verbose logging")
-
     return parser
 
 
-def init_logging(args):
-    """Initilize logging for the running mutmut process"""
-    handlers_ = []
-    log_format = logging.Formatter(
-        fmt="[%(asctime)s] [%(levelname)s] - %(message)s")
-    if args.log_dir:
-        os.makedirs(args.log_dir, exist_ok=True)
-        file_handler = TimedRotatingFileHandler(
-            os.path.join(args.log_dir, "mini_project_2.log"),
-            when="d", interval=1, backupCount=7, encoding="UTF-8",
-        )
-        file_handler.setFormatter(log_format)
-        file_handler.setLevel(args.log_level)
-        handlers_.append(file_handler)
-    if args.verbose:
-        stream_handler = logging.StreamHandler(stream=sys.stderr)
-        stream_handler.setFormatter(log_format)
-        stream_handler.setLevel(args.log_level)
-        handlers_.append(stream_handler)
-
-    logging.basicConfig(
-        handlers=handlers_,
-        level=args.log_level
-    )
-
-
 def main(argv=sys.argv[1:]):
-    """main entrypoint for mutmut
-commands:\n
-    run [mutation id]\n
-        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
-    results\n
-        Print the results.\n
-    apply [mutation id]\n
-        Apply a mutation on disk.\n
-    show [mutation id]\n
-        Show a mutation diff.\n
-    """
+    """main entrypoint for mutmut"""
     parser = get_argparser()
     args = parser.parse_args(argv)
-
     dict_synonyms = [x.strip() for x in "".split(',')]
-    runner = 'python -m pytest -x'
     if args.use_coverage and not exists('.coverage'):
-        raise FileExistsError(
+        raise FileNotFoundError(
             'No .coverage file found. You must generate a coverage file to use this feature.')
 
     if args.results:
@@ -202,7 +139,8 @@ commands:\n
     # stop python from creating .pyc files
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
-    using_testmon = '--testmon' in runner
+    # TODO:
+    using_testmon = '--testmon' in args.runner
 
     print("""
 - Mutation testing starting - 
@@ -215,17 +153,11 @@ These are the steps:
 
 Mutants are written to the cache in the .mutmut-cache 
 directory. Print found mutants with `mutmut results`.
-
-Legend for output:
-🎉 Killed mutants. The goal is for everything to end up in this bucket. 
-⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.  
-🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
-🙁 Survived. This means your tests needs to be expanded. 
 """)
 
     baseline_time_elapsed = time_test_suite(
         swallow_output=not args.output_capture,
-        test_command=runner,
+        test_command=args.runner,
         using_testmon=using_testmon)
 
     if using_testmon:
@@ -266,7 +198,7 @@ Legend for output:
     print(mutations_by_file)
     config = Config(
         swallow_output=not args.output_capture,
-        test_command=runner,
+        test_command=args.runner,
         exclude_callback=_exclude,
         baseline_time_elapsed=baseline_time_elapsed,
         backup=args.backup,
@@ -278,6 +210,7 @@ Legend for output:
         hash_of_tests=hash_of_tests(tests_dirs),
     )
 
+    # TODO: return code based?
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
 

@@ -8,14 +8,11 @@ import hashlib
 import os
 from functools import wraps
 from io import open
-from itertools import groupby
 from logging import getLogger
 
-from pony.orm import Database, Required, db_session, Set, Optional, select, \
-    PrimaryKey
+from pony.orm import Database, Required, db_session, Set, Optional, PrimaryKey
 
-from mutmut.mutators import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, \
-    UNTESTED, OK_KILLED
+from mutmut.mutators import UNTESTED, OK_KILLED
 
 db = Database()
 
@@ -77,34 +74,6 @@ def hash_of_tests(tests_dirs):
 def get_apply_line(mutant):
     apply_line = 'mutmut apply %s' % mutant.id
     return apply_line
-
-
-@init_db
-@db_session
-def print_result_cache():
-    print('To apply a mutant on disk:')
-    print('    mutmut apply <id>')
-    print()
-    print('To show a mutant:')
-    print('    mutmut show <id>')
-    print()
-
-    def print_stuff(title, query):
-        l = list(query)
-        if l:
-            print()
-            print(title, '(%s)' % len(l))
-            for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
-                mutants = list(mutants)
-                print()
-                print('-' * 4, '%s' % filename, '(%s)' % len(mutants), '-' * 4)
-                print()
-                print(', '.join([str(x.id) for x in mutants]))
-
-    print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
-    print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
-    print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
 def get_or_create(model, defaults=None, **params):
