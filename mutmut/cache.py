@@ -19,6 +19,12 @@ db = Database()
 
 __log__ = getLogger(__name__)
 
+UNTESTED = "UNTESTED"
+OK_SUSPICIOUS = "OK_SUSPICIOUS"
+OK_KILLED = "OK_KILLED"
+BAD_SURVIVED = "BAD_SURVIVED"
+BAD_TIMEOUT = "BAD_TIMEOUT"
+
 
 class MiscData(db.Entity):
     key = PrimaryKey(str, auto=True)
@@ -245,10 +251,3 @@ def set_cached_test_time(baseline_time_elapsed):
     :type baseline_time_elapsed: float
     """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
-
-
-UNTESTED = "UNTESTED"
-OK_SUSPICIOUS = "OK_SUSPICIOUS"
-OK_KILLED = "OK_KILLED"
-BAD_SURVIVED = "BAD_SURVIVED"
-BAD_TIMEOUT = "BAD_TIMEOUT"
