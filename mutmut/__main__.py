@@ -10,11 +10,11 @@ from shutil import copy
 
 from glob2 import glob
 
+from mutmut.cache import hash_of_tests
 from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, MutationContext
 from mutmut.runner import read_coverage_data, time_test_suite, \
     python_source_files, add_mutations_by_file, run_mutation_tests
-from .cache import hash_of_tests
 
 __log__ = getLogger(__name__)
 
@@ -74,7 +74,8 @@ class Config(object):
         self.suspicious_mutants = 0
 
     def print_progress(self):
-        print('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
+        print(
+            'Mutation: {}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
             self.progress, self.total, self.killed_mutants,
             self.surviving_mutants_timeout, self.suspicious_mutants,
             self.surviving_mutants))
@@ -89,7 +90,9 @@ def get_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--use-coverage", action="store_true",
                         dest="use_coverage")
     parser.add_argument("--paths-to-mutate", default=".", dest="mutate_paths")
-    parser.add_argument("--runner", default="pytest")
+    parser.add_argument("--runner", default='python -m pytest -x',
+                        help="The python test runner (and its arguments) to "
+                             "invoke each mutation test run")
     parser.add_argument("--results", action="store_true")
     parser.add_argument("--backup", action="store_true")
     parser.add_argument("--apply")
@@ -101,23 +104,12 @@ def get_argparser() -> argparse.ArgumentParser:
 
 
 def main(argv=sys.argv[1:]):
-    """main entrypoint for mutmut
-commands:\n
-    run [mutation id]\n
-        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
-    results\n
-        Print the results.\n
-    apply [mutation id]\n
-        Apply a mutation on disk.\n
-    show [mutation id]\n
-        Show a mutation diff.\n
-    """
+    """main entrypoint for mutmut"""
     parser = get_argparser()
     args = parser.parse_args(argv)
     dict_synonyms = [x.strip() for x in "".split(',')]
-    runner = 'python -m pytest -x'
     if args.use_coverage and not exists('.coverage'):
-        raise FileExistsError(
+        raise FileNotFoundError(
             'No .coverage file found. You must generate a coverage file to use this feature.')
 
     if args.results:
@@ -148,7 +140,7 @@ commands:\n
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
     # TODO:
-    using_testmon = '--testmon' in runner
+    using_testmon = '--testmon' in args.runner
 
     print("""
 - Mutation testing starting - 
@@ -161,17 +153,11 @@ These are the steps:
 
 Mutants are written to the cache in the .mutmut-cache 
 directory. Print found mutants with `mutmut results`.
-
-Legend for output:
-🎉 Killed mutants. The goal is for everything to end up in this bucket. 
-⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.  
-🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
-🙁 Survived. This means your tests needs to be expanded. 
 """)
 
     baseline_time_elapsed = time_test_suite(
         swallow_output=not args.output_capture,
-        test_command=runner,
+        test_command=args.runner,
         using_testmon=using_testmon)
 
     if using_testmon:
@@ -220,7 +206,7 @@ Legend for output:
     print(mutations_by_file)
     config = Config(
         swallow_output=not args.output_capture,
-        test_command=runner,
+        test_command=args.runner,
         exclude_callback=_exclude,
         baseline_time_elapsed=baseline_time_elapsed,
         backup=args.backup,
@@ -232,6 +218,7 @@ Legend for output:
         hash_of_tests=hash_of_tests(tests_dirs),
     )
 
+    # TODO: return code based?
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
 

@@ -277,6 +277,21 @@ mutations_by_type = {
 class MutationContext(object):
     def __init__(self, source=None, mutate_id=ALL, dict_synonyms=None,
                  filename=None, exclude=lambda context: False, config=None):
+        """
+
+        :param source:
+
+        :param mutate_id:
+        :type mutate_id: tuple[str, int]
+
+        :param dict_synonyms:
+
+        :param filename:
+        :type filename: str
+
+        :param exclude:
+        :param config:
+        """
         self.index = 0
         self.source = source
         self.mutate_id = mutate_id
@@ -336,6 +351,7 @@ def mutate(context):
     """
     :type context: MutationContext
     :return: tuple: mutated source code, number of mutations performed
+    :rtype: tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -354,7 +370,8 @@ def mutate(context):
     print(mutated_source)
 
     if context.number_of_performed_mutations:
-        # Check that if we said we mutated the code, that it has actually changed
+        # Check that if we said we mutated the code,
+        # that it has actually changed
         assert context.source != mutated_source
     context.mutated_source = mutated_source
     return mutated_source, context.number_of_performed_mutations
@@ -362,6 +379,7 @@ def mutate(context):
 
 def mutate_node(i, context):
     """
+    :param context:
     :type context: MutationContext
     """
     context.stack.append(i)
@@ -374,7 +392,8 @@ def mutate_node(i, context):
 
         if i.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = i.start_pos[0] - 1
-            context.index = 0  # indexes are unique per line, so start over here!
+            # indexes are unique per line, so start over here!
+            context.index = 0
 
         if hasattr(i, 'children'):
             mutate_list_of_nodes(i, context=context)
@@ -415,6 +434,7 @@ def mutate_node(i, context):
                 return
     finally:
         context.stack.pop()
+
 
 # variable names we should skip modifying as we are sure that proper
 # python practice avoids this being sificant to mutate
