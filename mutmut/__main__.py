@@ -7,19 +7,18 @@ import os
 import sys
 from logging import getLogger, StreamHandler, basicConfig, Formatter
 from logging.handlers import TimedRotatingFileHandler
-from os.path import isdir, exists
+from os.path import exists
 from shutil import copy
 
 from glob2 import glob
 
 from mutmut.cache import hash_of_tests
-from mutmut.runner import read_coverage_data, time_test_suite, \
-    python_source_files, add_mutations_by_file, run_mutation_tests, Config
+from mutmut.file_collection import guess_paths_to_mutate, read_coverage_data, \
+    get_python_source_files
+from mutmut.runner import time_test_suite, \
+    add_mutations_by_file, run_mutation_tests, Config
 
 __log__ = getLogger(__name__)
-
-
-DEFAULT_TESTS_DIR = 'tests/:test/'
 
 LOG_LEVEL_STRINGS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
 
@@ -45,7 +44,6 @@ def get_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--runner", default='python -m pytest -x',
                         help="The python test runner (and its arguments) to "
                              "invoke each mutation test run")
-    parser.add_argument("--results", action="store_true")
     parser.add_argument("--backup", action="store_true")
     parser.add_argument("--tests", dest="tests_dir", default="tests")
     parser.add_argument("-s", action="store_true", dest="output_capture",
@@ -132,7 +130,6 @@ These are the steps:
 2. Mutants will be generated and checked
 
 Mutants are written to the cache in the .mutmut-cache 
-directory. Print found mutants with `mutmut results`.
 """)
 
     baseline_time_elapsed = time_test_suite(
@@ -168,7 +165,7 @@ directory. Print found mutants with `mutmut results`.
     mutations_by_file = {}
 
     for path in paths_to_mutate:
-        for filename in python_source_files(path, tests_dirs):
+        for filename in get_python_source_files(path, tests_dirs):
             add_mutations_by_file(mutations_by_file, filename, _exclude)
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
@@ -188,20 +185,6 @@ directory. Print found mutants with `mutmut results`.
 
     # TODO: return code based?
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
-
-
-def guess_paths_to_mutate() -> str:
-    """guess the path of the source code to mutate"""
-    # Guess path with code
-    this_dir = os.getcwd().split(os.sep)[-1]
-    if isdir('lib'):
-        return 'lib'
-    elif isdir('src'):
-        return 'src'
-    elif isdir(this_dir):
-        return this_dir
-    else:
-        raise FileNotFoundError('Could not find code to mutate')
 
 
 if __name__ == '__main__':

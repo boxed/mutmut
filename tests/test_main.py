@@ -7,7 +7,8 @@ from subprocess import TimeoutExpired
 
 import pytest
 
-from mutmut.__main__ import main, python_source_files
+from mutmut.__main__ import main
+from mutmut.file_collection import get_python_source_files
 from mutmut.runner import popen_streaming_output
 
 in_travis = os.environ['PATH'].startswith('/home/travis/')
@@ -72,9 +73,10 @@ def test_full_run_one_surviving_mutant(capsys):
 
 @pytest.mark.usefixtures('filesystem')
 def test_python_source_files():
-    assert list(python_source_files('foo.py', [])) == ['foo.py']
-    assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
-    assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
+    assert list(get_python_source_files('foo.py', [])) == ['foo.py']
+    assert list(get_python_source_files('.', [])) == ['./foo.py',
+                                                      './tests/test_foo.py']
+    assert list(get_python_source_files('.', ['./tests'])) == ['./foo.py']
 
 
 def mock_callback_func(line):

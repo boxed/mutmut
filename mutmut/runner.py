@@ -1,11 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+"""mutation test management and execution"""
+
 import datetime
 import os
 import subprocess
 import time
 from logging import getLogger
-from os.path import isdir
 from shutil import move, copy
 
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
@@ -18,13 +20,21 @@ __log__ = getLogger(__name__)
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
-    """
+    """Open a subprocess and stream its output without hard-blocking.
 
-    :param cmd:
-    :param callback:
-    :param timeout:
+    :param cmd: the command to execute within the subprocess
+    :type cmd: str
+
+    :param callback: function to execute with the subprocess stdout output
+    :param timeout: the timeout time for the processes' ``communication``
+        call to complete
     :type timeout: float
-    :return:
+
+    :raises subprocess.TimeoutExpired: if the exciting subprocesses'
+        ``communication`` call times out
+
+    :return: the return code of the executed subprocess
+    :rtype: int
     """
     p = subprocess.Popen(
         cmd,
@@ -208,26 +218,6 @@ def run_mutation_tests(config, mutations_by_file):
         run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
-def read_coverage_data(use_coverage):
-    """Read a coverage report a ``.coverage`` and return its coverage data.
-
-    :param use_coverage:
-    :type use_coverage: bool
-
-    :return:
-    :rtype: CoverageData or None
-    """
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-        return coverage_data
-    else:
-        return None
-
-
 def time_test_suite(swallow_output, test_command, using_testmon):
     """Obtain the run-time of a test suite on a non mutated code source.
     This is used to obtain an approximate run-time for setting the mutation
@@ -339,30 +329,9 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
     return False
 
 
-def python_source_files(path, tests_dirs):
-    """
-
-    :param path:
-    :type path: str
-
-    :param tests_dirs:
-    :type tests_dirs: list[str]
-
-    :return:
-    :rtype:
-    """
-    if isdir(path):
-        for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if
-                       os.path.join(root, d) not in tests_dirs]
-            for filename in files:
-                if filename.endswith('.py'):
-                    yield os.path.join(root, filename)
-    else:
-        yield path
-
-
 class Config(object):
+    """Container for all the needed configuration for a mutation test run"""
+
     def __init__(self, swallow_output, test_command, exclude_callback,
                  baseline_time_elapsed, backup, total,
                  using_testmon, cache_only, tests_dirs, hash_of_tests):
