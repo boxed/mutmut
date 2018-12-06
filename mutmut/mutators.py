@@ -468,6 +468,9 @@ def count_mutations(context):
 def list_mutations(context):
     """
     :type context: MutationContext
+
+    :return: list of preformed mutation's ids
+    :rtype: list[tuple[str, int]]
     """
     assert context.mutate_id == ALL
     mutate(context)
@@ -479,6 +482,9 @@ def mutate_file(backup, context):
 
     :type backup: bool
     :type context: MutationContext
+
+    :return: the number of mutations preformed
+    :rtype: int
     """
     code = open(context.filename).read()
     context.source = code

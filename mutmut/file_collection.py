@@ -45,12 +45,13 @@ def read_coverage_data(use_coverage):
 
 
 def get_python_source_files(path, tests_dirs):
-    """
+    """Yield the paths to all python source files
 
-    :param path:
+    :param path: path of the source file to mutate or path of the directory to
+        yield source files from to mutate
     :type path: str
 
-    :param tests_dirs:
+    :param tests_dirs: list of the directories containing testing files
     :type tests_dirs: list[str]
 
     :return:
