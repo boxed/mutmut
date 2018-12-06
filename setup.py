@@ -11,13 +11,7 @@ import sys
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
 
-readme = open('README.rst').read()
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
-
-
-def read_reqs(name):
-    with open(os.path.join(os.path.dirname(__file__), name)) as f:
-        return [line for line in f.read().split('\n') if line and not line.strip().startswith('#')]
 
 
 def find_version(*file_paths):
@@ -96,6 +90,7 @@ class PyTest(test):
         errno = pytest.main(shlex.split(self.pytest_args))
         sys.exit(errno)
 
+
 import inspect
 running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
@@ -117,6 +112,11 @@ setup(
         "parso",
         "tri.declarative",
         "pony",
+    ],
+    tests_require=[
+        "pytest",
+        "pytest-cov",
+        "pylint>=1.9.1,<2.0.0",
     ],
     license="BSD",
     zip_safe=False,
