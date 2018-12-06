@@ -1,7 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+"""functionality for driving mutation tests"""
+
 import datetime
 import os
+import traceback
 from os.path import isdir
 from shutil import move, copy
 from subprocess import Popen
@@ -215,8 +219,14 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception:
-        print('Failed while creating mutations for %s, for line "%s"' % (
-            context.filename, context.current_source_line))
+        print(
+            'Failed while creating mutations for '
+            'file: {}, on line: "{}", traceback: {}'.format(
+                context.filename,
+                context.current_source_line,
+                traceback.format_exc()
+            )
+        )
         raise
 
 
