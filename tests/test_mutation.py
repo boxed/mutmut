@@ -93,8 +93,8 @@ def test_basic_mutations_python3(original, expected):
     ]
 )
 def test_do_not_mutate(source):
-    actual = mutate(MutationContext(source=source, mutate_id=ALL,
-                                    dict_synonyms=['Struct', 'FooBarDict']))[0]
+    # dict_synonyms = ['Struct', 'FooBarDict']
+    actual = mutate(MutationContext(source=source, mutate_id=ALL))[0]
     assert actual == source
 
 
@@ -105,8 +105,8 @@ def test_do_not_mutate(source):
     ]
 )
 def test_do_not_mutate_python3(source):
-    actual = mutate(MutationContext(source=source, mutate_id=ALL,
-                                    dict_synonyms=['Struct', 'FooBarDict']))[0]
+    # dict_synonyms = ['Struct', 'FooBarDict']
+    actual = mutate(MutationContext(source=source, mutate_id=ALL))[0]
     assert actual == source
 
 
