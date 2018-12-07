@@ -99,7 +99,7 @@ def argument_mutation(children, context, **_):
     power_node = context.stack[stack_pos_of_power_node]
 
     if power_node.children[0].type == 'name' and \
-            power_node.children[0].value in context.dict_synonyms:
+            power_node.children[0].value in ['dict']:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -280,15 +280,10 @@ class MutationContext(object):
         self.mutate_id = mutate_id
         self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
-        assert isinstance(mutate_id, tuple)
-        assert isinstance(mutate_id[0], str)
-        assert isinstance(mutate_id[1], int)
         self.current_line_index = 0
         self.filename = filename
         self.exclude = exclude
         self.stack = []
-        # TODO: refactor out?
-        self.dict_synonyms = ['dict']
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
@@ -338,15 +333,13 @@ def mutate(context):
     :rtype: tuple[str, int]
     """
     try:
-        result = parse(context.source, error_recovery=False)
+        node = parse(context.source, error_recovery=False)
     except Exception:
-        print(
-            'Failed to parse %s. Internal error from parso follows.' % context.filename)
-        print('----------------------------------')
+        print('Failed to parse {}'.format(context.filename))
         raise
 
-    mutate_list_of_nodes(result, context=context)
-    mutated_source = result.get_code().replace(' not not ', ' ')
+    mutate_childs(node, context=context)
+    mutated_source = node.get_code().replace(' not not ', ' ')
 
     if context.number_of_performed_mutations:
         # Check that if we said we mutated the code,
@@ -356,47 +349,47 @@ def mutate(context):
     return mutated_source, context.number_of_performed_mutations
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :param context:
     :type context: MutationContext
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
 
-        t = i.type
+        type = node.type
 
-        if i.type == 'tfpdef':
+        if node.type == 'tfpdef':
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             # indexes are unique per line, so start over here!
             context.index = 0
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if hasattr(node, 'children'):
+            mutate_childs(node, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutate_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        m = mutations_by_type.get(type)
 
         if m is None:
             return
 
         for key, value in sorted(m.items()):
-            old = getattr(i, key)
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
             new = evaluate(
                 value,
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
             assert not callable(new)
             if new != old:
@@ -404,7 +397,7 @@ def mutate_node(i, context):
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(
                         context.mutate_id_of_current_index)
-                    setattr(i, key, new)
+                    setattr(node, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
@@ -415,20 +408,20 @@ def mutate_node(i, context):
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
+def mutate_childs(node, context):
     """
     :type context: MutationContext
     """
-    for i in result.children:
+    for child in node.children:
 
         # TODO: move to a filter?
-        if i.type == 'name' and i.value in SKIP_NAMES:
+        if child.type == 'name' and child.value in SKIP_NAMES:
             continue
 
-        if i.type == 'operator' and i.value == '->':
+        if child.type == 'operator' and child.value == '->':
             return
 
-        mutate_node(i, context=context)
+        mutate_node(child, context=context)
 
         # this is just an optimization to stop early
         if context.number_of_performed_mutations and context.mutate_id != ALL:
