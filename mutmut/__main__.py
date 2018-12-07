@@ -48,10 +48,10 @@ def main(argv=sys.argv[1:]):
     parser = get_argparser()
     args = parser.parse_args(argv)
 
-    if args.use_coverage and not exists('.coverage'):
+    if args.use_coverage and not exists(args.use_coverage):
         raise FileNotFoundError(
-            'No .coverage file found. You must generate a coverage '
-            'file to use this feature.'
+            'Specified coverage file: {} not found. You must generate a '
+            'coverage file to use this feature.'.format(args.use_coverage)
         )
 
     if args.file_or_dir:
@@ -84,8 +84,6 @@ def main(argv=sys.argv[1:]):
             try:
                 covered_lines = covered_lines_by_filename[context.filename]
             except KeyError:
-                print(context.filename)
-                print(coverage_data)
                 covered_lines = coverage_data.lines(
                     os.path.abspath(context.filename))
                 covered_lines_by_filename[context.filename] = covered_lines
