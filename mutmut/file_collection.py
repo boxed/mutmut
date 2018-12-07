@@ -5,7 +5,6 @@
 testing and generating a dictionary of valid mutations"""
 
 import os
-from os.path import isdir
 
 from glob2 import glob
 
@@ -16,11 +15,11 @@ def guess_paths_to_mutate() -> str:
     """guess the path of the source code to mutate"""
     # Guess path with code
     this_dir = os.getcwd().split(os.sep)[-1]
-    if isdir('lib'):
+    if os.path.isdir('lib'):
         return 'lib'
-    elif isdir('src'):
+    elif os.path.isdir('src'):
         return 'src'
-    elif isdir(this_dir):
+    elif os.path.isdir(this_dir):
         return this_dir
     else:
         raise FileNotFoundError('Could not find code to mutate')
@@ -29,17 +28,13 @@ def guess_paths_to_mutate() -> str:
 def read_coverage_data():
     """Read a coverage report a ``.coverage`` and return its coverage data.
 
-    :param use_coverage:
-    :type use_coverage: bool
-
     :return:
     :rtype: CoverageData or None
     """
+    print("Using coverage data at: '.coverage'")
     # noinspection PyPackageRequirements,PyUnresolvedReferences
-    import coverage
-    coverage_data = coverage.CoverageData()
-    coverage_data.read_file('.coverage')
-    return coverage_data
+    from coverage import CoverageData
+    return CoverageData().read_file('.coverage')
 
 
 def get_python_source_files(path, tests_dirs):
@@ -55,7 +50,7 @@ def get_python_source_files(path, tests_dirs):
     :return:
     :rtype:
     """
-    if isdir(path):
+    if os.path.isdir(path):
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if
                        os.path.join(root, d) not in tests_dirs]
@@ -66,11 +61,12 @@ def get_python_source_files(path, tests_dirs):
         yield path
 
 
-def get_tests_dirs(tests_dir: list, paths_to_mutate) -> list:
+def get_tests_dirs(tests_dir, paths_to_mutate) -> list:
     """Get the paths of all testing files/directories
 
     :param tests_dir:
     :type tests_dir: list[str]
+
     :param paths_to_mutate:
     :type paths_to_mutate: list[str]
 
