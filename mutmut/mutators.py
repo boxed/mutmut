@@ -123,7 +123,8 @@ def keyword_mutation(value, context, **_):
         # 'not': 'not not',
         'not': '',
         'is': 'is not',
-    # this will cause "is not not" sometimes, so there's a hack to fix that later
+        # this will cause "is not not" sometimes, so there's
+        # a hack to fix that later
         'in': 'not in',
         'break': 'continue',
         'continue': 'break',
@@ -354,6 +355,10 @@ def mutate_node(node, context):
     :param context:
     :type context: MutationContext
     """
+    # proto
+    if node.type == 'expr_stmt' and \
+            node.get_code().split()[0] in SKIP_NAMES:
+        return
     context.stack.append(node)
     try:
 
@@ -361,6 +366,7 @@ def mutate_node(node, context):
 
         if node.type == 'tfpdef':
             return
+
 
         if node.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = node.start_pos[0] - 1
@@ -383,7 +389,12 @@ def mutate_node(node, context):
             old = getattr(node, key)
             if context.exclude_line():
                 continue
-
+            # TODO: move to a filter?
+            if node.type == 'name' and \
+                    node.value in SKIP_NAMES:
+                print(node)
+                continue
+            # TODO: add more filters
             new = evaluate(
                 value,
                 context=context,
@@ -412,11 +423,8 @@ def mutate_childs(node, context):
     """
     :type context: MutationContext
     """
-    for child in node.children:
 
-        # TODO: move to a filter?
-        if child.type == 'name' and child.value in SKIP_NAMES:
-            continue
+    for child in node.children:
 
         if child.type == 'operator' and child.value == '->':
             return
