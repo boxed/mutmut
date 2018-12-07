@@ -59,7 +59,7 @@ def filesystem(tmpdir):
 def test_full_run_no_surviving_mutants(capsys):
     main(['foo.py'])
     captured = capsys.readouterr()
-    assert "ALIVE:     1" not in captured.out
+    assert "ALIVE:1" not in captured.out
 
 
 @pytest.mark.usefixtures('filesystem')
@@ -68,7 +68,7 @@ def test_full_run_one_surviving_mutant(capsys):
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
     main(['foo.py'])
     captured = capsys.readouterr()
-    assert "ALIVE:    1" in captured.out
+    assert "ALIVE:1" in captured.out
 
 
 @pytest.mark.parametrize("expected, source_path, tests_dirs",
@@ -79,18 +79,20 @@ def test_full_run_one_surviving_mutant(capsys):
                               []),
                              ([os.path.join(".", "foo.py")], ".",
                               [os.path.join(".", "tests")])
-                         ])
+                         ]
+                         )
 @pytest.mark.usefixtures('filesystem')
 def test_python_source_files(expected, source_path, tests_dirs):
     assert expected == list(get_python_source_files(source_path, tests_dirs))
 
 
 def mock_callback_func(line):
-    """test call back function to be thrown into popen_streaming_output"""
+    """test call back function to be thrown into ``popen_streaming_output``"""
     print(line)
 
 
 def test_timeout(capsys):
+    """ensure that ``popen_streaming_output`` can properly timeout"""
     start = time.time()
     with pytest.raises(TimeoutExpired):
         popen_streaming_output(
