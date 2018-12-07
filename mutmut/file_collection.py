@@ -25,16 +25,22 @@ def guess_paths_to_mutate() -> str:
         raise FileNotFoundError('Could not find code to mutate')
 
 
-def read_coverage_data():
+def read_coverage_data(coverage_path):
     """Read a coverage report a ``.coverage`` and return its coverage data.
+
+    :param coverage_path:
+    :type coverage_path: str
 
     :return:
     :rtype: CoverageData or None
     """
-    print("Using coverage data at: '.coverage'")
+    print("Using coverage data at: '{}'".format(coverage_path))
     # noinspection PyPackageRequirements,PyUnresolvedReferences
-    from coverage import CoverageData
-    return CoverageData().read_file('.coverage')
+    import coverage
+    coverage_data = coverage.CoverageData()
+    coverage_data.read_file(coverage_path)
+    assert coverage_data
+    return coverage_data
 
 
 def get_python_source_files(path, tests_dirs):

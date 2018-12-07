@@ -17,7 +17,7 @@ from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
 from mutmut.mutators import MutationContext, list_mutations, mutate_file
 
 
-def compute_return_code(config, exception=None) -> int:
+def compute_return_code(config, exception=None):
     """Compute an error code similar to how pylint does. (using bit OR)
 
     The following output status codes are available for mutmut:
@@ -189,6 +189,7 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     :return:
     :rtype: str
     """
+    print("{}[{}] ".format(filename, mutation_id), end='')
     status = get_cached_mutation_status(filename, mutation_id,
                                         config.hash_of_tests)
     if status == BAD_SURVIVED:
@@ -207,13 +208,10 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
 
     # at this point we are done the mutation test run
     config.progress += 1
-    print("{}[{}] {}".format(filename, mutation_id, status))
+    print("{}".format(status))
 
     if not (status == OK_KILLED or status == OK_SUSPICIOUS):
         mutation_diff = get_mutation_diff(filename, mutation_id)
-        print(
-            "Mutation test failure! Status: {} Mutation: {} source: {}".format(
-                status, config.progress + 1, filename))
         print(*mutation_diff)
 
     return status
@@ -229,7 +227,7 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
     :type file_to_mutate: str
 
     :param mutations:
-    :type mutations: list[
+    :type mutations:
 
     :return:
     """
@@ -257,7 +255,6 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True) -> int:
     :rtype: int
     """
     exception = None
-    print("{:=^56}".format(" Running Mutation Tests "))
     try:
         for file_to_mutate, mutations in mutations_by_file.items():
             run_mutation_tests_for_file(config, file_to_mutate, mutations)
@@ -267,13 +264,13 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True) -> int:
         print("Exception during mutation tests!")
         traceback.print_exc()
     finally:
-        print("{:=^56}".format(" Mutation tests complete "))
-        print(
-            'Mutant Stats: KILLED:{}  TIMEOUT:{}  SUSPICIOUS:{}  ALIVE:{}'.format(
+        print("{:=^79}".format(
+            'KILLED:{} SUSPICIOUS:{} TIMEOUT:{} ALIVE:{}'.format(
                 config.killed_mutants,
-                config.surviving_mutants_timeout,
                 config.suspicious_mutants,
+                config.surviving_mutants_timeout,
                 config.surviving_mutants)
+        )
         )
         if config.surviving_mutants + config.surviving_mutants_timeout > 0:
             print("WARNING: Surviving mutants detected you should "
@@ -378,6 +375,7 @@ def coverage_exclude_callback(context, use_coverage, coverage_data) -> bool:
     :type use_coverage: bool
 
     :param coverage_data: TODO
+    :type coverage_data: CoverageData
 
     :return:
     :rtype: bool

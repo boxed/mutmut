@@ -14,17 +14,20 @@ from mutmut.runner import time_test_suite, \
     add_mutations_by_file, run_mutation_tests, Config
 
 
-def get_argparser() -> argparse.ArgumentParser:
-    """get the main argument parser for mutmut"""
+def get_argparser():
+    """Get the main argument parser for mutmut
+
+    :return: the main argument parser for mutmut
+    :rtype: argparse.ArgumentParser
+    """
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("file_or_dir", nargs="+",
                         help="path to the source files to mutate test")
-    parser.add_argument("--use-coverage", action="store_true",
-                        dest="use_coverage",
+    parser.add_argument("--use-coverage", dest="use_coverage",
                         help="only mutate code that is covered by tests note "
-                             "this requires a ``.coverage`` file to exist "
-                             "within the current working directory")
+                             "this requires a ``.coverage`` file path to be "
+                             "given")
     parser.add_argument("--runner", default='python -m pytest -x',
                         help="The python test runner (and its arguments) to "
                              "invoke each mutation test run ")
@@ -33,8 +36,6 @@ def get_argparser() -> argparse.ArgumentParser:
                              "mutations")
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
-    parser.add_argument("--cache-only", action="store_true", dest="cache_only")
-
 
     return parser
 
@@ -65,36 +66,26 @@ def main(argv=sys.argv[1:]):
 
     tests_dirs = get_tests_dirs(args.tests_dir, paths_to_mutate)
 
+    print("{:=^79}".format(" Starting Mutation Tests "))
     print("Using test runner: {}".format(args.runner))
-    print("Captured the following source files:")
-    for mutate_path in paths_to_mutate:
-        print(mutate_path)
-    print("Captured the following test files:")
-    for test_dir in tests_dirs:
-        print(test_dir)
 
     using_testmon = '--testmon' in args.runner
     baseline_time_elapsed = time_test_suite(
         swallow_output=not args.output_capture,
         test_command=args.runner,
         using_testmon=using_testmon)
-
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
-        print("Using testmon: '{}'->'{}'".format('.testmondata',
-                                                 '.testmondata-initial'))
 
-    if not args.use_coverage:
-        def _exclude(context):
-            return False
-    else:
+    if args.use_coverage:
         covered_lines_by_filename = {}
-        coverage_data = read_coverage_data()
-
+        coverage_data = read_coverage_data(args.use_coverage)
         def _exclude(context):
             try:
                 covered_lines = covered_lines_by_filename[context.filename]
             except KeyError:
+                print(context.filename)
+                print(coverage_data)
                 covered_lines = coverage_data.lines(
                     os.path.abspath(context.filename))
                 covered_lines_by_filename[context.filename] = covered_lines
@@ -105,21 +96,19 @@ def main(argv=sys.argv[1:]):
             if current_line not in covered_lines:
                 return True
             return False
+    else:
+        def _exclude(context):
+            return False
 
-    print("Captured the following source files and mutations")
-    print("{}{:<15}".format("file", "No Mutations"))
     mutations_by_file = {}
 
     for path in paths_to_mutate:
         for filename in get_python_source_files(path, tests_dirs):
             add_mutations_by_file(mutations_by_file, filename, _exclude)
-            print("{:<}{:>15}".format(filename,
-                                      len(mutations_by_file[filename])))
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
-    print("Collected {} mutations from {} file".format(total,
-                                                       len(paths_to_mutate)))
-    print()
+    print("Collected {} mutations from {} file".format(
+        total, len(paths_to_mutate)))
     return run_mutation_tests(
         config=Config(
             swallow_output=not args.output_capture,
