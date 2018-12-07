@@ -3,7 +3,6 @@
 
 """mutation test management and execution"""
 
-import datetime
 import subprocess
 import time
 import traceback
@@ -12,7 +11,7 @@ from shutil import move, copy
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
     set_cached_test_time, register_mutants, get_cached_test_time, \
     get_mutation_diff, UNTESTED, OK_SUSPICIOUS, OK_KILLED, BAD_SURVIVED, \
-    BAD_TIMEOUT
+    BAD_TIMEOUT, get_differ
 from mutmut.mutators import MutationContext, list_mutations, mutate_file
 
 
@@ -144,15 +143,15 @@ def run_untested_mutation(config, filename, mutation_id) -> str:
             context=context
         )
         assert number_of_mutations_performed
-        start = datetime.datetime.now()
+        start = time.time()
         try:
             survived = tests_pass(config)
         except subprocess.TimeoutExpired:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
-        time_elapsed = datetime.datetime.now() - start
-        if time_elapsed.total_seconds() > config.baseline_time_elapsed * 2:
+        time_elapsed = time.time() - start
+        if time_elapsed > config.baseline_time_elapsed * 2:
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -248,6 +247,7 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
     :rtype: int
     """
     exception = None
+    start = time.time()
     try:
         for file_to_mutate, mutations in mutations_by_file.items():
             run_mutation_tests_for_file(config, file_to_mutate, mutations)
@@ -265,6 +265,9 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
                 config.surviving_mutants)
         )
         )
+        print("Executed {}/{} Mutations in {:.3f} seconds".format(
+            config.progress, config.total, time.time() - start))
+
         if config.surviving_mutants + config.surviving_mutants_timeout > 0:
             print("WARNING: Surviving mutants detected you should "
                   "improve your tests")
