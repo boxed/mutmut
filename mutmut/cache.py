@@ -54,6 +54,7 @@ def init_db(f):
             db.generate_mapping(create_tables=True)
 
         return f(*args, **kwargs)
+
     return wrapper
 
 
@@ -176,6 +177,24 @@ def get_mutation_diff(filename, mutation_id):
     return unified_diff(source.splitlines(keepends=True),
                         mutated_source.splitlines(keepends=True),
                         fromfile=filename, tofile=filename)
+
+
+def test_get_differ(filename, mutation_id):
+    with open(filename) as f:
+        source = f.read()
+    context = MutationContext(
+        source=source,
+        filename=filename,
+        mutate_id=mutation_id,
+    )
+    mutated_source, number_of_mutations_performed = mutate(context)
+    mutant = set(mutated_source.splitlines(keepends=True))
+    normie = set(source.splitlines(keepends=True))
+    mutation = list(mutant - normie)
+    assert 1 == len(mutation)
+    original = list(normie - mutant)
+    assert 1 == len(original)
+    return mutation[0].strip(), original[0].strip()
 
 
 @init_db
