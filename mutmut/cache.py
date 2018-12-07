@@ -201,8 +201,6 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test
         # suite will mean it's still killed
-
-        # TODO: is this flawed logic?
         return OK_KILLED
 
     if mutant.tested_against_hash != hash_of_tests:
@@ -231,7 +229,7 @@ def get_cached_test_time():
     """Get the baseline tests (tests without mutations) execution time
 
     :return: execution time of the baseline tests
-    :rtype: float
+    :rtype: float or None
     """
     d = MiscData.get(key='baseline_time_elapsed')
     return float(d.value) if d else None
