@@ -9,15 +9,12 @@ import os
 from difflib import unified_diff
 from functools import wraps
 from io import open
-from logging import getLogger
 
 from pony.orm import Database, Required, db_session, Set, Optional, PrimaryKey
 
 from mutmut.mutators import MutationContext, mutate
 
 db = Database()
-
-__log__ = getLogger(__name__)
 
 UNTESTED = "UNTESTED"
 OK_SUSPICIOUS = "OK_SUSPICIOUS"
@@ -46,8 +43,7 @@ class Mutant(db.Entity):
     line = Required(Line)
     index = Required(int)
     tested_against_hash = Optional(str, autostrip=False)
-    status = Required(str,
-                      autostrip=False)  # really an enum of mutant_statuses
+    status = Required(str, autostrip=False)
 
 
 def init_db(f):
