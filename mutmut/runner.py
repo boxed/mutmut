@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""mutation test management and execution"""
+"""Mutation test management and execution"""
 
 import subprocess
 import time

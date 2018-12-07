@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""mutation testing definitions and helpers"""
+"""Mutation testing definitions and helpers"""
 
 from parso import parse
 from parso.python.tree import Name

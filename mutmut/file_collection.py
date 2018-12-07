@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""functionality for obtaining both source and test files for mutation
+"""Functionality for obtaining both source and test files for mutation
 testing and generating a dictionary of valid mutations"""
 
 import os

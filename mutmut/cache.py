@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""functionality for operating, populating and reading from the mutmut test
+"""Functionality for operating, populating and reading from the mutmut test
 and mutation cache"""
 
 import hashlib

@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+"""Main entrypoint definitions for mutmut"""
+
 import argparse
 import os
 import sys
