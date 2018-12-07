@@ -6,11 +6,12 @@
 import subprocess
 import time
 import traceback
+from difflib import unified_diff
 from shutil import move, copy
 
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
     set_cached_test_time, register_mutants, get_cached_test_time, \
-    get_mutation_diff, UNTESTED, OK_SUSPICIOUS, OK_KILLED, BAD_SURVIVED, \
+    UNTESTED, OK_SUSPICIOUS, OK_KILLED, BAD_SURVIVED, \
     BAD_TIMEOUT, get_differ
 from mutmut.mutators import MutationContext, list_mutations, mutate_file
 
@@ -165,6 +166,16 @@ def run_untested_mutation(config, filename, mutation_id) -> str:
         move(filename + '.bak', filename)
 
 
+def get_mutation_original_pair(source, mutated_source):
+    mutant = set(mutated_source.splitlines(keepends=True))
+    normie = set(source.splitlines(keepends=True))
+    mutation = list(mutant - normie)
+    assert 1 == len(mutation)
+    original = list(normie - mutant)
+    assert 1 == len(original)
+    return original[0].strip(), mutation[0].strip()
+
+
 def get_mutation_test_status(config, filename, mutation_id) -> str:
     """Obtain a mutation test's status by either obtaining the cached result
     or by running the mutation test.
@@ -178,10 +189,12 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     :param mutation_id:
     :type mutation_id: tuple[str, int]
 
-    :return:
+    :return: the status of the executed mutation test
     :rtype: str
     """
-    print("{}[{}] ".format(filename, mutation_id), end='')
+    source, mutated_source = get_differ(filename, mutation_id)
+    original, mutation = get_mutation_original_pair(source, mutated_source)
+    print("{}['{}'->'{}'] ".format(filename, original, mutation), end='')
     status = get_cached_mutation_status(filename, mutation_id,
                                         config.hash_of_tests)
     if status == BAD_SURVIVED:
@@ -195,16 +208,16 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     elif status == UNTESTED:
         status = run_untested_mutation(config, filename, mutation_id)
     else:
-        raise ValueError(
-            "Unknown mutation test status obtained: {}".format(status))
+        raise ValueError("Unknown mutation test status: {}".format(status))
 
     # at this point we are done the mutation test run
     config.progress += 1
     print(status)
 
     if not (status == OK_KILLED or status == OK_SUSPICIOUS):
-        mutation_diff = get_mutation_diff(filename, mutation_id)
-        print(*mutation_diff)
+        print(*unified_diff(source.splitlines(keepends=True),
+                            mutated_source.splitlines(keepends=True),
+                            fromfile=filename, tofile=filename))
 
     return status
 
@@ -258,7 +271,7 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
         traceback.print_exc()
     finally:
         print("{:=^79}".format(
-            'KILLED:{} SUSPICIOUS:{} TIMEOUT:{} ALIVE:{}'.format(
+            ' KILLED:{} SUSPICIOUS:{} TIMEOUT:{} ALIVE:{} '.format(
                 config.killed_mutants,
                 config.suspicious_mutants,
                 config.surviving_mutants_timeout,

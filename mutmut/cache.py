@@ -6,7 +6,6 @@ and mutation cache"""
 
 import hashlib
 import os
-from difflib import unified_diff
 from functools import wraps
 from io import open
 
@@ -173,13 +172,23 @@ def get_mutation_diff(filename, mutation_id):
         filename=filename,
         mutate_id=mutation_id,
     )
-    mutated_source, number_of_mutations_performed = mutate(context)
-    return unified_diff(source.splitlines(keepends=True),
-                        mutated_source.splitlines(keepends=True),
-                        fromfile=filename, tofile=filename)
+    mutated_source, _ = mutate(context)
+    return source, mutated_source
 
 
-def test_get_differ(filename, mutation_id):
+def get_differ(filename, mutation_id):
+    """Get a tuple noting the differences between the mutated and original
+    code.
+
+    :param filename:
+    :type filename: str
+
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+
+    :return: the tuple (mutated code, original code)
+    :rtype: tuple[str, str]
+    """
     with open(filename) as f:
         source = f.read()
     context = MutationContext(
@@ -188,13 +197,7 @@ def test_get_differ(filename, mutation_id):
         mutate_id=mutation_id,
     )
     mutated_source, number_of_mutations_performed = mutate(context)
-    mutant = set(mutated_source.splitlines(keepends=True))
-    normie = set(source.splitlines(keepends=True))
-    mutation = list(mutant - normie)
-    assert 1 == len(mutation)
-    original = list(normie - mutant)
-    assert 1 == len(original)
-    return mutation[0].strip(), original[0].strip()
+    return source, mutated_source
 
 
 @init_db
