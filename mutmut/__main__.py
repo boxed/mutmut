@@ -1,26 +1,38 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+"""main entrypoint for mutmut"""
+
 import argparse
 import logging
 import os
 import sys
-from logging import getLogger, StreamHandler, basicConfig, Formatter
-from logging.handlers import TimedRotatingFileHandler
+from logging import getLogger
 from os.path import exists
 from shutil import copy
 
-from glob2 import glob
-
 from mutmut.cache import hash_of_tests
 from mutmut.file_collection import guess_paths_to_mutate, read_coverage_data, \
-    get_python_source_files
+    get_python_source_files, get_tests_dirs
 from mutmut.runner import time_test_suite, \
     add_mutations_by_file, run_mutation_tests, Config
 
 __log__ = getLogger(__name__)
 
 LOG_LEVEL_STRINGS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
+
+START_MESSAGE = """
+=============== Mutation Testing Starting ==============
+
+These are the steps:
+1. A full test suite run will be made to make sure we 
+   can run the tests successfully and we know how long 
+   it takes (to detect infinite loops for example)
+2. Mutants will be generated and checked
+
+Mutants are written to the cache in the .mutmut-cache 
+
+========================================================"""
 
 
 def log_level(log_level_string: str):
@@ -36,59 +48,35 @@ def log_level(log_level_string: str):
 
 
 def get_argparser() -> argparse.ArgumentParser:
-    """get the main arguement parser for mutmut"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("file_or_dir", nargs="+")
+    """get the main argument parser for mutmut"""
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("file_or_dir", nargs="+",
+                        help="path to the source files to mutate test")
     parser.add_argument("--use-coverage", action="store_true",
-                        dest="use_coverage")
-    parser.add_argument("--runner", default='python -m pytest -x',
+                        dest="use_coverage",
+                        help="only mutate code that is covered by tests note "
+                             "this requires a ``.coverage`` file to exist "
+                             "within the current working directory")
+    parser.add_argument("--runner", default='pytest',
                         help="The python test runner (and its arguments) to "
-                             "invoke each mutation test run")
-    parser.add_argument("--backup", action="store_true")
-    parser.add_argument("--tests", dest="tests_dir", default="tests")
+                             "invoke each mutation test run ")
+    parser.add_argument("--tests", dest="tests_dir", default="tests",
+                        help="path to the testing files to challenge with"
+                             "mutations")
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
-    parser.add_argument("--cache-only", action="store_true", dest="cache_only")
-
-    group = parser.add_argument_group(title="Logging")
-    group.add_argument("--log-level", dest="log_level", default="INFO",
-                       type=log_level, help="Set the logging output level")
-    group.add_argument("--log-dir", dest="log_dir",
-                       help="Enable TimeRotatingLogging at the directory "
-                            "specified")
-    group.add_argument("-v", "--verbose", action="store_true",
-                       help="Enable verbose logging")
 
     return parser
 
 
 def main(argv=sys.argv[1:]):
     """main entrypoint for mutmut"""
+    # stop python from creating .pyc files
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+
     parser = get_argparser()
     args = parser.parse_args(argv)
-
-    # configure logging
-    handlers_ = []
-    log_format = Formatter(fmt="[%(asctime)s] [%(levelname)s] - %(message)s")
-    if args.log_dir:
-        os.makedirs(args.log_dir, exist_ok=True)
-        file_handler = TimedRotatingFileHandler(
-            os.path.join(args.log_dir, "mini_project_2.log"),
-            when="d", interval=1, backupCount=7, encoding="UTF-8",
-        )
-        file_handler.setFormatter(log_format)
-        file_handler.setLevel(args.log_level)
-        handlers_.append(file_handler)
-    if args.verbose:
-        stream_handler = StreamHandler(stream=sys.stderr)
-        stream_handler.setFormatter(log_format)
-        stream_handler.setLevel(args.log_level)
-        handlers_.append(stream_handler)
-
-    basicConfig(
-        handlers=handlers_,
-        level=args.log_level
-    )
 
     if args.use_coverage and not exists('.coverage'):
         raise FileNotFoundError(
@@ -102,36 +90,22 @@ def main(argv=sys.argv[1:]):
         paths_to_mutate = [guess_paths_to_mutate()]
 
     if not paths_to_mutate:
-        raise Exception('You must specify a list of paths to mutate. '
-                        'Either as a command line argument, or by setting '
-                        'paths_to_mutate under the section')
+        raise FileNotFoundError('You must specify a list of paths to mutate. '
+                                'Either as a command line argument, or by '
+                                'setting paths_to_mutate under the section')
 
-    tests_dirs = []
-    for p in args.tests_dir.split(':'):
-        tests_dirs.extend(glob(p, recursive=True))
+    tests_dirs = get_tests_dirs(args.tests_dir, paths_to_mutate)
 
-    for p in paths_to_mutate:
-        for pt in args.tests_dir.split(':'):
-            tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
+    print(START_MESSAGE)
+    print("Using test runner: {}".format(args.runner))
+    print("Captured the following source files:")
+    for mutate_path in paths_to_mutate:
+        print(mutate_path)
+    print("Captured the following test files:")
+    for test_dir in tests_dirs:
+        print(test_dir)
 
-    # stop python from creating .pyc files
-    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
-
-    # TODO:
     using_testmon = '--testmon' in args.runner
-
-    print("""
-- Mutation testing starting - 
-
-These are the steps:
-1. A full test suite run will be made to make sure we 
-   can run the tests successfully and we know how long 
-   it takes (to detect infinite loops for example)
-2. Mutants will be generated and checked
-
-Mutants are written to the cache in the .mutmut-cache 
-""")
-
     baseline_time_elapsed = time_test_suite(
         swallow_output=not args.output_capture,
         test_command=args.runner,
@@ -139,13 +113,16 @@ Mutants are written to the cache in the .mutmut-cache
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
+        print("Using testmon: '{}'->'{}'".format('.testmondata',
+                                                 '.testmondata-initial'))
 
     if not args.use_coverage:
         def _exclude(context):
             return False
     else:
         covered_lines_by_filename = {}
-        coverage_data = read_coverage_data(args.use_coverage)
+        coverage_data = read_coverage_data()
+        print("Using coverage data at: '.coverage'")
 
         def _exclude(context):
             try:
@@ -162,29 +139,32 @@ Mutants are written to the cache in the .mutmut-cache
                 return True
             return False
 
+    print("Captured the following source files and mutations")
+    print("{}{:<15}".format("file", "No Mutations"))
     mutations_by_file = {}
-
     for path in paths_to_mutate:
         for filename in get_python_source_files(path, tests_dirs):
             add_mutations_by_file(mutations_by_file, filename, _exclude)
+            print("{:<}{:>15}".format(filename,
+                                      len(mutations_by_file[filename])))
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
-
-    config = Config(
-        swallow_output=not args.output_capture,
-        test_command=args.runner,
-        exclude_callback=_exclude,
-        baseline_time_elapsed=baseline_time_elapsed,
-        backup=args.backup,
-        total=total,
-        using_testmon=using_testmon,
-        cache_only=args.cache_only,
-        tests_dirs=tests_dirs,
-        hash_of_tests=hash_of_tests(tests_dirs),
+    print("Collected {} mutations from {} file".format(total,
+                                                       len(paths_to_mutate)))
+    print()
+    return run_mutation_tests(
+        config=Config(
+            swallow_output=not args.output_capture,
+            test_command=args.runner,
+            exclude_callback=_exclude,
+            baseline_time_elapsed=baseline_time_elapsed,
+            total=total,
+            using_testmon=using_testmon,
+            tests_dirs=tests_dirs,
+            hash_of_tests=hash_of_tests(tests_dirs),
+        ),
+        mutations_by_file=mutations_by_file
     )
-
-    # TODO: return code based?
-    run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
 
 if __name__ == '__main__':

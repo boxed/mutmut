@@ -3,16 +3,11 @@
 
 """mutation testing definitions and helpers"""
 
-from logging import getLogger
-
 from parso import parse
 from parso.python.tree import Name
 from tri.declarative import evaluate
 
-__log__ = getLogger(__name__)
-
 ALL = ('all', -1)
-
 
 # variable names we should skip modifying as we are sure that proper
 # python practice avoids this being sificant to mutate

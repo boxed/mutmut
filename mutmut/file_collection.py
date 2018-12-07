@@ -1,11 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""functionality for obtaining both source and test file paths for mutation
-testing"""
+"""functionality for obtaining both source and test files for mutation
+testing and generating a dictionary of valid mutations"""
 
 import os
 from os.path import isdir
+
+from glob2 import glob
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
 
@@ -24,7 +26,7 @@ def guess_paths_to_mutate() -> str:
         raise FileNotFoundError('Could not find code to mutate')
 
 
-def read_coverage_data(use_coverage):
+def read_coverage_data():
     """Read a coverage report a ``.coverage`` and return its coverage data.
 
     :param use_coverage:
@@ -33,15 +35,11 @@ def read_coverage_data(use_coverage):
     :return:
     :rtype: CoverageData or None
     """
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-        return coverage_data
-    else:
-        return None
+    # noinspection PyPackageRequirements,PyUnresolvedReferences
+    import coverage
+    coverage_data = coverage.CoverageData()
+    coverage_data.read_file('.coverage')
+    return coverage_data
 
 
 def get_python_source_files(path, tests_dirs):
@@ -66,3 +64,25 @@ def get_python_source_files(path, tests_dirs):
                     yield os.path.join(root, filename)
     else:
         yield path
+
+
+def get_tests_dirs(tests_dir: list, paths_to_mutate) -> list:
+    """Get the paths of all testing files/directories
+
+    :param tests_dir:
+    :type tests_dir: list[str]
+    :param paths_to_mutate:
+    :type paths_to_mutate: list[str]
+
+    :return:
+    :rtype: list[str]
+    """
+    full_tests_dirs = []
+    for p in tests_dir:
+        full_tests_dirs.extend(glob(p, recursive=True))
+
+    for p in paths_to_mutate:
+        for pt in tests_dir:
+            full_tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
+
+    return full_tests_dirs

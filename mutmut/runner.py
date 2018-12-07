@@ -7,7 +7,7 @@ import datetime
 import os
 import subprocess
 import time
-from logging import getLogger
+import traceback
 from shutil import move, copy
 
 from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
@@ -16,7 +16,37 @@ from mutmut.cache import get_cached_mutation_status, update_mutant_status, \
     BAD_TIMEOUT
 from mutmut.mutators import MutationContext, list_mutations, mutate_file
 
-__log__ = getLogger(__name__)
+
+def compute_return_code(config, exception=None) -> int:
+    """Compute an error code similar to how pylint does. (using bit OR)
+
+    The following output status codes are available for mutmut:
+     * 0 if all mutants were killed (OK_KILLED)
+     * 1 if a fatal error occurred
+     * 2 if one or more mutants survived (BAD_SURVIVED)
+     * 4 if one or more mutants timed out (BAD_TIMEOUT)
+     * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
+     status codes 1 to 8 will be bit-ORed so you can know which different
+     categories has been issued by analysing the mutmut output status code
+
+    :param exception:
+    :type exception: Exception
+    :param config:
+    :type config: Config
+
+    :return: a integer noting the return status of the mutation tests.
+    :rtype: int
+    """
+    code = 0
+    if exception is not None:
+        code = code | 1
+    if config.surviving_mutants > 0:
+        code = code | 2
+    if config.surviving_mutants_timeout > 0:
+        code = code | 4
+    if config.suspicious_mutants > 0:
+        code = code | 8
+    return code
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -52,13 +82,11 @@ def popen_streaming_output(cmd, callback, timeout=None):
             line = output
             callback(line)
         except OSError:
-            __log__.exception(
-                "OSError during subprocess execution: {}".format(cmd))
-            # This seems to happen on some platforms, including TravisCI. It seems like
-            # it's ok to just let this pass here, you just won't get as nice feedback.
+            # This seems to happen on some platforms, including TravisCI.
+            # It seems like it's ok to just let this pass here, you just
+            # won't get as nice feedback.
             pass
         except subprocess.TimeoutExpired:
-            __log__.exception("subprocess timed out")
             p.kill()
             raise
 
@@ -87,9 +115,10 @@ def tests_pass(config):
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_uncached_mutation(config, filename, mutation_id) -> str:
-    """Run a mutation test that is currently not existing within the cache
-    or reported to be ``UNTESTED``
+def run_untested_mutation(config, filename, mutation_id) -> str:
+    """Run a mutation test that is currently reported to be ``UNTESTED``.
+    Likely this mutation is brand new, recently updated, or  not existing
+    within the cache.
 
     :param config:
     :type config: Config
@@ -120,7 +149,7 @@ def run_uncached_mutation(config, filename, mutation_id) -> str:
         try:
             survived = tests_pass(config)
         except subprocess.TimeoutExpired:
-            __log__.exception(
+            print(
                 "mutation test run timed out: "
                 "mutation_id: {}, source filename: {}".format(
                     mutation_id, filename
@@ -151,7 +180,7 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     :param config:
     :type config: Config
 
-    :param filename:
+    :param filename: the source file that was mutated within this test
     :type filename: str
 
     :param mutation_id:
@@ -171,13 +200,14 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     elif status == OK_SUSPICIOUS:
         config.suspicious_mutants += 1
     elif status == UNTESTED:
-        status = run_uncached_mutation(config, filename, mutation_id)
+        status = run_untested_mutation(config, filename, mutation_id)
     else:
         raise ValueError("unknown status obtained by "
                          "get_cached_mutation_status: {}".format(status))
 
     # at this point we are done the mutation test run
-    config.print_progress()
+    config.progress += 1
+    print("{}[{}] {}".format(filename, mutation_id, status))
 
     if not (status == OK_KILLED or status == OK_SUSPICIOUS):
         mutation_diff = get_mutation_diff(filename, mutation_id)
@@ -207,19 +237,54 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
         status = get_mutation_test_status(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status,
                              config.hash_of_tests)
-        config.progress += 1
 
 
-def run_mutation_tests(config, mutations_by_file):
-    """
+def run_mutation_tests(config, mutations_by_file, catch_exception=True) -> int:
+    """Run a series of mutations tests with the given config and mutations
+    per file.
+
+    :param config:
     :type config: Config
+
+    :param mutations_by_file:
     :type mutations_by_file: dict[str, list[tuple[str, int]]]
+
+    :param catch_exception: boolean indicating whether mutmut should catch
+        exceptions during mutation testing. This should be normally left on.
+    :type catch_exception: bool
+
+    :return: a integer noting the return status of the mutation tests.
+    :rtype: int
     """
-    for file_to_mutate, mutations in mutations_by_file.items():
-        run_mutation_tests_for_file(config, file_to_mutate, mutations)
+    exception = None
+    print("{:=^56}".format(" Running Mutation Tests "))
+    try:
+        for file_to_mutate, mutations in mutations_by_file.items():
+            run_mutation_tests_for_file(config, file_to_mutate, mutations)
+    except Exception as exception:
+        if not catch_exception:
+            raise exception
+        print("Exception during mutation tests!")
+        traceback.print_exc()
+    finally:
+        print("{:=^56}".format(" Mutation tests complete "))
+        print(
+            'Mutant Stats: KILLED:{}  TIMEOUT:{}  SUSPICIOUS:{}  ALIVE:{}'.format(
+                config.killed_mutants,
+                config.surviving_mutants_timeout,
+                config.suspicious_mutants,
+                config.surviving_mutants)
+        )
+        if config.surviving_mutants + config.surviving_mutants_timeout > 0:
+            print("WARNING: Surviving mutants detected you should "
+                  "improve your tests")
+        else:
+            print("No surviving mutants detected you should **still**"
+                  "improve your tests")
+        return compute_return_code(config, exception)
 
 
-def time_test_suite(swallow_output, test_command, using_testmon):
+def time_test_suite(swallow_output, test_command, using_testmon) -> float:
     """Obtain the run-time of a test suite on a non mutated code source.
     This is used to obtain an approximate run-time for setting the mutation
     test run timeout value.
@@ -238,15 +303,14 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     """
     cached_time = get_cached_test_time()
     if cached_time is not None:
-        __log__.info("using cached baseline tests "
-                     "execution time: {}".format(cached_time))
-        print('1. Using cached time for baseline tests, to run baseline '
-              'again delete the cache file')
+        print(
+            "Using cached baseline tests execution time: {}\n"
+            "Note: to reset this value delete the '.mutmut-cache'".format(
+                cached_time)
+        )
         return cached_time
 
-    __log__.info("running baseline tests (without mutations) to "
-                 "obtain their execution time")
-    print('1. Running tests without mutations')
+    print('Running tests without mutations: cmd: {}'.format(test_command))
     start_time = time.time()
 
     output = []
@@ -260,12 +324,12 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time.time() - start_time
-        __log__.info("obtained baseline test "
-                     "execution time: {}".format(baseline_time_elapsed))
+        print("Obtained test execution time without mutations: {}".format(
+            baseline_time_elapsed))
     else:
-        raise Exception(
+        raise RuntimeError(
             "Tests don't run cleanly without mutations. "
-            "Test command was: {}\n\nOutput:\n\n{}".format(
+            "Test command was: {}\nOutput:\n{}".format(
                 test_command, "".join(output)
             )
         )
@@ -281,7 +345,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude):
     :param mutations_by_file:
     :type mutations_by_file: dict[str, list[tuple[str, int]]]
 
-    :param filename:
+    :param filename: the file to create mutations in
     :type filename: str
 
     :param exclude:
@@ -296,17 +360,15 @@ def add_mutations_by_file(mutations_by_file, filename, exclude):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception:
-        __log__.exception(
-            "failed creation mutations for file: {} on line: {}".format(
+        print(
+            "Failed creating mutations for file: {} on line: {}".format(
                 context.filename, context.current_source_line
             )
         )
-        print('Failed while creating mutations for %s, for line "%s"' % (
-            context.filename, context.current_source_line))
         raise
 
 
-def coverage_exclude_callback(context, use_coverage, coverage_data):
+def coverage_exclude_callback(context, use_coverage, coverage_data) -> bool:
     """
 
     :param context:
@@ -334,18 +396,16 @@ class Config(object):
     """Container for all the needed configuration for a mutation test run"""
 
     def __init__(self, swallow_output, test_command, exclude_callback,
-                 baseline_time_elapsed, backup, total,
-                 using_testmon, cache_only, tests_dirs, hash_of_tests):
+                 baseline_time_elapsed, total,
+                 using_testmon, tests_dirs, hash_of_tests):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
         self.baseline_time_elapsed = baseline_time_elapsed
-        self.backup = backup
         self.total = total
         self.using_testmon = using_testmon
         self.progress = 0
         self.skipped = 0
-        self.cache_only = cache_only
         self.tests_dirs = tests_dirs
         self.hash_of_tests = hash_of_tests
         self.killed_mutants = 0
@@ -353,9 +413,3 @@ class Config(object):
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
 
-    def print_progress(self):
-        print(
-            'Mutation: {:5d}/{}  Mutant Stats: KILLED:{:5d}  TIMEOUT:{:5d}  SUSPICIOUS:{:5d}  ALIVE:{:5d}'.format(
-                self.progress + 1, self.total, self.killed_mutants,
-                self.surviving_mutants_timeout, self.suspicious_mutants,
-                self.surviving_mutants))
