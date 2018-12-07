@@ -4,7 +4,6 @@
 """mutation test management and execution"""
 
 import datetime
-import os
 import subprocess
 import time
 import traceback
@@ -149,12 +148,6 @@ def run_untested_mutation(config, filename, mutation_id) -> str:
         try:
             survived = tests_pass(config)
         except subprocess.TimeoutExpired:
-            print(
-                "mutation test run timed out: "
-                "mutation_id: {}, source filename: {}".format(
-                    mutation_id, filename
-                )
-            )
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
@@ -203,12 +196,12 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     elif status == UNTESTED:
         status = run_untested_mutation(config, filename, mutation_id)
     else:
-        raise ValueError("unknown status obtained by "
-                         "get_cached_mutation_status: {}".format(status))
+        raise ValueError(
+            "Unknown mutation test status obtained: {}".format(status))
 
     # at this point we are done the mutation test run
     config.progress += 1
-    print("{}".format(status))
+    print(status)
 
     if not (status == OK_KILLED or status == OK_SUSPICIOUS):
         mutation_diff = get_mutation_diff(filename, mutation_id)
@@ -237,7 +230,7 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
                              config.hash_of_tests)
 
 
-def run_mutation_tests(config, mutations_by_file, catch_exception=True) -> int:
+def run_mutation_tests(config, mutations_by_file, catch_exception=True):
     """Run a series of mutations tests with the given config and mutations
     per file.
 
@@ -363,31 +356,6 @@ def add_mutations_by_file(mutations_by_file, filename, exclude):
             )
         )
         raise
-
-
-def coverage_exclude_callback(context, use_coverage, coverage_data) -> bool:
-    """
-
-    :param context:
-    :type context: MutationContext
-
-    :param use_coverage:
-    :type use_coverage: bool
-
-    :param coverage_data: TODO
-    :type coverage_data: CoverageData
-
-    :return:
-    :rtype: bool
-    """
-    if use_coverage:
-        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-        if measured_lines is None:
-            return True
-        current_line = context.current_line_index + 1
-        if current_line not in measured_lines:
-            return True
-    return False
 
 
 class Config(object):
