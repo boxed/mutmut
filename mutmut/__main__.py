@@ -1,13 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""main entrypoint for mutmut"""
-
 import argparse
-import logging
 import os
 import sys
-from logging import getLogger
 from os.path import exists
 from shutil import copy
 
@@ -16,35 +12,6 @@ from mutmut.file_collection import guess_paths_to_mutate, read_coverage_data, \
     get_python_source_files, get_tests_dirs
 from mutmut.runner import time_test_suite, \
     add_mutations_by_file, run_mutation_tests, Config
-
-__log__ = getLogger(__name__)
-
-LOG_LEVEL_STRINGS = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
-
-START_MESSAGE = """
-=============== Mutation Testing Starting ==============
-
-These are the steps:
-1. A full test suite run will be made to make sure we 
-   can run the tests successfully and we know how long 
-   it takes (to detect infinite loops for example)
-2. Mutants will be generated and checked
-
-Mutants are written to the cache in the .mutmut-cache 
-
-========================================================"""
-
-
-def log_level(log_level_string: str):
-    """Argparse type function for determining the specified logging level"""
-    if log_level_string not in LOG_LEVEL_STRINGS:
-        raise argparse.ArgumentTypeError(
-            "invalid choice: {} (choose from {})".format(
-                log_level_string,
-                LOG_LEVEL_STRINGS
-            )
-        )
-    return getattr(logging, log_level_string, logging.INFO)
 
 
 def get_argparser() -> argparse.ArgumentParser:
@@ -58,7 +25,7 @@ def get_argparser() -> argparse.ArgumentParser:
                         help="only mutate code that is covered by tests note "
                              "this requires a ``.coverage`` file to exist "
                              "within the current working directory")
-    parser.add_argument("--runner", default='pytest',
+    parser.add_argument("--runner", default='python -m pytest -x',
                         help="The python test runner (and its arguments) to "
                              "invoke each mutation test run ")
     parser.add_argument("--tests", dest="tests_dir", default="tests",
@@ -66,6 +33,8 @@ def get_argparser() -> argparse.ArgumentParser:
                              "mutations")
     parser.add_argument("-s", action="store_true", dest="output_capture",
                         help="turn off output capture")
+    parser.add_argument("--cache-only", action="store_true", dest="cache_only")
+
 
     return parser
 
@@ -96,7 +65,6 @@ def main(argv=sys.argv[1:]):
 
     tests_dirs = get_tests_dirs(args.tests_dir, paths_to_mutate)
 
-    print(START_MESSAGE)
     print("Using test runner: {}".format(args.runner))
     print("Captured the following source files:")
     for mutate_path in paths_to_mutate:
@@ -122,7 +90,6 @@ def main(argv=sys.argv[1:]):
     else:
         covered_lines_by_filename = {}
         coverage_data = read_coverage_data()
-        print("Using coverage data at: '.coverage'")
 
         def _exclude(context):
             try:
@@ -142,6 +109,7 @@ def main(argv=sys.argv[1:]):
     print("Captured the following source files and mutations")
     print("{}{:<15}".format("file", "No Mutations"))
     mutations_by_file = {}
+
     for path in paths_to_mutate:
         for filename in get_python_source_files(path, tests_dirs):
             add_mutations_by_file(mutations_by_file, filename, _exclude)
