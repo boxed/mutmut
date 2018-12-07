@@ -58,11 +58,13 @@ def init_db(f):
 
 
 def hash_of(filename):
-    """
+    """Get the sha256 hash of a file given a the specified path
 
-    :param filename:
+    :param filename: path to the file to sha256 hash
     :type filename: str
-    :return:
+
+    :return: a sha256 hash string of the file's contents
+    :rtype: str
     """
     with open(filename, 'rb') as f:
         m = hashlib.sha256()
@@ -112,8 +114,6 @@ def register_mutants(mutations_by_file):
 
     :param mutations_by_file:
     :type mutations_by_file: dict[str, list[tuple[str, int]]]
-
-    :return:
     """
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
@@ -153,34 +153,11 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     mutant.tested_against_hash = tests_hash
 
 
-def get_mutation_diff(filename, mutation_id):
-    """Get the difference between source file and the source file mutated by
-    the mutation noted by ``mutation_id``
-
-    :param filename: thw source file's name
-    :type filename: str
-
-    :param mutation_id: id of the mutation on the source file
-    :type mutation_id: tuple[str, int]
-
-    :return: TODO: type
-    """
-    with open(filename) as f:
-        source = f.read()
-    context = MutationContext(
-        source=source,
-        filename=filename,
-        mutate_id=mutation_id,
-    )
-    mutated_source, _ = mutate(context)
-    return source, mutated_source
-
-
 def get_differ(filename, mutation_id):
     """Get a tuple noting the differences between the mutated and original
     code.
 
-    :param filename:
+    :param filename: the source file's name
     :type filename: str
 
     :param mutation_id:
