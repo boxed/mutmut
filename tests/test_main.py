@@ -59,7 +59,7 @@ def filesystem(tmpdir):
 def test_full_run_no_surviving_mutants(capsys):
     main(['foo.py'])
     captured = capsys.readouterr()
-    assert "ALIVE:1" not in captured.out
+    assert "ALIVE:0" in captured.out
 
 
 @pytest.mark.usefixtures('filesystem')
