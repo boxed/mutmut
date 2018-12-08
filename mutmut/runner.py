@@ -222,26 +222,6 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     return status
 
 
-def run_mutation_tests_for_file(config, file_to_mutate, mutations):
-    """
-
-    :param config:
-    :type config: Config
-
-    :param file_to_mutate:
-    :type file_to_mutate: str
-
-    :param mutations:
-    :type mutations:
-
-    :return:
-    """
-    for mutation_id in mutations:
-        status = get_mutation_test_status(config, file_to_mutate, mutation_id)
-        update_mutant_status(file_to_mutate, mutation_id, status,
-                             config.hash_of_tests)
-
-
 def run_mutation_tests(config, mutations_by_file, catch_exception=True):
     """Run a series of mutations tests with the given config and mutations
     per file.
@@ -259,16 +239,19 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
     :return: a integer noting the return status of the mutation tests.
     :rtype: int
     """
-    exception = None
     start = time.time()
     try:
         for file_to_mutate, mutations in mutations_by_file.items():
             run_mutation_tests_for_file(config, file_to_mutate, mutations)
     except Exception as exception:
-        if not catch_exception:
-            raise exception
         print("Exception during mutation tests!")
         traceback.print_exc()
+        if not catch_exception:
+            raise exception
+        return compute_return_code(config, exception)
+    else:
+        print("All mutation tests executed successfully")
+        return compute_return_code(config)
     finally:
         print("{:=^79}".format(
             ' KILLED:{} SUSPICIOUS:{} TIMEOUT:{} ALIVE:{} '.format(
@@ -287,7 +270,26 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
         else:
             print("No surviving mutants detected you should **still**"
                   "improve your tests")
-        return compute_return_code(config, exception)
+
+
+def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """
+
+    :param config:
+    :type config: Config
+
+    :param file_to_mutate:
+    :type file_to_mutate: str
+
+    :param mutations:
+    :type mutations:
+
+    :return:
+    """
+    for mutation_id in mutations:
+        status = get_mutation_test_status(config, file_to_mutate, mutation_id)
+        update_mutant_status(file_to_mutate, mutation_id, status,
+                             config.hash_of_tests)
 
 
 def time_test_suite(swallow_output, test_command, using_testmon) -> float:
