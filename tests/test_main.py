@@ -14,6 +14,12 @@ from mutmut.runner import popen_streaming_output
 in_travis = os.environ['PATH'].startswith('/home/travis/')
 
 file_to_mutate_lines = [
+    "__version__ = '1.0.0'",
+    "__author__ = 'foobar'",
+    "__copyright__ = '1356'",
+    "__license__ = 'bsd'",
+    "__version__ = '1.0.0'",
+    "__summary__ = 'the most advanced library known to man foo.py'",
     "def foo(a, b):",
     "    return a < b",
     "e = 1",
@@ -59,6 +65,7 @@ def filesystem(tmpdir):
 def test_full_run_no_surviving_mutants(capsys):
     main(['foo.py'])
     captured = capsys.readouterr()
+    print(captured.out)
     assert "ALIVE:0" in captured.out
 
 
