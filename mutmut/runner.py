@@ -222,7 +222,7 @@ def get_mutation_test_status(config, filename, mutation_id) -> str:
     return status
 
 
-def run_mutation_tests(config, mutations_by_file, catch_exception=True):
+def run_mutation_tests(config, mutations_by_file):
     """Run a series of mutations tests with the given config and mutations
     per file.
 
@@ -231,10 +231,6 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
 
     :param mutations_by_file:
     :type mutations_by_file: dict[str, list[tuple[str, int]]]
-
-    :param catch_exception: boolean indicating whether mutmut should catch
-        exceptions during mutation testing. This should be normally left on.
-    :type catch_exception: bool
 
     :return: a integer noting the return status of the mutation tests.
     :rtype: int
@@ -246,11 +242,9 @@ def run_mutation_tests(config, mutations_by_file, catch_exception=True):
     except Exception as exception:
         print("Exception during mutation tests!")
         traceback.print_exc()
-        if not catch_exception:
-            raise exception
         return compute_return_code(config, exception)
     else:
-        print("All mutation tests executed successfully")
+        print("All mutation tests executed successfully!")
         return compute_return_code(config)
     finally:
         print("{:=^79}".format(
