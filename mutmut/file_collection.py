@@ -1,10 +1,25 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+"""Functionality for obtaining both source and test files for mutation
+testing and generating a dictionary of valid mutations"""
+
 import os
 from os.path import isdir
 
 
 def python_source_files(path, tests_dirs):
+    """Yield the paths to all python source files
+
+    :param path: path of the source file to mutate or path of the directory to
+        yield source files from to mutate
+    :type path: str
+
+    :param tests_dirs: list of the directories containing testing files
+    :type tests_dirs: list[str]
+
+    :return: Generator yielding paths to python source files
+    """
     if isdir(path):
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if
@@ -17,6 +32,12 @@ def python_source_files(path, tests_dirs):
 
 
 def get_or_guess_paths_to_mutate(paths_to_mutate):
+    """Guess the path of the source code directory to mutate if no specific
+    path is given
+
+    :return: The path to source code to mutate
+    :rtype: str
+    """
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -28,12 +49,25 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
             return this_dir
         else:
             raise FileNotFoundError(
-                'Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+                'Could not figure out where the code to mutate is. '
+                'Please specify it on the command line like "mutmut code_dir" '
+                'or by adding "paths_to_mutate=code_dir" in setup.cfg '
+                'under the section [mutmut]'
+            )
     else:
         return paths_to_mutate
 
 
 def read_coverage_data(use_coverage):
+    """Read a coverage report a ``.coverage`` and return its coverage data.
+
+    :param use_coverage: boolean indicating whether to read coverage data
+        located at the current working ``.coverage``
+    :type use_coverage: bool
+
+    :return: CoverageData from the given coverage file path
+    :rtype: CoverageData or None
+    """
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
