@@ -367,7 +367,6 @@ def mutate_node(node, context):
         if node.type == 'tfpdef':
             return
 
-
         if node.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = node.start_pos[0] - 1
             # indexes are unique per line, so start over here!
