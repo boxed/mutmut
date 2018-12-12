@@ -15,6 +15,8 @@ from mutmut.terminal import print_status
 
 
 class Config(object):
+    """Container for all the needed configuration for a mutation test run"""
+
     def __init__(self, swallow_output, test_command, exclude_callback,
                  baseline_time_elapsed, backup, dict_synonyms, total,
                  using_testmon, cache_only, tests_dirs, hash_of_tests):
@@ -62,6 +64,19 @@ def do_apply(mutation_pk, dict_synonyms, backup):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    """
+
+    :param mutations_by_file:
+    :type mutations_by_file: dict[str, list[tuple[str, int]]]
+
+    :param filename: the file to create mutations in
+    :type filename: str
+
+    :param dict_synonyms:
+    :type: TODO
+
+    :param exclude:
+    """
     context = Context(
         source=open(filename).read(),
         filename=filename,
@@ -134,6 +149,17 @@ def run_mutation_tests(config, mutations_by_file):
 
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """Run mutation tests for a given file
+
+    :param config:
+    :type config: Config
+
+    :param file_to_mutate: path of the file to run mutation tests over
+    :type file_to_mutate: str
+
+    :param mutations:
+    :type mutations:
+    """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status,
@@ -200,6 +226,15 @@ def run_mutation(config, filename, mutation_id):
 
 
 def tests_pass(config):
+    """Run the test command and obtain a boolean noting if the test suite
+    has passed
+
+    :param config:
+    :type config: Config
+
+    :return: a boolean noting if the test suite has passed
+    :rtype: bool
+    """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
