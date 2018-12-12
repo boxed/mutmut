@@ -10,7 +10,7 @@ from tri.declarative import evaluate
 ALL = ('all', -1)
 
 # variable names we should skip modifying as we are sure that proper
-# python practice avoids this being sificant to mutate
+# python practice avoids this being significant to mutate
 SKIP_NAMES = [
     "__author__",
     "__copyright__",
