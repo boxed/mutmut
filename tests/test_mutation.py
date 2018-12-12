@@ -1,7 +1,9 @@
 import sys
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID
 import pytest
+
+from mutmut.mutators import Context, mutate, ALL, MutationID, count_mutations, \
+    list_mutations
 
 
 @pytest.mark.parametrize(

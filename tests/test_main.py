@@ -1,13 +1,16 @@
-# coding=utf-8
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""pytests for :mod:`mutmut.__main__`"""
+
 import os
 import shutil
 import sys
-from datetime import datetime
 
 import pytest
-
-from mutmut.__main__ import main, python_source_files, popen_streaming_output
 from click.testing import CliRunner
+
+from mutmut.__main__ import main, python_source_files
 
 pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
 
@@ -111,12 +114,3 @@ def test_python_source_files():
     assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
     assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
 
-
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
-def test_timeout():
-    start = datetime.now()
-
-    with pytest.raises(TimeoutError):
-        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
-
-    assert (datetime.now() - start).total_seconds() < 3
