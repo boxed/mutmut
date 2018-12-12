@@ -11,8 +11,12 @@ from glob2 import glob
 DEFAULT_TESTS_DIR = 'tests/:test/'
 
 
-def guess_paths_to_mutate() -> str:
-    """guess the path of the source code to mutate"""
+def guess_paths_to_mutate():
+    """Guess the path of the source code to mutate
+
+    :return: The path to source code to mutate
+    :rtype: str
+    """
     # Guess path with code
     this_dir = os.getcwd().split(os.sep)[-1]
     if os.path.isdir('lib'):
