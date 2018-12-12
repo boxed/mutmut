@@ -32,10 +32,10 @@ def guess_paths_to_mutate():
 def read_coverage_data(coverage_path):
     """Read a coverage report a ``.coverage`` and return its coverage data.
 
-    :param coverage_path:
+    :param coverage_path: path to the coverage file read from
     :type coverage_path: str
 
-    :return:
+    :return: CoverageData from the given coverage file path
     :rtype: CoverageData or None
     """
     print("Using coverage data at: '{}'".format(coverage_path))
