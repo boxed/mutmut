@@ -21,30 +21,29 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
 else:
     text_type = str
 
+DB = Database()
 
-db = Database()
-
-current_db_version = 2
+CURRENT_DB_VERSION = 2
 
 
-class MiscData(db.Entity):
+class MiscData(DB.Entity):
     key = PrimaryKey(text_type, auto=True)
     value = Optional(text_type, autostrip=False)
 
 
-class SourceFile(db.Entity):
+class SourceFile(DB.Entity):
     filename = Required(text_type, autostrip=False)
     lines = Set('Line')
 
 
-class Line(db.Entity):
+class Line(DB.Entity):
     sourcefile = Required(SourceFile)
     line = Optional(text_type, autostrip=False)
     line_number = Required(int)
     mutants = Set('Mutant')
 
 
-class Mutant(db.Entity):
+class Mutant(DB.Entity):
     line = Required(Line)
     index = Required(int)
     tested_against_hash = Optional(text_type, autostrip=False)
@@ -54,12 +53,12 @@ class Mutant(db.Entity):
 def init_db(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if db.provider is None:
+        if DB.provider is None:
             cache_filename = os.path.join(os.getcwd(), '.mutmut-cache')
-            db.bind(provider='sqlite', filename=cache_filename, create_db=True)
+            DB.bind(provider='sqlite', filename=cache_filename, create_db=True)
 
             try:
-                db.generate_mapping(create_tables=True)
+                DB.generate_mapping(create_tables=True)
             except OperationalError:
                 pass
 
@@ -75,15 +74,15 @@ def init_db(f):
                     except (RowNotFound, ERDiagramError, OperationalError):
                         existing_db_version = 1
 
-                if existing_db_version != current_db_version:
+                if existing_db_version != CURRENT_DB_VERSION:
                     print('mutmut cache is out of date, clearing it...')
-                    db.drop_all_tables(with_all_data=True)
-                    db.schema = None  # Pony otherwise thinks we've already created the tables
-                    db.generate_mapping(create_tables=True)
+                    DB.drop_all_tables(with_all_data=True)
+                    DB.schema = None  # Pony otherwise thinks we've already created the tables
+                    DB.generate_mapping(create_tables=True)
 
             with db_session:
                 v = get_or_create(MiscData, key='version')
-                v.value = str(current_db_version)
+                v.value = str(CURRENT_DB_VERSION)
 
         return f(*args, **kwargs)
     return wrapper
@@ -264,7 +263,7 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
-def cached_mutation_status(filename, mutation_id, hash_of_tests):
+def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
@@ -284,7 +283,7 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 
 @init_db
 @db_session
-def mutation_id_from_pk(pk):
+def get_mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
     from mutmut.mutators import MutationID
     return MutationID(line=mutant.line.line, index=mutant.index,
@@ -293,14 +292,14 @@ def mutation_id_from_pk(pk):
 
 @init_db
 @db_session
-def filename_and_mutation_id_from_pk(pk):
+def get_filename_and_mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)
+    return mutant.line.sourcefile.filename, get_mutation_id_from_pk(pk)
 
 
 @init_db
 @db_session
-def cached_test_time():
+def get_cached_test_time():
     """Get the baseline tests (tests without mutations) execution time
 
     :return: execution time of the baseline tests

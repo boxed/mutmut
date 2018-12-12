@@ -7,9 +7,9 @@ import subprocess
 from datetime import datetime
 from shutil import move, copy
 
-from mutmut.cache import set_cached_test_time, cached_test_time, \
-    cached_mutation_status, update_mutant_status, register_mutants, \
-    filename_and_mutation_id_from_pk
+from mutmut.cache import set_cached_test_time, get_cached_test_time, \
+    get_cached_mutation_status, update_mutant_status, register_mutants, \
+    get_filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
 
@@ -48,7 +48,8 @@ class Config(object):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
-    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+    filename, mutation_id = get_filename_and_mutation_id_from_pk(
+        int(mutation_pk))
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -179,8 +180,8 @@ def run_mutation(config, filename, mutation_id):
     from mutmut.mutators import BAD_SURVIVED, BAD_TIMEOUT, OK_KILLED, \
         OK_SUSPICIOUS, UNTESTED
 
-    cached_status = cached_mutation_status(filename, mutation_id,
-                                           config.hash_of_tests)
+    cached_status = get_cached_mutation_status(filename, mutation_id,
+                                               config.hash_of_tests)
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
@@ -249,7 +250,7 @@ def tests_pass(config):
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
-    cached_time = cached_test_time()
+    cached_time = get_cached_test_time()
     if cached_time is not None:
         print(
             '1. Using cached time for baseline tests, to run baseline again delete the cache file')

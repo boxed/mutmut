@@ -58,8 +58,8 @@ def filesystem():
 
     # This is a hack to get pony to forget about the old db file
     import mutmut.cache
-    mutmut.cache.db.provider = None
-    mutmut.cache.db.schema = None
+    mutmut.cache.DB.provider = None
+    mutmut.cache.DB.schema = None
 
 
 @pytest.mark.usefixtures('filesystem')

@@ -15,7 +15,8 @@ import click
 from glob2 import glob
 
 from mutmut import __version__
-from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk, \
+from mutmut.cache import print_result_cache, \
+    get_filename_and_mutation_id_from_pk, \
     update_line_numbers, hash_of_tests
 from mutmut.file_collection import python_source_files, \
     get_or_guess_paths_to_mutate, read_coverage_data
@@ -133,7 +134,7 @@ commands:\n
             print_result_cache()
             return
 
-        filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+        filename, mutation_id = get_filename_and_mutation_id_from_pk(argument)
         with open(filename) as f:
             source = f.read()
         context = Context(
@@ -230,7 +231,8 @@ commands:\n
                 add_mutations_by_file(mutations_by_file, filename, _exclude,
                                       dict_synonyms)
     else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        filename, mutation_id = get_filename_and_mutation_id_from_pk(
+            int(argument))
         mutations_by_file[filename] = [mutation_id]
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
