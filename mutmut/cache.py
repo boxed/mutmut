@@ -246,7 +246,7 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     :type file_to_mutate: str
 
     :param mutation_id:
-    :type mutation_id: tuple[str, int]
+    :type mutation_id: MutationID
 
     :param status:
     :type status: str

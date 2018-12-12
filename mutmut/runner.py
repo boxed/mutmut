@@ -68,7 +68,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
     """
 
     :param mutations_by_file:
-    :type mutations_by_file: dict[str, list[tuple[str, int]]]
+    :type mutations_by_file: dict[str, list[MutationID]]
 
     :param filename: the file to create mutations in
     :type filename: str
@@ -141,7 +141,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
-    :type mutations_by_file: dict[str, list[tuple]]
+    :type mutations_by_file: dict[str, list[MutationID]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
         config.print_progress()
@@ -159,7 +159,7 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
     :type file_to_mutate: str
 
     :param mutations:
-    :type mutations:
+    :type mutations: list[MutationID]
     """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
