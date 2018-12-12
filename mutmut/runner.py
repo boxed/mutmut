@@ -206,7 +206,7 @@ def run_mutation(config, filename, mutation_id):
         start = datetime.now()
         try:
             survived = tests_pass(config)
-        except TimeoutError:
+        except subprocess.TimeoutExpired:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
