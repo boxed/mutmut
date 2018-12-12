@@ -1,4 +1,8 @@
-# coding=utf-8
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""Functionality for operating, populating and reading from the mutmut test
+and mutation cache"""
 
 import hashlib
 import os
@@ -8,9 +12,8 @@ from functools import wraps
 from io import open
 from itertools import groupby, zip_longest
 
-from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
-
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID
+from pony.orm import Database, Required, db_session, Set, Optional, select, \
+    PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
@@ -87,6 +90,14 @@ def init_db(f):
 
 
 def hash_of(filename):
+    """Get the sha256 hash of a file given a the specified path
+
+    :param filename: path to the file to sha256 hash
+    :type filename: str
+
+    :return: a sha256 hash string of the file's contents
+    :rtype: str
+    """
     with open(filename, 'rb') as f:
         m = hashlib.sha256()
         m.update(f.read())
@@ -94,6 +105,12 @@ def hash_of(filename):
 
 
 def hash_of_tests(tests_dirs):
+    """
+
+    :param tests_dirs:
+    :type tests_dirs: list[str]
+    :return:
+    """
     m = hashlib.sha256()
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
@@ -130,9 +147,13 @@ def print_result_cache():
                 print()
                 print(', '.join([str(x.id) for x in mutants]))
 
+    from mutmut.mutators import BAD_TIMEOUT
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
+    from mutmut.mutators import OK_SUSPICIOUS
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
+    from mutmut.mutators import BAD_SURVIVED
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
+    from mutmut.mutators import UNTESTED
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
@@ -196,24 +217,44 @@ def update_line_numbers(filename):
             Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % tag
+            assert False, 'unknown opcode from SequenceMatcher: %s' % command
 
 
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
+    """
+
+    :param mutations_by_file:
+    :type mutations_by_file: dict[str, list[tuple[str, int]]]
+    """
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
 
         for mutation_id in mutation_ids:
             line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
             assert line is not None
+            from mutmut.mutators import UNTESTED
             get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
 
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
+    """Update the status of the mutation test run within the database
+
+    :param file_to_mutate:
+    :type file_to_mutate: str
+
+    :param mutation_id:
+    :type mutation_id: tuple[str, int]
+
+    :param status:
+    :type status: str
+
+    :param tests_hash:
+    :type tests_hash: str
+    """
     sourcefile = SourceFile.get(filename=file_to_mutate)
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
@@ -228,11 +269,14 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
+    from mutmut.mutators import OK_KILLED
     if mutant.status == OK_KILLED:
-        # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
+        # We assume that if a mutant was killed, a change to the test
+        # suite will mean it's still killed
         return OK_KILLED
 
     if mutant.tested_against_hash != hash_of_tests:
+        from mutmut.mutators import UNTESTED
         return UNTESTED
 
     return mutant.status
@@ -242,7 +286,9 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @db_session
 def mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
+    from mutmut.mutators import MutationID
+    return MutationID(line=mutant.line.line, index=mutant.index,
+                      line_number=mutant.line.line_number)
 
 
 @init_db
@@ -255,6 +301,11 @@ def filename_and_mutation_id_from_pk(pk):
 @init_db
 @db_session
 def cached_test_time():
+    """Get the baseline tests (tests without mutations) execution time
+
+    :return: execution time of the baseline tests
+    :rtype: float or None
+    """
     d = MiscData.get(key='baseline_time_elapsed')
     return float(d.value) if d else None
 
@@ -262,4 +313,10 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
+    """Set the baseline tests (tests without mutations) execution time
+    within the database.
+
+    :param baseline_time_elapsed:
+    :type baseline_time_elapsed: float
+    """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)

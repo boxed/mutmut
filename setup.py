@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""setup.py for mutmut"""
+
 import os
 import re
+
 from setuptools import setup, find_packages, Command
 
 readme = open('README.rst').read()
