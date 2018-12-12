@@ -3,11 +3,9 @@
 
 """Mutation testing execution runner"""
 
-import os
+import subprocess
 from datetime import datetime
 from shutil import move, copy
-from threading import Thread
-from time import sleep
 
 from mutmut.cache import set_cached_test_time, cached_test_time, \
     cached_mutation_status, update_mutant_status, register_mutants, \
@@ -81,50 +79,45 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
-    master, slave = os.openpty()
+    """Open a subprocess and stream its output without hard-blocking.
 
-    from subprocess import Popen
-    p = Popen(
+    :param cmd: the command to execute within the subprocess
+    :type cmd: str
+
+    :param callback: function to execute with the subprocess stdout output
+    :param timeout: the timeout time for the processes' ``communication``
+        call to complete
+    :type timeout: float
+
+    :raises subprocess.TimeoutExpired: if the exciting subprocesses'
+        ``communication`` call times out
+
+    :return: the return code of the executed subprocess
+    :rtype: int
+    """
+    p = subprocess.Popen(
         cmd,
-        shell=True,
-        stdout=slave,
-        stderr=slave,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True
     )
-    stdout = os.fdopen(master)
-    os.close(slave)
-
-    start = datetime.now()
-
-    foo = {'raise': False}
-
-    def timeout_killer():
-        while p.returncode is None:
-            sleep(0.1)
-            if (datetime.now() - start).total_seconds() > timeout:
-                foo['raise'] = True
-                p.kill()
-                return
-
-    if timeout:
-        t = Thread(target=timeout_killer)
-        t.daemon = True
-        t.start()
 
     while p.returncode is None:
         try:
-            # remove the newline at the end
-            line = stdout.readline()[:-1]
+            output, errors = p.communicate(timeout=timeout)
+            if output.endswith("\n"):
+                # -1 to remove the newline at the end
+                output = output[:-1]
+            line = output
             callback(line)
         except OSError:
-            # This seems to happen on some platforms, including TravisCI. It
-            # seems like it's ok to just let this pass here, you just won't
-            # get as nice feedback.
+            # This seems to happen on some platforms, including TravisCI.
+            # It seems like it's ok to just let this pass here, you just
+            # won't get as nice feedback.
             pass
-
-        p.poll()
-
-    if foo['raise']:
-        raise TimeoutError()
+        except subprocess.TimeoutExpired:
+            p.kill()
+            raise
 
     return p.returncode
 
