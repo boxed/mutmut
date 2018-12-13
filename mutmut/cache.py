@@ -225,7 +225,7 @@ def register_mutants(mutations_by_file):
     """
 
     :param mutations_by_file:
-    :type mutations_by_file: dict[str, list[tuple[str, int]]]
+    :type mutations_by_file: dict[str, list[MutationID]]
     """
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
@@ -284,6 +284,13 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
 @init_db
 @db_session
 def get_mutation_id_from_pk(pk):
+    """
+
+    :param pk:
+
+    :return: the MutationID related to the given private key
+    :rtype: MutationID
+    """
     mutant = Mutant.get(id=pk)
     from mutmut.mutators import MutationID
     return MutationID(line=mutant.line.line, index=mutant.index,
@@ -293,6 +300,14 @@ def get_mutation_id_from_pk(pk):
 @init_db
 @db_session
 def get_filename_and_mutation_id_from_pk(pk):
+    """
+
+    :param pk:
+
+    :return: the source filename and the MutationID related to the
+        given private key
+    :rtype: tuple[str, MutationID]
+    """
     mutant = Mutant.get(id=pk)
     return mutant.line.sourcefile.filename, get_mutation_id_from_pk(pk)
 
