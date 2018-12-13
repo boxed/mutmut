@@ -172,8 +172,7 @@ def get_or_create(model, defaults=None, **params):
             if k not in params:
                 params[k] = v
         return model(**params)
-    else:
-        return obj
+    return obj
 
 
 def sequence_ops(a, b):
