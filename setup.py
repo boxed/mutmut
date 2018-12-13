@@ -113,7 +113,7 @@ setup(
     zip_safe=False,
     keywords='',
     tests_require=[
-        "pytest",
+        "pytest>=2.8.7",
         "pytest-cov",
         "pylint>=1.9.1,<2.0.0",
     ],
