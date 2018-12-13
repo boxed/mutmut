@@ -31,31 +31,28 @@ def python_source_files(path, tests_dirs):
         yield path
 
 
-def get_or_guess_paths_to_mutate(paths_to_mutate):
+def get_or_guess_paths_to_mutate():
     """Guess the path of the source code directory to mutate if no specific
     path is given
 
     :return: The path to source code to mutate
     :rtype: str
     """
-    if paths_to_mutate is None:
-        # Guess path with code
-        this_dir = os.getcwd().split(os.sep)[-1]
-        if isdir('lib'):
-            return 'lib'
-        elif isdir('src'):
-            return 'src'
-        elif isdir(this_dir):
-            return this_dir
-        else:
-            raise FileNotFoundError(
-                'Could not figure out where the code to mutate is. '
-                'Please specify it on the command line like "mutmut code_dir" '
-                'or by adding "paths_to_mutate=code_dir" in setup.cfg '
-                'under the section [mutmut]'
-            )
+    # Guess path with code
+    this_dir = os.getcwd().split(os.sep)[-1]
+    if isdir('lib'):
+        return 'lib'
+    elif isdir('src'):
+        return 'src'
+    elif isdir(this_dir):
+        return this_dir
     else:
-        return paths_to_mutate
+        raise FileNotFoundError(
+            'Could not figure out where the code to mutate is. '
+            'Please specify it on the command line like "mutmut code_dir" '
+            'or by adding "paths_to_mutate=code_dir" in setup.cfg '
+            'under the section [mutmut]'
+        )
 
 
 def read_coverage_data():

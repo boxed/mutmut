@@ -164,7 +164,8 @@ commands:\n
         do_apply(argument, dict_synonyms, backup)
         return 0
 
-    paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
+    if paths_to_mutate is None:
+        paths_to_mutate = get_or_guess_paths_to_mutate()
 
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
