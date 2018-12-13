@@ -176,6 +176,16 @@ def get_or_create(model, defaults=None, **params):
 
 
 def sequence_ops(a, b):
+    """
+
+    :param a:
+    :type: list[str]
+
+    :param b:
+    :type: list[str]
+
+    :return:
+    """
     sequence_matcher = SequenceMatcher(a=a, b=b)
 
     for tag, i1, i2, j1, j2 in sequence_matcher.get_opcodes():
