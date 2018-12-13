@@ -10,15 +10,17 @@ import sys
 from difflib import SequenceMatcher
 from functools import wraps
 from io import open
-from itertools import groupby, zip_longest
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+    from itertools import izip_longest, groupby
+    zip_longest = izip_longest
     # noinspection PyUnresolvedReferences
     text_type = unicode  # pylint: disable=undefined-variable
 else:
+    from itertools import groupby, zip_longest
     text_type = str
 
 DB = Database()
