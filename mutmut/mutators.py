@@ -56,8 +56,8 @@ class MutationID(object):
         self.line, self.index, self.line_number)
 
     def __eq__(self, other):
-        return (self.line, self.index, self.line_number) == (
-        other.line, other.index, other.line_number)
+        return (self.line, self.index, self.line_number) == \
+               (other.line, other.index, other.line_number)
 
 
 ALL = MutationID(line='%all%', index=-1, line_number=-1)
@@ -82,8 +82,7 @@ def number_mutation(value, **_):
     elif value.startswith('0b'):
         base = 2
         value = value[2:]
-    elif value.startswith('0') and len(value) > 1 and value[
-        1] != '.':  # pragma: no cover (python 2 specific)
+    elif value.startswith('0') and len(value) > 1 and value[1] != '.':  # pragma: no cover (python 2 specific)
         base = 8
         value = value[1:]
     else:
@@ -107,7 +106,9 @@ def string_mutation(value, **_):
     value = value[len(prefix):]
 
     if value.startswith('"""') or value.startswith("'''"):
-        return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
+        # We assume here that triple-quoted stuff are docs or other things
+        # that mutation is meaningless for
+        return value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -128,19 +129,19 @@ def argument_mutation(children, context, **_):
     """
     :type context: Context
     """
-    if len(context.stack) >= 3 and context.stack[-3].type in (
-    'power', 'atom_expr'):
+    if len(context.stack) >= 3 and \
+            context.stack[-3].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -3
-    elif len(context.stack) >= 4 and context.stack[-4].type in (
-    'power', 'atom_expr'):
+    elif len(context.stack) >= 4 and \
+            context.stack[-4].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -4
     else:
         return children
 
     power_node = context.stack[stack_pos_of_power_node]
 
-    if power_node.children[0].type == 'name' and power_node.children[
-        0].value in context.dict_synonyms:
+    if power_node.children[0].type == 'name' and \
+            power_node.children[0].value in context.dict_synonyms:
         children = children[:]
         from parso.python.tree import Name
         c = children[0]
@@ -152,8 +153,9 @@ def argument_mutation(children, context, **_):
 
 
 def keyword_mutation(value, context, **_):
-    if len(context.stack) > 2 and context.stack[
-        -2].type == 'comp_op' and value in ('in', 'is'):
+    if len(context.stack) > 2 and \
+            context.stack[-2].type == 'comp_op' and \
+            value in ('in', 'is'):
         return value
 
     if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
@@ -162,8 +164,9 @@ def keyword_mutation(value, context, **_):
     return {
         # 'not': 'not not',
         'not': '',
+        # this will cause "is not not" sometimes,
+        # so there's a hack to fix that later
         'is': 'is not',
-    # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
         'break': 'continue',
         'continue': 'break',
@@ -251,20 +254,23 @@ def decorator_mutation(children, **_):
 
 
 def trailer_mutation(children, **_):
-    if len(children) == 3 and children[0].type == 'operator' and children[
-        0].value == '[' and children[-1].type == 'operator' and children[
-        -1].value == ']' and children[0].parent.type == 'trailer' and children[
-        1].type == 'name' and children[1].value != 'None':
+    if len(children) == 3 and \
+            children[0].type == 'operator' and \
+            children[0].value == '[' and \
+            children[-1].type == 'operator' and \
+            children[-1].value == ']' and \
+            children[0].parent.type == 'trailer' and \
+            children[1].type == 'name' and \
+            children[1].value != 'None':
         # Something that looks like "foo[bar]"
-        return [children[0],
-                Name(value='None', start_pos=children[0].start_pos),
-                children[-1]]
+        return [children[0], Name(value='None', start_pos=children[0].start_pos), children[-1]]
     return children
 
 
 def arglist_mutation(children, **_):
-    if len(children) > 3 and children[0].type == 'name' and children[
-        0].value != 'None':
+    if len(children) > 3 and \
+            children[0].type == 'name' and \
+            children[0].value != 'None':
         return [Name(value='None',
                      start_pos=children[0].start_pos)] + children[1:]
     return children
@@ -379,7 +385,8 @@ def mutate(context):
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
     if context.number_of_performed_mutations:
-        # Check that if we said we mutated the code, that it has actually changed
+        # Check that if we said we mutated the code,
+        # that it has actually changed
         assert context.source != mutated_source
     context.mutated_source = mutated_source
     return mutated_source, context.number_of_performed_mutations
@@ -399,13 +406,15 @@ def mutate_node(i, context):
 
         if i.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = i.start_pos[0] - 1
-            context.index = 0  # indexes are unique per line, so start over here!
+            # indexes are unique per line, so start over here!
+            context.index = 0
 
         if hasattr(i, 'children'):
             mutate_list_of_nodes(i, context=context)
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
+            if context.number_of_performed_mutations and \
+                    context.mutation_id != ALL:
                 return
 
         m = mutations_by_type.get(t)
@@ -435,7 +444,8 @@ def mutate_node(i, context):
                 context.index += 1
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
+            if context.number_of_performed_mutations and \
+                    context.mutation_id != ALL:
                 return
     finally:
         context.stack.pop()
@@ -453,7 +463,8 @@ def mutate_list_of_nodes(result, context):
         mutate_node(i, context=context)
 
         # this is just an optimization to stop early
-        if context.number_of_performed_mutations and context.mutation_id != ALL:
+        if context.number_of_performed_mutations and \
+                context.mutation_id != ALL:
             return
 
 
