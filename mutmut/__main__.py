@@ -240,7 +240,6 @@ commands:\n
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    print()
     print('2. Checking mutants')
     config = Config(
         swallow_output=not s,
