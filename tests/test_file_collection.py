@@ -9,6 +9,7 @@ import pytest
 
 from mutmut.file_collection import python_source_files
 
+from tests.test_main import filesystem
 
 @pytest.mark.parametrize(
     "expected, source_path, tests_dirs",
