@@ -111,7 +111,9 @@ def hash_of_tests(tests_dirs):
 
     :param tests_dirs:
     :type tests_dirs: list[str]
-    :return:
+
+    :return: a sha256 hash string of all the test files combined contents
+    :rtype: str
     """
     m = hashlib.sha256()
     for tests_dir in tests_dirs:
