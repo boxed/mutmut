@@ -9,7 +9,7 @@ import sys
 import pytest
 from click.testing import CliRunner
 
-from mutmut.__main__ import main, python_source_files
+from mutmut.__main__ import main
 
 pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
 
@@ -101,11 +101,3 @@ Survived 🙁 (1)
 
 1
 """.strip() == result.output.strip()
-
-
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files():
-    assert list(python_source_files('foo.py', [])) == ['foo.py']
-    assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
-    assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
-
