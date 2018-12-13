@@ -230,9 +230,8 @@ def update_line_numbers(filename):
         elif command == 'replace':
             cached_line_objects[a_index].delete()
             Line(sourcefile=sourcefile, line=b, line_number=b_index)
-
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % command
+            raise ValueError('unknown opcode from SequenceMatcher: %s' % command)
 
 
 @init_db
