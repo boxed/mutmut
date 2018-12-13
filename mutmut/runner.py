@@ -112,7 +112,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
     :rtype: int
     """
     p = subprocess.Popen(
-        cmd,
+        cmd.split(),  # TODO: better spit fix
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True
