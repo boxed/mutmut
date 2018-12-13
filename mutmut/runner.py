@@ -122,8 +122,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         call to complete
     :type timeout: float
 
-    :raises subprocess.TimeoutExpired: if the exciting subprocesses'
-        ``communication`` call times out
+    :raises TimeoutError: if the subprocesses' ``communication`` call times out
 
     :return: the return code of the executed subprocess
     :rtype: int
