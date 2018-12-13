@@ -278,7 +278,7 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
-def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
+def get_cached_mutation_status(filename, mutation_id, tests_hash):
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
@@ -289,7 +289,7 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
         # suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests:
+    if mutant.tested_against_hash != tests_hash:
         from mutmut.mutators import UNTESTED
         return UNTESTED
 
