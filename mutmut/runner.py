@@ -164,7 +164,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def run_mutation_tests(config, mutations_by_file):
-    """
+    """Run mutation tests over all files/mutations specified within the
+    ``mutations_by_file`` dictionary
+
     :type config: Config
     :type mutations_by_file: dict[str, list[MutationID]]
     """
@@ -195,6 +197,17 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
 
 
 def run_mutation(config, filename, mutation_id):
+    """Run a given mutation on the specified file
+
+    :param config:
+    :type config: Config
+
+    :param filename: path of the file to mutate
+    :type filename: str
+
+    :param mutation_id: MutationID of the mutation to apply
+    :type mutation_id: MutationID
+    """
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -260,7 +273,7 @@ def tests_pass(config):
     :param config:
     :type config: Config
 
-    :return: a boolean noting if the test suite has passed
+    :return: boolean noting if the test suite has passed
     :rtype: bool
     """
     if config.using_testmon:
