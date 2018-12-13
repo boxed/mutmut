@@ -108,10 +108,16 @@ setup(
     packages=find_packages('.'),
     package_dir={'': '.'},
     include_package_data=True,
-    install_requires=read_reqs('requirements.txt'),
     license="BSD",
     zip_safe=False,
     keywords='',
+    install_requires=[
+        "click"
+        "glob2",
+        "parso",
+        "pony",
+        "tri.declarative",
+    ],
     tests_require=[
         "pytest>=2.8.7",
         "pytest-cov",
@@ -134,7 +140,8 @@ setup(
     test_suite='tests',
     cmdclass={'tag': Tag,
               'release_check': ReleaseCheck, "test": PyTest, "lint": Pylint},
-    # if I add entry_points while pytest runs, it imports before the coverage collecting starts
+    # if I add entry_points while pytest runs,
+    # it imports before the coverage collecting starts
     entry_points={
         'pytest11': [
             'mutmut = mutmut.pytestplugin',

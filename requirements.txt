@@ -1,5 +1,0 @@
-glob2
-parso
-tri.declarative
-click
-pony
