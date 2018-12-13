@@ -10,7 +10,7 @@ from datetime import datetime
 from shutil import move, copy
 
 from mutmut.cache import update_cached_test_time, get_cached_test_time, \
-    get_cached_mutation_status, update_mutant_status, register_mutants, \
+    get_cached_mutation_status, update_mutant_status, update_mutants, \
     get_filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
@@ -101,7 +101,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
 
     try:
         mutations_by_file[filename] = list_mutations(context)
-        register_mutants(mutations_by_file)
+        update_mutants(mutations_by_file)
     except Exception:
         print('Failed while creating mutations for %s, for line "%s"' % (
         context.filename, context.current_source_line))

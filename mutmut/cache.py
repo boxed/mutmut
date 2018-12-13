@@ -236,7 +236,7 @@ def update_line_numbers(filename):
 
 @init_db
 @db_session
-def register_mutants(mutations_by_file):
+def update_mutants(mutations_by_file):
     """Update/create Mutants within the database reflecting the Mutants
     defined in the ``mutations_by_file`` dictionary
 
