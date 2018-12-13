@@ -21,7 +21,6 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
-
 ]
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
