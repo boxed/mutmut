@@ -186,7 +186,8 @@ commands:\n
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
 
-    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
+    # stop python from creating .pyc files
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
     using_testmon = '--testmon' in runner
 
