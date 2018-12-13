@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+"""main entrypoint for mutmut"""
+
 from __future__ import print_function
 
 import os
@@ -15,11 +17,10 @@ import click
 from glob2 import glob
 
 from mutmut import __version__
-from mutmut.cache import print_result_cache, \
-    get_filename_and_mutation_id_from_pk, \
-    update_line_numbers, hash_of_tests
-from mutmut.file_collection import python_source_files, \
-    get_or_guess_paths_to_mutate, read_coverage_data
+from mutmut.cache import print_result_cache, update_line_numbers, \
+    get_filename_and_mutation_id_from_pk, hash_of_tests
+from mutmut.file_collection import python_source_files, read_coverage_data, \
+    get_or_guess_paths_to_mutate
 from mutmut.mutators import Context, mutate
 from mutmut.runner import run_mutation_tests, Config, do_apply, \
     time_test_suite, add_mutations_by_file
@@ -120,12 +121,10 @@ commands:\n
 
     valid_commands = ['run', 'results', 'apply', 'show']
     if command not in valid_commands:
-        print('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
-        return
+        raise ValueError('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
 
     if command == 'results' and argument:
-        print('The %s command takes no arguments' % command)
-        return
+        raise ValueError('The %s command takes no arguments' % command)
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
@@ -145,8 +144,7 @@ commands:\n
         )
         mutated_source, number_of_mutations_performed = mutate(context)
         if not number_of_mutations_performed:
-            print('No mutation performed')
-            return
+            raise ValueError('No mutations performed')
 
         for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
             print(line)
@@ -154,8 +152,10 @@ commands:\n
         return
 
     if use_coverage and not exists('.coverage'):
-        print('No .coverage file found. You must generate a coverage file to use this feature.')
-        return
+        raise FileNotFoundError(
+            'No .coverage file found. You must generate a coverage '
+            'file to use this feature.'
+        )
 
     if command == 'results':
         print_result_cache()
@@ -171,8 +171,11 @@ commands:\n
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        raise ValueError(
-            'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise FileNotFoundError(
+            'You must specify a list of paths to mutate. '
+            'Either as a command line argument, or by setting paths_to_mutate '
+            'under the section [mutmut] in setup.cfg'
+        )
 
     tests_dirs = []
     for p in tests_dir.split(':'):
