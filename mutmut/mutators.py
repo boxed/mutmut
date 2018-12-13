@@ -44,8 +44,8 @@ class MutationID(object):
         self.line_number = line_number
 
     def __repr__(self):
-        return 'MutationID(line="%s", index=%s, line_number=%s)' % (
-        self.line, self.index, self.line_number)
+        return 'MutationID(line="%s", index=%s, line_number=%s)' % \
+               (self.line, self.index, self.line_number)
 
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == \
@@ -344,11 +344,10 @@ class Context(object):
     def pragma_no_mutate_lines(self):
         if self._pragma_no_mutate_lines is None:
             self._pragma_no_mutate_lines = {
-                i
-                for i, line in enumerate(self.source_by_line_number)
-                if
-            '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[
-                -1]
+                line_number
+                for line_number, line in enumerate(self.source_by_line_number)
+                if '# pragma:' in line and
+                   'no mutate' in line.partition('# pragma:')[-1]
             }
         return self._pragma_no_mutate_lines
 
@@ -381,47 +380,47 @@ def mutate(context):
     return mutated_source, context.number_of_performed_mutations
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :type context: Context
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
 
-        t = i.type
+        node_type = node.type
 
-        if i.type == 'tfpdef':
+        if node.type == 'tfpdef':
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             # indexes are unique per line, so start over here!
             context.index = 0
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if hasattr(node, 'children'):
+            mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and \
                     context.mutation_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        m = mutations_by_type.get(node_type)
 
         if m is None:
             return
 
         for key, value in sorted(m.items()):
-            old = getattr(i, key)
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
             new = evaluate(
                 value,
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
             assert not callable(new)
             if new != old:
@@ -429,7 +428,7 @@ def mutate_node(i, context):
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(
                         context.mutation_id_of_current_index)
-                    setattr(i, key, new)
+                    setattr(node, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
@@ -440,16 +439,16 @@ def mutate_node(i, context):
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
+def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-    for i in result.children:
+    for child in node.children:
 
-        if i.type == 'operator' and i.value == '->':
+        if child.type == 'operator' and child.value == '->':
             return
 
-        mutate_node(i, context=context)
+        mutate_node(child, context=context)
 
         # this is just an optimization to stop early
         if context.number_of_performed_mutations and \
