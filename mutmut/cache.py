@@ -151,13 +151,12 @@ def print_result_cache():
                 print()
                 print(', '.join([str(x.id) for x in mutants]))
 
-    from mutmut.mutators import BAD_TIMEOUT
+    from mutmut.mutators import BAD_SURVIVED, BAD_TIMEOUT, OK_KILLED, \
+        OK_SUSPICIOUS, UNTESTED
+    # TODO: shouldn't OK_KILLED be also specified?
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
-    from mutmut.mutators import OK_SUSPICIOUS
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
-    from mutmut.mutators import BAD_SURVIVED
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    from mutmut.mutators import UNTESTED
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
