@@ -10,7 +10,6 @@ import sys
 from difflib import unified_diff
 from functools import wraps
 from io import open
-from os.path import exists
 from shutil import copy
 
 import click
@@ -150,7 +149,7 @@ commands:\n
 
         return 0
 
-    if use_coverage and not exists('.coverage'):
+    if use_coverage and not os.path.exists('.coverage'):
         raise FileNotFoundError(
             'No .coverage file found. You must generate a coverage '
             'file to use this feature.'
