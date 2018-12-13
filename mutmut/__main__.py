@@ -100,7 +100,8 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version):
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s,
+         use_coverage, dict_synonyms, cache_only, version):
     """
 commands:\n
     run [mutation id]\n
