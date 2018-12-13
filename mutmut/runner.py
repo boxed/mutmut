@@ -204,7 +204,9 @@ def run_mutation(config, filename, mutation_id):
             backup=True,
             context=context
         )
-        assert number_of_mutations_performed
+        if number_of_mutations_performed <= 0:
+            raise ValueError("no mutations preformed on file: {}".format(filename))
+
         start = datetime.now()
         try:
             survived = tests_pass(config)
