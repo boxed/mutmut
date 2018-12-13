@@ -298,11 +298,12 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
 @init_db
 @db_session
 def get_mutation_id_from_pk(pk):
-    """
+    """Get the MutationID related to the given Mutant primary key
 
-    :param pk:
+    :param pk: primary key of a Mutant
+    :type pk: str
 
-    :return: the MutationID related to the given private key
+    :return: the MutationID related to the given Mutant primary key
     :rtype: MutationID
     """
     mutant = Mutant.get(id=pk)
@@ -314,12 +315,14 @@ def get_mutation_id_from_pk(pk):
 @init_db
 @db_session
 def get_filename_and_mutation_id_from_pk(pk):
-    """
+    """Get the source code filename and the MutationID related to the
+    given Mutant primary key
 
-    :param pk:
+    :param pk: primary key of a Mutant
+    :type pk: str
 
-    :return: the source filename and the MutationID related to the
-        given private key
+    :return: the source code filename and the MutationID related to the
+        given Mutant primary key
     :rtype: tuple[str, MutationID]
     """
     mutant = Mutant.get(id=pk)
