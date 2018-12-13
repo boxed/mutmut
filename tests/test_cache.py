@@ -1,3 +1,8 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""pytests for :mod:`mutmut.cache`"""
+
 from mutmut.cache import sequence_ops
 
 
