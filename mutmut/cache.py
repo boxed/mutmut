@@ -65,7 +65,8 @@ def init_db(f):
                 pass
 
             if os.path.exists(cache_filename):
-                # If the existing cache file is out of data, delete it and start over
+                # If the existing cache file is out of data,
+                # delete it and start over
                 with db_session:
                     try:
                         v = MiscData.get(key='version')
