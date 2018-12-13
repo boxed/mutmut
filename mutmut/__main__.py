@@ -112,6 +112,9 @@ commands:\n
         Apply a mutation on disk.\n
     show [mutation id]\n
         Show a mutation diff.\n
+
+    :return: return code of running mutmut
+    :rtype: int
     """
     if version:
         print("mutmut version %s" % __version__)
