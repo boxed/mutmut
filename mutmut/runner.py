@@ -131,9 +131,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
         universal_newlines=True
     )
 
-    def kill(p):
+    def kill(process):
         try:
-            p.kill()
+            process.kill()
         except OSError:
             pass  # ignore
 
