@@ -107,11 +107,9 @@ def string_mutation(value, **_):
 def lambda_mutation(children, **_):
     from parso.python.tree import Name
     if len(children) != 4 or getattr(children[-1], 'value', '---') != 'None':
-        return children[:3] + [
-            Name(value=' None', start_pos=children[0].start_pos)]
-    else:
-        return children[:3] + [
-            Name(value=' 0', start_pos=children[0].start_pos)]
+        return children[:3] + \
+               [Name(value=' None', start_pos=children[0].start_pos)]
+    return children[:3] + [Name(value=' 0', start_pos=children[0].start_pos)]
 
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
