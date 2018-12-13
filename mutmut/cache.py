@@ -53,8 +53,8 @@ class Mutant(DB.Entity):
     status = Required(text_type, autostrip=False)
 
 
-def init_db(f):
-    @wraps(f)
+def init_db(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         if DB.provider is None:
             cache_filename = os.path.join(os.getcwd(), '.mutmut-cache')
@@ -70,11 +70,11 @@ def init_db(f):
                 # delete it and start over
                 with db_session:
                     try:
-                        v = MiscData.get(key='version')
-                        if v is None:
+                        version = MiscData.get(key='version')
+                        if version is None:
                             existing_db_version = 1
                         else:
-                            existing_db_version = int(v.value)
+                            existing_db_version = int(version.value)
                     except (RowNotFound, ERDiagramError, OperationalError):
                         existing_db_version = 1
 
@@ -87,10 +87,10 @@ def init_db(f):
                     DB.generate_mapping(create_tables=True)
 
             with db_session:
-                v = get_or_create(MiscData, key='version')
-                v.value = str(CURRENT_DB_VERSION)
+                version = get_or_create(MiscData, key='version')
+                version.value = str(CURRENT_DB_VERSION)
 
-        return f(*args, **kwargs)
+        return func(*args, **kwargs)
     return wrapper
 
 
@@ -104,9 +104,9 @@ def hash_of(filename):
     :rtype: str
     """
     with open(filename, 'rb') as f:
-        m = hashlib.sha256()
-        m.update(f.read())
-        return m.hexdigest()
+        hash_ = hashlib.sha256()
+        hash_.update(f.read())
+        return hash_.hexdigest()
 
 
 def hash_of_tests(tests_dirs):
@@ -118,13 +118,13 @@ def hash_of_tests(tests_dirs):
     :return: sha256 hash string of all the test files' combined contents
     :rtype: str
     """
-    m = hashlib.sha256()
+    hash_ = hashlib.sha256()
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
             for filename in files:
                 with open(os.path.join(root, filename), 'rb') as f:
-                    m.update(f.read())
-    return m.hexdigest()
+                    hash_.update(f.read())
+    return hash_.hexdigest()
 
 
 def get_apply_line(mutant):
