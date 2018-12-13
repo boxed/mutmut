@@ -13,6 +13,7 @@ from mutmut.cache import set_cached_test_time, get_cached_test_time, \
     get_filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
+from threading import Timer
 
 
 class Config(object):
@@ -112,16 +113,26 @@ def popen_streaming_output(cmd, callback, timeout=None):
     :return: the return code of the executed subprocess
     :rtype: int
     """
-    p = subprocess.Popen(
+    process = subprocess.Popen(
         shlex.split(cmd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True
     )
 
-    while p.returncode is None:
+    def kill(p):
         try:
-            output, errors = p.communicate(timeout=timeout)
+            p.kill()
+        except OSError:
+            pass  # ignore
+
+    # python 2-3 agnostic process timer
+    timer = Timer(timeout, kill, [process])
+    timer.start()
+
+    while process.returncode is None:
+        try:
+            output, errors = process.communicate()
             if output.endswith("\n"):
                 # -1 to remove the newline at the end
                 output = output[:-1]
@@ -132,11 +143,13 @@ def popen_streaming_output(cmd, callback, timeout=None):
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
             pass
-        except subprocess.TimeoutExpired:
-            p.kill()
-            raise
+        if not timer.is_alive():
+            raise TimeoutError("subprocess timed out")
 
-    return p.returncode
+    # we have returned from the subprocess cancel the timer if it is running
+    timer.cancel()
+
+    return process.returncode
 
 
 def run_mutation_tests(config, mutations_by_file):
@@ -210,7 +223,7 @@ def run_mutation(config, filename, mutation_id):
         start = datetime.now()
         try:
             survived = tests_pass(config)
-        except subprocess.TimeoutExpired:
+        except TimeoutError:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
