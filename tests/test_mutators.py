@@ -235,7 +235,7 @@ filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6 syntax in Python < 3.6")
 def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
