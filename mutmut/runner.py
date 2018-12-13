@@ -24,8 +24,6 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
         simplicity.
         """
 
-        def __init__(self, *args, **kwargs):  # real signature unknown
-            pass
 else:
     TimeoutError = TimeoutError
 
