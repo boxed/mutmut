@@ -57,8 +57,8 @@ Legend for output:
 
 
 def config_from_setup_cfg(**defaults):
-    def decorator(f):
-        @wraps(f)
+    def decorator(func):
+        @wraps(func)
         def wrapper(*args, **kwargs):
             config_parser = ConfigParser()
             config_parser.read('setup.cfg')
@@ -72,7 +72,7 @@ def config_from_setup_cfg(**defaults):
             for k in list(kwargs.keys()):
                 if not kwargs[k]:
                     kwargs[k] = s(k, defaults.get(k))
-            f(*args, **kwargs)
+            func(*args, **kwargs)
 
         return wrapper
     return decorator
