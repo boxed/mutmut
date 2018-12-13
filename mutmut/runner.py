@@ -6,7 +6,7 @@
 import shlex
 import subprocess
 import sys
-from datetime import datetime
+import time
 from shutil import move, copy
 from threading import Timer
 
@@ -245,15 +245,15 @@ def run_mutation(config, filename, mutation_id):
         if number_of_mutations_performed <= 0:
             raise ValueError("no mutations preformed on file: {}".format(filename))
 
-        start = datetime.now()
+        start = time.time()
         try:
             survived = tests_pass(config)
         except TimeoutError:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
-        time_elapsed = datetime.now() - start
-        if time_elapsed.total_seconds() > config.baseline_time_elapsed * 2:
+        time_elapsed = time.time() - start
+        if time_elapsed > config.baseline_time_elapsed * 2:
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -298,7 +298,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         return cached_time
 
     print('1. Running tests without mutations')
-    start_time = datetime.now()
+    start_time = time.time()
 
     output = []
 
@@ -311,7 +311,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = (datetime.now() - start_time).total_seconds()
+        baseline_time_elapsed = (time.time() - start_time)
     else:
         raise RuntimeError(
             "Tests don't run cleanly without mutations. "
