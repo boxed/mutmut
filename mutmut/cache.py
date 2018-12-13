@@ -345,11 +345,12 @@ def get_cached_test_time():
 
 @init_db
 @db_session
-def set_cached_test_time(baseline_time_elapsed):
-    """Set the baseline tests (tests without mutations) execution time
-    within the database.
+def update_cached_test_time(baseline_time_elapsed):
+    """Update/create the baseline tests (tests without mutations) execution
+    time within the database
 
-    :param baseline_time_elapsed:
+    :param baseline_time_elapsed: the baseline tests (tests without mutations)
+        execution time
     :type baseline_time_elapsed: float
     """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)

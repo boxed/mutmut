@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 from shutil import move, copy
 
-from mutmut.cache import set_cached_test_time, get_cached_test_time, \
+from mutmut.cache import update_cached_test_time, get_cached_test_time, \
     get_cached_mutation_status, update_mutant_status, register_mutants, \
     get_filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, Context, list_mutations
@@ -318,6 +318,6 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
     print(' Done')
 
-    set_cached_test_time(baseline_time_elapsed)
+    update_cached_test_time(baseline_time_elapsed)
 
     return baseline_time_elapsed
