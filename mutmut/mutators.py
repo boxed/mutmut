@@ -44,7 +44,7 @@ ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
 if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
+    text_types = (str, unicode)  # pylint: disable=undefined-variable
 else:
     text_types = (str,)
 

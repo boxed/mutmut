@@ -17,7 +17,7 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_type = unicode
+    text_type = unicode  # pylint: disable=undefined-variable
 else:
     text_type = str
 

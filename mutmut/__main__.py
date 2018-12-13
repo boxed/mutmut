@@ -27,7 +27,7 @@ from mutmut.terminal import print_status
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+    from ConfigParser import ConfigParser, NoOptionError, NoSectionError  # pylint: disable=import-error
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
@@ -277,4 +277,4 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
 
 
 if __name__ == '__main__':
-    main()
+    main()  # pylint: disable=no-value-for-parameter
