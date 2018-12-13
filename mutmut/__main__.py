@@ -24,7 +24,6 @@ from mutmut.file_collection import python_source_files, read_coverage_data, \
 from mutmut.mutators import Context, mutate
 from mutmut.runner import run_mutation_tests, Config, do_apply, \
     time_test_suite, add_mutations_by_file
-from mutmut.terminal import print_status
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
