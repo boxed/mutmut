@@ -22,8 +22,15 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
-    "g: int = 2",
+
 ]
+
+if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
+    file_to_mutate_lines.append("g: int = 2")
+else:
+    file_to_mutate_lines.append("g = 2")
+
+
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
 test_file_contents = '''
