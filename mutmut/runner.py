@@ -3,6 +3,7 @@
 
 """Mutation testing execution runner"""
 
+import shlex
 import subprocess
 from datetime import datetime
 from shutil import move, copy
@@ -112,7 +113,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
     :rtype: int
     """
     p = subprocess.Popen(
-        cmd.split(),  # TODO: better spit fix
+        shlex.split(cmd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True
