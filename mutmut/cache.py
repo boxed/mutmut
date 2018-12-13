@@ -97,7 +97,7 @@ def hash_of(filename):
     :param filename: path to the file to sha256 hash
     :type filename: str
 
-    :return: a sha256 hash string of the file's contents
+    :return: sha256 hash string of the file's contents
     :rtype: str
     """
     with open(filename, 'rb') as f:
@@ -112,7 +112,7 @@ def hash_of_tests(tests_dirs):
     :param tests_dirs:
     :type tests_dirs: list[str]
 
-    :return: a sha256 hash string of all the test files combined contents
+    :return: sha256 hash string of all the test files' combined contents
     :rtype: str
     """
     m = hashlib.sha256()
