@@ -9,10 +9,8 @@ from datetime import datetime
 import pytest
 
 from mutmut.runner import popen_streaming_output
-from tests.test_main import in_travis
 
 
-@pytest.mark.skipif(in_travis, reason='This test does not work on TravisCI')
 def test_timeout():
     start = datetime.now()
 
