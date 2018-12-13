@@ -59,7 +59,7 @@ def read_coverage_data():
     """Read a coverage report a ``.coverage`` and return its coverage data.
 
     :return: CoverageData from the given coverage file path
-    :rtype: CoverageData or None
+    :rtype: CoverageData
     """
     print('Using coverage data from .coverage file')
     # noinspection PyPackageRequirements,PyUnresolvedReferences
