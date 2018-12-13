@@ -5,6 +5,7 @@
 
 import shlex
 import subprocess
+import sys
 from datetime import datetime
 from shutil import move, copy
 
@@ -14,6 +15,20 @@ from mutmut.cache import set_cached_test_time, get_cached_test_time, \
 from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
 from threading import Timer
+
+
+if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+    class TimeoutError(OSError):
+        """ Timeout expired.
+
+        python2.7 does not have this exception class natively so we add it for
+        simplicity.
+        """
+
+        def __init__(self, *args, **kwargs):  # real signature unknown
+            pass
+else:
+    TimeoutError = TimeoutError
 
 
 class Config(object):

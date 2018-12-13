@@ -8,6 +8,7 @@ from datetime import datetime
 import pytest
 
 from mutmut.runner import popen_streaming_output
+from mutmut.runner import TimeoutError
 
 
 def test_timeout():
