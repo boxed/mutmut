@@ -4,7 +4,6 @@
 """pytests for :mod:`mutmut.__main__`"""
 
 import os
-import shutil
 import sys
 
 import pytest
@@ -41,21 +40,17 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem():
-    shutil.rmtree('test_fs', ignore_errors=True)
-    os.mkdir('test_fs')
-    with open('test_fs/foo.py', 'w') as f:
-        f.write(file_to_mutate_contents)
+def filesystem(tmpdir):
+    foo = tmpdir.mkdir("test_fs").join("foo.py")
+    foo.write(file_to_mutate_contents)
 
-    os.mkdir('test_fs/tests')
-    with open('test_fs/tests/test_foo.py', 'w') as f:
-        f.write(test_file_contents)
+    test_foo = tmpdir.mkdir(os.path.join("test_fs", "tests")).join(
+        "test_foo.py")
+    test_foo.write(test_file_contents)
 
-    os.chdir('test_fs')
+    os.chdir(str(tmpdir.join('test_fs')))
     yield
     os.chdir('..')
-    shutil.rmtree('test_fs')
-
     # This is a hack to get pony to forget about the old db file
     import mutmut.cache
     mutmut.cache.DB.provider = None
