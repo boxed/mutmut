@@ -62,8 +62,8 @@ class Config(object):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
-    filename, mutation_id = get_filename_and_mutation_id_from_pk(
-        int(mutation_pk))
+    filename, mutation_id = \
+        get_filename_and_mutation_id_from_pk(int(mutation_pk))
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -103,8 +103,10 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         mutations_by_file[filename] = list_mutations(context)
         update_mutants(mutations_by_file)
     except Exception:
-        print('Failed while creating mutations for %s, for line "%s"' % (
-        context.filename, context.current_source_line))
+        print(
+            'Failed while creating mutations for %s, for line "%s"' %
+            (context.filename, context.current_source_line)
+        )
         raise
 
 
@@ -243,7 +245,7 @@ def run_mutation(config, filename, mutation_id):
             context=context
         )
         if number_of_mutations_performed <= 0:
-            raise ValueError("no mutations preformed on file: {}".format(filename))
+            raise ValueError("no mutations preformed on file: %s" % filename)
 
         start = time.time()
         try:
