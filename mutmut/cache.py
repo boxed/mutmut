@@ -210,8 +210,8 @@ def update_line_numbers(filename):
         existing_lines = [x[:-1] for x in f.readlines()]
 
     if not cached_lines:
-        for i, line in enumerate(existing_lines):
-            Line(sourcefile=sourcefile, line=line, line_number=i)
+        for line_number, line in enumerate(existing_lines):
+            Line(sourcefile=sourcefile, line=line, line_number=line_number)
         return
 
     for command, a, a_index, b, b_index in sequence_ops(cached_lines, existing_lines):
