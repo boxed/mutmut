@@ -14,7 +14,6 @@ from mutmut.file_collection import python_source_files
 
 pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
 
-in_travis = os.environ['PATH'].startswith('/home/travis/')
 
 file_to_mutate_lines = [
     "def foo(a, b):",
