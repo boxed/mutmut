@@ -131,7 +131,8 @@ commands:\n
             print_result_cache()
             return 0
 
-        filename, mutation_id = get_filename_and_mutation_id_from_pk(argument)
+        filename, mutation_id = \
+            get_filename_and_mutation_id_from_pk(int(argument))
         with open(filename) as f:
             source = f.read()
         context = Context(
@@ -233,8 +234,8 @@ commands:\n
                 add_mutations_by_file(mutations_by_file, filename, _exclude,
                                       dict_synonyms)
     else:
-        filename, mutation_id = get_filename_and_mutation_id_from_pk(
-            int(argument))
+        filename, mutation_id = \
+            get_filename_and_mutation_id_from_pk(int(argument))
         mutations_by_file[filename] = [mutation_id]
 
     total = sum(len(mutations) for mutations in mutations_by_file.values())

@@ -302,7 +302,7 @@ def get_mutation_id_from_pk(pk):
     """Get the MutationID related to the given Mutant primary key
 
     :param pk: primary key of a Mutant
-    :type pk: str
+    :type pk: int
 
     :return: the MutationID related to the given Mutant primary key
     :rtype: MutationID
@@ -320,7 +320,7 @@ def get_filename_and_mutation_id_from_pk(pk):
     given Mutant primary key
 
     :param pk: primary key of a Mutant
-    :type pk: str
+    :type pk: int
 
     :return: the source code filename and the MutationID related to the
         given Mutant primary key
