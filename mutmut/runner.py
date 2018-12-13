@@ -8,13 +8,13 @@ import subprocess
 import sys
 from datetime import datetime
 from shutil import move, copy
+from threading import Timer
 
 from mutmut.cache import update_cached_test_time, get_cached_test_time, \
     get_cached_mutation_status, update_mutant_status, update_mutants, \
     get_filename_and_mutation_id_from_pk
 from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
-from threading import Timer
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     class TimeoutError(OSError):
