@@ -133,7 +133,6 @@ def argument_mutation(children, context, **_):
     if power_node.children[0].type == 'name' and \
             power_node.children[0].value in context.dict_synonyms:
         children = children[:]
-        from parso.python.tree import Name
         c = children[0]
         if c.type == 'name':
             children[0] = Name(c.value + 'XX', start_pos=c.start_pos,
