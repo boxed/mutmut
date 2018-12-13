@@ -3,6 +3,7 @@
 
 """pytests for :mod:`mutmut.runner`"""
 
+import subprocess
 from datetime import datetime
 
 import pytest
@@ -15,7 +16,7 @@ from tests.test_main import in_travis
 def test_timeout():
     start = datetime.now()
 
-    with pytest.raises(TimeoutError):
+    with pytest.raises(subprocess.TimeoutExpired):
         popen_streaming_output('python -c "import time; time.sleep(4)"',
                                lambda line: line, timeout=0.1)
 
