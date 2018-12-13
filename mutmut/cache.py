@@ -49,7 +49,7 @@ class Mutant(DB.Entity):
     line = Required(Line)
     index = Required(int)
     tested_against_hash = Optional(text_type, autostrip=False)
-    status = Required(text_type, autostrip=False)  # really an enum of mutant_statuses
+    status = Required(text_type, autostrip=False)  # really an enum of MUTANT_STATUSES
 
 
 def init_db(f):

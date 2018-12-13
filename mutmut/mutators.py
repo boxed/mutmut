@@ -9,6 +9,12 @@ from parso import parse
 from parso.python.tree import Name
 from tri.declarative import evaluate
 
+if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
+    # noinspection PyUnresolvedReferences
+    text_types = (str, unicode)  # pylint: disable=undefined-variable
+else:
+    text_types = (str,)
+
 # We have a global whitelist for constants of the
 # pattern __all__, __version__, etc
 DUNDER_WHITELIST = [
@@ -22,6 +28,20 @@ DUNDER_WHITELIST = [
     'version',
     'license',
     'copyright',
+]
+
+UNTESTED = 'untested'
+OK_KILLED = 'ok_killed'
+OK_SUSPICIOUS = 'ok_suspicious'
+BAD_TIMEOUT = 'bad_timeout'
+BAD_SURVIVED = 'bad_survived'
+
+MUTANT_STATUSES = [
+    UNTESTED,
+    OK_KILLED,
+    OK_SUSPICIOUS,
+    BAD_TIMEOUT,
+    BAD_SURVIVED,
 ]
 
 
@@ -41,26 +61,6 @@ class MutationID(object):
 
 
 ALL = MutationID(line='%all%', index=-1, line_number=-1)
-
-if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)  # pylint: disable=undefined-variable
-else:
-    text_types = (str,)
-
-UNTESTED = 'untested'
-OK_KILLED = 'ok_killed'
-OK_SUSPICIOUS = 'ok_suspicious'
-BAD_TIMEOUT = 'bad_timeout'
-BAD_SURVIVED = 'bad_survived'
-
-mutant_statuses = [
-    UNTESTED,
-    OK_KILLED,
-    OK_SUSPICIOUS,
-    BAD_TIMEOUT,
-    BAD_SURVIVED,
-]
 
 
 def number_mutation(value, **_):

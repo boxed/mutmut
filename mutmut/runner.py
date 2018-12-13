@@ -16,7 +16,6 @@ from mutmut.mutators import mutate_file, Context, list_mutations
 from mutmut.terminal import print_status
 from threading import Timer
 
-
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     class TimeoutError(OSError):
         """ Timeout expired.
