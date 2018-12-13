@@ -218,11 +218,13 @@ def run_mutation(config, filename, mutation_id):
         dict_synonyms=config.dict_synonyms,
         config=config,
     )
-    from mutmut.mutators import BAD_SURVIVED, BAD_TIMEOUT, OK_KILLED, \
-        OK_SUSPICIOUS, UNTESTED
 
     cached_status = get_cached_mutation_status(filename, mutation_id,
                                                config.hash_of_tests)
+
+    from mutmut.mutators import BAD_SURVIVED, BAD_TIMEOUT, OK_KILLED, \
+        OK_SUSPICIOUS, UNTESTED
+
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
