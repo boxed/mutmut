@@ -205,7 +205,7 @@ commands:\n
             return False
     else:
         covered_lines_by_filename = {}
-        coverage_data = read_coverage_data(use_coverage)
+        coverage_data = read_coverage_data()
 
         def _exclude(context):
             try:

@@ -58,22 +58,15 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         return paths_to_mutate
 
 
-def read_coverage_data(use_coverage):
+def read_coverage_data():
     """Read a coverage report a ``.coverage`` and return its coverage data.
-
-    :param use_coverage: boolean indicating whether to read coverage data
-        located at the current working ``.coverage``
-    :type use_coverage: bool
 
     :return: CoverageData from the given coverage file path
     :rtype: CoverageData or None
     """
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-        return coverage_data
-    else:
-        return None
+    print('Using coverage data from .coverage file')
+    # noinspection PyPackageRequirements,PyUnresolvedReferences
+    import coverage
+    coverage_data = coverage.CoverageData()
+    coverage_data.read_file('.coverage')
+    return coverage_data
