@@ -1,3 +1,8 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""pytests for :mod:`mutmut.mutators`"""
+
 import sys
 
 import pytest
