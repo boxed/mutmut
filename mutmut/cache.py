@@ -107,7 +107,7 @@ def hash_of(filename):
 
 
 def hash_of_tests(tests_dirs):
-    """
+    """Get the sha256 has of all the test files' combined contents
 
     :param tests_dirs:
     :type tests_dirs: list[str]
