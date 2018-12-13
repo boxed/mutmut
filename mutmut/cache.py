@@ -80,7 +80,9 @@ def init_db(f):
                 if existing_db_version != CURRENT_DB_VERSION:
                     print('mutmut cache is out of date, clearing it...')
                     DB.drop_all_tables(with_all_data=True)
-                    DB.schema = None  # Pony otherwise thinks we've already created the tables
+                    # Set the schema to None otherwise Pony thinks we've
+                    # already created the tables
+                    DB.schema = None
                     DB.generate_mapping(create_tables=True)
 
             with db_session:
@@ -236,7 +238,8 @@ def update_line_numbers(filename):
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
-    """
+    """Update/create Mutants within the database reflecting the Mutants
+    defined in the ``mutations_by_file`` dictionary
 
     :param mutations_by_file:
     :type mutations_by_file: dict[str, list[MutationID]]
