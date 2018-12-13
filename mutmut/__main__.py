@@ -167,7 +167,7 @@ commands:\n
         paths_to_mutate = get_or_guess_paths_to_mutate()
 
     if not isinstance(paths_to_mutate, (list, tuple)):
-        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
+        paths_to_mutate = [path.strip() for path in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
         raise FileNotFoundError(
