@@ -117,7 +117,7 @@ commands:\n
     """
     if version:
         print("mutmut version %s" % __version__)
-        return
+        return 0
 
     valid_commands = ['run', 'results', 'apply', 'show']
     if command not in valid_commands:
@@ -131,7 +131,7 @@ commands:\n
     if command in ('show', 'diff'):
         if not argument:
             print_result_cache()
-            return
+            return 0
 
         filename, mutation_id = get_filename_and_mutation_id_from_pk(argument)
         with open(filename) as f:
@@ -149,7 +149,7 @@ commands:\n
         for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
             print(line)
 
-        return
+        return 0
 
     if use_coverage and not exists('.coverage'):
         raise FileNotFoundError(
@@ -159,11 +159,11 @@ commands:\n
 
     if command == 'results':
         print_result_cache()
-        return
+        return 0
 
     if command == 'apply':
         do_apply(argument, dict_synonyms, backup)
-        return
+        return 0
 
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
@@ -257,27 +257,8 @@ commands:\n
     )
 
     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
-    print()
-
-
-def fail_on_cache_only(config):
-    if config.cache_only:
-        print_status('')
-        print('\rFAILED: changes detected in cache only mode')
-        exit(2)
-
-
-def coverage_exclude_callback(context, use_coverage, coverage_data):
-    if use_coverage:
-        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-        if measured_lines is None:
-            return True
-        current_line = context.current_line_index + 1
-        if current_line not in measured_lines:
-            return True
-
-    return False
+    return 0
 
 
 if __name__ == '__main__':
-    main()  # pylint: disable=no-value-for-parameter
+    sys.exit(main())  # pylint: disable=no-value-for-parameter
