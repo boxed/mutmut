@@ -133,10 +133,10 @@ def argument_mutation(children, context, **_):
     if power_node.children[0].type == 'name' and \
             power_node.children[0].value in context.dict_synonyms:
         children = children[:]
-        c = children[0]
-        if c.type == 'name':
-            children[0] = Name(c.value + 'XX', start_pos=c.start_pos,
-                               prefix=c.prefix)
+        child = children[0]
+        if child.type == 'name':
+            children[0] = Name(child.value + 'XX', start_pos=child.start_pos,
+                               prefix=child.prefix)
 
     return children
 
