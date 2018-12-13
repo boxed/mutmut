@@ -38,7 +38,7 @@ jobs:
     - python: 3.7
       dist: xenial
     - python: pypy
-    - python: pypy3
+# TODO: resolve issues    - python: pypy3
     - stage: linting
       python:
         - 3.6
