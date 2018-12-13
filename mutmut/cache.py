@@ -284,14 +284,13 @@ def get_cached_mutation_status(filename, mutation_id, tests_hash):
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
-    from mutmut.mutators import OK_KILLED
+    from mutmut.mutators import OK_KILLED, UNTESTED
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test
         # suite will mean it's still killed
         return OK_KILLED
 
     if mutant.tested_against_hash != tests_hash:
-        from mutmut.mutators import UNTESTED
         return UNTESTED
 
     return mutant.status
