@@ -6,15 +6,16 @@ from __future__ import print_function
 import itertools
 import os
 import shlex
+import subprocess
 import sys
 import traceback
 from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from subprocess import Popen
-from threading import Thread
 from time import sleep, time
+
+from threading import Timer
 
 import click
 from glob2 import glob
@@ -364,52 +365,59 @@ Legend for output:
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
-    master, slave = os.openpty()
+    """Open a subprocess and stream its output without hard-blocking.
 
-    p = Popen(
-        shlex.split(cmd, posix=True),
-        stdout=slave,
-        stderr=slave
+    :param cmd: the command to execute within the subprocess
+    :type cmd: str
+
+    :param callback: function to execute with the subprocess stdout output
+    :param timeout: the timeout time for the processes' ``communication``
+        call to complete
+    :type timeout: float
+
+    :raises TimeoutError: if the subprocesses' ``communication`` call times out
+
+    :return: the return code of the executed subprocess
+    :rtype: int
+    """
+    process = subprocess.Popen(
+        shlex.split(cmd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True
     )
-    stdout = os.fdopen(master)
-    os.close(slave)
 
-    start = time()
-
-    foo = {'raise': False}
-
-    def timeout_killer():
-        while p.returncode is None:
-            sleep(0.1)
-            if (time() - start) > timeout:
-                foo['raise'] = True
-                p.kill()
-                return
-
-    if timeout:
-        t = Thread(target=timeout_killer)
-        t.daemon = True
-        t.start()
-
-    while p.returncode is None:
+    def kill(process):
+        """Kill the specified process on Timer completion"""
         try:
-            while True:
-                line = stdout.readline()
-                if not line:
-                    break
-                callback(line.rstrip())
-        except (IOError, OSError):
+            process.kill()
+        except OSError:
+            pass  # ignore
+
+    # python 2-3 agnostic process timer
+    timer = Timer(timeout, kill, [process])
+    timer.start()
+
+    while process.returncode is None:
+        try:
+            output, errors = process.communicate()
+            if output.endswith("\n"):
+                # -1 to remove the newline at the end
+                output = output[:-1]
+            line = output
+            callback(line)
+        except OSError:
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
             pass
+        if not timer.is_alive():
+            raise TimeoutError("subprocess timed out")
 
-        p.poll()
+    # we have returned from the subprocess cancel the timer if it is running
+    timer.cancel()
 
-    if foo['raise']:
-        raise TimeoutError("subprocess command {} timed out after {} seconds".format(cmd, time()-start))
-
-    return p.returncode
+    return process.returncode
 
 
 def tests_pass(config):
