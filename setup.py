@@ -1,8 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""setup.py for mutmut"""
+
 import os
 import re
+import sys
+
 from setuptools import setup, find_packages, Command
+from setuptools.command.test import test
 
 readme = open('README.rst').read()
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
@@ -63,6 +69,29 @@ class ReleaseCheck(Command):
 
         print("Ok to distribute files")
 
+
+class Pylint(test):
+    def run_tests(self):
+        from pylint.lint import Run
+        Run(["mutmut", "--persistent", "y", "--rcfile", ".pylintrc",
+             "--output-format", "colorized"])
+
+
+class PyTest(test):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
+
+    def initialize_options(self):
+        test.initialize_options(self)
+        self.pytest_args = "-v --cov={}".format("mutmut")
+
+    def run_tests(self):
+        import shlex
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(shlex.split(self.pytest_args))
+        sys.exit(errno)
+
+
 import inspect
 running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
@@ -79,10 +108,21 @@ setup(
     packages=find_packages('.'),
     package_dir={'': '.'},
     include_package_data=True,
-    install_requires=read_reqs('requirements.txt'),
     license="BSD",
     zip_safe=False,
     keywords='',
+    install_requires=[
+        "click",
+        "glob2",
+        "parso",
+        "pony",
+        "tri.declarative",
+    ],
+    tests_require=[
+        "pytest>=2.8.7",
+        "pytest-cov",
+        "pylint>=1.9.1,<2.0.0",
+    ],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
@@ -91,13 +131,21 @@ setup(
         "Programming Language :: Python :: 2",
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
-        "Framework :: Pytest",
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Framework :: Pytest',
     ],
     test_suite='tests',
-    cmdclass={'tag': Tag,
-              'release_check': ReleaseCheck},
-    # if I add entry_points while pytest runs, it imports before the coverage collecting starts
+    cmdclass={
+        'tag': Tag,
+        'release_check': ReleaseCheck,
+        'test': PyTest,
+        'lint': Pylint
+    },
+    # if I add entry_points while pytest runs,
+    # it imports before the coverage collecting starts
     entry_points={
         'pytest11': [
             'mutmut = mutmut.pytestplugin',
