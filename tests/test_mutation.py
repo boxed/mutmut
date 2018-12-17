@@ -1,3 +1,8 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+"""pytests for various mutations done by mutmut"""
+
 import sys
 
 from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID
@@ -62,12 +67,22 @@ def test_basic_mutations(original, expected):
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'original, expected', [
-        ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[None] = 7'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass')
     ]
 )
 def test_basic_mutations_python3(original, expected):
+    actual = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
+    assert actual == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
+@pytest.mark.parametrize(
+    'original, expected', [
+        ('a: int = 1', 'a: int = None'),
+        ('a: Optional[int] = None', 'a: Optional[None] = 7'),
+    ]
+)
+def test_basic_mutations_python36(original, expected):
     actual = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == expected
 
@@ -218,7 +233,7 @@ filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
 def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
