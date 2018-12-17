@@ -111,18 +111,8 @@ setup(
     license="BSD",
     zip_safe=False,
     keywords='',
-    install_requires=[
-        "click",
-        "glob2",
-        "parso",
-        "pony",
-        "tri.declarative",
-    ],
-    tests_require=[
-        "pytest>=2.8.7",
-        "pytest-cov",
-        "pylint>=1.9.1,<2.0.0",
-    ],
+    install_requires=read_reqs('requirements.txt'),
+    tests_require=read_reqs('test_requirements.txt'),
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
