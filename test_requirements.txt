@@ -1,2 +1,0 @@
-pytest >= 2.8.7
--rrequirements.txt
