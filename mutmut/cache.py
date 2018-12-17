@@ -14,7 +14,7 @@ from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_type = unicode
+    text_type = unicode  # pylint: disable=undefined-variable
 else:
     text_type = str
 

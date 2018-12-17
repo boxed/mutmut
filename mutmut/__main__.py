@@ -27,7 +27,7 @@ spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+    from ConfigParser import ConfigParser, NoOptionError, NoSectionError  # pylint: disable=import-error
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
@@ -559,6 +559,6 @@ def python_source_files(path, tests_dirs):
 
 if __name__ == '__main__':
     try:
-        main()
+        main()  # pylint: disable=no-value-for-parameter
     except ErrorMessage as main_error:
         print(str(main_error))
