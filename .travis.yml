@@ -1,15 +1,65 @@
 language: python
-python:
-- '3.6'
-install: pip install tox codecov
-script: make coverage
-after_success: codecov
-deploy:
-  provider: pypi
-  user: boxed
-  password:
-    secure: RIx54eu4Pxu4nDWNU8WCztI0POS9iPmIz4v4ClzkFIGR3N14sfK3V4OHnQMSI/3rY1KBbm4XRRoOpzLi52tHYI7B4FUzp0TSrWKjETqHgA2/ZJ4fCFyCYnD+loU4MKWHTcVfmlVKyhGIXxBTCX5T6ieUFcno455eE11PKQSo1gsK36uB5WMeW7E6hwAvn3b17PFLiMnpGq8rO3+QzU0WbLCRacKXGMuleqKMDGxvmDwZIz1Sk3RhPMY+EHXNYXFeBzCxjdlxf5ZwVFrQgqqni4C0et04xq680d81KbVdt9iqptdGr54d7Gl1S+ErVj7fwCkCrAFrcy3ui+e0TJofNefdn2i45PhDodoLC4tiT18Tx6ZA4AYPb9RkyTr5WUWIZ5KOaNqsZIxvo13pw4x5oTv8kf5MJ/pMF5MzY+Mx8+4hk7Box0t6V5OIWcm3vu4gIFDEWinKCKjmR3leP6kY/Nlc7M//jBcG1DJ3WajFIv7+eNe4kqPV2PHjN9SsxtlAWO1oqyV2pcWlmSPyIutIZy0jehHCxBEPvK05yq34fHV7JVQOcjIgi4IyyUgJ+Kfkf0E0TcTVvBkjE7FD01ekvI9jvlhwC20BvfWw+7b7iL8pTyQb1FqmgF5FkEIPugeDYR1pT19efrHbfSZtvv+eXV+UltSpQix1Jn9u+JqOxNE=
-  on:
-    python: 3.6
-    tags: true
-    repo: boxed/mutmut
+
+stages:
+  - linting
+  - test
+  - build
+  - deploy
+
+before_install:
+  - pip install codecov
+  - |
+    if [ "$TRAVIS_PYTHON_VERSION" = "pypy" ]; then
+      export PYENV_ROOT="$HOME/.pyenv"
+      if [ -f "$PYENV_ROOT/bin/pyenv" ]; then
+        pushd "$PYENV_ROOT" && git pull && popd
+      else
+        rm -rf "$PYENV_ROOT" && git clone --depth 1 https://github.com/yyuu/pyenv.git "$PYENV_ROOT"
+      fi
+      export PYPY_VERSION="5.6.0"
+      "$PYENV_ROOT/bin/pyenv" install --skip-existing "pypy-$PYPY_VERSION"
+      virtualenv --python="$PYENV_ROOT/versions/pypy-$PYPY_VERSION/bin/python" "$HOME/virtualenvs/pypy-$PYPY_VERSION"
+      source "$HOME/virtualenvs/pypy-$PYPY_VERSION/bin/activate"
+    fi
+
+install:
+  - pip install .
+script:
+  - python setup.py test
+after_success:
+  - codecov
+
+jobs:
+  include:
+    - python: 2.7
+    - python: 3.4
+    - python: 3.5
+    - python: 3.6
+    - python: 3.7
+      dist: xenial
+    - python: pypy
+# TODO: resolve issues    - python: pypy3
+    - stage: linting
+      python:
+        - 3.6
+      before_script: skip
+      after_script: skip
+      script:
+        - python setup.py lint || exit $(($? & 35))
+    - stage: build
+      python:
+        - 3.6
+      before_script: skip
+      after_script: skip
+      script:
+        - python setup.py sdist
+    - stage: deploy
+      deploy:
+        provider: pypi
+        user: boxed
+        password:
+          secure: RIx54eu4Pxu4nDWNU8WCztI0POS9iPmIz4v4ClzkFIGR3N14sfK3V4OHnQMSI/3rY1KBbm4XRRoOpzLi52tHYI7B4FUzp0TSrWKjETqHgA2/ZJ4fCFyCYnD+loU4MKWHTcVfmlVKyhGIXxBTCX5T6ieUFcno455eE11PKQSo1gsK36uB5WMeW7E6hwAvn3b17PFLiMnpGq8rO3+QzU0WbLCRacKXGMuleqKMDGxvmDwZIz1Sk3RhPMY+EHXNYXFeBzCxjdlxf5ZwVFrQgqqni4C0et04xq680d81KbVdt9iqptdGr54d7Gl1S+ErVj7fwCkCrAFrcy3ui+e0TJofNefdn2i45PhDodoLC4tiT18Tx6ZA4AYPb9RkyTr5WUWIZ5KOaNqsZIxvo13pw4x5oTv8kf5MJ/pMF5MzY+Mx8+4hk7Box0t6V5OIWcm3vu4gIFDEWinKCKjmR3leP6kY/Nlc7M//jBcG1DJ3WajFIv7+eNe4kqPV2PHjN9SsxtlAWO1oqyV2pcWlmSPyIutIZy0jehHCxBEPvK05yq34fHV7JVQOcjIgi4IyyUgJ+Kfkf0E0TcTVvBkjE7FD01ekvI9jvlhwC20BvfWw+7b7iL8pTyQb1FqmgF5FkEIPugeDYR1pT19efrHbfSZtvv+eXV+UltSpQix1Jn9u+JqOxNE=
+        on:
+          python: 3.6
+          tags: true
+          repo: boxed/mutmut
