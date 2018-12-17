@@ -13,8 +13,7 @@ from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from time import sleep, time
-
+from time import time
 from threading import Timer
 
 import click
@@ -400,11 +399,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while process.returncode is None:
         try:
-            output, errors = process.communicate()
-            if output.endswith("\n"):
-                # -1 to remove the newline at the end
-                output = output[:-1]
-            line = output
+            # -1 to remove the newline at the end
+            line = process.stdout.readline()[:-1]
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI.
@@ -413,6 +409,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
             pass
         if not timer.is_alive():
             raise TimeoutError("subprocess timed out")
+
+        process.poll()
 
     # we have returned from the subprocess cancel the timer if it is running
     timer.cancel()

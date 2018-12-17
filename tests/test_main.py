@@ -327,7 +327,7 @@ def test_timeout(capsys):
     assert (time.time() - start) < 3
     # ensure we obtained nothing
     captured = capsys.readouterr()
-    assert "failure\n" != captured.out
+    assert "failure" not in captured.out
 
 
 def test_non_timeout(capsys):
@@ -341,4 +341,4 @@ def test_non_timeout(capsys):
     assert (time.time() - start) > 4
     # ensure we captured the print of 'success'
     captured = capsys.readouterr()
-    assert "success\n" == captured.out
+    assert "success" in captured.out
