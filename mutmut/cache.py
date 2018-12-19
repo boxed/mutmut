@@ -12,6 +12,8 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, Prim
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID
 
+from junit_xml import TestSuite, TestCase
+
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
@@ -134,6 +136,31 @@ def print_result_cache():
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
+
+
+@init_db
+@db_session
+def print_result_cache_junitxml():
+    test_cases = []
+    l = list(select(x for x in Mutant))
+    for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+        for mutant in mutants:
+            # TODO: Use the unified diff output instead of the plain line
+            tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
+            if mutant.status == BAD_SURVIVED:
+                tc.add_failure_info(message=mutant.status)
+            if mutant.status == BAD_TIMEOUT:
+                tc.add_error_info(message=mutant.status, error_type="timeout")
+            if mutant.status == OK_SUSPICIOUS:
+                tc.add_skipped_info(message=mutant.status, output="Suspicious")
+            if mutant.status == UNTESTED:
+                tc.add_skipped_info(message=mutant.status, output="Untested")
+
+            test_cases.append(tc)
+            # print(filename, mutant.to_dict())
+
+    ts = TestSuite("mutmut", test_cases)
+    print(TestSuite.to_xml_string([ts]))
 
 
 def get_or_create(model, defaults=None, **params):

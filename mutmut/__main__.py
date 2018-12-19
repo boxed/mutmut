@@ -19,7 +19,8 @@ import click
 from glob2 import glob
 
 from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
-    mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers
+    mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
+    print_result_cache_junitxml
 from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
 from .cache import hash_of_tests
 
@@ -184,7 +185,7 @@ commands:\n
         print("mutmut version %s" % __version__)
         return
 
-    valid_commands = ['run', 'results', 'apply', 'show']
+    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
         print('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
         return
@@ -225,6 +226,10 @@ commands:\n
 
     if command == 'results':
         print_result_cache()
+        return
+
+    if command == 'junitxml':
+        print_result_cache_junitxml()
         return
 
     if command == 'apply':
