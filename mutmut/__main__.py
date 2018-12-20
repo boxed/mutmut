@@ -20,7 +20,7 @@ from glob2 import glob
 
 from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
     mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
-    print_result_cache_junitxml
+    print_result_cache_junitxml, get_unified_diff
 from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
 from .cache import hash_of_tests
 
@@ -201,22 +201,7 @@ commands:\n
             print_result_cache()
             return
 
-        filename, mutation_id = filename_and_mutation_id_from_pk(argument)
-        with open(filename) as f:
-            source = f.read()
-        context = Context(
-            source=source,
-            filename=filename,
-            mutation_id=mutation_id,
-            dict_synonyms=dict_synonyms,
-        )
-        mutated_source, number_of_mutations_performed = mutate(context)
-        if not number_of_mutations_performed:
-            print('No mutation performed')
-            return
-
-        for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
-            print(line)
+        print(get_unified_diff(argument, dict_synonyms))
 
         return
 
@@ -229,7 +214,7 @@ commands:\n
         return
 
     if command == 'junitxml':
-        print_result_cache_junitxml()
+        print_result_cache_junitxml(dict_synonyms)
         return
 
     if command == 'apply':

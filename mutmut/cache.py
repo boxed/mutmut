@@ -7,10 +7,11 @@ from difflib import SequenceMatcher
 from functools import wraps
 from io import open
 from itertools import groupby, zip_longest
+from difflib import unified_diff
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID, Context, mutate
 
 from junit_xml import TestSuite, TestCase
 
@@ -138,9 +139,29 @@ def print_result_cache():
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
+def get_unified_diff(argument, dict_synonyms):
+    filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+    with open(filename) as f:
+        source = f.read()
+    context = Context(
+        source=source,
+        filename=filename,
+        mutation_id=mutation_id,
+        dict_synonyms=dict_synonyms,
+    )
+    mutated_source, number_of_mutations_performed = mutate(context)
+    if not number_of_mutations_performed:
+        return ""
+
+    output = ""
+    for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
+        output += line + "\n"
+    return output
+
+
 @init_db
 @db_session
-def print_result_cache_junitxml():
+def print_result_cache_junitxml(dict_synonyms):
     test_cases = []
     l = list(select(x for x in Mutant))
     for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
@@ -150,11 +171,11 @@ def print_result_cache_junitxml():
             if mutant.status == BAD_SURVIVED:
                 tc.add_failure_info(message=mutant.status)
             if mutant.status == BAD_TIMEOUT:
-                tc.add_error_info(message=mutant.status, error_type="timeout")
+                tc.add_error_info(message=mutant.status, error_type="timeout", output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == OK_SUSPICIOUS:
-                tc.add_skipped_info(message=mutant.status, output="Suspicious")
+                tc.add_skipped_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == UNTESTED:
-                tc.add_skipped_info(message=mutant.status, output="Untested")
+                tc.add_skipped_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
 
             test_cases.append(tc)
             # print(filename, mutant.to_dict())
