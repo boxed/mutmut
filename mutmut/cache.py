@@ -169,7 +169,7 @@ def print_result_cache_junitxml(dict_synonyms):
             # TODO: Use the unified diff output instead of the plain line
             tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
             if mutant.status == BAD_SURVIVED:
-                tc.add_failure_info(message=mutant.status)
+                tc.add_failure_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == BAD_TIMEOUT:
                 tc.add_error_info(message=mutant.status, error_type="timeout", output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == OK_SUSPICIOUS:
