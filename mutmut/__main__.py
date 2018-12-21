@@ -400,12 +400,17 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while process.returncode is None:
         try:
-            output, errors = nonblock_read(process.stdout)
-            if output.endswith("\n"):
-                # -1 to remove the newline at the end
-                output = output[:-1]
-            line = output
-            callback(line)
+            if os.name == 'nt':
+                output = process.stdout.readline()
+            else:
+                output = nonblock_read(process.stdout)
+            if output:
+                if isinstance(output, bytes):
+                    output = output.decode("utf-8")
+                if output.endswith("\n"):
+                    # -1 to remove the newline at the end
+                    output = output[:-1]
+                callback(output)
         except OSError:
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
