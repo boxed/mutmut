@@ -166,7 +166,6 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
     l = list(select(x for x in Mutant))
     for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
         for mutant in mutants:
-            # TODO: Use the unified diff output instead of the plain line
             tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
             if mutant.status == BAD_SURVIVED:
                 tc.add_failure_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
@@ -182,7 +181,6 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
                     func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
 
             test_cases.append(tc)
-            # print(filename, mutant.to_dict())
 
     ts = TestSuite("mutmut", test_cases)
     print(TestSuite.to_xml_string([ts]))
