@@ -110,3 +110,17 @@ You can also tell mutmut to just check a single mutant:
 .. code-block:: shell
 
     > mutmut run 3
+
+
+JUnit XML support
+-----------------
+
+In order to better integrate with CI/CD systems, `mutmut` supports the generation of a JUnit XML report (using https://pypi.org/project/junit-xml/).
+This option is available by calling `mutmut junitxml`. In order to define how to deal with suspicious and untested mutants, you can use `mutmut junitxml --suspicious-policy=ignore --untested-policy=ignore`.
+The possible values for these policies are:
+- `ignore`: Do not include the results on the report at all
+- `skipped`: Include the mutant on the report as "skipped"
+- `error`: Include the mutant on the report as "error"
+- `failure`: Include the mutant on the report as "failure"
+
+If a failed mutant is included in the report, then the unified diff of the mutant will also be included for debugging purposes.
