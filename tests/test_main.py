@@ -2,6 +2,7 @@
 import os
 import shutil
 import sys
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import pytest
@@ -82,6 +83,18 @@ To show a mutant:
 
 
 @pytest.mark.usefixtures('filesystem')
+def test_full_run_no_surviving_mutants_junit():
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    root = ET.fromstring(result.output.strip())
+    assert root.attrib['tests'] == '8'
+    assert root.attrib['failures'] == '0'
+    assert root.attrib['errors'] == '0'
+    assert root.attrib['disabled'] == '0'
+
+
+@pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
@@ -103,6 +116,21 @@ Survived 🙁 (1)
 
 1
 """.strip() == result.output.strip()
+
+
+@pytest.mark.usefixtures('filesystem')
+def test_full_run_one_surviving_mutant_junit():
+    with open('tests/test_foo.py', 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    root = ET.fromstring(result.output.strip())
+    assert root.attrib['tests'] == '8'
+    assert root.attrib['failures'] == '1'
+    assert root.attrib['errors'] == '0'
+    assert root.attrib['disabled'] == '0'
 
 
 @pytest.mark.usefixtures('filesystem')
