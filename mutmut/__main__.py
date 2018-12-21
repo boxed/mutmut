@@ -396,6 +396,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     # python 2-3 agnostic process timer
     timer = Timer(timeout, kill, [process])
+    timer.setDaemon(True)
     timer.start()
 
     while process.returncode is None:
