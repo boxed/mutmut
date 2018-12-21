@@ -161,7 +161,7 @@ def get_unified_diff(argument, dict_synonyms):
 
 @init_db
 @db_session
-def print_result_cache_junitxml(dict_synonyms):
+def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
     test_cases = []
     l = list(select(x for x in Mutant))
     for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
@@ -173,9 +173,13 @@ def print_result_cache_junitxml(dict_synonyms):
             if mutant.status == BAD_TIMEOUT:
                 tc.add_error_info(message=mutant.status, error_type="timeout", output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == OK_SUSPICIOUS:
-                tc.add_skipped_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+                if suspicious_policy != 'ignore':
+                    func = getattr(tc, 'add_{}_info'.format(suspicious_policy))
+                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == UNTESTED:
-                tc.add_skipped_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+                if untested_policy != 'ignore':
+                    func = getattr(tc, 'add_{}_info'.format(untested_policy))
+                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
 
             test_cases.append(tc)
             # print(filename, mutant.to_dict())

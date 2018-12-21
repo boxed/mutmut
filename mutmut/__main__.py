@@ -164,12 +164,14 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version):
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version, suspicious_policy, untested_policy):
     """
 commands:\n
     run [mutation id]\n
@@ -214,7 +216,7 @@ commands:\n
         return
 
     if command == 'junitxml':
-        print_result_cache_junitxml(dict_synonyms)
+        print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
         return
 
     if command == 'apply':
