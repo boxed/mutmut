@@ -118,6 +118,7 @@ JUnit XML support
 In order to better integrate with CI/CD systems, `mutmut` supports the generation of a JUnit XML report (using https://pypi.org/project/junit-xml/).
 This option is available by calling `mutmut junitxml`. In order to define how to deal with suspicious and untested mutants, you can use `mutmut junitxml --suspicious-policy=ignore --untested-policy=ignore`.
 The possible values for these policies are:
+
 - `ignore`: Do not include the results on the report at all
 - `skipped`: Include the mutant on the report as "skipped"
 - `error`: Include the mutant on the report as "error"
