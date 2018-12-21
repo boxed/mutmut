@@ -18,6 +18,7 @@ from threading import Timer
 
 import click
 from glob2 import glob
+from nonblock import nonblock_read
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
     BAD_TIMEOUT, \
@@ -399,8 +400,11 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while process.returncode is None:
         try:
-            # -1 to remove the newline at the end
-            line = process.stdout.readline()[:-1]
+            output, errors = nonblock_read(process.stdout)
+            if output.endswith("\n"):
+                # -1 to remove the newline at the end
+                output = output[:-1]
+            line = output
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI.
