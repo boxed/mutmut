@@ -5,6 +5,7 @@ from __future__ import print_function
 import itertools
 import os
 import sys
+import signal
 from datetime import datetime
 from difflib import unified_diff
 from functools import wraps
@@ -336,6 +337,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         shell=True,
         stdout=slave,
         stderr=slave,
+        start_new_session=True
     )
     stdout = os.fdopen(master)
     os.close(slave)
@@ -349,7 +351,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             sleep(0.1)
             if (datetime.now() - start).total_seconds() > timeout:
                 foo['raise'] = True
-                p.kill()
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
                 return
 
     if timeout:
@@ -359,7 +361,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while p.returncode is None:
         try:
-            line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+            line = stdout.readline().rstrip()
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI. It seems like
