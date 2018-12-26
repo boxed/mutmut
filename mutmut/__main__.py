@@ -5,8 +5,8 @@ from __future__ import print_function
 import itertools
 import os
 import sys
+import signal
 from datetime import datetime
-from difflib import unified_diff
 from functools import wraps
 from io import open
 from os.path import isdir, exists
@@ -19,9 +19,9 @@ import click
 from glob2 import glob
 
 from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
-    mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
+    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
     print_result_cache_junitxml, get_unified_diff
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -336,6 +336,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         shell=True,
         stdout=slave,
         stderr=slave,
+        preexec_fn=os.setsid
     )
     stdout = os.fdopen(master)
     os.close(slave)
@@ -349,7 +350,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             sleep(0.1)
             if (datetime.now() - start).total_seconds() > timeout:
                 foo['raise'] = True
-                p.kill()
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
                 return
 
     if timeout:
@@ -359,7 +360,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while p.returncode is None:
         try:
-            line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+            line = stdout.readline().rstrip()
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI. It seems like
