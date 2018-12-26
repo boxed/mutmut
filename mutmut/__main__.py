@@ -336,7 +336,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         shell=True,
         stdout=slave,
         stderr=slave,
-        start_new_session=True
+        preexec_fn=os.setsid
     )
     stdout = os.fdopen(master)
     os.close(slave)
