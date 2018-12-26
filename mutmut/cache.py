@@ -17,8 +17,7 @@ from junit_xml import TestSuite, TestCase
 
 try:
     from itertools import zip_longest
-except ImportError:
-    # Python2
+except ImportError:  # pragma: no cover (python2)
     from itertools import izip_longest as zip_longest
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
