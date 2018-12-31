@@ -1,0 +1,6 @@
+glob2
+parso
+tri.declarative
+click
+pony
+junit-xml==1.8

@@ -5,6 +5,8 @@
 
 import os
 import sys
+import xml.etree.ElementTree as ET
+from datetime import datetime
 
 import pytest
 
@@ -12,8 +14,6 @@ from mutmut.__main__ import main, python_source_files
 from click.testing import CliRunner
 
 pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
-
-in_travis = os.environ['PATH'].startswith('/home/travis/')
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -86,6 +86,18 @@ To show a mutant:
 
 
 @pytest.mark.usefixtures('filesystem')
+def test_full_run_no_surviving_mutants_junit():
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    root = ET.fromstring(result.output.strip())
+    assert root.attrib['tests'] == '8'
+    assert root.attrib['failures'] == '0'
+    assert root.attrib['errors'] == '0'
+    assert root.attrib['disabled'] == '0'
+
+
+@pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
@@ -121,3 +133,24 @@ Survived 🙁 (1)
 @pytest.mark.usefixtures('filesystem')
 def test_python_source_files(expected, source_path, tests_dirs):
     assert expected == list(python_source_files(source_path, tests_dirs))
+
+def test_full_run_one_surviving_mutant_junit():
+    with open('tests/test_foo.py', 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    root = ET.fromstring(result.output.strip())
+    assert root.attrib['tests'] == '8'
+    assert root.attrib['failures'] == '1'
+    assert root.attrib['errors'] == '0'
+    assert root.attrib['disabled'] == '0'
+
+def test_timeout():
+    start = datetime.now()
+
+    with pytest.raises(TimeoutError):
+        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+
+    assert (datetime.now() - start).total_seconds() < 3
