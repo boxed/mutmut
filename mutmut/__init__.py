@@ -41,7 +41,7 @@ dunder_whitelist = [
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)  # pylint: disable=undefined-variable
+    text_types = (str, unicode)
 else:
     text_types = (str,)
 
