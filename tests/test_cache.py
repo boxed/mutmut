@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from mutmut.cache import sequence_ops
 
 

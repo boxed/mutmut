@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import sys
 
 from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID
