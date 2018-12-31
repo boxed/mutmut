@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""pytests for :mod:`mutmut.__main__`"""
-
 import os
 import sys
 import xml.etree.ElementTree as ET

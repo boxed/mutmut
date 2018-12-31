@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""setup.py for mutmut"""
-
 import os
 import re
 import sys

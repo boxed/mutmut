@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""pytests for various mutations done by mutmut"""
-
 import sys
 
 from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID
