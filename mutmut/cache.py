@@ -20,7 +20,6 @@ except ImportError:  # pragma: no cover (python2)
     from itertools import izip_longest as zip_longest
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    from itertools import izip_longest as zip_longest
     # noinspection PyUnresolvedReferences
     text_type = unicode
 else:
