@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pytest
 
-from mutmut.__main__ import main, python_source_files
+from mutmut.__main__ import main, python_source_files, popen_streaming_output
 from click.testing import CliRunner
 
 pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
@@ -134,6 +134,8 @@ Survived 🙁 (1)
 def test_python_source_files(expected, source_path, tests_dirs):
     assert expected == list(python_source_files(source_path, tests_dirs))
 
+
+@pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant_junit():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
@@ -147,9 +149,9 @@ def test_full_run_one_surviving_mutant_junit():
     assert root.attrib['errors'] == '0'
     assert root.attrib['disabled'] == '0'
 
+
 def test_timeout():
     start = datetime.now()
-
     with pytest.raises(TimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
