@@ -70,13 +70,6 @@ class ReleaseCheck(Command):
         print("Ok to distribute files")
 
 
-class Pylint(test):
-    def run_tests(self):
-        from pylint.lint import Run
-        Run(["mutmut", "--persistent", "y", "--rcfile", ".pylintrc",
-             "--output-format", "colorized"])
-
-
 class PyTest(test):
     user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
 
@@ -121,7 +114,6 @@ setup(
     tests_require=[
         "pytest>=2.8.7",
         "pytest-cov",
-        "pylint>=1.9.1,<2.0.0",
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
@@ -142,7 +134,6 @@ setup(
         'tag': Tag,
         'release_check': ReleaseCheck,
         'test': PyTest,
-        'lint': Pylint
     },
     # if I add entry_points while pytest runs,
     # it imports before the coverage collecting starts

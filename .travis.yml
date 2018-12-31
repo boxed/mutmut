@@ -1,7 +1,6 @@
 language: python
 
 stages:
-  - linting
   - test
   - build
   - deploy
@@ -38,14 +37,6 @@ jobs:
     - python: 3.7
       dist: xenial
     - python: pypy
-# TODO: resolve issues    - python: pypy3
-    - stage: linting
-      python:
-        - 3.6
-      before_script: skip
-      after_script: skip
-      script:
-        - python setup.py lint || exit $(($? & 35))
     - stage: build
       python:
         - 3.6
