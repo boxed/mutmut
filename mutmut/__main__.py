@@ -5,8 +5,8 @@ from __future__ import print_function
 import itertools
 import os
 import sys
+import signal
 from datetime import datetime
-from difflib import unified_diff
 from functools import wraps
 from io import open
 from os.path import isdir, exists
@@ -19,8 +19,9 @@ import click
 from glob2 import glob
 
 from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
-    mutation_id_from_pk, filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, mutate
+    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
+    print_result_cache_junitxml, get_unified_diff
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -163,12 +164,14 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version):
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version, suspicious_policy, untested_policy):
     """
 commands:\n
     run [mutation id]\n
@@ -184,7 +187,7 @@ commands:\n
         print("mutmut version %s" % __version__)
         return
 
-    valid_commands = ['run', 'results', 'apply', 'show']
+    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
         print('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
         return
@@ -200,22 +203,7 @@ commands:\n
             print_result_cache()
             return
 
-        filename, mutation_id = filename_and_mutation_id_from_pk(argument)
-        with open(filename) as f:
-            source = f.read()
-        context = Context(
-            source=source,
-            filename=filename,
-            mutation_id=mutation_id,
-            dict_synonyms=dict_synonyms,
-        )
-        mutated_source, number_of_mutations_performed = mutate(context)
-        if not number_of_mutations_performed:
-            print('No mutation performed')
-            return
-
-        for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
-            print(line)
+        print(get_unified_diff(argument, dict_synonyms))
 
         return
 
@@ -225,6 +213,10 @@ commands:\n
 
     if command == 'results':
         print_result_cache()
+        return
+
+    if command == 'junitxml':
+        print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
         return
 
     if command == 'apply':
@@ -344,6 +336,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         shell=True,
         stdout=slave,
         stderr=slave,
+        preexec_fn=os.setsid
     )
     stdout = os.fdopen(master)
     os.close(slave)
@@ -357,7 +350,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             sleep(0.1)
             if (datetime.now() - start).total_seconds() > timeout:
                 foo['raise'] = True
-                p.kill()
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
                 return
 
     if timeout:
@@ -367,7 +360,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while p.returncode is None:
         try:
-            line = stdout.readline()[:-1]  # -1 to remove the newline at the end
+            line = stdout.readline().rstrip()
             callback(line)
         except OSError:
             # This seems to happen on some platforms, including TravisCI. It seems like
