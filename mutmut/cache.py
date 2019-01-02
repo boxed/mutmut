@@ -1,13 +1,12 @@
-# coding=utf-8
+# -*- coding: utf-8 -*-
 
 import hashlib
 import os
 import sys
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, unified_diff
 from functools import wraps
-from io import open
 from itertools import groupby
-from difflib import unified_diff
+from io import open
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
@@ -24,6 +23,7 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
 else:
+    from itertools import zip_longest
     text_type = str
 
 
@@ -251,7 +251,7 @@ def update_line_numbers(filename):
             Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % tag
+            assert False, 'unknown opcode from SequenceMatcher: %s' % command
 
 
 @init_db

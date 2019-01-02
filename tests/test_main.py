@@ -1,6 +1,6 @@
-# coding=utf-8
+# -*- coding: utf-8 -*-
+
 import os
-import shutil
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -18,8 +18,14 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
-    "g: int = 2",
 ]
+
+if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
+    file_to_mutate_lines.append("g: int = 2")
+else:
+    file_to_mutate_lines.append("g = 2")
+
+
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
 test_file_contents = '''
@@ -37,21 +43,17 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem():
-    shutil.rmtree('test_fs', ignore_errors=True)
-    os.mkdir('test_fs')
-    with open('test_fs/foo.py', 'w') as f:
-        f.write(file_to_mutate_contents)
+def filesystem(tmpdir):
+    foo = tmpdir.mkdir("test_fs").join("foo.py")
+    foo.write(file_to_mutate_contents)
 
-    os.mkdir('test_fs/tests')
-    with open('test_fs/tests/test_foo.py', 'w') as f:
-        f.write(test_file_contents)
+    test_foo = tmpdir.mkdir(os.path.join("test_fs", "tests")).join(
+        "test_foo.py")
+    test_foo.write(test_file_contents)
 
-    os.chdir('test_fs')
+    os.chdir(str(tmpdir.join('test_fs')))
     yield
     os.chdir('..')
-    shutil.rmtree('test_fs')
-
     # This is a hack to get pony to forget about the old db file
     import mutmut.cache
     mutmut.cache.db.provider = None
@@ -116,6 +118,20 @@ Survived 🙁 (1)
 """.strip() == result.output.strip()
 
 
+@pytest.mark.parametrize(
+    "expected, source_path, tests_dirs",
+    [
+        (["foo.py"], "foo.py", []),
+        ([os.path.join(".", "foo.py"),
+          os.path.join(".", "tests", "test_foo.py")], ".", []),
+        ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
+    ]
+)
+@pytest.mark.usefixtures('filesystem')
+def test_python_source_files(expected, source_path, tests_dirs):
+    assert expected == list(python_source_files(source_path, tests_dirs))
+
+
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant_junit():
     with open('tests/test_foo.py', 'w') as f:
@@ -131,16 +147,8 @@ def test_full_run_one_surviving_mutant_junit():
     assert root.attrib['disabled'] == '0'
 
 
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files():
-    assert list(python_source_files('foo.py', [])) == ['foo.py']
-    assert list(python_source_files('.', [])) == ['./foo.py', './tests/test_foo.py']
-    assert list(python_source_files('.', ['./tests'])) == ['./foo.py']
-
-
 def test_timeout():
     start = datetime.now()
-
     with pytest.raises(TimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
