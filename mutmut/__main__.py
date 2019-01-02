@@ -387,10 +387,10 @@ def popen_streaming_output(cmd, callback, timeout=None):
         universal_newlines=True
     )
 
-    def kill(process):
+    def kill(process_):
         """Kill the specified process on Timer completion"""
         try:
-            process.kill()
+            process_.kill()
         except OSError:
             pass  # ignore
 
