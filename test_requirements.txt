@@ -1,2 +1,3 @@
 pytest>=2.8.7
 pytest-cov
+mock == 2.0.0
