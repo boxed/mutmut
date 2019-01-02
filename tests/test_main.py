@@ -313,7 +313,7 @@ def test_full_run_one_suspicious_mutant_junit(filesystem):
 
 def mock_callback_func(line):
     """test call back function to be thrown into ``popen_streaming_output``"""
-    print(line)
+    print(line, end='')
 
 
 def test_timeout(capsys):
