@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -7,15 +8,13 @@ from datetime import datetime
 
 import pytest
 
-from mutmut.__main__ import main, python_source_files, popen_streaming_output
+from mutmut.__main__ import main, python_source_files, popen_streaming_output, CompatTimeoutError
 from click.testing import CliRunner
 try:
     from unittest.mock import MagicMock, call
 except ImportError:
     from mock import MagicMock, call
 
-
-pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -65,6 +64,7 @@ def filesystem(tmpdir):
     mutmut.cache.db.schema = None
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_simple_apply():
     result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
@@ -73,6 +73,7 @@ def test_simple_apply():
         assert f.read() != file_to_mutate_contents
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants():
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
@@ -87,6 +88,7 @@ To show a mutant:
 """.strip() == result.output.strip()
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants_junit():
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
@@ -99,6 +101,7 @@ def test_full_run_no_surviving_mutants_junit():
     assert root.attrib['disabled'] == '0'
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
@@ -137,6 +140,7 @@ def test_python_source_files(expected, source_path, tests_dirs):
     assert expected == list(python_source_files(source_path, tests_dirs))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant_junit():
     with open('tests/test_foo.py', 'w') as f:
@@ -154,7 +158,7 @@ def test_full_run_one_surviving_mutant_junit():
 
 def test_popen_streaming_output_timeout():
     start = datetime.now()
-    with pytest.raises(TimeoutError):
+    with pytest.raises(CompatTimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
     assert (datetime.now() - start).total_seconds() < 3
@@ -162,12 +166,19 @@ def test_popen_streaming_output_timeout():
 
 def test_popen_streaming_output_stream():
     mock = MagicMock()
-    popen_streaming_output('echo first;echo second;', callback=mock)
+    popen_streaming_output(
+        'python -c "print(\'first\'); print(\'second\')"', 
+        callback=mock
+    )
     mock.assert_has_calls([call('first'), call('second')])
 
     mock = MagicMock()
     popen_streaming_output(
-        'echo first;sleep 1;echo second;echo third;',
+        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
         callback=mock
     )
     mock.assert_has_calls([call('first'), call('second'), call('third')])
+
+    mock = MagicMock()
+    popen_streaming_output('python -c "exit(0);"', callback=mock)
+    mock.assert_not_called()
