@@ -6,6 +6,8 @@ from __future__ import print_function
 import itertools
 import os
 import sys
+import shlex
+
 import signal
 from datetime import datetime
 from functools import wraps
@@ -40,6 +42,9 @@ else:
     # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
 
+
+class CompatTimeoutError(OSError):
+    pass
 
 # decorator
 def config_from_setup_cfg(**defaults):
@@ -333,11 +338,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
     master, slave = os.openpty()
 
     p = Popen(
-        cmd,
-        shell=True,
+        shlex.split(cmd, posix=True),
         stdout=slave,
-        stderr=slave,
-        preexec_fn=os.setsid
+        stderr=slave
     )
     stdout = os.fdopen(master)
     os.close(slave)
@@ -351,7 +354,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             sleep(0.1)
             if (datetime.now() - start).total_seconds() > timeout:
                 foo['raise'] = True
-                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                p.kill()
                 return
 
     if timeout:
@@ -361,9 +364,12 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while p.returncode is None:
         try:
-            line = stdout.readline().rstrip()
-            callback(line)
-        except OSError:
+            while True:
+                line = stdout.readline()
+                if not line:
+                    break
+                callback(line.rstrip())
+        except (IOError, OSError):
             # This seems to happen on some platforms, including TravisCI. It seems like
             # it's ok to just let this pass here, you just won't get as nice feedback.
             pass
@@ -371,7 +377,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         p.poll()
 
     if foo['raise']:
-        raise TimeoutError()
+        raise CompatTimeoutError()
 
     return p.returncode
 
