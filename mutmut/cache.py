@@ -1,21 +1,29 @@
-# coding=utf-8
+# -*- coding: utf-8 -*-
 
 import hashlib
 import os
 import sys
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, unified_diff
 from functools import wraps
+from itertools import groupby
 from io import open
-from itertools import groupby, zip_longest
 
 from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID, Context, mutate
+
+from junit_xml import TestSuite, TestCase
+
+try:
+    from itertools import zip_longest
+except ImportError:  # pragma: no cover (python2)
+    from itertools import izip_longest as zip_longest
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
 else:
+    from itertools import zip_longest
     text_type = str
 
 
@@ -136,6 +144,53 @@ def print_result_cache():
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
+def get_unified_diff(argument, dict_synonyms):
+    filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+    with open(filename) as f:
+        source = f.read()
+    context = Context(
+        source=source,
+        filename=filename,
+        mutation_id=mutation_id,
+        dict_synonyms=dict_synonyms,
+    )
+    mutated_source, number_of_mutations_performed = mutate(context)
+    if not number_of_mutations_performed:
+        return ""
+
+    output = ""
+    for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
+        output += line + "\n"
+    return output
+
+
+@init_db
+@db_session
+def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
+    test_cases = []
+    l = list(select(x for x in Mutant))
+    for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+        for mutant in mutants:
+            tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
+            if mutant.status == BAD_SURVIVED:
+                tc.add_failure_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+            if mutant.status == BAD_TIMEOUT:
+                tc.add_error_info(message=mutant.status, error_type="timeout", output=get_unified_diff(mutant.id, dict_synonyms))
+            if mutant.status == OK_SUSPICIOUS:
+                if suspicious_policy != 'ignore':
+                    func = getattr(tc, 'add_{}_info'.format(suspicious_policy))
+                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+            if mutant.status == UNTESTED:
+                if untested_policy != 'ignore':
+                    func = getattr(tc, 'add_{}_info'.format(untested_policy))
+                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+
+            test_cases.append(tc)
+
+    ts = TestSuite("mutmut", test_cases)
+    print(TestSuite.to_xml_string([ts]))
+
+
 def get_or_create(model, defaults=None, **params):
     if defaults is None:
         defaults = {}
@@ -196,7 +251,7 @@ def update_line_numbers(filename):
             Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % tag
+            assert False, 'unknown opcode from SequenceMatcher: %s' % command
 
 
 @init_db

@@ -3,6 +3,7 @@ examples/db.sqlite3
 venv
 table.css.map
 .idea
+.vscode
 .cache
 .DS_Store
 .pytest_cache
