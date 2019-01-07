@@ -7,8 +7,10 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import pytest
+from coverage import CoverageData
 
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, CompatTimeoutError
+from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
+    CompatTimeoutError, read_coverage_data
 from click.testing import CliRunner
 try:
     from unittest.mock import MagicMock, call
@@ -182,3 +184,9 @@ def test_popen_streaming_output_stream():
     mock = MagicMock()
     popen_streaming_output('python -c "exit(0);"', callback=mock)
     mock.assert_not_called()
+
+
+@pytest.mark.usefixtures('filesystem')
+def test_read_coverage_data():
+    assert read_coverage_data(False) is None
+    assert isinstance(read_coverage_data(True), CoverageData)
