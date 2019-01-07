@@ -154,6 +154,7 @@ def test_basic_mutations_python36(original, expected):
         'for x in y: pass',
         'a[None]',
         'a(None)',
+        'def foo(a, *args, **kwargs): pass',
     ]
 )
 def test_do_not_mutate(source):
@@ -164,7 +165,8 @@ def test_do_not_mutate(source):
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'source', [
-        'def foo(s: str): pass'
+        'def foo(s: str): pass',
+        'def foo(a, *, b): pass',
     ]
 )
 def test_do_not_mutate_python3(source):

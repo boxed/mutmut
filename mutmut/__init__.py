@@ -283,7 +283,10 @@ def operator_mutation(value, node, **_):
     if import_from_star_pattern.matches(node=node):
         return
 
-    if value == '**' and node.parent.type == 'param':
+    if value in ('**', '*') and node.parent.type == 'param':
+        return
+
+    if value == '*' and node.parent.type == 'parameters':
         return
 
     return {
