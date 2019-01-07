@@ -5,10 +5,8 @@ from __future__ import print_function
 
 import itertools
 import os
-import sys
 import shlex
-
-import signal
+import sys
 from datetime import datetime
 from functools import wraps
 from io import open
@@ -21,10 +19,13 @@ from time import sleep
 import click
 from glob2 import glob
 
-from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
-    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
+from mutmut.cache import register_mutants, update_mutant_status, \
+    print_result_cache, cached_mutation_status, \
+    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
+    update_line_numbers, \
     print_result_cache_junitxml, get_unified_diff
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, \
+    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -479,10 +480,8 @@ def read_coverage_data(use_coverage):
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-        return coverage_data
+        from coverage import Coverage
+        return Coverage('.coverage').get_data()
     else:
         return None
 
