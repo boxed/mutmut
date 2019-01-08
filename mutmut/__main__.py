@@ -7,6 +7,7 @@ import itertools
 import os
 import shlex
 import sys
+import traceback
 from functools import wraps
 from io import open
 from os.path import isdir, exists
@@ -320,6 +321,7 @@ Legend for output:
     try:
         run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
     except Exception as e:
+        traceback.print_exc()
         return compute_return_code(config, e)
     else:
         return compute_return_code(config)
