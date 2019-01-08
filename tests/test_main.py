@@ -112,7 +112,6 @@ def test_full_run_one_surviving_mutant():
 
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
-    assert result.exit_code == 2
     print(repr(result.output))
     assert u"""
 To apply a mutant on disk:
