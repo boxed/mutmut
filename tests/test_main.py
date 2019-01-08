@@ -52,8 +52,9 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem(tmpdir):
-    test_fs = tmpdir.mkdir("test_fs")
+def filesystem(tmpdir_factory):
+    old_cwd = os.getcwd()
+    test_fs = tmpdir_factory.mktemp("test_fs")
     test_fs.join("foo.py").write(file_to_mutate_contents)
     os.mkdir(str(test_fs.join("tests")))
     test_fs.join("tests", "test_foo.py").write(test_file_contents)
@@ -64,6 +65,7 @@ def filesystem(tmpdir):
     mutmut.cache.db.drop_all_tables(with_all_data=True)
     mutmut.cache.db.schema = None  # Pony otherwise thinks we've already created the tables
     mutmut.cache.db.generate_mapping(create_tables=True)
+    os.chdir(old_cwd)
 
 
 def test_compute_return_code():
