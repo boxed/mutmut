@@ -53,7 +53,7 @@ def test_foo():
 def filesystem(tmpdir):
     test_fs = tmpdir.mkdir("test_fs")
     test_fs.join("foo.py").write(file_to_mutate_contents)
-    os.mkdir(test_fs.join("tests"))
+    os.mkdir(str(test_fs.join("tests")))
     test_fs.join("tests", "test_foo.py").write(test_file_contents)
     os.chdir(str(test_fs))
     yield test_fs
