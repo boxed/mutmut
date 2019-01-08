@@ -46,6 +46,7 @@ else:
     from configparser import ConfigParser, NoOptionError, NoSectionError
     TimeoutError = TimeoutError
 
+
 # decorator
 def config_from_setup_cfg(**defaults):
     def decorator(f):
