@@ -479,10 +479,8 @@ def read_coverage_data(use_coverage):
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
-        import coverage
-        coverage_data = coverage.CoverageData()
-        coverage_data.read_file('.coverage')
-        return coverage_data
+        from coverage import Coverage
+        return Coverage('.coverage').get_data()
     else:
         return None
 
