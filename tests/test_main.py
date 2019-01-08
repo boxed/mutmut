@@ -4,8 +4,8 @@ from __future__ import print_function
 
 import os
 import sys
+import time
 import xml.etree.ElementTree as ET
-from datetime import datetime
 
 import pytest
 from click.testing import CliRunner
@@ -151,11 +151,11 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
 
 
 def test_popen_streaming_output_timeout():
-    start = datetime.now()
+    start = time.time()
     with pytest.raises(CompatTimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
-    assert (datetime.now() - start).total_seconds() < 3
+    assert time.time() - start < 3
 
 
 def test_popen_streaming_output_stream():
