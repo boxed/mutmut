@@ -5,26 +5,26 @@ from __future__ import print_function
 
 import itertools
 import os
-import sys
 import shlex
-
-import signal
-from datetime import datetime
+import sys
 from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
 from subprocess import Popen
 from threading import Thread
-from time import sleep
+from time import sleep, time
 
 import click
 from glob2 import glob
 
-from mutmut.cache import register_mutants, update_mutant_status, print_result_cache, cached_mutation_status, \
-    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, update_line_numbers, \
+from mutmut.cache import register_mutants, update_mutant_status, \
+    print_result_cache, cached_mutation_status, \
+    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
+    update_line_numbers, \
     print_result_cache_junitxml, get_unified_diff
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, \
+    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -327,6 +327,7 @@ Legend for output:
             hash_of_tests=hash_of_tests(tests_dirs),
         )
 
+    try:
         run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
 
         print()
@@ -345,14 +346,14 @@ def popen_streaming_output(cmd, callback, timeout=None):
     stdout = os.fdopen(master)
     os.close(slave)
 
-    start = datetime.now()
+    start = time()
 
     foo = {'raise': False}
 
     def timeout_killer():
         while p.returncode is None:
             sleep(0.1)
-            if (datetime.now() - start).total_seconds() > timeout:
+            if (time() - start) > timeout:
                 foo['raise'] = True
                 p.kill()
                 return
@@ -427,15 +428,15 @@ def run_mutation(config, filename, mutation_id):
             context=context
         )
         assert number_of_mutations_performed
-        start = datetime.now()
+        start = time()
         try:
             survived = tests_pass(config)
         except TimeoutError:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
-        time_elapsed = datetime.now() - start
-        if time_elapsed.total_seconds() > config.baseline_time_elapsed * 2:
+        time_elapsed = time() - start
+        if time_elapsed > config.baseline_time_elapsed * 2:
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -494,7 +495,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         return cached_time
 
     print('1. Running tests without mutations')
-    start_time = datetime.now()
+    start_time = time()
 
     output = []
 
@@ -507,9 +508,9 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = (datetime.now() - start_time).total_seconds()
+        baseline_time_elapsed = time() - start_time
     else:
-        raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
+        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
 
     print(' Done')
 
