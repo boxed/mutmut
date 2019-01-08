@@ -31,8 +31,10 @@ file_to_mutate_lines = [
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
+    EXPECTED_MUTANTS = 8
 else:
     file_to_mutate_lines.append("g = 2")
+    EXPECTED_MUTANTS = 9
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -160,7 +162,6 @@ def test_popen_streaming_output_stream():
     mock.assert_not_called()
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_simple_apply(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 0
@@ -170,7 +171,6 @@ def test_simple_apply(filesystem):
         assert f.read() != file_to_mutate_contents
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 0
@@ -186,7 +186,6 @@ To show a mutant:
 """.strip() == result.output.strip()
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_no_surviving_mutants_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 0
@@ -194,13 +193,12 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
     assert result.exit_code == 0
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '0'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 0
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_one_surviving_mutant(filesystem):
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
@@ -237,7 +235,7 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
     assert result.exit_code == 0
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '1'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 1
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
