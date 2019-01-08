@@ -552,8 +552,9 @@ def compute_return_code(config, exception=None):
      * 2 if one or more mutants survived (BAD_SURVIVED)
      * 4 if one or more mutants timed out (BAD_TIMEOUT)
      * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
-     status codes 1 to 8 will be bit-ORed so you can know which different
-     categories has been issued by analysing the mutmut output status code
+
+     Status codes 1 to 8 will be bit-ORed so you can know which different
+     categories has been issued by analyzing the mutmut output status code.
 
     :param exception:
     :type exception: Exception
