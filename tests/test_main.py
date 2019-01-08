@@ -31,6 +31,8 @@ if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
     EXPECTED_MUTANTS = 8
 else:
+    # python2 is given a more primitive mutation base
+    # thus can obtain 1 more mutant
     file_to_mutate_lines.append("g = 2")
     EXPECTED_MUTANTS = 9
 
@@ -53,22 +55,21 @@ def test_foo():
 
 @pytest.fixture
 def filesystem(tmpdir_factory):
-    old_cwd = os.getcwd()
     test_fs = tmpdir_factory.mktemp("test_fs")
     test_fs.join("foo.py").write(file_to_mutate_contents)
     os.mkdir(str(test_fs.join("tests")))
     test_fs.join("tests", "test_foo.py").write(test_file_contents)
-
+    os.chdir(str(test_fs))
     yield test_fs
+
     # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
     import mutmut.cache
     mutmut.cache.db.provider = None
-    mutmut.cache.db.schema = None  # Pony otherwise thinks we've already created the tables
-    os.chdir(old_cwd)
+    mutmut.cache.db.schema = None
 
 
 def test_simple_apply(filesystem):
-    os.chdir(str(filesystem))
     result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     CliRunner().invoke(main, ['apply', '1'], catch_exceptions=False)
     with open('foo.py') as f:
@@ -76,8 +77,6 @@ def test_simple_apply(filesystem):
 
 
 def test_full_run_no_surviving_mutants(filesystem):
-    os.chdir(str(filesystem))
-
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
@@ -91,8 +90,6 @@ To show a mutant:
 
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
-    os.chdir(str(filesystem))
-
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
@@ -104,8 +101,6 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
 
 
 def test_full_run_one_surviving_mutant(filesystem):
-    os.chdir(str(filesystem))
-
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
@@ -138,14 +133,10 @@ Survived 🙁 (1)
     ]
 )
 def test_python_source_files(expected, source_path, tests_dirs, filesystem):
-    os.chdir(str(filesystem))
-
-    assert expected == list(python_source_files(source_path, tests_dirs))
+    assert list(python_source_files(source_path, tests_dirs)) == expected
 
 
 def test_full_run_one_surviving_mutant_junit(filesystem):
-    os.chdir(str(filesystem))
-
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
