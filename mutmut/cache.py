@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import hashlib
 import os
 import sys
@@ -27,6 +29,13 @@ else:
     from itertools import zip_longest
     text_type = str
 
+if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
+    # This little hack is needed to get the click tester working on python 2.7
+    orig_print = print
+
+    def print(x='', **kwargs):
+        x = x.decode("utf-8")
+        orig_print(x.encode("utf-8"), **kwargs)
 
 db = Database()
 
@@ -117,6 +126,7 @@ def get_apply_line(mutant):
     return apply_line
 
 
+
 @init_db
 @db_session
 def print_result_cache():
@@ -131,11 +141,11 @@ def print_result_cache():
         l = list(query)
         if l:
             print('')
-            print(title, '(%s)' % len(l))
+            print("{} ({})".format(title, len(l)))
             for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
                 mutants = list(mutants)
                 print('')
-                print('-' * 4, '%s' % filename, '(%s)' % len(mutants), '-' * 4)
+                print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
                 print(', '.join([str(x.id) for x in mutants]))
 
