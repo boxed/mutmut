@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import os
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import pytest
-
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, CompatTimeoutError
 from click.testing import CliRunner
+
+from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
+    CompatTimeoutError
+
 try:
     from unittest.mock import MagicMock, call
 except ImportError:
@@ -48,25 +51,21 @@ def test_foo():
 
 @pytest.fixture
 def filesystem(tmpdir):
-    foo = tmpdir.mkdir("test_fs").join("foo.py")
-    foo.write(file_to_mutate_contents)
-
-    test_foo = tmpdir.mkdir(os.path.join("test_fs", "tests")).join(
-        "test_foo.py")
-    test_foo.write(test_file_contents)
-
-    os.chdir(str(tmpdir.join('test_fs')))
-    yield
-    os.chdir('..')
+    test_fs = tmpdir.mkdir("test_fs")
+    test_fs.join("foo.py").write(file_to_mutate_contents)
+    os.mkdir(test_fs.join("tests"))
+    test_fs.join("tests", "test_foo.py").write(test_file_contents)
+    os.chdir(str(test_fs))
+    yield test_fs
     # This is a hack to get pony to forget about the old db file
     import mutmut.cache
-    mutmut.cache.db.provider = None
-    mutmut.cache.db.schema = None
+    mutmut.cache.db.drop_all_tables(with_all_data=True)
+    mutmut.cache.db.schema = None  # Pony otherwise thinks we've already created the tables
+    mutmut.cache.db.generate_mapping(create_tables=True)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_simple_apply():
+def test_simple_apply(filesystem):
     result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     CliRunner().invoke(main, ['apply', '1'], catch_exceptions=False)
     with open('foo.py') as f:
@@ -74,8 +73,7 @@ def test_simple_apply():
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_no_surviving_mutants():
+def test_full_run_no_surviving_mutants(filesystem):
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
     print(repr(result.output))
@@ -89,8 +87,7 @@ To show a mutant:
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_no_surviving_mutants_junit():
+def test_full_run_no_surviving_mutants_junit(filesystem):
     CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
@@ -102,8 +99,7 @@ def test_full_run_no_surviving_mutants_junit():
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_one_surviving_mutant():
+def test_full_run_one_surviving_mutant(filesystem):
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
@@ -135,14 +131,12 @@ Survived 🙁 (1)
         ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
     ]
 )
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files(expected, source_path, tests_dirs):
+def test_python_source_files(expected, source_path, tests_dirs, filesystem):
     assert expected == list(python_source_files(source_path, tests_dirs))
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_one_surviving_mutant_junit():
+def test_full_run_one_surviving_mutant_junit(filesystem):
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
