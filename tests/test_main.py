@@ -29,8 +29,10 @@ file_to_mutate_lines = [
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
+    EXPECTED_MUTANTS = 8
 else:
     file_to_mutate_lines.append("g = 2")
+    EXPECTED_MUTANTS = 9
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -65,7 +67,6 @@ def filesystem(tmpdir_factory):
     os.chdir(old_cwd)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_simple_apply(filesystem):
     os.chdir(str(filesystem))
     result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
@@ -74,7 +75,6 @@ def test_simple_apply(filesystem):
         assert f.read() != file_to_mutate_contents
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_no_surviving_mutants(filesystem):
     os.chdir(str(filesystem))
 
@@ -90,7 +90,6 @@ To show a mutant:
 """.strip() == result.output.strip()
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_no_surviving_mutants_junit(filesystem):
     os.chdir(str(filesystem))
 
@@ -98,13 +97,12 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
     result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '0'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 0
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_one_surviving_mutant(filesystem):
     os.chdir(str(filesystem))
 
@@ -145,7 +143,6 @@ def test_python_source_files(expected, source_path, tests_dirs, filesystem):
     assert expected == list(python_source_files(source_path, tests_dirs))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_full_run_one_surviving_mutant_junit(filesystem):
     os.chdir(str(filesystem))
 
@@ -156,10 +153,10 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
     result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '1'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 1
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
 
 
 def test_popen_streaming_output_timeout():
