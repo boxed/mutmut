@@ -19,14 +19,15 @@ from time import sleep, time
 import click
 from glob2 import glob
 
+from mutmut import mutate_file, Context, list_mutations, __version__, \
+    BAD_TIMEOUT, \
+    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from mutmut.cache import hash_of_tests
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, \
     print_result_cache_junitxml, get_unified_diff
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, \
-    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
-from .cache import hash_of_tests
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
