@@ -25,17 +25,17 @@ except ImportError:  # pragma: no cover (python2)
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
-else:
-    from itertools import zip_longest
-    text_type = str
-
-if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
     def print(x='', **kwargs):
         x = x.decode("utf-8")
         orig_print(x.encode("utf-8"), **kwargs)
+
+else:
+    from itertools import zip_longest
+    text_type = str
+
 
 db = Database()
 
