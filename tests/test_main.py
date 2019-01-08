@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import os
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from time import time
 
 import pytest
-
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, CompatTimeoutError
 from click.testing import CliRunner
+
+from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
+    Config, compute_return_code
+
 try:
     from unittest.mock import MagicMock, call
 except ImportError:
@@ -157,11 +160,11 @@ def test_full_run_one_surviving_mutant_junit():
 
 
 def test_popen_streaming_output_timeout():
-    start = datetime.now()
+    start = time()
     with pytest.raises(CompatTimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
-    assert (datetime.now() - start).total_seconds() < 3
+    assert (time() - start) < 3
 
 
 def test_popen_streaming_output_stream():
