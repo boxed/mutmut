@@ -448,13 +448,6 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
         config.print_progress()
 
 
-def fail_on_cache_only(config):
-    if config.cache_only:
-        print_status('')
-        print('\rFAILED: changes detected in cache only mode')
-        exit(2)
-
-
 def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
