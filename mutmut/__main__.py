@@ -83,8 +83,6 @@ def status_printer():
         s = next(spinner) + ' ' + s
         len_s = len(s)
         output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
-        if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
-            output = output.encode('utf8')
         sys.stdout.write(output)
         sys.stdout.flush()
         last_len[0] = len_s
