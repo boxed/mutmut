@@ -8,6 +8,12 @@ import xml.etree.ElementTree as ET
 from time import time
 
 import pytest
+
+from coverage import CoverageData
+
+from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
+    CompatTimeoutError, read_coverage_data
+
 from click.testing import CliRunner
 
 from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
@@ -186,7 +192,7 @@ def test_popen_streaming_output_stream():
     popen_streaming_output('python -c "exit(0);"', callback=mock)
     mock.assert_not_called()
 
-
+    
 def test_compute_return_code():
     # mock of Config for ease of testing
     class MockConfig(Config):
@@ -231,3 +237,9 @@ def test_compute_return_code():
     assert compute_return_code(MockConfig(1, 1, 0, 1), Exception) == 11
     assert compute_return_code(MockConfig(1, 1, 1, 0), Exception) == 7
     assert compute_return_code(MockConfig(1, 1, 1, 1), Exception) == 15
+
+    
+@pytest.mark.usefixtures('filesystem')
+def test_read_coverage_data():
+    assert read_coverage_data(False) is None
+    assert isinstance(read_coverage_data(True), CoverageData)
