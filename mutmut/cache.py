@@ -5,14 +5,15 @@ import os
 import sys
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
-from itertools import groupby
 from io import open
-
-from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
-
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID, Context, mutate
+from itertools import groupby
 
 from junit_xml import TestSuite, TestCase
+from pony.orm import Database, Required, db_session, Set, Optional, select, \
+    PrimaryKey, RowNotFound, ERDiagramError, OperationalError
+
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
+    OK_KILLED, MutationID, Context, mutate
 
 try:
     from itertools import zip_longest
@@ -121,21 +122,21 @@ def get_apply_line(mutant):
 def print_result_cache():
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
-    print()
+    print('')
     print('To show a mutant:')
     print('    mutmut show <id>')
-    print()
+    print('')
 
     def print_stuff(title, query):
         l = list(query)
         if l:
-            print()
+            print('')
             print(title, '(%s)' % len(l))
             for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
                 mutants = list(mutants)
-                print()
+                print('')
                 print('-' * 4, '%s' % filename, '(%s)' % len(mutants), '-' * 4)
-                print()
+                print('')
                 print(', '.join([str(x.id) for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
