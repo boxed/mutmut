@@ -193,9 +193,15 @@ commands:\n
             suspicious_policy, untested_policy))
 
 
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s,
-         use_coverage, dict_synonyms, cache_only, version, suspicious_policy,
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+         swallow_output, use_coverage, dict_synonyms, cache_only, version,
+         suspicious_policy,
          untested_policy):
+    """return exit code, after performing an mutation test run.
+
+    :return: the exit code from executing the mutation tests
+    :rtype: int
+    """
     if version:
         print("mutmut version %s" % __version__)
         return 0
@@ -271,7 +277,11 @@ Legend for output:
 🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
 🙁 Survived. This means your tests needs to be expanded. 
 """)
-    baseline_time_elapsed = time_test_suite(swallow_output=not s, test_command=runner, using_testmon=using_testmon)
+    baseline_time_elapsed = time_test_suite(
+        swallow_output=not swallow_output,
+        test_command=runner,
+        using_testmon=using_testmon
+    )
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
@@ -316,7 +326,7 @@ Legend for output:
     print()
     print('2. Checking mutants')
     config = Config(
-        swallow_output=not s,
+        swallow_output=not swallow_output,
         test_command=runner,
         exclude_callback=_exclude,
         baseline_time_elapsed=baseline_time_elapsed,
