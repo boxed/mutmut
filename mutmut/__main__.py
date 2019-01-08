@@ -123,7 +123,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         context=context,
     )
     if context.number_of_performed_mutations == 0:
-        raise RuntimeError('ERROR: no mutations performed. Are you sure the index is not too big?')
+        raise RuntimeError('No mutations performed. Are you sure the index is not too big?')
 
 
 null_out = open(os.devnull, 'w')
