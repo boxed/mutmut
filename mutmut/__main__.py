@@ -37,7 +37,8 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     orig_print = print
 
     def print(x='', **kwargs):
-        orig_print(x.encode('utf8'), **kwargs)
+        x = x.decode("utf-8")
+        orig_print(x.encode("utf-8"), **kwargs)
 
 else:
     # noinspection PyUnresolvedReferences,PyCompatibility
