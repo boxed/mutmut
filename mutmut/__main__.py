@@ -163,7 +163,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
-@click.option('-s', help='turn off output capture', is_flag=True)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
@@ -174,7 +174,9 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version, suspicious_policy, untested_policy):
+def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
+            swallow_output, use_coverage, dict_synonyms, cache_only, version,
+            suspicious_policy, untested_policy):
     """
 commands:\n
     run [mutation id]\n
@@ -186,6 +188,14 @@ commands:\n
     show [mutation id]\n
         Show a mutation diff.\n
     """
+    sys.exit(main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+            swallow_output, use_coverage, dict_synonyms, cache_only, version,
+            suspicious_policy, untested_policy))
+
+
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s,
+         use_coverage, dict_synonyms, cache_only, version, suspicious_policy,
+         untested_policy):
     if version:
         print("mutmut version %s" % __version__)
         return 0
@@ -323,9 +333,9 @@ Legend for output:
         run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
     except Exception as e:
         traceback.print_exc()
-        return compute_return_code(config, e)
+        return compute_exit_code(config, e)
     else:
-        return compute_return_code(config)
+        return compute_exit_code(config)
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -541,25 +551,25 @@ def python_source_files(path, tests_dirs):
         yield path
 
 
-def compute_return_code(config, exception=None):
-    """Compute an error code similar to how pylint does. (using bit OR)
+def compute_exit_code(config, exception=None):
+    """Compute an exit code for mutmut mutation testing
 
-    The following output status codes are available for mutmut:
+    The following exit codes are available for mutmut:
      * 0 if all mutants were killed (OK_KILLED)
      * 1 if a fatal error occurred
      * 2 if one or more mutants survived (BAD_SURVIVED)
      * 4 if one or more mutants timed out (BAD_TIMEOUT)
      * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
 
-     Status codes 1 to 8 will be bit-ORed so you can know which different
-     categories has been issued by analyzing the mutmut output status code.
+     Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
+     different mutant statuses occurred during mutation testing.
 
     :param exception:
     :type exception: Exception
     :param config:
     :type config: Config
 
-    :return: a integer noting the return status of the mutation tests.
+    :return: integer noting the exit code of the mutation tests.
     :rtype: int
     """
     code = 0
@@ -575,4 +585,4 @@ def compute_return_code(config, exception=None):
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    climain()
