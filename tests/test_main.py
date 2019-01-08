@@ -8,16 +8,12 @@ import xml.etree.ElementTree as ET
 from time import time
 
 import pytest
-
+from click.testing import CliRunner
 from coverage import CoverageData
 
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
-    CompatTimeoutError, read_coverage_data
-
-from click.testing import CliRunner
-
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
-    TimeoutError, Config, compute_return_code
+from mutmut.__main__ import main, python_source_files, \
+    popen_streaming_output, TimeoutError, Config, compute_return_code, \
+    read_coverage_data
 
 try:
     from unittest.mock import MagicMock, call
