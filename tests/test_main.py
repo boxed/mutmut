@@ -261,7 +261,7 @@ def test_full_run_one_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 8
-    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
     assert result.output.strip() == u"""
