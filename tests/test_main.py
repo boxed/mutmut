@@ -264,7 +264,8 @@ def test_full_run_one_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert result.output.strip() == u"""
+    if EXPECTED_MUTANTS == 8:
+        assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -277,6 +278,21 @@ Suspicious 🤔 (8)
 ---- foo.py (8) ----
 
 1, 2, 3, 4, 5, 6, 7, 8
+""".strip()
+    else:
+        assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (9)
+
+---- foo.py (9) ----
+
+1, 2, 3, 4, 5, 6, 7, 8, 9
 """.strip()
 
 
