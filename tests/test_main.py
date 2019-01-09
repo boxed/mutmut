@@ -272,11 +272,11 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (1)
+Suspicious 🤔 (8)
 
----- foo.py (1) ----
+---- foo.py (8) ----
 
-1
+8
 """.strip()
 
 
