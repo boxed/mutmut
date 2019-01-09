@@ -129,11 +129,16 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback, baseline_time_elapsed, backup, dict_synonyms, total, using_testmon, cache_only, tests_dirs, hash_of_tests):
+    def __init__(self, swallow_output, test_command, exclude_callback,
+                 baseline_time_elapsed, test_time_multiplier, test_time_base,
+                 backup, dict_synonyms, total, using_testmon, cache_only,
+                 tests_dirs, hash_of_tests):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
         self.baseline_time_elapsed = baseline_time_elapsed
+        self.test_time_multipler = test_time_multiplier
+        self.test_time_base = test_time_base
         self.backup = backup
         self.dict_synonyms = dict_synonyms
         self.total = total
@@ -163,6 +168,8 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=float(0), type=float)
 @click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
@@ -175,6 +182,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     tests_dir=DEFAULT_TESTS_DIR,
 )
 def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
+            test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy):
     """
@@ -188,12 +196,16 @@ commands:\n
     show [mutation id]\n
         Show a mutation diff.\n
     """
-    sys.exit(main(command, argument, paths_to_mutate, backup, runner, tests_dir,
-            swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy))
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    sys.exit(main(command, argument, paths_to_mutate, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy))
 
 
 def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+         test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy,
          untested_policy):
@@ -337,6 +349,8 @@ Legend for output:
         cache_only=cache_only,
         tests_dirs=tests_dirs,
         hash_of_tests=hash_of_tests(tests_dirs),
+        test_time_multiplier=test_time_multiplier,
+        test_time_base=test_time_base,
     )
 
     try:
@@ -449,7 +463,7 @@ def run_mutation(config, filename, mutation_id):
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if time_elapsed > config.baseline_time_elapsed * 2:
+        if time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
