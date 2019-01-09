@@ -7,26 +7,26 @@ import itertools
 import os
 import shlex
 import sys
-from datetime import datetime
+import traceback
 from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
 from subprocess import Popen
 from threading import Thread
-from time import sleep
+from time import sleep, time
 
 import click
 from glob2 import glob
 
+from mutmut import mutate_file, Context, list_mutations, __version__, \
+    BAD_TIMEOUT, \
+    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+from mutmut.cache import hash_of_tests
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
-    update_line_numbers, \
-    print_result_cache_junitxml, get_unified_diff
-from . import mutate_file, Context, list_mutations, __version__, BAD_TIMEOUT, \
-    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
-from .cache import hash_of_tests
+    update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
@@ -40,13 +40,13 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
         x = x.decode("utf-8")
         orig_print(x.encode("utf-8"), **kwargs)
 
+    class TimeoutError(OSError):
+        """Defining TimeoutError for Python 2 compatibility"""
 else:
     # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
+    TimeoutError = TimeoutError
 
-
-class CompatTimeoutError(OSError):
-    pass
 
 # decorator
 def config_from_setup_cfg(**defaults):
@@ -104,7 +104,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         elif isdir(this_dir):
             return this_dir
         else:
-            raise ErrorMessage('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+            raise FileNotFoundError('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
     else:
         return paths_to_mutate
 
@@ -121,11 +121,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         context=context,
     )
     if context.number_of_performed_mutations == 0:
-        raise ErrorMessage('ERROR: no mutations performed. Are you sure the index is not too big?')
-
-
-class ErrorMessage(Exception):
-    pass
+        raise RuntimeError('No mutations performed. Are you sure the index is not too big?')
 
 
 null_out = open(os.devnull, 'w')
@@ -166,7 +162,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
-@click.option('-s', help='turn off output capture', is_flag=True)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
@@ -177,7 +173,9 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
 )
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir, s, use_coverage, dict_synonyms, cache_only, version, suspicious_policy, untested_policy):
+def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
+            swallow_output, use_coverage, dict_synonyms, cache_only, version,
+            suspicious_policy, untested_policy):
     """
 commands:\n
     run [mutation id]\n
@@ -189,45 +187,55 @@ commands:\n
     show [mutation id]\n
         Show a mutation diff.\n
     """
+    sys.exit(main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+            swallow_output, use_coverage, dict_synonyms, cache_only, version,
+            suspicious_policy, untested_policy))
+
+
+def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+         swallow_output, use_coverage, dict_synonyms, cache_only, version,
+         suspicious_policy,
+         untested_policy):
+    """return exit code, after performing an mutation test run.
+
+    :return: the exit code from executing the mutation tests
+    :rtype: int
+    """
     if version:
         print("mutmut version %s" % __version__)
-        return
+        return 0
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
-        print('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
-        return
+        raise click.BadArgumentUsage('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
 
     if command == 'results' and argument:
-        print('The %s command takes no arguments' % command)
-        return
+        raise click.BadArgumentUsage('The %s command takes no arguments' % command)
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
     if command in ('show', 'diff'):
         if not argument:
             print_result_cache()
-            return
+            return 0
 
         print(get_unified_diff(argument, dict_synonyms))
-
-        return
+        return 0
 
     if use_coverage and not exists('.coverage'):
-        print('No .coverage file found. You must generate a coverage file to use this feature.')
-        return
+        raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
 
     if command == 'results':
         print_result_cache()
-        return
+        return 0
 
     if command == 'junitxml':
         print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
-        return
+        return 0
 
     if command == 'apply':
         do_apply(argument, dict_synonyms, backup)
-        return
+        return 0
 
     paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
 
@@ -235,7 +243,7 @@ commands:\n
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        raise ErrorMessage('You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     tests_dirs = []
     for p in tests_dir.split(':'):
@@ -268,70 +276,75 @@ Legend for output:
 🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
 🙁 Survived. This means your tests needs to be expanded. 
 """)
+    baseline_time_elapsed = time_test_suite(
+        swallow_output=not swallow_output,
+        test_command=runner,
+        using_testmon=using_testmon
+    )
+
+    if using_testmon:
+        copy('.testmondata', '.testmondata-initial')
+
+    if not use_coverage:
+        def _exclude(context):
+            return False
+    else:
+        covered_lines_by_filename = {}
+        coverage_data = read_coverage_data(use_coverage)
+
+        def _exclude(context):
+            try:
+                covered_lines = covered_lines_by_filename[context.filename]
+            except KeyError:
+                covered_lines = coverage_data.lines(os.path.abspath(context.filename))
+                covered_lines_by_filename[context.filename] = covered_lines
+
+            if covered_lines is None:
+                return True
+            current_line = context.current_line_index + 1
+            if current_line not in covered_lines:
+                return True
+            return False
+
+    if command != 'run':
+        raise click.BadArgumentUsage("Invalid command %s" % command)
+
+    mutations_by_file = {}
+
+    if argument is None:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path, tests_dirs):
+                update_line_numbers(filename)
+                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
+    else:
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        mutations_by_file[filename] = [mutation_id]
+
+    total = sum(len(mutations) for mutations in mutations_by_file.values())
+
+    print()
+    print('2. Checking mutants')
+    config = Config(
+        swallow_output=not swallow_output,
+        test_command=runner,
+        exclude_callback=_exclude,
+        baseline_time_elapsed=baseline_time_elapsed,
+        backup=backup,
+        dict_synonyms=dict_synonyms,
+        total=total,
+        using_testmon=using_testmon,
+        cache_only=cache_only,
+        tests_dirs=tests_dirs,
+        hash_of_tests=hash_of_tests(tests_dirs),
+    )
 
     try:
-        baseline_time_elapsed = time_test_suite(swallow_output=not s, test_command=runner, using_testmon=using_testmon)
-
-        if using_testmon:
-            copy('.testmondata', '.testmondata-initial')
-
-        if not use_coverage:
-            def _exclude(context):
-                return False
-        else:
-            covered_lines_by_filename = {}
-            coverage_data = read_coverage_data(use_coverage)
-
-            def _exclude(context):
-                try:
-                    covered_lines = covered_lines_by_filename[context.filename]
-                except KeyError:
-                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
-                    covered_lines_by_filename[context.filename] = covered_lines
-
-                if covered_lines is None:
-                    return True
-                current_line = context.current_line_index + 1
-                if current_line not in covered_lines:
-                    return True
-                return False
-
-        assert command == 'run'
-
-        mutations_by_file = {}
-
-        if argument is None:
-            for path in paths_to_mutate:
-                for filename in python_source_files(path, tests_dirs):
-                    update_line_numbers(filename)
-                    add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
-        else:
-            filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-            mutations_by_file[filename] = [mutation_id]
-
-        total = sum(len(mutations) for mutations in mutations_by_file.values())
-
-        print()
-        print('2. Checking mutants')
-        config = Config(
-            swallow_output=not s,
-            test_command=runner,
-            exclude_callback=_exclude,
-            baseline_time_elapsed=baseline_time_elapsed,
-            backup=backup,
-            dict_synonyms=dict_synonyms,
-            total=total,
-            using_testmon=using_testmon,
-            cache_only=cache_only,
-            tests_dirs=tests_dirs,
-            hash_of_tests=hash_of_tests(tests_dirs),
-        )
-
         run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
-
-        print()
-    except ErrorMessage as e:
-        print('\nERROR %s' % e)
+    except Exception as e:
+        traceback.print_exc()
+        return compute_exit_code(config, e)
+    else:
+        return compute_exit_code(config)
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -345,14 +358,14 @@ def popen_streaming_output(cmd, callback, timeout=None):
     stdout = os.fdopen(master)
     os.close(slave)
 
-    start = datetime.now()
+    start = time()
 
     foo = {'raise': False}
 
     def timeout_killer():
         while p.returncode is None:
             sleep(0.1)
-            if (datetime.now() - start).total_seconds() > timeout:
+            if (time() - start) > timeout:
                 foo['raise'] = True
                 p.kill()
                 return
@@ -377,7 +390,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         p.poll()
 
     if foo['raise']:
-        raise CompatTimeoutError()
+        raise TimeoutError("subprocess command {} timed out after {} seconds".format(cmd, time()-start))
 
     return p.returncode
 
@@ -427,15 +440,15 @@ def run_mutation(config, filename, mutation_id):
             context=context
         )
         assert number_of_mutations_performed
-        start = datetime.now()
+        start = time()
         try:
             survived = tests_pass(config)
-        except CompatTimeoutError:
+        except TimeoutError:
             context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
-        time_elapsed = datetime.now() - start
-        if time_elapsed.total_seconds() > config.baseline_time_elapsed * 2:
+        time_elapsed = time() - start
+        if time_elapsed > config.baseline_time_elapsed * 2:
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -455,13 +468,6 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
         config.progress += 1
         config.print_progress()
-
-
-def fail_on_cache_only(config):
-    if config.cache_only:
-        print_status('')
-        print('\rFAILED: changes detected in cache only mode')
-        exit(2)
 
 
 def run_mutation_tests(config, mutations_by_file):
@@ -492,7 +498,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         return cached_time
 
     print('1. Running tests without mutations')
-    start_time = datetime.now()
+    start_time = time()
 
     output = []
 
@@ -505,9 +511,9 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = (datetime.now() - start_time).total_seconds()
+        baseline_time_elapsed = time() - start_time
     else:
-        raise ErrorMessage("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
+        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
 
     print(' Done')
 
@@ -527,9 +533,8 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
     try:
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
-    except Exception:
-        print('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line))
-        raise
+    except Exception as e:
+        raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
 
 
 def coverage_exclude_callback(context, use_coverage, coverage_data):
@@ -555,8 +560,38 @@ def python_source_files(path, tests_dirs):
         yield path
 
 
+def compute_exit_code(config, exception=None):
+    """Compute an exit code for mutmut mutation testing
+
+    The following exit codes are available for mutmut:
+     * 0 if all mutants were killed (OK_KILLED)
+     * 1 if a fatal error occurred
+     * 2 if one or more mutants survived (BAD_SURVIVED)
+     * 4 if one or more mutants timed out (BAD_TIMEOUT)
+     * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
+
+     Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
+     different mutant statuses occurred during mutation testing.
+
+    :param exception:
+    :type exception: Exception
+    :param config:
+    :type config: Config
+
+    :return: integer noting the exit code of the mutation tests.
+    :rtype: int
+    """
+    code = 0
+    if exception is not None:
+        code = code | 1
+    if config.surviving_mutants > 0:
+        code = code | 2
+    if config.surviving_mutants_timeout > 0:
+        code = code | 4
+    if config.suspicious_mutants > 0:
+        code = code | 8
+    return code
+
+
 if __name__ == '__main__':
-    try:
-        main()
-    except ErrorMessage as main_error:
-        print(str(main_error))
+    climain()
