@@ -164,7 +164,9 @@ def test_popen_streaming_output_stream():
 
 def test_simple_apply(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 0
+
     result = CliRunner().invoke(climain, ['apply', '1'], catch_exceptions=False)
     assert result.exit_code == 0
     with open('foo.py') as f:
@@ -175,8 +177,8 @@ def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 0
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
-    assert result.exit_code == 0
     print(repr(result.output))
+    assert result.exit_code == 0
     assert u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -189,9 +191,10 @@ To show a mutant:
 def test_full_run_no_surviving_mutants_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 0
+
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
-    assert result.exit_code == 0
     print(repr(result.output))
+    assert result.exit_code == 0
     root = ET.fromstring(result.output.strip())
     assert int(root.attrib['tests']) == EXPECTED_MUTANTS
     assert int(root.attrib['failures']) == 0
@@ -205,9 +208,10 @@ def test_full_run_one_surviving_mutant(filesystem):
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 2
+
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
-    assert result.exit_code == 0
     print(repr(result.output))
+    assert result.exit_code == 0
     assert u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -230,6 +234,7 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
     assert result.exit_code == 2
+
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     assert result.exit_code == 0
     print(repr(result.output))
