@@ -58,12 +58,19 @@ def test_foo():
 @pytest.fixture
 def filesystem(tmpdir_factory):
     test_fs = tmpdir_factory.mktemp("test_fs")
-    test_fs.join("foo.py").write(file_to_mutate_contents)
-    os.mkdir(str(test_fs.join("tests")))
-    test_fs.join("tests", "test_foo.py").write(test_file_contents)
     os.chdir(str(test_fs))
+    assert os.getcwd() == str(test_fs)
+
+    # using `with` pattern to satisfy the pypy gods
+    with open(str(test_fs.join("foo.py")), 'w') as f:
+        f.write(file_to_mutate_contents)
+    os.mkdir(str(test_fs.join("tests")))
+    with open(str(test_fs.join("tests", "test_foo.py")), 'w') as f:
+        f.write(test_file_contents)
     yield test_fs
+
     # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
     import mutmut.cache
     mutmut.cache.db.provider = None
     mutmut.cache.db.schema = None
@@ -116,8 +123,7 @@ def test_compute_return_code():
     assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception()) == 15
 
 
-@pytest.mark.usefixtures('filesystem')
-def test_read_coverage_data():
+def test_read_coverage_data(filesystem):
     assert read_coverage_data(False) is None
     assert isinstance(read_coverage_data(True), CoverageData)
 
@@ -131,8 +137,7 @@ def test_read_coverage_data():
         ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
     ]
 )
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files(expected, source_path, tests_dirs):
+def test_python_source_files(expected, source_path, tests_dirs, filesystem):
     assert list(python_source_files(source_path, tests_dirs)) == expected
 
 
@@ -170,13 +175,15 @@ def test_simple_apply(filesystem):
     assert result.exit_code == 0
 
     result = CliRunner().invoke(climain, ['apply', '1'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 0
-    with open('foo.py') as f:
+    with open(os.path.join(str(filesystem), 'foo.py')) as f:
         assert f.read() != file_to_mutate_contents
 
 
 def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 0
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
@@ -192,6 +199,7 @@ To show a mutant:
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 0
 
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
@@ -205,10 +213,11 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
 
 
 def test_full_run_one_surviving_mutant(filesystem):
-    with open('tests/test_foo.py', 'w') as f:
+    with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 2
 
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
@@ -231,15 +240,16 @@ Survived 🙁 (1)
 
 
 def test_full_run_one_surviving_mutant_junit(filesystem):
-    with open('tests/test_foo.py', 'w') as f:
+    with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
     assert result.exit_code == 2
 
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
-    assert result.exit_code == 0
     print(repr(result.output))
+    assert result.exit_code == 0
     root = ET.fromstring(result.output.strip())
     assert int(root.attrib['tests']) == EXPECTED_MUTANTS
     assert int(root.attrib['failures']) == 1
