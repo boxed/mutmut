@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import os
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from time import time
 
 import pytest
+from click.testing import CliRunner
 from coverage import CoverageData
 
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
-    CompatTimeoutError, read_coverage_data
-from click.testing import CliRunner
+from mutmut.__main__ import climain, python_source_files, \
+    popen_streaming_output, TimeoutError, Config, compute_exit_code, \
+    read_coverage_data
+
 try:
     from unittest.mock import MagicMock, call
 except ImportError:
@@ -66,11 +69,108 @@ def filesystem(tmpdir):
     mutmut.cache.db.schema = None
 
 
+def test_compute_return_code():
+    # mock of Config for ease of testing
+    class MockConfig(Config):
+        def __init__(self, killed_mutants, surviving_mutants,
+                     surviving_mutants_timeout, suspicious_mutants):
+            self.killed_mutants = killed_mutants
+            self.surviving_mutants = surviving_mutants
+            self.surviving_mutants_timeout = surviving_mutants_timeout
+            self.suspicious_mutants = suspicious_mutants
+
+    assert compute_exit_code(MockConfig(0, 0, 0, 0)) == 0
+    assert compute_exit_code(MockConfig(0, 0, 0, 1)) == 8
+    assert compute_exit_code(MockConfig(0, 0, 1, 0)) == 4
+    assert compute_exit_code(MockConfig(0, 0, 1, 1)) == 12
+    assert compute_exit_code(MockConfig(0, 1, 0, 0)) == 2
+    assert compute_exit_code(MockConfig(0, 1, 0, 1)) == 10
+    assert compute_exit_code(MockConfig(0, 1, 1, 0)) == 6
+    assert compute_exit_code(MockConfig(0, 1, 1, 1)) == 14
+
+    assert compute_exit_code(MockConfig(1, 0, 0, 0)) == 0
+    assert compute_exit_code(MockConfig(1, 0, 0, 1)) == 8
+    assert compute_exit_code(MockConfig(1, 0, 1, 0)) == 4
+    assert compute_exit_code(MockConfig(1, 0, 1, 1)) == 12
+    assert compute_exit_code(MockConfig(1, 1, 0, 0)) == 2
+    assert compute_exit_code(MockConfig(1, 1, 0, 1)) == 10
+    assert compute_exit_code(MockConfig(1, 1, 1, 0)) == 6
+    assert compute_exit_code(MockConfig(1, 1, 1, 1)) == 14
+
+    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception) == 1
+    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception) == 9
+    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception) == 5
+    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception) == 13
+    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception) == 3
+    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception) == 11
+    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception) == 7
+    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception) == 15
+
+    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception) == 1
+    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception) == 9
+    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception) == 5
+    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception) == 13
+    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception) == 3
+    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception) == 11
+    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception) == 7
+    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception) == 15
+
+
+@pytest.mark.usefixtures('filesystem')
+def test_read_coverage_data():
+    assert read_coverage_data(False) is None
+    assert isinstance(read_coverage_data(True), CoverageData)
+
+
+@pytest.mark.parametrize(
+    "expected, source_path, tests_dirs",
+    [
+        (["foo.py"], "foo.py", []),
+        ([os.path.join(".", "foo.py"),
+          os.path.join(".", "tests", "test_foo.py")], ".", []),
+        ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
+    ]
+)
+@pytest.mark.usefixtures('filesystem')
+def test_python_source_files(expected, source_path, tests_dirs):
+    assert list(python_source_files(source_path, tests_dirs)) == expected
+
+
+def test_popen_streaming_output_timeout():
+    start = time()
+    with pytest.raises(TimeoutError):
+        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+
+    assert (time() - start) < 3
+
+
+def test_popen_streaming_output_stream():
+    mock = MagicMock()
+    popen_streaming_output(
+        'python -c "print(\'first\'); print(\'second\')"',
+        callback=mock
+    )
+    mock.assert_has_calls([call('first'), call('second')])
+
+    mock = MagicMock()
+    popen_streaming_output(
+        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
+        callback=mock
+    )
+    mock.assert_has_calls([call('first'), call('second'), call('third')])
+
+    mock = MagicMock()
+    popen_streaming_output('python -c "exit(0);"', callback=mock)
+    mock.assert_not_called()
+
+
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_simple_apply():
-    result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    CliRunner().invoke(main, ['apply', '1'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    assert result.exit_code == 0
+    result = CliRunner().invoke(climain, ['apply', '1'], catch_exceptions=False)
+    assert result.exit_code == 0
     with open('foo.py') as f:
         assert f.read() != file_to_mutate_contents
 
@@ -78,8 +178,10 @@ def test_simple_apply():
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants():
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    assert result.exit_code == 0
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    assert result.exit_code == 0
     print(repr(result.output))
     assert u"""
 To apply a mutant on disk:
@@ -93,8 +195,10 @@ To show a mutant:
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_no_surviving_mutants_junit():
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    assert result.exit_code == 0
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    assert result.exit_code == 0
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
     assert root.attrib['tests'] == '8'
@@ -109,8 +213,10 @@ def test_full_run_one_surviving_mutant():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    assert result.exit_code == 2
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    assert result.exit_code == 0
     print(repr(result.output))
     assert u"""
 To apply a mutant on disk:
@@ -128,65 +234,19 @@ Survived 🙁 (1)
 """.strip() == result.output.strip()
 
 
-@pytest.mark.parametrize(
-    "expected, source_path, tests_dirs",
-    [
-        (["foo.py"], "foo.py", []),
-        ([os.path.join(".", "foo.py"),
-          os.path.join(".", "tests", "test_foo.py")], ".", []),
-        ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
-    ]
-)
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files(expected, source_path, tests_dirs):
-    assert expected == list(python_source_files(source_path, tests_dirs))
-
-
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.usefixtures('filesystem')
 def test_full_run_one_surviving_mutant_junit():
     with open('tests/test_foo.py', 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    assert result.exit_code == 2
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    assert result.exit_code == 0
     print(repr(result.output))
     root = ET.fromstring(result.output.strip())
     assert root.attrib['tests'] == '8'
     assert root.attrib['failures'] == '1'
     assert root.attrib['errors'] == '0'
     assert root.attrib['disabled'] == '0'
-
-
-def test_popen_streaming_output_timeout():
-    start = datetime.now()
-    with pytest.raises(CompatTimeoutError):
-        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
-
-    assert (datetime.now() - start).total_seconds() < 3
-
-
-def test_popen_streaming_output_stream():
-    mock = MagicMock()
-    popen_streaming_output(
-        'python -c "print(\'first\'); print(\'second\')"', 
-        callback=mock
-    )
-    mock.assert_has_calls([call('first'), call('second')])
-
-    mock = MagicMock()
-    popen_streaming_output(
-        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
-        callback=mock
-    )
-    mock.assert_has_calls([call('first'), call('second'), call('third')])
-
-    mock = MagicMock()
-    popen_streaming_output('python -c "exit(0);"', callback=mock)
-    mock.assert_not_called()
-
-
-@pytest.mark.usefixtures('filesystem')
-def test_read_coverage_data():
-    assert read_coverage_data(False) is None
-    assert isinstance(read_coverage_data(True), CoverageData)
