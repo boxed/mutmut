@@ -454,10 +454,12 @@ def mutate_file(backup, context):
     :type backup: bool
     :type context: Context
     """
-    code = open(context.filename).read()
+    with open(context.filename) as f:
+        code = f.read()
     context.source = code
     if backup:
-        open(context.filename + '.bak', 'w').write(code)
+        with open(context.filename + '.bak', 'w') as f:
+            f.write(code)
     result, number_of_mutations_performed = mutate(context)
     with open(context.filename, 'w') as f:
         f.write(result)

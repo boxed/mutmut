@@ -524,8 +524,10 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    with open(filename) as f:
+        source = f.read()
     context = Context(
-        source=open(filename).read(),
+        source=source,
         filename=filename,
         exclude=exclude,
         dict_synonyms=dict_synonyms,
