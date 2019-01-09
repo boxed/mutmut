@@ -169,7 +169,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
-@click.option('-b', '--test-time-base', default=float(0), type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
 @click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
@@ -198,6 +198,8 @@ commands:\n
     """
     if test_time_base is None:  # click sets the default=0.0 to None
         test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
     sys.exit(main(command, argument, paths_to_mutate, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
