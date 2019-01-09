@@ -95,23 +95,23 @@ def test_compute_return_code():
     assert compute_exit_code(MockConfig(1, 1, 1, 0)) == 6
     assert compute_exit_code(MockConfig(1, 1, 1, 1)) == 14
 
-    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception) == 1
-    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception) == 9
-    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception) == 5
-    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception) == 13
-    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception) == 3
-    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception) == 11
-    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception) == 7
-    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception) == 15
+    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception()) == 15
 
-    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception) == 1
-    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception) == 9
-    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception) == 5
-    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception) == 13
-    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception) == 3
-    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception) == 11
-    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception) == 7
-    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception) == 15
+    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception()) == 15
 
 
 @pytest.mark.usefixtures('filesystem')
