@@ -33,6 +33,8 @@ if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
     EXPECTED_MUTANTS = 8
 else:
+    # python2 is given a more primitive mutation base
+    # thus can obtain 1 more mutant
     file_to_mutate_lines.append("g = 2")
     EXPECTED_MUTANTS = 9
 
