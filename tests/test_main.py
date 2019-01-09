@@ -250,3 +250,44 @@ def test_full_run_one_surviving_mutant_junit():
     assert root.attrib['failures'] == '1'
     assert root.attrib['errors'] == '0'
     assert root.attrib['disabled'] == '0'
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.usefixtures('filesystem')
+def test_full_run_one_suspicious_mutant():
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (1)
+
+---- foo.py (1) ----
+
+1
+""".strip() == result.output.strip()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.usefixtures('filesystem')
+def test_full_run_one_suspicious_mutant_junit():
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert root.attrib['tests'] == '8'
+    assert root.attrib['failures'] == '0'
+    assert root.attrib['errors'] == '0'
+    assert root.attrib['disabled'] == '0'
