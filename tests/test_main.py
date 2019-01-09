@@ -188,13 +188,13 @@ def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
 To show a mutant:
     mutmut show <id>
-""".strip() == result.output.strip()
+""".strip()
 
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
@@ -223,7 +223,7 @@ def test_full_run_one_surviving_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -236,7 +236,7 @@ Survived 🙁 (1)
 ---- foo.py (1) ----
 
 1
-""".strip() == result.output.strip()
+""".strip()
 
 
 def test_full_run_one_surviving_mutant_junit(filesystem):
@@ -253,5 +253,58 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
     root = ET.fromstring(result.output.strip())
     assert int(root.attrib['tests']) == EXPECTED_MUTANTS
     assert int(root.attrib['failures']) == 1
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
+
+
+def test_full_run_one_suspicious_mutant(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    if EXPECTED_MUTANTS == 8:
+        assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (8)
+
+---- foo.py (8) ----
+
+1, 2, 3, 4, 5, 6, 7, 8
+""".strip()
+    else:
+        assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (9)
+
+---- foo.py (9) ----
+
+1, 2, 3, 4, 5, 6, 7, 8, 9
+""".strip()
+
+
+def test_full_run_one_suspicious_mutant_junit(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 0
     assert int(root.attrib['errors']) == 0
     assert int(root.attrib['disabled']) == 0
