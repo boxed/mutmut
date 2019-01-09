@@ -1,18 +1,21 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import hashlib
 import os
 import sys
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
-from itertools import groupby
 from io import open
-
-from pony.orm import Database, Required, db_session, Set, Optional, select, PrimaryKey, RowNotFound, ERDiagramError, OperationalError
-
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, OK_KILLED, MutationID, Context, mutate
+from itertools import groupby
 
 from junit_xml import TestSuite, TestCase
+from pony.orm import Database, Required, db_session, Set, Optional, select, \
+    PrimaryKey, RowNotFound, ERDiagramError, OperationalError
+
+from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
+    OK_KILLED, MutationID, Context, mutate
 
 try:
     from itertools import zip_longest
@@ -22,6 +25,13 @@ except ImportError:  # pragma: no cover (python2)
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
+    # This little hack is needed to get the click tester working on python 2.7
+    orig_print = print
+
+    def print(x='', **kwargs):
+        x = x.decode("utf-8")
+        orig_print(x.encode("utf-8"), **kwargs)
+
 else:
     from itertools import zip_longest
     text_type = str
@@ -116,26 +126,27 @@ def get_apply_line(mutant):
     return apply_line
 
 
+
 @init_db
 @db_session
 def print_result_cache():
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
-    print()
+    print('')
     print('To show a mutant:')
     print('    mutmut show <id>')
-    print()
+    print('')
 
     def print_stuff(title, query):
         l = list(query)
         if l:
-            print()
-            print(title, '(%s)' % len(l))
+            print('')
+            print("{} ({})".format(title, len(l)))
             for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
                 mutants = list(mutants)
-                print()
-                print('-' * 4, '%s' % filename, '(%s)' % len(mutants), '-' * 4)
-                print()
+                print('')
+                print("---- {} ({}) ----".format(filename, len(mutants)))
+                print('')
                 print(', '.join([str(x.id) for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))

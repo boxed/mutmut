@@ -37,7 +37,8 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     orig_print = print
 
     def print(x='', **kwargs):
-        orig_print(x.encode('utf8'), **kwargs)
+        x = x.decode("utf-8")
+        orig_print(x.encode("utf-8"), **kwargs)
 
     class TimeoutError(OSError):
         """Defining TimeoutError for Python 2 compatibility"""
@@ -83,8 +84,6 @@ def status_printer():
         s = next(spinner) + ' ' + s
         len_s = len(s)
         output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
-        if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
-            output = output.encode('utf8')
         sys.stdout.write(output)
         sys.stdout.flush()
         last_len[0] = len_s
@@ -400,8 +399,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
                     break
                 callback(line.rstrip())
         except (IOError, OSError):
-            # This seems to happen on some platforms, including TravisCI. It seems like
-            # it's ok to just let this pass here, you just won't get as nice feedback.
+            # This seems to happen on some platforms, including TravisCI.
+            # It seems like it's ok to just let this pass here, you just
+            # won't get as nice feedback.
             pass
 
         p.poll()

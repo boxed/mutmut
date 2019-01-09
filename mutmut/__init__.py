@@ -22,7 +22,8 @@ class MutationID(object):
 
 ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
-# We have a global whitelist for constants of the pattern __all__, __version__, etc
+# We have a global whitelist for constants of the pattern:
+# __all__, __version__, etc
 dunder_whitelist = [
     'all',
     'version',
@@ -102,7 +103,9 @@ def string_mutation(value, **_):
     value = value[len(prefix):]
 
     if value.startswith('"""') or value.startswith("'''"):
-        return value  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
+        # We assume here that triple-quoted stuff are docs or other things
+        # that mutation is meaningless for
+        return value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -353,7 +356,7 @@ def mutate(context):
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
     if context.number_of_performed_mutations:
-        # Check that if we said we mutated the code, that it has actually changed
+        # If we said we mutated the code, check that it has actually changed
         assert context.source != mutated_source
     context.mutated_source = mutated_source
     return mutated_source, context.number_of_performed_mutations
