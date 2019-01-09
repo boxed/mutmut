@@ -383,8 +383,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
                     break
                 callback(line.rstrip())
         except (IOError, OSError):
-            # This seems to happen on some platforms, including TravisCI. It seems like
-            # it's ok to just let this pass here, you just won't get as nice feedback.
+            # This seems to happen on some platforms, including TravisCI.
+            # It seems like it's ok to just let this pass here, you just
+            # won't get as nice feedback.
             pass
 
         p.poll()
