@@ -188,13 +188,13 @@ def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
 To show a mutant:
     mutmut show <id>
-""".strip() == result.output.strip()
+""".strip()
 
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
@@ -223,7 +223,7 @@ def test_full_run_one_surviving_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -236,7 +236,7 @@ Survived 🙁 (1)
 ---- foo.py (1) ----
 
 1
-""".strip() == result.output.strip()
+""".strip()
 
 
 def test_full_run_one_surviving_mutant_junit(filesystem):
@@ -264,7 +264,7 @@ def test_full_run_one_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -277,7 +277,7 @@ Suspicious 🤔 (1)
 ---- foo.py (1) ----
 
 1
-""".strip() == result.output.strip()
+""".strip()
 
 
 def test_full_run_one_suspicious_mutant_junit(filesystem):
