@@ -22,6 +22,11 @@ try:
 except ImportError:  # pragma: no cover (python2)
     from itertools import izip_longest as zip_longest
 
+
+if sys.version_info < (3, 5):   # pragma: no cover (python 2 specific)
+    # add tying library for doc improvements
+    from typing import Generator, Sequence
+
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
@@ -105,6 +110,14 @@ def init_db(f):
 
 
 def hash_of(filename):
+    """
+
+    :param filename:
+    :type filename: str
+
+    :return:
+    :rtype: str
+    """
     with open(filename, 'rb') as f:
         m = hashlib.sha256()
         m.update(f.read())
@@ -112,6 +125,14 @@ def hash_of(filename):
 
 
 def hash_of_tests(tests_dirs):
+    """
+
+    :param tests_dirs:
+    :type tests_dirs: list[str]
+
+    :return:
+    :rtype: str
+    """
     m = hashlib.sha256()
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
@@ -121,15 +142,25 @@ def hash_of_tests(tests_dirs):
     return m.hexdigest()
 
 
+# TODO: check if used
 def get_apply_line(mutant):
+    """
+
+    :param mutant:
+    :type mutant: Mutant
+
+    :return:
+    :rtype: str
+    """
     apply_line = 'mutmut apply %s' % mutant.id
     return apply_line
-
 
 
 @init_db
 @db_session
 def print_result_cache():
+    """Print the mutation test results contained within the `.mutmut-cache`
+    in a human readable format"""
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -156,6 +187,18 @@ def print_result_cache():
 
 
 def get_unified_diff(argument, dict_synonyms):
+    """
+
+    TODO: maybe rework type
+    :param argument:
+    :type argument: int
+
+    :param dict_synonyms:
+    :type dict_synonyms: list[str]
+
+    :return:
+    :rtype: str
+    """
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
     with open(filename) as f:
         source = f.read()
@@ -178,6 +221,18 @@ def get_unified_diff(argument, dict_synonyms):
 @init_db
 @db_session
 def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
+    """Print the mutation test results contained within the `.mutmut-cache`
+    styled similar too junit xml
+
+    :param dict_synonyms:
+    :type dict_synonyms: list[str]
+
+    :param suspicious_policy:
+    :type suspicious_policy: str
+
+    :param untested_policy:
+    :type untested_policy: str
+    """
     test_cases = []
     l = list(select(x for x in Mutant))
     for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
@@ -217,6 +272,16 @@ def get_or_create(model, defaults=None, **params):
 
 
 def sequence_ops(a, b):
+    """
+
+    :param a:
+    :type a: Sequence[Any]
+    :param b:
+    :type b: Sequence[Any]
+
+    :return:
+    :rtype: Generator[tuple[Any], None, None]
+    """
     sequence_matcher = SequenceMatcher(a=a, b=b)
 
     for tag, i1, i2, j1, j2 in sequence_matcher.get_opcodes():
@@ -229,6 +294,11 @@ def sequence_ops(a, b):
 @init_db
 @db_session
 def update_line_numbers(filename):
+    """
+
+    :param filename:
+    :type filename: str
+    """
     sourcefile = get_or_create(SourceFile, filename=filename)
 
     cached_line_objects = list(sourcefile.lines.order_by(Line.line_number))
@@ -268,6 +338,11 @@ def update_line_numbers(filename):
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
+    """
+
+    :param mutations_by_file:
+    :type mutations_by_file: dict[str, list[MutationID]]
+    """
     for filename, mutation_ids in mutations_by_file.items():
         sourcefile = get_or_create(SourceFile, filename=filename)
 
@@ -280,6 +355,20 @@ def register_mutants(mutations_by_file):
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
+    """
+
+    :param file_to_mutate:
+    :type file_to_mutate: str
+
+    :param mutation_id:
+    :type mutation_id: MutationID
+
+    :param status:
+    :type status: str
+
+    :param tests_hash:
+    :type tests_hash: str
+    """
     sourcefile = SourceFile.get(filename=file_to_mutate)
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
@@ -290,6 +379,20 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 @init_db
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
+    """
+
+    :param filename:
+    :type filename: str
+
+    :param mutation_id:
+    :type mutation_id: MutationID
+
+    :param hash_of_tests:
+    :type hash_of_tests: str
+
+    :return: the status of the specified mutant
+    :rtype: str
+    """
     sourcefile = SourceFile.get(filename=filename)
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
@@ -307,6 +410,14 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @init_db
 @db_session
 def mutation_id_from_pk(pk):
+    """
+
+    :param pk:
+    :type pk: int
+
+    :return:
+    :rtype: MutationID
+    """
     mutant = Mutant.get(id=pk)
     return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
 
@@ -314,6 +425,14 @@ def mutation_id_from_pk(pk):
 @init_db
 @db_session
 def filename_and_mutation_id_from_pk(pk):
+    """
+
+    :param pk:
+    :type pk: int
+
+    :return:
+    :rtype: tuple[str, MutationID]
+    """
     mutant = Mutant.get(id=pk)
     return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)
 
@@ -321,6 +440,11 @@ def filename_and_mutation_id_from_pk(pk):
 @init_db
 @db_session
 def cached_test_time():
+    """
+
+    :return:
+    :rtype: float or None
+    """
     d = MiscData.get(key='baseline_time_elapsed')
     return float(d.value) if d else None
 
@@ -328,4 +452,9 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
+    """
+
+    :param baseline_time_elapsed:
+    :type baseline_time_elapsed: float
+    """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
