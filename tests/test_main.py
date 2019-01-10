@@ -258,7 +258,7 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
     assert int(root.attrib['disabled']) == 0
 
 
-def test_full_run_one_suspicious_mutant(filesystem):
+def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 8
@@ -297,7 +297,7 @@ Suspicious 🤔 (9)
 """.strip()
 
 
-def test_full_run_one_suspicious_mutant_junit(filesystem):
+def test_full_run_all_suspicious_mutant_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 8
