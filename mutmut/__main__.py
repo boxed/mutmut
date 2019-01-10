@@ -29,7 +29,7 @@ from mutmut.cache import register_mutants, update_mutant_status, \
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
-if sys.version_info < (3, 5):   # pragma: no cover (python 2 specific)
+if sys.version_info >= (3, 5):   # pragma: no cover (python 2 specific)
     # add tying library for doc improvements
     from typing import Generator
 

@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover (python2)
     from itertools import izip_longest as zip_longest
 
 
-if sys.version_info < (3, 5):   # pragma: no cover (python 2 specific)
+if sys.version_info >= (3, 5):   # pragma: no cover (python 2 specific)
     # add tying library for doc improvements
     from typing import Generator, Sequence
 
