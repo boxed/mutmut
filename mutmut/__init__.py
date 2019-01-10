@@ -129,6 +129,7 @@ def matches_any(patterns, node):
 
 
 # We have a global whitelist for constants of the pattern __all__, __version__, etc
+
 dunder_whitelist = [
     'all',
     'version',
@@ -208,7 +209,9 @@ def string_mutation(value, **_):
     value = value[len(prefix):]
 
     if value.startswith('"""') or value.startswith("'''"):
-        return  # We assume here that triple-quoted stuff are docs or other things that mutation is meaningless for
+        # We assume here that triple-quoted stuff are docs or other things
+        # that mutation is meaningless for
+        return value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -489,7 +492,7 @@ def mutate(context):
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
     if context.number_of_performed_mutations:
-        # Check that if we said we mutated the code, that it has actually changed
+        # If we said we mutated the code, check that it has actually changed
         assert context.source != mutated_source
     context.mutated_source = mutated_source
     return mutated_source, context.number_of_performed_mutations
@@ -590,10 +593,12 @@ def mutate_file(backup, context):
     :type backup: bool
     :type context: Context
     """
-    code = open(context.filename).read()
+    with open(context.filename) as f:
+        code = f.read()
     context.source = code
     if backup:
-        open(context.filename + '.bak', 'w').write(code)
+        with open(context.filename + '.bak', 'w') as f:
+            f.write(code)
     result, number_of_mutations_performed = mutate(context)
     with open(context.filename, 'w') as f:
         f.write(result)

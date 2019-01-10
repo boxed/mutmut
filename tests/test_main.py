@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import os
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from time import time
 
 import pytest
+from click.testing import CliRunner
 from coverage import CoverageData
 
-from mutmut.__main__ import main, python_source_files, popen_streaming_output, \
-    CompatTimeoutError, read_coverage_data
-from click.testing import CliRunner
+from mutmut.__main__ import climain, python_source_files, \
+    popen_streaming_output, TimeoutError, Config, compute_exit_code, \
+    read_coverage_data
+
 try:
     from unittest.mock import MagicMock, call
 except ImportError:
@@ -28,8 +31,12 @@ file_to_mutate_lines = [
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
+    EXPECTED_MUTANTS = 8
 else:
+    # python2 is given a more primitive mutation base
+    # thus can obtain 1 more mutant
     file_to_mutate_lines.append("g = 2")
+    EXPECTED_MUTANTS = 9
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -49,83 +56,76 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem(tmpdir):
-    foo = tmpdir.mkdir("test_fs").join("foo.py")
-    foo.write(file_to_mutate_contents)
+def filesystem(tmpdir_factory):
+    test_fs = tmpdir_factory.mktemp("test_fs")
+    os.chdir(str(test_fs))
+    assert os.getcwd() == str(test_fs)
 
-    test_foo = tmpdir.mkdir(os.path.join("test_fs", "tests")).join(
-        "test_foo.py")
-    test_foo.write(test_file_contents)
+    # using `with` pattern to satisfy the pypy gods
+    with open(str(test_fs.join("foo.py")), 'w') as f:
+        f.write(file_to_mutate_contents)
+    os.mkdir(str(test_fs.join("tests")))
+    with open(str(test_fs.join("tests", "test_foo.py")), 'w') as f:
+        f.write(test_file_contents)
+    yield test_fs
 
-    os.chdir(str(tmpdir.join('test_fs')))
-    yield
-    os.chdir('..')
     # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
     import mutmut.cache
     mutmut.cache.db.provider = None
     mutmut.cache.db.schema = None
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_simple_apply():
-    result = CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    CliRunner().invoke(main, ['apply', '1'], catch_exceptions=False)
-    with open('foo.py') as f:
-        assert f.read() != file_to_mutate_contents
+def test_compute_return_code():
+    # mock of Config for ease of testing
+    class MockConfig(Config):
+        def __init__(self, killed_mutants, surviving_mutants,
+                     surviving_mutants_timeout, suspicious_mutants):
+            self.killed_mutants = killed_mutants
+            self.surviving_mutants = surviving_mutants
+            self.surviving_mutants_timeout = surviving_mutants_timeout
+            self.suspicious_mutants = suspicious_mutants
+
+    assert compute_exit_code(MockConfig(0, 0, 0, 0)) == 0
+    assert compute_exit_code(MockConfig(0, 0, 0, 1)) == 8
+    assert compute_exit_code(MockConfig(0, 0, 1, 0)) == 4
+    assert compute_exit_code(MockConfig(0, 0, 1, 1)) == 12
+    assert compute_exit_code(MockConfig(0, 1, 0, 0)) == 2
+    assert compute_exit_code(MockConfig(0, 1, 0, 1)) == 10
+    assert compute_exit_code(MockConfig(0, 1, 1, 0)) == 6
+    assert compute_exit_code(MockConfig(0, 1, 1, 1)) == 14
+
+    assert compute_exit_code(MockConfig(1, 0, 0, 0)) == 0
+    assert compute_exit_code(MockConfig(1, 0, 0, 1)) == 8
+    assert compute_exit_code(MockConfig(1, 0, 1, 0)) == 4
+    assert compute_exit_code(MockConfig(1, 0, 1, 1)) == 12
+    assert compute_exit_code(MockConfig(1, 1, 0, 0)) == 2
+    assert compute_exit_code(MockConfig(1, 1, 0, 1)) == 10
+    assert compute_exit_code(MockConfig(1, 1, 1, 0)) == 6
+    assert compute_exit_code(MockConfig(1, 1, 1, 1)) == 14
+
+    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception()) == 15
+
+    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception()) == 15
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_no_surviving_mutants():
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
-    print(repr(result.output))
-    assert u"""
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
-""".strip() == result.output.strip()
-
-
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_no_surviving_mutants_junit():
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
-    print(repr(result.output))
-    root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '0'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
-
-
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_one_surviving_mutant():
-    with open('tests/test_foo.py', 'w') as f:
-        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
-
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['results'], catch_exceptions=False)
-    print(repr(result.output))
-    assert u"""
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
-
-
-Survived 🙁 (1)
-
----- foo.py (1) ----
-
-1
-""".strip() == result.output.strip()
+def test_read_coverage_data(filesystem):
+    assert read_coverage_data(False) is None
+    assert isinstance(read_coverage_data(True), CoverageData)
 
 
 @pytest.mark.parametrize(
@@ -137,39 +137,22 @@ Survived 🙁 (1)
         ([os.path.join(".", "foo.py")], ".", [os.path.join(".", "tests")])
     ]
 )
-@pytest.mark.usefixtures('filesystem')
-def test_python_source_files(expected, source_path, tests_dirs):
-    assert expected == list(python_source_files(source_path, tests_dirs))
-
-
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
-@pytest.mark.usefixtures('filesystem')
-def test_full_run_one_surviving_mutant_junit():
-    with open('tests/test_foo.py', 'w') as f:
-        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
-
-    CliRunner().invoke(main, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
-    result = CliRunner().invoke(main, ['junitxml'], catch_exceptions=False)
-    print(repr(result.output))
-    root = ET.fromstring(result.output.strip())
-    assert root.attrib['tests'] == '8'
-    assert root.attrib['failures'] == '1'
-    assert root.attrib['errors'] == '0'
-    assert root.attrib['disabled'] == '0'
+def test_python_source_files(expected, source_path, tests_dirs, filesystem):
+    assert list(python_source_files(source_path, tests_dirs)) == expected
 
 
 def test_popen_streaming_output_timeout():
-    start = datetime.now()
-    with pytest.raises(CompatTimeoutError):
+    start = time()
+    with pytest.raises(TimeoutError):
         popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
-    assert (datetime.now() - start).total_seconds() < 3
+    assert (time() - start) < 3
 
 
 def test_popen_streaming_output_stream():
     mock = MagicMock()
     popen_streaming_output(
-        'python -c "print(\'first\'); print(\'second\')"', 
+        'python -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
     mock.assert_has_calls([call('first'), call('second')])
@@ -186,7 +169,142 @@ def test_popen_streaming_output_stream():
     mock.assert_not_called()
 
 
-@pytest.mark.usefixtures('filesystem')
-def test_read_coverage_data():
-    assert read_coverage_data(False) is None
-    assert isinstance(read_coverage_data(True), CoverageData)
+def test_simple_apply(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+
+    result = CliRunner().invoke(climain, ['apply', '1'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    with open(os.path.join(str(filesystem), 'foo.py')) as f:
+        assert f.read() != file_to_mutate_contents
+
+
+def test_full_run_no_surviving_mutants(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+""".strip()
+
+
+def test_full_run_no_surviving_mutants_junit(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 0
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
+
+
+def test_full_run_one_surviving_mutant(filesystem):
+    with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 2
+
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (1)
+
+---- foo.py (1) ----
+
+1
+""".strip()
+
+
+def test_full_run_one_surviving_mutant_junit(filesystem):
+    with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 2
+
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 1
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
+
+
+def test_full_run_one_suspicious_mutant(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    if EXPECTED_MUTANTS == 8:
+        assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (8)
+
+---- foo.py (8) ----
+
+1, 2, 3, 4, 5, 6, 7, 8
+""".strip()
+    else:
+        assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Suspicious 🤔 (9)
+
+---- foo.py (9) ----
+
+1, 2, 3, 4, 5, 6, 7, 8, 9
+""".strip()
+
+
+def test_full_run_one_suspicious_mutant_junit(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 8
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 0
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
