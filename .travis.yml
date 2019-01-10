@@ -25,6 +25,7 @@ jobs:
       after_script: skip
       script:
        - python setup.py lint || exit $(($? & 35))
+    - stage: test
     - python: 2.7
     - python: pypy
     - python: 3.6
