@@ -70,10 +70,17 @@ class ReleaseCheck(Command):
 
 
 class Pylint(test):
+    user_options = [('pylint-args=', 'a', "Arguments to pass to pylint")]
+
+    def initialize_options(self):
+        test.initialize_options(self)
+        self.pylint_args = "mutmut --persistent=y --rcfile=.pylintrc --output-format=colorized"
+
     def run_tests(self):
+        import shlex
+        # import here, cause outside the eggs aren't loaded
         from pylint.lint import Run
-        Run(['mutmut', "--persistent", "y", "--rcfile", ".pylintrc",
-             "--output-format", "colorized"])
+        Run(shlex.split(self.pylint_args))
 
 
 class PyTest(test):
