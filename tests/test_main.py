@@ -309,36 +309,3 @@ def test_full_run_one_suspicious_mutant_junit(filesystem):
     assert int(root.attrib['failures']) == 0
     assert int(root.attrib['errors']) == 0
     assert int(root.attrib['disabled']) == 0
-
-
-def mock_callback_func(line):
-    """test call back function to be thrown into ``popen_streaming_output``"""
-    print(line, end='')
-
-
-def test_timeout(capsys):
-    """Test that ``popen_streaming_output`` can properly timeout"""
-    start = time.time()
-    with pytest.raises(TimeoutError):
-        popen_streaming_output(
-            """python -c "import time; time.sleep(4); print('failure')" """,
-            mock_callback_func, timeout=0.1
-        )
-    assert (time.time() - start) < 3
-    # ensure we obtained nothing
-    captured = capsys.readouterr()
-    assert "failure" not in captured.out
-
-
-def test_non_timeout(capsys):
-    """Test that ``popen_streaming_output`` can properly run a simple
-    command"""
-    start = time.time()
-    popen_streaming_output(
-        """python -c "import time; time.sleep(4); print('success')" """,
-        mock_callback_func, timeout=10
-    )
-    assert (time.time() - start) > 4
-    # ensure we captured the print of 'success'
-    captured = capsys.readouterr()
-    assert "success" in captured.out
