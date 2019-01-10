@@ -4,12 +4,13 @@
 import os
 import re
 import sys
+import io
 
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
 
-readme = open('README.rst').read()
-history = open('HISTORY.rst').read().replace('.. :changelog:', '')
+readme = io.open('README.rst', encoding='utf8').read()
+history = io.open('HISTORY.rst', encoding='utf8').read().replace('.. :changelog:', '')
 
 
 def read_reqs(name):
