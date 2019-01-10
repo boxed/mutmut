@@ -264,7 +264,7 @@ def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:
+    if EXPECTED_MUTANTS == 8:  # python3
         assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -279,7 +279,7 @@ Suspicious 🤔 (8)
 
 1, 2, 3, 4, 5, 6, 7, 8
 """.strip()
-    else:
+    else:  # python2
         assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -308,3 +308,34 @@ def test_full_run_all_suspicious_mutant_junit(filesystem):
     assert int(root.attrib['failures']) == 0
     assert int(root.attrib['errors']) == 0
     assert int(root.attrib['disabled']) == 0
+
+
+def test_use_coverage(capsys, filesystem):
+    with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
+        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+
+    # first validate that mutmut without coverage detects a surviving mutant
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 2
+
+    result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    root = ET.fromstring(result.output.strip())
+    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
+    assert int(root.attrib['failures']) == 1
+    assert int(root.attrib['errors']) == 0
+    assert int(root.attrib['disabled']) == 0
+
+    # generate a `.coverage` file by invoking pytest
+    pytest.main(["--cov=.", "foo.py"])
+    assert os.path.isfile('.coverage')
+
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0", "--use-coverage"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    if EXPECTED_MUTANTS == 8:  # python3
+        assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    else:  # python2
+        assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
