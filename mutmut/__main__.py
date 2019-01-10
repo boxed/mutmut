@@ -402,7 +402,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         try:
             process_.kill()
         except OSError:
-            pass  # ignore
+            pass
 
     # python 2-3 agnostic process timer
     timer = Timer(timeout, kill, [process])
