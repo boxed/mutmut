@@ -36,15 +36,6 @@ BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
 
 
-mutant_statuses = [
-    UNTESTED,
-    OK_KILLED,
-    OK_SUSPICIOUS,
-    BAD_TIMEOUT,
-    BAD_SURVIVED,
-]
-
-
 class MutationID(object):
     def __init__(self, line, index, line_number):
         """
