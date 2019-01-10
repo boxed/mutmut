@@ -315,7 +315,7 @@ def test_use_coverage(capsys, filesystem):
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
     # first validate that mutmut without coverage detects a surviving mutant
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 2
 
@@ -332,7 +332,7 @@ def test_use_coverage(capsys, filesystem):
     pytest.main(["--cov=.", "foo.py"])
     assert os.path.isfile('.coverage')
 
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--use-coverage"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
     if EXPECTED_MUTANTS == 8:  # python3
