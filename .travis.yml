@@ -24,7 +24,7 @@ jobs:
       before_script: skip
       after_script: skip
       script:
-       - python setup.py lint || exit $(($? & 35))
+        - python setup.py lint || exit $(($? & 35))
     - stage: test
     - python: 2.7
     - python: pypy
