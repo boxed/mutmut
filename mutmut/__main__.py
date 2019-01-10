@@ -6,15 +6,15 @@ from __future__ import print_function
 import itertools
 import os
 import shlex
+import subprocess
 import sys
 import traceback
 from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from subprocess import Popen
-from threading import Thread
-from time import sleep, time
+from threading import Timer
+from time import time
 
 import click
 from glob2 import glob
@@ -364,52 +364,79 @@ Legend for output:
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
-    master, slave = os.openpty()
+    """Open a subprocess and stream its output without hard-blocking.
 
-    p = Popen(
-        shlex.split(cmd, posix=True),
-        stdout=slave,
-        stderr=slave
-    )
-    stdout = os.fdopen(master)
-    os.close(slave)
+    :param cmd: the command to execute within the subprocess
+    :type cmd: str
 
-    start = time()
+    :param callback: function that intakes the subprocess' stdout line by line.
+        It is called for each line received from the subprocess' stdout stream.
+    :param timeout: the timeout time of the subprocess
+    :type timeout: float
 
-    foo = {'raise': False}
+    :raises TimeoutError: if the subprocess' execution time exceeds
+        the timeout time
 
-    def timeout_killer():
-        while p.returncode is None:
-            sleep(0.1)
-            if (time() - start) > timeout:
-                foo['raise'] = True
-                p.kill()
-                return
+    :return: the return code of the executed subprocess
+    :rtype: int
+    """
+    if os.name == 'nt':
+        process = subprocess.Popen(
+            shlex.split(cmd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout = process.stdout
+    else:
+        master, slave = os.openpty()
+        process = subprocess.Popen(
+            shlex.split(cmd, posix=True),
+            stdout=slave,
+            stderr=slave
+        )
+        stdout = os.fdopen(master)
+        os.close(slave)
 
-    if timeout:
-        t = Thread(target=timeout_killer)
-        t.daemon = True
-        t.start()
-
-    while p.returncode is None:
+    def kill(process_):
+        """Kill the specified process on Timer completion"""
         try:
-            while True:
+            process_.kill()
+        except OSError:
+            pass
+
+    # python 2-3 agnostic process timer
+    timer = Timer(timeout, kill, [process])
+    timer.setDaemon(True)
+    timer.start()
+
+    while process.returncode is None:
+        try:
+            if os.name == 'nt':
                 line = stdout.readline()
-                if not line:
-                    break
-                callback(line.rstrip())
+                # windows gives readline() raw stdout as a b''
+                # need to decode it
+                line = line.decode("utf-8")
+                if line:  # ignore empty strings and None
+                    callback(line.rstrip())
+            else:
+                while True:
+                    line = stdout.readline()
+                    if not line:
+                        break
+                    callback(line.rstrip())
         except (IOError, OSError):
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
             pass
+        if not timer.is_alive():
+            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
+        process.poll()
 
-        p.poll()
+    # we have returned from the subprocess cancel the timer if it is running
+    timer.cancel()
 
-    if foo['raise']:
-        raise TimeoutError("subprocess command {} timed out after {} seconds".format(cmd, time()-start))
-
-    return p.returncode
+    return process.returncode
 
 
 def tests_pass(config):

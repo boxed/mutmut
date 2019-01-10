@@ -1,6 +1,29 @@
 Changelog
 ---------
 
+1.2.0 (2019-01-10)
+~~~~~~~~~~~~~~~~~~
+
+* JUnit XML output: Run `mutmut junitxml` to output the results as a JUnit compatible XML file.
+
+* Python 2 compatibility fixes.
+
+* pypy compatibility fixes.
+
+* Fixed an issue where mutmut couldn't kill the spawned test process.
+
+* Travis tests now test much more thoroughly, both python2, 3, pypy and on windows.
+
+* The return code of mutmut now reflects what mutmut found during execution.
+
+* New command line option `--test-time-multiplier` to tweak the detection threshold for mutations that make the code slower.
+
+* Fixed compatibility with Windows.
+
+
+Thanks goes out Marcelo Da Cruz Pinto, Savo Kovačević,
+
+
 1.1.0 (2018-12-10)
 ~~~~~~~~~~~~~~~~~~~
 
