@@ -11,7 +11,6 @@ import pytest
 from click.testing import CliRunner
 from coverage import CoverageData
 
-pytestmark = [pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")]
 from mutmut.__main__ import climain, python_source_files, \
     popen_streaming_output, TimeoutError, Config, compute_exit_code, \
     read_coverage_data
