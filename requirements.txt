@@ -4,4 +4,3 @@ tri.declarative
 click
 pony
 junit-xml==1.8
-python-nonblock
