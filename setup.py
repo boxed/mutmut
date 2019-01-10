@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import io
 import os
 import re
 import sys
-import io
 
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
@@ -69,12 +69,19 @@ class ReleaseCheck(Command):
         print("Ok to distribute files")
 
 
+class Pylint(test):
+    def run_tests(self):
+        from pylint.lint import Run
+        Run(['mutmut', "--persistent", "y", "--rcfile", ".pylintrc",
+             "--output-format", "colorized"])
+
+
 class PyTest(test):
     user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
 
     def initialize_options(self):
         test.initialize_options(self)
-        self.pytest_args = "-v --cov={}".format("mutmut")
+        self.pytest_args = "-vv -x --cov={}".format("mutmut")
 
     def run_tests(self):
         import shlex
@@ -124,6 +131,7 @@ setup(
         'tag': Tag,
         'release_check': ReleaseCheck,
         'test': PyTest,
+        'lint': Pylint
     },
     # if I add entry_points while pytest runs,
     # it imports before the coverage collecting starts
