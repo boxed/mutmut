@@ -30,6 +30,9 @@ jobs:
         - choco install python --version 3.7.2
         - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
         - python -m pip install --upgrade pip wheel
+        - python -m pip install codecov
+      after_success:
+        - python -m codecov
     - stage: build
       python:
         - 3.6
