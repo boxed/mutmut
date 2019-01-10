@@ -355,7 +355,7 @@ def arglist_mutation(children, **_):
     return children
 
 
-mutations_by_type = {
+MUTATIONS_BY_TYPE = {
     'operator': dict(value=operator_mutation),
     'keyword': dict(value=keyword_mutation),
     'number': dict(value=number_mutation),
@@ -378,6 +378,7 @@ mutations_by_type = {
     'trailer': dict(children=trailer_mutation),
     'arglist': dict(children=arglist_mutation),
 }
+
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
 
@@ -510,7 +511,7 @@ def mutate_node(i, context):
             if context.number_of_performed_mutations and context.mutation_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        m = MUTATIONS_BY_TYPE.get(t)
 
         if m is None:
             return
