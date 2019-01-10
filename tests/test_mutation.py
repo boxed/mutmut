@@ -4,7 +4,7 @@ import sys
 
 from parso import parse
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID, matches, array_subscript_pattern, function_call_pattern, matches_any, ASTPattern
+from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
 import pytest
 
 
@@ -18,7 +18,8 @@ def test_matches():
     node = parse('from foo import bar').children[0]
     assert not array_subscript_pattern.matches(node=node)
     assert not function_call_pattern.matches(node=node)
-    assert not matches_any(patterns=[array_subscript_pattern, function_call_pattern], node=node)
+    assert not array_subscript_pattern.matches(node=node)
+    assert not function_call_pattern.matches(node=node)
 
     node = parse('foo[bar]\n').children[0].children[0].children[1].children[1]
     assert array_subscript_pattern.matches(node=node)
@@ -27,7 +28,7 @@ def test_matches():
     assert function_call_pattern.matches(node=node)
 
 
-def test_multiline_matches():
+def test_ast_pattern_for_loop():
     p = ASTPattern(
         """
 for x in y:

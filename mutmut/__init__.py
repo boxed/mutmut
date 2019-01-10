@@ -28,104 +28,92 @@ ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
 class ASTPattern(object):
     def __init__(self, source, **definitions):
+        if definitions is None:
+            definitions = {}
+        source = source.strip()
+
         self.definitions = definitions
-        self.module, self.markers = _create_pattern_node(source, definitions=definitions)
+
+        self.module = parse(source)
+
+        self.markers = []
+
+        def get_leaf(line, column, of_type=None):
+            r = self.module.children[0].get_leaf_for_position((line, column))
+            while of_type is not None and r.type != of_type:
+                r = r.parent
+            return r
+
+        def parse_markers(node):
+            if hasattr(node, '_split_prefix'):
+                for x in node._split_prefix():
+                    parse_markers(x)
+
+            if hasattr(node, 'children'):
+                for x in node.children:
+                    parse_markers(x)
+
+            if node.type == 'comment':
+                line, column = node.start_pos
+                for match in re.finditer(r'(?P<marker>[\^↑])(?P<value>[^\^↑]*)', node.value):
+                    name = match.groupdict()['value'].strip()
+                    d = definitions.get(name, {})
+                    assert set(d.keys()) | {'of_type', 'marker_type'} == {'of_type', 'marker_type'}
+                    self.markers.append(dict(
+                        node=get_leaf(line - 1, column + match.start(), of_type=d.get('of_type')),
+                        marker_type=d.get('marker_type'),
+                        marker=match.groupdict()['marker'].strip()
+                    ))
+
+        parse_markers(self.module)
+
         self.pattern = [x['node'] for x in self.markers if x['marker'] == '↑'][0]
         self.marker_type_by_id = {id(x['node']): x['marker_type'] for x in self.markers}
 
-    def matches(self, node):
-        return matches(pattern=self.pattern, node=node, marker_type_by_id=self.marker_type_by_id)
+    def matches(self, node, pattern=None, skip_child=None):
+        if pattern is None:
+            pattern = self.pattern
 
+        check_value = True
+        check_children = True
 
-def _create_pattern_node(source, definitions=None):
-    if definitions is None:
-        definitions = {}
-
-    source = source.strip()
-    assert source.count('↑') == 1, 'you can only have one match marker, use ^ to mark other nodes for info'
-    module = parse(source)
-
-    markers = []
-
-    def get_leaf(line, column, of_type=None):
-        r = module.children[0].get_leaf_for_position((line, column))
-        while of_type is not None and r.type != of_type:
-            r = r.parent
-        return r
-
-    def parse_markers(node):
-        if hasattr(node, '_split_prefix'):
-            for x in node._split_prefix():
-                parse_markers(x)
-
-        if hasattr(node, 'children'):
-            for x in node.children:
-                parse_markers(x)
-
-        if node.type == 'comment':
-            line, column = node.start_pos
-            for match in re.finditer(r'(?P<marker>[\^↑])(?P<value>[^\^↑]*)', node.value):
-                name = match.groupdict()['value'].strip()
-                d = definitions.get(name, {})
-                assert set(d.keys()) | {'of_type', 'marker_type'} == {'of_type', 'marker_type'}
-                markers.append(dict(
-                    node=get_leaf(line - 1, column + match.start(), of_type=d.get('of_type')),
-                    marker_type=d.get('marker_type'),
-                    marker=match.groupdict()['marker'].strip()
-                ))
-
-    parse_markers(module)
-    return module, markers
-
-
-def matches(pattern, node, skip_child=None, marker_type_by_id=None):
-    if marker_type_by_id is None:
-        marker_type_by_id = {}
-
-    check_value = True
-    check_children = True
-
-    # Match type based on the name, so _keyword matches all keywords. Special case for _all that matches everything
-    if pattern.type == 'name' and pattern.value.startswith('_') and pattern.value[1:] in ('any', node.type):
-        check_value = False
-
-    # The advanced case where we've explicitly marked up a node with the accepted types
-    elif id(pattern) in marker_type_by_id:
-        if marker_type_by_id[id(pattern)] in (pattern.type, 'any'):
+        # Match type based on the name, so _keyword matches all keywords. Special case for _all that matches everything
+        if pattern.type == 'name' and pattern.value.startswith('_') and pattern.value[1:] in ('any', node.type):
             check_value = False
-            check_children = False  # TODO: really? or just do this for 'any'?
 
-    # Check node type strictly
-    elif pattern.type != node.type:
-        return False
+        # The advanced case where we've explicitly marked up a node with the accepted types
+        elif id(pattern) in self.marker_type_by_id:
+            if self.marker_type_by_id[id(pattern)] in (pattern.type, 'any'):
+                check_value = False
+                check_children = False  # TODO: really? or just do this for 'any'?
 
-    # Match children
-    if check_children and hasattr(pattern, 'children'):
-        if len(pattern.children) != len(node.children):
+        # Check node type strictly
+        elif pattern.type != node.type:
             return False
 
-        for pattern_child, node_child in zip(pattern.children, node.children):
-            if node_child is skip_child:  # prevent infinite recursion
-                continue
-
-            if not matches(pattern=pattern_child, node=node_child, skip_child=node_child, marker_type_by_id=marker_type_by_id):
+        # Match children
+        if check_children and hasattr(pattern, 'children'):
+            if len(pattern.children) != len(node.children):
                 return False
 
-    # Node value
-    if check_value and hasattr(pattern, 'value'):
-        if pattern.value != node.value:
-            return False
+            for pattern_child, node_child in zip(pattern.children, node.children):
+                if node_child is skip_child:  # prevent infinite recursion
+                    continue
 
-    # Parent
-    if pattern.parent.type != 'file_input':  # top level matches nothing
-        if skip_child != node:
-            return matches(pattern.parent, node.parent, skip_child=node, marker_type_by_id=marker_type_by_id)
+                if not self.matches(node=node_child, pattern=pattern_child, skip_child=node_child):
+                    return False
 
-    return True
+        # Node value
+        if check_value and hasattr(pattern, 'value'):
+            if pattern.value != node.value:
+                return False
 
+        # Parent
+        if pattern.parent.type != 'file_input':  # top level matches nothing
+            if skip_child != node:
+                return self.matches(node=node.parent, pattern=pattern.parent, skip_child=node)
 
-def matches_any(patterns, node):
-    return any(pattern.matches(node=node) for pattern in patterns)
+        return True
 
 
 # We have a global whitelist for constants of the pattern __all__, __version__, etc
@@ -215,7 +203,7 @@ def string_mutation(value, **_):
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
-def split_node_list(nodes, value):
+def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
             return nodes[:i], n, nodes[i+1:]
@@ -224,7 +212,7 @@ def split_node_list(nodes, value):
 
 
 def lambda_mutation(children, **_):
-    pre, op, post = split_node_list(children, value=':')
+    pre, op, post = partition_node_list(children, value=':')
 
     if len(post) == 1 and getattr(post[0], 'value', None) == 'None':
         return pre + [op] + [Number(value=' 0', start_pos=post[0].start_pos)]
@@ -388,7 +376,10 @@ def name_mutation(node, value, **_):
     if value in simple_mutants:
         return simple_mutants[value]
 
-    if matches_any(patterns=[array_subscript_pattern, function_call_pattern], node=node):
+    if array_subscript_pattern.matches(node=node):
+        return 'None'
+
+    if function_call_pattern.matches(node=node):
         return 'None'
 
 
