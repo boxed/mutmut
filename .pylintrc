@@ -121,7 +121,7 @@ ignore-imports=no
 [FORMAT]
 
 # Maximum number of characters on a single line.
-max-line-length=100
+max-line-length=160
 
 # Regexp for a line that is allowed to be longer than the limit.
 ignore-long-lines=^\s*(# )?<?https?://\S+>?$
