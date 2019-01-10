@@ -430,7 +430,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             # won't get as nice feedback.
             pass
         if not timer.is_alive():
-            raise TimeoutError("subprocess timed out")
+            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
         process.poll()
 
     # we have returned from the subprocess cancel the timer if it is running
