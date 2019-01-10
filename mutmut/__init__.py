@@ -145,9 +145,6 @@ def lambda_mutation(children, **_):
         return children[:3] + [Name(value=' 0', start_pos=children[0].start_pos)]
 
 
-NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
-
-
 def argument_mutation(children, context, **_):
     """
     :type children: list[PythonLeaf]
