@@ -32,7 +32,7 @@ spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+    from ConfigParser import ConfigParser, NoOptionError, NoSectionError  # pylint: disable=import-error
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
@@ -388,7 +388,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
         )
         stdout = process.stdout
     else:
-        master, slave = os.openpty()
+        master, slave = os.openpty()  # pylint: disable=no-member
         process = subprocess.Popen(
             shlex.split(cmd, posix=True),
             stdout=slave,
@@ -640,4 +640,4 @@ def compute_exit_code(config, exception=None):
 
 
 if __name__ == '__main__':
-    climain()
+    climain()  # pylint: disable=no-value-for-parameter
