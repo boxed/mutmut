@@ -1,26 +1,18 @@
 import sys
 
 from parso import parse
-from parso.python.tree import Name
+from parso.python.tree import Name, PythonLeaf, PythonNode
 from tri.declarative import evaluate
 
 __version__ = '1.2.0'
 
 
-class MutationID(object):
-    def __init__(self, line, index, line_number):
-        self.line = line
-        self.index = index
-        self.line_number = line_number
+if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+    # noinspection PyUnresolvedReferences
+    text_types = (str, unicode)
+else:
+    text_types = (str,)
 
-    def __repr__(self):
-        return 'MutationID(line="%s", index=%s, line_number=%s)' % (self.line, self.index, self.line_number)
-
-    def __eq__(self, other):
-        return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
-
-
-ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
 # We have a global whitelist for constants of the pattern:
 # __all__, __version__, etc
@@ -36,14 +28,6 @@ dunder_whitelist = [
     'license',
     'copyright',
 ]
-
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
-else:
-    text_types = (str,)
-
 
 UNTESTED = 'untested'
 OK_KILLED = 'ok_killed'
@@ -61,7 +45,44 @@ mutant_statuses = [
 ]
 
 
+class MutationID(object):
+    def __init__(self, line, index, line_number):
+        """
+
+        :param line:
+        :type line: str
+
+        :param index:
+        :type index: int
+
+        :param line_number:
+        :type line_number: int
+        """
+        self.line = line
+        self.index = index
+        self.line_number = line_number
+
+    def __repr__(self):
+        return 'MutationID(line="%s", index=%s, line_number=%s)' % (
+        self.line, self.index, self.line_number)
+
+    def __eq__(self, other):
+        return (self.line, self.index, self.line_number) == (
+        other.line, other.index, other.line_number)
+
+
+ALL = MutationID(line='%all%', index=-1, line_number=-1)
+
+
 def number_mutation(value, **_):
+    """
+
+    :param value:
+    :type value: str
+
+    :return:
+    :rtype: str
+    """
     suffix = ''
     if value.upper().endswith('L'):  # pragma: no cover (python 2 specific)
         suffix = value[-1]
@@ -99,6 +120,14 @@ def number_mutation(value, **_):
 
 
 def string_mutation(value, **_):
+    """
+
+    :param value:
+    :type value: str
+
+    :return:
+    :rtype: str
+    """
     prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
     value = value[len(prefix):]
 
@@ -110,6 +139,14 @@ def string_mutation(value, **_):
 
 
 def lambda_mutation(children, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :return:
+    :rtype: list[PythonNode]
+    """
     from parso.python.tree import Name
     if len(children) != 4 or getattr(children[-1], 'value', '---') != 'None':
         return children[:3] + [Name(value=' None', start_pos=children[0].start_pos)]
@@ -122,6 +159,7 @@ NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 def argument_mutation(children, context, **_):
     """
+    :type children: list[PythonLeaf]
     :type context: Context
     """
     if len(context.stack) >= 3 and context.stack[-3].type in ('power', 'atom_expr'):
@@ -144,7 +182,17 @@ def argument_mutation(children, context, **_):
 
 
 def keyword_mutation(value, context, **_):
+    """
 
+    :param value:
+    :type value: str
+
+    :param context:
+    :type context: Context
+
+    :return:
+    :rtype: str
+    """
     if len(context.stack) > 2 and context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
         return value
 
@@ -164,6 +212,17 @@ def keyword_mutation(value, context, **_):
 
 
 def operator_mutation(value, context, **_):
+    """
+
+    :param value:
+    :type value: str
+
+    :param context:
+    :type context: Context
+
+    :return:
+    :rtype: str
+    """
     if context.stack[-2].type in ('import_from', 'param'):
         return value
 
@@ -207,6 +266,17 @@ def operator_mutation(value, context, **_):
 
 
 def and_or_test_mutation(children, node, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :param node:
+    :type node: PythonNode
+
+    :return:
+    :rtype: list[PythonLeaf]
+    """
     children = children[:]
     from parso.python.tree import Keyword
     children[1] = Keyword(
@@ -217,7 +287,26 @@ def and_or_test_mutation(children, node, **_):
 
 
 def expression_mutation(children, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :param node:
+    :type node: PythonNode
+
+    :return:
+    :rtype: list[PythonLeaf]
+    """
     def handle_assignment(children):
+        """
+
+        :param children:
+        :type children: list[PythonLeaf]
+
+        :return:
+        :rtype: list[PythonLeaf]
+        """
         if getattr(children[2], 'value', '---') != 'None':
             x = ' None'
         else:
@@ -237,11 +326,27 @@ def expression_mutation(children, **_):
 
 
 def decorator_mutation(children, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :return:
+    :rtype: list[PythonLeaf]
+    """
     assert children[-1].type == 'newline'
     return children[-1:]
 
 
 def trailer_mutation(children, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :return:
+    :rtype: list[PythonLeaf]
+    """
     if len(children) == 3 and children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and children[0].parent.type == 'trailer' and children[1].type == 'name' and children[1].value != 'None':
         # Something that looks like "foo[bar]"
         return [children[0], Name(value='None', start_pos=children[0].start_pos), children[-1]]
@@ -249,6 +354,14 @@ def trailer_mutation(children, **_):
 
 
 def arglist_mutation(children, **_):
+    """
+
+    :param children:
+    :type children: list[PythonLeaf]
+
+    :return:
+    :rtype: list[PythonLeaf]
+    """
     if len(children) > 3 and children[0].type == 'name' and children[0].value != 'None':
         return [Name(value='None', start_pos=children[0].start_pos)] + children[1:]
     return children
@@ -282,7 +395,28 @@ mutations_by_type = {
 
 
 class Context(object):
-    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
+    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None,
+                 filename=None, exclude=lambda context: False, config=None):
+        """
+
+        :param source:
+        :type source: str
+
+        :param mutation_id:
+        :type mutation_id: MutationID
+
+        :param dict_synonyms:
+        :type dict_synonyms: list[str]
+
+        :param filename:
+        :type filename: str
+
+        :param exclude:
+        :type exclude: Callable[[Context], bool]
+
+        :param config:
+        :type config: Config
+        """
         self.index = 0
         self.source = source
         self.mutation_id = mutation_id
@@ -345,7 +479,9 @@ class Context(object):
 def mutate(context):
     """
     :type context: Context
+
     :return: tuple: mutated source code, number of mutations performed
+    :rtype: tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -364,6 +500,7 @@ def mutate(context):
 
 def mutate_node(i, context):
     """
+    :type i: PythonNode or PythonLeaf
     :type context: Context
     """
     context.stack.append(i)
@@ -419,6 +556,7 @@ def mutate_node(i, context):
 
 def mutate_list_of_nodes(result, context):
     """
+    :type result: PythonNode
     :type context: Context
     """
     for i in result.children:
@@ -453,7 +591,6 @@ def list_mutations(context):
 
 def mutate_file(backup, context):
     """
-
     :type backup: bool
     :type context: Context
     """
