@@ -13,12 +13,11 @@ from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from time import time
 from threading import Timer
+from time import time
 
 import click
 from glob2 import glob
-from nonblock import nonblock_read
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
     BAD_TIMEOUT, \
@@ -367,25 +366,36 @@ Legend for output:
 def popen_streaming_output(cmd, callback, timeout=None):
     """Open a subprocess and stream its output without hard-blocking.
 
-    :param cmd: the command to execute within the subprocess
+    :param cmd: the command to execute within as subprocess
     :type cmd: str
 
     :param callback: function to execute with the subprocess stdout output
-    :param timeout: the timeout time for the processes' ``communication``
-        call to complete
+    :param timeout: the timeout time for the processes to complete
     :type timeout: float
 
-    :raises TimeoutError: if the subprocesses' ``communication`` call times out
+    :raises TimeoutError: if the subprocess execution time exceeds the timeout
+        time
 
     :return: the return code of the executed subprocess
     :rtype: int
     """
-    process = subprocess.Popen(
-        shlex.split(cmd),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True
-    )
+
+    if os.name == 'nt':
+        process = subprocess.Popen(
+            shlex.split(cmd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout = process.stdout
+    else:
+        master, slave = os.openpty()
+        process = subprocess.Popen(
+            shlex.split(cmd, posix=True),
+            stdout=slave,
+            stderr=slave
+        )
+        stdout = os.fdopen(master)
+        os.close(slave)
 
     def kill(process_):
         """Kill the specified process on Timer completion"""
@@ -402,24 +412,25 @@ def popen_streaming_output(cmd, callback, timeout=None):
     while process.returncode is None:
         try:
             if os.name == 'nt':
-                output = process.stdout.readline()
+                line = stdout.readline()
+                # windows gives readline() raw stdout as a b''
+                # need to decode it
+                line = line.decode("utf-8")
+                if line:  # ignore empty strings and None
+                    callback(line.rstrip())
             else:
-                output = nonblock_read(process.stdout)
-            if output:
-                if isinstance(output, bytes):
-                    output = output.decode("utf-8")
-                if output.endswith("\n"):
-                    # -1 to remove the newline at the end
-                    output = output[:-1]
-                callback(output)
-        except OSError:
+                while True:
+                    line = stdout.readline()
+                    if not line:
+                        break
+                    callback(line.rstrip())
+        except (IOError, OSError):
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
             pass
         if not timer.is_alive():
             raise TimeoutError("subprocess timed out")
-
         process.poll()
 
     # we have returned from the subprocess cancel the timer if it is running
