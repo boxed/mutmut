@@ -325,8 +325,8 @@ def register_mutants(mutations_by_file):
 
 @init_db
 @db_session
-def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
-    """
+def set_cached_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
+    """Set the status of a **existing** mutant in the cache
 
     :param file_to_mutate:
     :type file_to_mutate: str
@@ -349,8 +349,8 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
-def cached_mutation_status(filename, mutation_id, hash_of_tests):
-    """
+def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
+    """Get the status of a **existing** mutant in the cache
 
     :param filename:
     :type filename: str
