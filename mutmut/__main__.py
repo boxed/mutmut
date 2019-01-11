@@ -22,8 +22,8 @@ from glob2 import glob
 from mutmut import mutate_file, Context, list_mutations, __version__, \
     BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, MutationID
 from mutmut.cache import hash_of_tests
-from mutmut.cache import register_mutants, update_mutant_status, \
-    print_result_cache, cached_mutation_status, \
+from mutmut.cache import register_mutants, set_cached_mutant_status, \
+    print_result_cache, get_cached_mutation_status, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
@@ -616,7 +616,7 @@ def run_mutation(config, filename, mutation_id):
         config=config,
     )
 
-    cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    cached_status = get_cached_mutation_status(filename, mutation_id, config.hash_of_tests)
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
@@ -675,7 +675,7 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
     """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
-        update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
+        set_cached_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
         config.progress += 1
         config.print_progress()
 
