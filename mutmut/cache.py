@@ -157,20 +157,19 @@ def print_result_cache():
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
-def get_unified_diff(argument, dict_synonyms):
+def get_unified_diff(pk, dict_synonyms):
     """
 
-    TODO: maybe rework type
-    :param argument:
-    :type argument: int
+    :param pk: primary key of a :class:`MutationID` within the cache
+    :type pk: int
 
-    :param dict_synonyms:
+    :param dict_synonyms: list of synonyms of python dictionary objects
     :type dict_synonyms: list[str]
 
     :return:
     :rtype: str
     """
-    filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+    filename, mutation_id = filename_and_mutation_id_from_pk(pk)
     with open(filename) as f:
         source = f.read()
     context = Context(
@@ -195,7 +194,7 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
     """Print the mutation test results contained within the `.mutmut-cache`
     styled similar too junit xml
 
-    :param dict_synonyms:
+    :param dict_synonyms: list of synonyms of python dictionary objects
     :type dict_synonyms: list[str]
 
     :param suspicious_policy:
@@ -399,7 +398,7 @@ def mutation_id_from_pk(pk):
 def filename_and_mutation_id_from_pk(pk):
     """
 
-    :param pk:
+    :param pk: primary key of a :class:`MutationID` within the cache
     :type pk: int
 
     :return:

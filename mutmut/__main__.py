@@ -127,7 +127,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
     :param mutation_pk:
     :type mutation_pk: str
 
-    :param dict_synonyms:
+    :param dict_synonyms: list of synonyms of python dictionary objects
     :type dict_synonyms: list[str]
 
     :param backup:
@@ -178,7 +178,7 @@ class Config(object):
         :param backup:
         :type backup: bool
 
-        :param dict_synonyms:
+        :param dict_synonyms: list of synonyms of python dictionary objects
         :type dict_synonyms: list[str]
 
         :param total:
@@ -309,7 +309,7 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     :type use_coverage: bool
 
     TODO: maybe rework how dict_synonyms works
-    :param dict_synonyms:
+    :param dict_synonyms: list of synonyms of python dictionary objects
     :type dict_synonyms: str
 
     :param cache_only:
