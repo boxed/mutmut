@@ -67,11 +67,7 @@ ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
 def number_mutation(value, **_):
     """
-
-    :param value:
     :type value: str
-
-    :return:
     :rtype: str
     """
     suffix = ''
@@ -112,11 +108,7 @@ def number_mutation(value, **_):
 
 def string_mutation(value, **_):
     """
-
-    :param value:
     :type value: str
-
-    :return:
     :rtype: str
     """
     prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
@@ -131,11 +123,7 @@ def string_mutation(value, **_):
 
 def lambda_mutation(children, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :return:
     :rtype: list[PythonNode]
     """
     from parso.python.tree import Name
@@ -171,14 +159,8 @@ def argument_mutation(children, context, **_):
 
 def keyword_mutation(value, context, **_):
     """
-
-    :param value:
     :type value: str
-
-    :param context:
     :type context: Context
-
-    :return:
     :rtype: str
     """
     if len(context.stack) > 2 and context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
@@ -201,14 +183,8 @@ def keyword_mutation(value, context, **_):
 
 def operator_mutation(value, context, **_):
     """
-
-    :param value:
     :type value: str
-
-    :param context:
     :type context: Context
-
-    :return:
     :rtype: str
     """
     if context.stack[-2].type in ('import_from', 'param'):
@@ -255,14 +231,8 @@ def operator_mutation(value, context, **_):
 
 def and_or_test_mutation(children, node, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :param node:
     :type node: PythonNode
-
-    :return:
     :rtype: list[PythonLeaf]
     """
     children = children[:]
@@ -276,23 +246,14 @@ def and_or_test_mutation(children, node, **_):
 
 def expression_mutation(children, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :param node:
-    :type node: PythonNode
 
     :return:
     :rtype: list[PythonLeaf]
     """
     def handle_assignment(children):
         """
-
-        :param children:
         :type children: list[PythonLeaf]
-
-        :return:
         :rtype: list[PythonLeaf]
         """
         if getattr(children[2], 'value', '---') != 'None':
@@ -315,11 +276,7 @@ def expression_mutation(children, **_):
 
 def decorator_mutation(children, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :return:
     :rtype: list[PythonLeaf]
     """
     assert children[-1].type == 'newline'
@@ -328,11 +285,7 @@ def decorator_mutation(children, **_):
 
 def trailer_mutation(children, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :return:
     :rtype: list[PythonLeaf]
     """
     if len(children) == 3 and children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and children[0].parent.type == 'trailer' and children[1].type == 'name' and children[1].value != 'None':
@@ -343,11 +296,7 @@ def trailer_mutation(children, **_):
 
 def arglist_mutation(children, **_):
     """
-
-    :param children:
     :type children: list[PythonLeaf]
-
-    :return:
     :rtype: list[PythonLeaf]
     """
     if len(children) > 3 and children[0].type == 'name' and children[0].value != 'None':
@@ -387,23 +336,11 @@ class Context(object):
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None,
                  filename=None, exclude=lambda context: False, config=None):
         """
-
-        :param source:
         :type source: str
-
-        :param mutation_id:
         :type mutation_id: MutationID
-
-        :param dict_synonyms:
         :type dict_synonyms: list[str]
-
-        :param filename:
         :type filename: str
-
-        :param exclude:
         :type exclude: Callable[[Context], bool]
-
-        :param config:
         :type config: Config
         """
         self.index = 0
@@ -582,6 +519,9 @@ def mutate_file(backup, context):
     """
     :type backup: bool
     :type context: Context
+
+    :return: number of mutations applied to the file
+    :rtype: int
     """
     with open(context.filename) as f:
         code = f.read()
