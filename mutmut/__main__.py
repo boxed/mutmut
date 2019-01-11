@@ -76,10 +76,11 @@ def config_from_setup_cfg(**defaults):
 
 # this function is stolen and modified from tqdm
 def status_printer():
-    """
-    Manage the printing and in-place updating of a line of characters.
-    Note that if the string is longer than a line, then in-place
-    updating may not work (it will print a new line at each refresh).
+    """Manage the printing and in-place updating of a line of characters
+
+    .. note::
+        If the string is longer than a line, then in-place updating may not
+        work (it will print a new line at each refresh).
     """
     last_len = [0]
 
