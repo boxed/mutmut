@@ -110,12 +110,13 @@ def init_db(f):
 
 
 def hash_of(filename):
-    """
+    """Read a file at the given path and calculate a SHA256 hash from its
+    contents.
 
-    :param filename:
+    :param filename: the path to file to read
     :type filename: str
 
-    :return:
+    :return: a SHA256 hash string
     :rtype: str
     """
     with open(filename, 'rb') as f:
@@ -125,12 +126,12 @@ def hash_of(filename):
 
 
 def hash_of_tests(tests_dirs):
-    """
+    """Calculate a SHA256 hash from the contents of all testing files
 
-    :param tests_dirs:
+    :param tests_dirs: list of paths of all testing directories
     :type tests_dirs: list[str]
 
-    :return:
+    :return: a SHA256 hash string
     :rtype: str
     """
     m = hashlib.sha256()
