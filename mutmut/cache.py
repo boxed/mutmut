@@ -349,7 +349,7 @@ def set_cached_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
-def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
+def get_cached_mutation_status(filename, mutation_id, tests_hash):
     """Get the status of a **existing** mutant in the cache
 
     :param filename:
@@ -358,8 +358,8 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
     :param mutation_id:
     :type mutation_id: MutationID
 
-    :param hash_of_tests:
-    :type hash_of_tests: str
+    :param tests_hash:
+    :type tests_hash: str
 
     :return: the status of the specified mutant
     :rtype: str
@@ -373,7 +373,7 @@ def get_cached_mutation_status(filename, mutation_id, hash_of_tests):
         # suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests:
+    if mutant.tested_against_hash != tests_hash:
         return UNTESTED
 
     return mutant.status
