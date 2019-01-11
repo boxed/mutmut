@@ -309,7 +309,8 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     :type use_coverage: bool
 
     TODO: maybe rework how dict_synonyms works
-    :param dict_synonyms: list of synonyms of python dictionary objects
+    :param dict_synonyms: comma separated list of synonyms of python
+        dictionary objects (e.g. ``'Struct, FooBarDict'``)
     :type dict_synonyms: str
 
     :param cache_only:
