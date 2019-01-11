@@ -121,7 +121,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
-    """
+    """Apply a specified mutant to the source code
 
     :param mutation_pk:
     :type mutation_pk: str
