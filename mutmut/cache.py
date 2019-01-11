@@ -441,9 +441,8 @@ def filename_and_mutation_id_from_pk(pk):
 @init_db
 @db_session
 def cached_test_time():
-    """
+    """Get the baseline test execution time from the cache
 
-    :return:
     :rtype: float or None
     """
     d = MiscData.get(key='baseline_time_elapsed')
@@ -453,9 +452,8 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
-    """
+    """Set the baseline test execution time in the cache
 
-    :param baseline_time_elapsed:
     :type baseline_time_elapsed: float
     """
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
