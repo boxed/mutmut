@@ -109,22 +109,6 @@ def init_db(f):
     return wrapper
 
 
-def hash_of(filename):
-    """Read a file at the given path and calculate a SHA256 hash from its
-    contents.
-
-    :param filename: the path to file to read
-    :type filename: str
-
-    :return: a SHA256 hash string
-    :rtype: str
-    """
-    with open(filename, 'rb') as f:
-        m = hashlib.sha256()
-        m.update(f.read())
-        return m.hexdigest()
-
-
 def hash_of_tests(tests_dirs):
     """Calculate a SHA256 hash from the contents of all testing files
 
