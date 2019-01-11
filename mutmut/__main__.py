@@ -154,7 +154,7 @@ class Config(object):
     def __init__(self, swallow_output, test_command, exclude_callback,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests):
+                 tests_dirs, tests_hash):
         """
 
         :param swallow_output:
@@ -193,8 +193,8 @@ class Config(object):
         :param tests_dirs:
         :type tests_dirs: list[str]
 
-        :param hash_of_tests:
-        :type hash_of_tests: str
+        :param tests_hash:
+        :type tests_hash: str
         """
         self.swallow_output = swallow_output
         self.test_command = test_command
@@ -210,7 +210,7 @@ class Config(object):
         self.skipped = 0
         self.cache_only = cache_only
         self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
+        self.tests_hash = tests_hash
         self.killed_mutants = 0
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
@@ -477,7 +477,7 @@ Legend for output:
         using_testmon=using_testmon,
         cache_only=cache_only,
         tests_dirs=tests_dirs,
-        hash_of_tests=hash_of_tests(tests_dirs),
+        tests_hash=hash_of_tests(tests_dirs),
         test_time_multiplier=test_time_multiplier,
         test_time_base=test_time_base,
     )
@@ -617,7 +617,7 @@ def run_mutation(config, filename, mutation_id):
         config=config,
     )
 
-    cached_status = get_cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    cached_status = get_cached_mutation_status(filename, mutation_id, config.tests_hash)
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
@@ -676,7 +676,7 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
     """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
-        set_cached_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
+        set_cached_mutant_status(file_to_mutate, mutation_id, status, config.tests_hash)
         config.progress += 1
         config.print_progress()
 
