@@ -575,7 +575,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 def tests_pass(config):
     """Run tests specified by the given `mutmut run` config
 
-    :param config: the `mutmut run` config
+    :param config:
     :type config: Config
 
     :return: :obj:`True` if the tests passed, otherwise :obj:`False`
@@ -597,7 +597,7 @@ def run_mutation(config, filename, mutation_id):
     """Obtain a mutant's status either by obtaining it from the cache
     or if the mutant's status is untested execute the tests for the mutant
 
-    :param config: the `mutmut run` config
+    :param config:
     :type config: Config
 
     :param filename: path to the source file to mutate
@@ -717,14 +717,14 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     :param swallow_output: if :obj:`True` test stdout will be not be printed
     :type swallow_output: bool
 
-    :param test_command:
+    :param test_command: command to spawn the testing subprocess
     :type test_command: str
 
     :param using_testmon: if :obj:`True` the test return code evaluation will
         accommodate for ``pytest-testmon``
     :type using_testmon: bool
 
-    :return: execution time of the test suite as a floating point number
+    :return: execution time of the test suite
     :rtype: float
     """
     cached_time = cached_test_time()
