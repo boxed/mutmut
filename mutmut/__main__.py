@@ -819,14 +819,14 @@ def python_source_files(path, tests_dirs):
     """Attempt to guess where the python source files to mutate are and yield
     their paths
 
-    :param path:
+    :param path: path to a python source file or package directory
     :type path: str
 
-    :param tests_dirs: List of directory paths containing test files
+    :param tests_dirs: list of directory paths containing test files
         (we do not want to mutate these!)
     :type tests_dirs: list[str]
 
-    :return: Generator specifying all the python source files to mutate are
+    :return: generator listing the paths to the python source files to mutate
     :rtype: Generator[str, None, None]
     """
     if isdir(path):
@@ -858,7 +858,7 @@ def compute_exit_code(config, exception=None):
     :param exception:
     :type exception: Exception
 
-    :return: integer noting the exit code of the mutation tests.
+    :return: exit code of the mutation tests
     :rtype: int
     """
     code = 0
