@@ -143,20 +143,6 @@ def hash_of_tests(tests_dirs):
     return m.hexdigest()
 
 
-# TODO: check if used
-def get_apply_line(mutant):
-    """
-
-    :param mutant:
-    :type mutant: Mutant
-
-    :return:
-    :rtype: str
-    """
-    apply_line = 'mutmut apply %s' % mutant.id
-    return apply_line
-
-
 @init_db
 @db_session
 def print_result_cache():
