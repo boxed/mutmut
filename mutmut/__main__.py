@@ -493,20 +493,20 @@ Legend for output:
 def popen_streaming_output(cmd, callback, timeout=None):
     """Open a subprocess and stream its output without hard-blocking.
 
-    :param cmd: the command to execute within the subprocess
+    :param cmd: command to execute within the subprocess
     :type cmd: str
 
     :param callback: function that intakes the subprocess' stdout line by line.
         It is called for each line received from the subprocess' stdout stream.
     :type callback: Callable[[Context], bool]
 
-    :param timeout: the timeout time of the subprocess
+    :param timeout: timeout time of the subprocess
     :type timeout: float
 
     :raises TimeoutError: if the subprocess' execution time exceeds
         the timeout time
 
-    :return: the return code of the executed subprocess
+    :return: return code of the executed subprocess
     :rtype: int
     """
     if os.name == 'nt':
