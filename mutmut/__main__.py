@@ -599,13 +599,13 @@ def run_mutation(config, filename, mutation_id):
     :param config: the `mutmut run` config
     :type config: Config
 
-    :param filename: the source file to mutate
+    :param filename: path to the source file to mutate
     :type filename: str
 
-    :param mutation_id: the id of the mutant
+    :param mutation_id: id of the mutant to run
     :type mutation_id: MutationID
 
-    :return: the status of the mutation
+    :return: status of the mutation
     :rtype: str
     """
     context = Context(
@@ -719,11 +719,11 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     :param test_command:
     :type test_command: str
 
-    :param using_testmon:
+    :param using_testmon: if :obj:`True` the test return code evaluation will
+        accommodate for ``pytest-testmon``
     :type using_testmon: bool
 
-    :return: the time it took to execute the test suite as
-        a floating point number
+    :return: execution time of the test suite as a floating point number
     :rtype: float
     """
     cached_time = cached_test_time()
