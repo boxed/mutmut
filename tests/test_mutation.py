@@ -32,7 +32,7 @@ def test_ast_pattern_for_loop():
     p = ASTPattern(
         """
 for x in y:
-#   ^ n  ↑ match
+#   ^ n  ^ match
     pass
     # ^ x
 """,

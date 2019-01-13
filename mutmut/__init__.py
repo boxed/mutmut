@@ -26,6 +26,10 @@ class MutationID(object):
 ALL = MutationID(line='%all%', index=-1, line_number=-1)
 
 
+class InvalidASTPatternException(Exception):
+    pass
+
+
 class ASTPattern(object):
     def __init__(self, source, **definitions):
         if definitions is None:
@@ -55,19 +59,22 @@ class ASTPattern(object):
 
             if node.type == 'comment':
                 line, column = node.start_pos
-                for match in re.finditer(r'(?P<marker>[\^↑])(?P<value>[^\^↑]*)', node.value):
+                for match in re.finditer(r'\^(?P<value>[^\^]*)', node.value):
                     name = match.groupdict()['value'].strip()
                     d = definitions.get(name, {})
                     assert set(d.keys()) | {'of_type', 'marker_type'} == {'of_type', 'marker_type'}
                     self.markers.append(dict(
                         node=get_leaf(line - 1, column + match.start(), of_type=d.get('of_type')),
                         marker_type=d.get('marker_type'),
-                        marker=match.groupdict()['marker'].strip()
+                        name=name,
                     ))
 
         parse_markers(self.module)
 
-        self.pattern = [x['node'] for x in self.markers if x['marker'] == '↑'][0]
+        pattern_nodes = [x['node'] for x in self.markers if x['name'] == 'match' or x['name'] == '']
+        if len(pattern_nodes) != 1:
+            raise InvalidASTPatternException("Found more than one match node. Match nodes are nodes with an empty name or with the explicit name 'match'")
+        self.pattern = pattern_nodes[0]
         self.marker_type_by_id = {id(x['node']): x['marker_type'] for x in self.markers}
 
     def matches(self, node, pattern=None, skip_child=None):
@@ -266,7 +273,7 @@ def keyword_mutation(value, context, **_):
 
 import_from_star_pattern = ASTPattern("""
 from _name import *
-#                 ↑
+#                 ^
 """)
 
 
@@ -355,13 +362,13 @@ def decorator_mutation(children, **_):
 
 array_subscript_pattern = ASTPattern("""
 _name[_any]
-#       ↑
+#       ^
 """)
 
 
 function_call_pattern = ASTPattern("""
 _name(_any)
-#       ↑
+#       ^
 """)
 
 
