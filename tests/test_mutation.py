@@ -1,12 +1,71 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 import sys
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID
+from parso import parse
+
+from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
 import pytest
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+def test_matches_py3():
+    node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
+    assert not array_subscript_pattern.matches(node=node)
+
+
+def test_matches():
+    node = parse('from foo import bar').children[0]
+    assert not array_subscript_pattern.matches(node=node)
+    assert not function_call_pattern.matches(node=node)
+    assert not array_subscript_pattern.matches(node=node)
+    assert not function_call_pattern.matches(node=node)
+
+    node = parse('foo[bar]\n').children[0].children[0].children[1].children[1]
+    assert array_subscript_pattern.matches(node=node)
+
+    node = parse('foo(bar)\n').children[0].children[0].children[1].children[1]
+    assert function_call_pattern.matches(node=node)
+
+
+def test_ast_pattern_for_loop():
+    p = ASTPattern(
+        """
+for x in y:
+#   ^ n  ^ match
+    pass
+    # ^ x
+""",
+        x=dict(
+            of_type='simple_stmt',
+            marker_type='any',
+        ),
+        n=dict(
+            marker_type='name',
+        ),
+        match=dict(
+            marker_type='any',
+        )
+    )
+
+    n = parse("""for a in [1, 2, 3]:
+    if foo:
+        continue 
+""").children[0].children[3]
+    assert p.matches(node=n)
+
+    n = parse("""for a, b in [1, 2, 3]:
+    if foo:
+        continue 
+""").children[0].children[3]
+    assert p.matches(node=n)
 
 
 @pytest.mark.parametrize(
     'original, expected', [
-        ('a(b, c, d, e, f)', 'a(None, c, d, e, f)'),
+        ('lambda: 0', 'lambda: None'),
+        ('lambda: None', 'lambda: 0'),
+        ('a(b)', 'a(None)'),
         ('a[b]', 'a[None]'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
         ('1+1', '2-2'),
@@ -39,6 +98,7 @@ import pytest
         ('a = b', 'a = None'),
         ('s[0]', 's[1]'),
         ('s[0] = a', 's[1] = None'),
+        ('s[x]', 's[None]'),
         ('s[1:]', 's[2:]'),
         ('1j', '2j'),
         ('1.0j', '2.0j'),
@@ -55,14 +115,16 @@ import pytest
     ]
 )
 def test_basic_mutations(original, expected):
-    actual = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == expected
+    actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
+    assert actual == expected, 'Performed %s mutations for original "%s"' % (number_of_performed_mutations, original)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'original, expected', [
-        ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass')
+        ('a: int = 1', 'a: int = None'),
+        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
     ]
 )
 def test_basic_mutations_python3(original, expected):
@@ -74,7 +136,7 @@ def test_basic_mutations_python3(original, expected):
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[None] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
     ]
 )
 def test_basic_mutations_python36(original, expected):
@@ -93,6 +155,7 @@ def test_basic_mutations_python36(original, expected):
         'for x in y: pass',
         'a[None]',
         'a(None)',
+        'def foo(a, *args, **kwargs): pass',
     ]
 )
 def test_do_not_mutate(source):
@@ -103,7 +166,8 @@ def test_do_not_mutate(source):
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'source', [
-        'def foo(s: str): pass'
+        'def foo(s: str): pass',
+        'def foo(a, *, b): pass',
     ]
 )
 def test_do_not_mutate_python3(source):
