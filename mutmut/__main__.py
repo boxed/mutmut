@@ -22,7 +22,7 @@ from glob2 import glob
 from mutmut import mutate_file, Context, list_mutations, __version__, \
     BAD_TIMEOUT, \
     OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
-from mutmut.cache import hash_of_tests
+from mutmut.cache import hash_of_tests, create_html_report
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
@@ -219,7 +219,7 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
         print("mutmut version %s" % __version__)
         return 0
 
-    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
+    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml', 'html']
     if command not in valid_commands:
         raise click.BadArgumentUsage('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
 
@@ -245,6 +245,10 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
 
     if command == 'junitxml':
         print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
+        return 0
+
+    if command == 'html':
+        create_html_report(dict_synonyms)
         return 0
 
     if command == 'apply':
