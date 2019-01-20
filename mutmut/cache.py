@@ -255,11 +255,14 @@ def update_line_numbers(filename):
             cached_line_objects[a_index].delete()
 
         elif command == 'insert':
-            Line(sourcefile=sourcefile, line=b, line_number=b_index)
+            if b is not None:
+                Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         elif command == 'replace':
-            cached_line_objects[a_index].delete()
-            Line(sourcefile=sourcefile, line=b, line_number=b_index)
+            if a_index is not None:
+                cached_line_objects[a_index].delete()
+            if b is not None:
+                Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
             assert False, 'unknown opcode from SequenceMatcher: %s' % command
