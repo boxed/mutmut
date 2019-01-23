@@ -14,8 +14,9 @@ from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
-    OK_KILLED, MutationID, Context, mutate
+from mutmut.mutator import Context, mutate, MutationID, \
+    UNTESTED, OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
+from mutmut.utils import print
 
 try:
     from itertools import zip_longest
@@ -25,13 +26,6 @@ except ImportError:  # pragma: no cover (python2)
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
-    # This little hack is needed to get the click tester working on python 2.7
-    orig_print = print
-
-    def print(x='', **kwargs):
-        x = x.decode("utf-8")
-        orig_print(x.encode("utf-8"), **kwargs)
-
 else:
     from itertools import zip_longest
     text_type = str
@@ -39,7 +33,7 @@ else:
 
 db = Database()
 
-current_db_version = 2
+CURRENT_DB_VERSION = 2
 
 
 class MiscData(db.Entity):
@@ -90,7 +84,7 @@ def init_db(f):
                     except (RowNotFound, ERDiagramError, OperationalError):
                         existing_db_version = 1
 
-                if existing_db_version != current_db_version:
+                if existing_db_version != CURRENT_DB_VERSION:
                     print('mutmut cache is out of date, clearing it...')
                     db.drop_all_tables(with_all_data=True)
                     db.schema = None  # Pony otherwise thinks we've already created the tables
@@ -98,7 +92,7 @@ def init_db(f):
 
             with db_session:
                 v = get_or_create(MiscData, key='version')
-                v.value = str(current_db_version)
+                v.value = str(CURRENT_DB_VERSION)
 
         return f(*args, **kwargs)
     return wrapper
