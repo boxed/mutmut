@@ -109,6 +109,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
+    """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
     context = Context(
         mutation_id=mutation_id,
@@ -539,6 +540,22 @@ def read_coverage_data(use_coverage):
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
+    """Execute a test suite specified by ``test_command`` and record
+    the time it took to execute the test suite as a floating point number
+
+    :param swallow_output: if :obj:`True` test stdout will be not be printed
+    :type swallow_output: bool
+
+    :param test_command: command to spawn the testing subprocess
+    :type test_command: str
+
+    :param using_testmon: if :obj:`True` the test return code evaluation will
+        accommodate for ``pytest-testmon``
+    :type using_testmon: bool
+
+    :return: execution time of the test suite
+    :rtype: float
+    """
     cached_time = cached_test_time()
     if cached_time is not None:
         print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
