@@ -126,7 +126,6 @@ def get_apply_line(mutant):
     return apply_line
 
 
-
 @init_db
 @db_session
 def print_result_cache():
