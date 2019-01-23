@@ -20,8 +20,7 @@ import click
 from glob2 import glob
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
-    BAD_TIMEOUT, \
-    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
