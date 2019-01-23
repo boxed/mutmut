@@ -57,7 +57,8 @@ def test_compute_return_code():
 def test_popen_streaming_output_timeout():
     start = time()
     with pytest.raises(TimeoutError):
-        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+        popen_streaming_output('python -c "import time; time.sleep(4)"',
+                               lambda line: line, timeout=0.1)
 
     assert (time() - start) < 3
 

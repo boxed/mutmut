@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 import itertools
 import os
 import shlex
@@ -32,6 +33,7 @@ def status_printer():
         sys.stdout.write(output)
         sys.stdout.flush()
         last_len[0] = len_s
+
     return p
 
 
@@ -104,7 +106,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
             # won't get as nice feedback.
             pass
         if not timer.is_alive():
-            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
+            raise TimeoutError(
+                "subprocess running command '{}' timed out after {} seconds".format(
+                    cmd, timeout))
         process.poll()
 
     # we have returned from the subprocess cancel the timer if it is running
@@ -122,7 +126,8 @@ def tests_pass(config):
             print(line)
         config.print_progress()
 
-    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
+    returncode = popen_streaming_output(config.test_command, feedback,
+                                        timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
@@ -135,7 +140,8 @@ def run_mutation(config, filename, mutation_id):
         config=config,
     )
 
-    cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    cached_status = cached_mutation_status(filename, mutation_id,
+                                           config.hash_of_tests)
     if cached_status == BAD_SURVIVED:
         config.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
@@ -166,7 +172,8 @@ def run_mutation(config, filename, mutation_id):
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if time_elapsed > config.test_time_base + (
+                config.baseline_time_elapsed * config.test_time_multipler):
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -183,7 +190,8 @@ def run_mutation(config, filename, mutation_id):
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
-        update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
+        update_mutant_status(file_to_mutate, mutation_id, status,
+                             config.hash_of_tests)
         config.progress += 1
         config.print_progress()
 
@@ -218,7 +226,8 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     """
     cached_time = cached_test_time()
     if cached_time is not None:
-        print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
+        print(
+            '1. Using cached time for baseline tests, to run baseline again delete the cache file')
         return cached_time
 
     print('1. Running tests without mutations')
@@ -237,7 +246,9 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time() - start_time
     else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
+        raise RuntimeError(
+            "Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (
+            test_command, '\n'.join(output)))
 
     print(' Done')
 
@@ -260,7 +271,9 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception as e:
-        raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
+        raise RuntimeError(
+            'Failed while creating mutations for %s, for line "%s"' % (
+            context.filename, context.current_source_line), e)
 
 
 def compute_exit_code(config, exception=None):
@@ -322,7 +335,10 @@ class Config(object):
         self.suspicious_mutants = 0
 
     def print_progress(self):
-        print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+        print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
+        self.progress, self.total, self.killed_mutants,
+        self.surviving_mutants_timeout, self.suspicious_mutants,
+        self.surviving_mutants))
 
 
 class Runner:

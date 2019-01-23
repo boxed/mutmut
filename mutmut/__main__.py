@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import os
 import sys
 import traceback
@@ -23,11 +21,9 @@ from mutmut.runner import run_mutation_tests, time_test_suite, \
     add_mutations_by_file, compute_exit_code, Config
 from mutmut.utils import print
 
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
     from ConfigParser import ConfigParser, NoOptionError, NoSectionError
-    # This little hack is needed to get the click tester working on python 2.7
-
 else:
     # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
@@ -53,6 +49,7 @@ def config_from_setup_cfg(**defaults):
             f(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
@@ -67,7 +64,8 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         elif isdir(this_dir):
             return this_dir
         else:
-            raise FileNotFoundError('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+            raise FileNotFoundError(
+                'Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
     else:
         return paths_to_mutate
 
@@ -85,7 +83,8 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         context=context,
     )
     if context.number_of_performed_mutations == 0:
-        raise RuntimeError('No mutations performed. Are you sure the index is not too big?')
+        raise RuntimeError(
+            'No mutations performed. Are you sure the index is not too big?')
 
 
 null_out = open(os.devnull, 'w')
@@ -103,12 +102,17 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
-@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('-s', '--swallow-output', help='turn off output capture',
+              is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
-@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
-@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--suspicious-policy',
+              type=click.Choice(['ignore', 'skipped', 'error', 'failure']),
+              default='ignore')
+@click.option('--untested-policy',
+              type=click.Choice(['ignore', 'skipped', 'error', 'failure']),
+              default='ignore')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
@@ -155,10 +159,13 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
-        raise click.BadArgumentUsage('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
+        raise click.BadArgumentUsage(
+            '%s is not a valid command, must be one of %s' % (
+            command, ', '.join(valid_commands)))
 
     if command == 'results' and argument:
-        raise click.BadArgumentUsage('The %s command takes no arguments' % command)
+        raise click.BadArgumentUsage(
+            'The %s command takes no arguments' % command)
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
@@ -171,14 +178,16 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
         return 0
 
     if use_coverage and not exists('.coverage'):
-        raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
+        raise FileNotFoundError(
+            'No .coverage file found. You must generate a coverage file to use this feature.')
 
     if command == 'results':
         print_result_cache()
         return 0
 
     if command == 'junitxml':
-        print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
+        print_result_cache_junitxml(dict_synonyms, suspicious_policy,
+                                    untested_policy)
         return 0
 
     if command == 'apply':
@@ -191,7 +200,8 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise click.BadOptionUsage('--paths-to-mutate',
+                                   'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     tests_dirs = []
     for p in tests_dir.split(':'):
@@ -202,7 +212,8 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
 
-    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
+    os.environ[
+        'PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
     using_testmon = '--testmon' in runner
 
@@ -244,7 +255,8 @@ Legend for output:
             try:
                 covered_lines = covered_lines_by_filename[context.filename]
             except KeyError:
-                covered_lines = coverage_data.lines(os.path.abspath(context.filename))
+                covered_lines = coverage_data.lines(
+                    os.path.abspath(context.filename))
                 covered_lines_by_filename[context.filename] = covered_lines
 
             if covered_lines is None:
@@ -263,7 +275,8 @@ Legend for output:
         for path in paths_to_mutate:
             for filename in python_source_files(path, tests_dirs):
                 update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
+                add_mutations_by_file(mutations_by_file, filename, _exclude,
+                                      dict_synonyms)
     else:
         filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
         mutations_by_file[filename] = [mutation_id]
@@ -337,7 +350,8 @@ def python_source_files(path, tests_dirs):
     """
     if isdir(path):
         for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
+            dirs[:] = [d for d in dirs if
+                       os.path.join(root, d) not in tests_dirs]
             for filename in files:
                 if filename.endswith('.py'):
                     yield os.path.join(root, filename)

@@ -16,7 +16,7 @@ class MutationID(object):
 
     def __repr__(self):
         return 'MutationID(line="%s", index=%s, line_number=%s)' % (
-        self.line, self.index, self.line_number)
+            self.line, self.index, self.line_number)
 
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == \
@@ -91,10 +91,10 @@ def argument_mutation(children, context, **_):
     :type context: Context
     """
     if len(context.stack) >= 3 and context.stack[-3].type in (
-    'power', 'atom_expr'):
+            'power', 'atom_expr'):
         stack_pos_of_power_node = -3
     elif len(context.stack) >= 4 and context.stack[-4].type in (
-    'power', 'atom_expr'):
+            'power', 'atom_expr'):
         stack_pos_of_power_node = -4
     else:
         return
@@ -123,7 +123,7 @@ def keyword_mutation(value, context, **_):
         # 'not': 'not not',
         'not': '',
         'is': 'is not',
-    # this will cause "is not not" sometimes, so there's a hack to fix that later
+        # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
         'break': 'continue',
         'continue': 'break',
@@ -333,8 +333,9 @@ class Context(object):
                 i
                 for i, line in enumerate(self.source_by_line_number)
                 if
-            '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[
-                -1]
+                '# pragma:' in line and 'no mutate' in
+                line.partition('# pragma:')[
+                    -1]
             }
         return self._pragma_no_mutate_lines
 

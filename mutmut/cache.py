@@ -23,13 +23,13 @@ try:
 except ImportError:  # pragma: no cover (python2)
     from itertools import izip_longest as zip_longest
 
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
+if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
     text_type = unicode
 else:
     from itertools import zip_longest
-    text_type = str
 
+    text_type = str
 
 db = Database()
 
@@ -57,7 +57,8 @@ class Mutant(db.Entity):
     line = Required(Line)
     index = Required(int)
     tested_against_hash = Optional(text_type, autostrip=False)
-    status = Required(text_type, autostrip=False)  # really an enum of mutant_statuses
+    status = Required(text_type,
+                      autostrip=False)  # really an enum of mutant_statuses
 
 
 def init_db(f):
@@ -95,6 +96,7 @@ def init_db(f):
                 v.value = str(CURRENT_DB_VERSION)
 
         return f(*args, **kwargs)
+
     return wrapper
 
 
@@ -135,16 +137,20 @@ def print_result_cache():
         if l:
             print('')
             print("{} ({})".format(title, len(l)))
-            for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+            for filename, mutants in groupby(l, key=lambda
+                    x: x.line.sourcefile.filename):
                 mutants = list(mutants)
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
                 print(', '.join([str(x.id) for x in mutants]))
 
-    print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
-    print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
-    print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
+    print_stuff('Timed out ⏰',
+                select(x for x in Mutant if x.status == BAD_TIMEOUT))
+    print_stuff('Suspicious 🤔',
+                select(x for x in Mutant if x.status == OK_SUSPICIOUS))
+    print_stuff('Survived 🙁',
+                select(x for x in Mutant if x.status == BAD_SURVIVED))
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
@@ -163,31 +169,42 @@ def get_unified_diff(argument, dict_synonyms):
         return ""
 
     output = ""
-    for line in unified_diff(source.split('\n'), mutated_source.split('\n'), fromfile=filename, tofile=filename, lineterm=''):
+    for line in unified_diff(source.split('\n'), mutated_source.split('\n'),
+                             fromfile=filename, tofile=filename, lineterm=''):
         output += line + "\n"
     return output
 
 
 @init_db
 @db_session
-def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
+def print_result_cache_junitxml(dict_synonyms, suspicious_policy,
+                                untested_policy):
     test_cases = []
     l = list(select(x for x in Mutant))
-    for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+    for filename, mutants in groupby(l,
+                                     key=lambda x: x.line.sourcefile.filename):
         for mutant in mutants:
-            tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
+            tc = TestCase("Mutant #{}".format(mutant.id), file=filename,
+                          line=mutant.line.line_number,
+                          stdout=mutant.line.line)
             if mutant.status == BAD_SURVIVED:
-                tc.add_failure_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+                tc.add_failure_info(message=mutant.status,
+                                    output=get_unified_diff(mutant.id,
+                                                            dict_synonyms))
             if mutant.status == BAD_TIMEOUT:
-                tc.add_error_info(message=mutant.status, error_type="timeout", output=get_unified_diff(mutant.id, dict_synonyms))
+                tc.add_error_info(message=mutant.status, error_type="timeout",
+                                  output=get_unified_diff(mutant.id,
+                                                          dict_synonyms))
             if mutant.status == OK_SUSPICIOUS:
                 if suspicious_policy != 'ignore':
                     func = getattr(tc, 'add_{}_info'.format(suspicious_policy))
-                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+                    func(message=mutant.status,
+                         output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == UNTESTED:
                 if untested_policy != 'ignore':
                     func = getattr(tc, 'add_{}_info'.format(untested_policy))
-                    func(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
+                    func(message=mutant.status,
+                         output=get_unified_diff(mutant.id, dict_synonyms))
 
             test_cases.append(tc)
 
@@ -215,7 +232,8 @@ def sequence_ops(a, b):
     for tag, i1, i2, j1, j2 in sequence_matcher.get_opcodes():
         a_sub_sequence = a[i1:i2]
         b_sub_sequence = b[j1:j2]
-        for x in zip_longest(a_sub_sequence, range(i1, i2), b_sub_sequence, range(j1, j2)):
+        for x in zip_longest(a_sub_sequence, range(i1, i2), b_sub_sequence,
+                             range(j1, j2)):
             yield (tag,) + x
 
 
@@ -236,7 +254,8 @@ def update_line_numbers(filename):
             Line(sourcefile=sourcefile, line=line, line_number=i)
         return
 
-    for command, a, a_index, b, b_index in sequence_ops(cached_lines, existing_lines):
+    for command, a, a_index, b, b_index in sequence_ops(cached_lines,
+                                                        existing_lines):
         if command == 'equal':
             if a_index != b_index:
                 cached_obj = cached_line_objects[a_index]
@@ -267,16 +286,19 @@ def register_mutants(mutations_by_file):
         sourcefile = get_or_create(SourceFile, filename=filename)
 
         for mutation_id in mutation_ids:
-            line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+            line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
+                            line_number=mutation_id.line_number)
             assert line is not None
-            get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
+            get_or_create(Mutant, line=line, index=mutation_id.index,
+                          defaults=dict(status=UNTESTED))
 
 
 @init_db
 @db_session
 def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
     sourcefile = SourceFile.get(filename=file_to_mutate)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
+                    line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
     mutant.status = status
     mutant.tested_against_hash = tests_hash
@@ -286,7 +308,8 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
+                    line_number=mutation_id.line_number)
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
     if mutant.status == OK_KILLED:
@@ -303,7 +326,8 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @db_session
 def mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
+    return MutationID(line=mutant.line.line, index=mutant.index,
+                      line_number=mutant.line.line_number)
 
 
 @init_db
@@ -323,4 +347,5 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
-    get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
+    get_or_create(MiscData, key='baseline_time_elapsed').value = str(
+        baseline_time_elapsed)

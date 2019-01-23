@@ -7,9 +7,11 @@ from mutmut.patterns import ASTPattern, array_subscript_pattern, \
     function_call_pattern
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.skipif(sys.version_info < (3, 0),
+                    reason="Don't check Python 3 syntax in Python 2")
 def test_matches_py3():
-    node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
+    node = parse('a: Optional[int] = 7\n').children[0].children[0].children[
+        1].children[1].children[1].children[1]
     assert not array_subscript_pattern.matches(node=node)
 
 
