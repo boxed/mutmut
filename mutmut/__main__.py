@@ -370,6 +370,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     :param callback: function that intakes the subprocess' stdout line by line.
         It is called for each line received from the subprocess' stdout stream.
+    :type callback: Callable[[Context], bool]
+
     :param timeout: the timeout time of the subprocess
     :type timeout: float
 
