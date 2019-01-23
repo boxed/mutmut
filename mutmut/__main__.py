@@ -20,11 +20,9 @@ import click
 from glob2 import glob
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
-    BAD_TIMEOUT, \
-    OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
-from mutmut.cache import hash_of_tests
+    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
 from mutmut.cache import register_mutants, update_mutant_status, \
-    print_result_cache, cached_mutation_status, \
+    print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
@@ -71,12 +69,12 @@ def config_from_setup_cfg(**defaults):
     return decorator
 
 
-# this function is stolen and modified from tqdm
 def status_printer():
-    """
-    Manage the printing and in-place updating of a line of characters.
-    Note that if the string is longer than a line, then in-place
-    updating may not work (it will print a new line at each refresh).
+    """Manage the printing and in-place updating of a line of characters
+
+    .. note::
+        If the string is longer than a line, then in-place updating may not
+        work (it will print a new line at each refresh).
     """
     last_len = [0]
 
@@ -110,6 +108,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
+    """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
     context = Context(
         mutation_id=mutation_id,
@@ -371,6 +370,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     :param callback: function that intakes the subprocess' stdout line by line.
         It is called for each line received from the subprocess' stdout stream.
+    :type callback: Callable[[Context], bool]
+
     :param timeout: the timeout time of the subprocess
     :type timeout: float
 
@@ -538,6 +539,22 @@ def read_coverage_data(use_coverage):
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
+    """Execute a test suite specified by ``test_command`` and record
+    the time it took to execute the test suite as a floating point number
+
+    :param swallow_output: if :obj:`True` test stdout will be not be printed
+    :type swallow_output: bool
+
+    :param test_command: command to spawn the testing subprocess
+    :type test_command: str
+
+    :param using_testmon: if :obj:`True` the test return code evaluation will
+        accommodate for ``pytest-testmon``
+    :type using_testmon: bool
+
+    :return: execution time of the test suite
+    :rtype: float
+    """
     cached_time = cached_test_time()
     if cached_time is not None:
         print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
@@ -598,6 +615,19 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
 
 
 def python_source_files(path, tests_dirs):
+    """Attempt to guess where the python source files to mutate are and yield
+    their paths
+
+    :param path: path to a python source file or package directory
+    :type path: str
+
+    :param tests_dirs: list of directory paths containing test files
+        (we do not want to mutate these!)
+    :type tests_dirs: list[str]
+
+    :return: generator listing the paths to the python source files to mutate
+    :rtype: Generator[str, None, None]
+    """
     if isdir(path):
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
