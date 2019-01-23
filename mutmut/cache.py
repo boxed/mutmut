@@ -235,8 +235,7 @@ def update_line_numbers(filename):
     cached_lines = [x.line for x in cached_line_objects]
 
     with open(filename) as f:
-        # :-1 to remove newline at the end
-        existing_lines = [x[:-1] for x in f.readlines()]
+        existing_lines = [x.strip('\n') for x in f.readlines()]
 
     if not cached_lines:
         for i, line in enumerate(existing_lines):
