@@ -70,7 +70,6 @@ def config_from_setup_cfg(**defaults):
     return decorator
 
 
-# this function is stolen and modified from tqdm
 def status_printer():
     """Manage the printing and in-place updating of a line of characters
 
