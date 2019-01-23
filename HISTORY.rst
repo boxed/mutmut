@@ -1,6 +1,16 @@
 Changelog
 ---------
 
+1.3.0 (2019-01-23)
+~~~~~~~~~~~~~~~~~~
+
+* Fixed incorrect loading of coverage data when using the `--use-coverage` flag.
+
+* Fixed a bug when updating the cache.
+
+* Fixed incorrect handling of source files that didn't end with a newline.
+
+
 1.2.0 (2019-01-10)
 ~~~~~~~~~~~~~~~~~~
 
