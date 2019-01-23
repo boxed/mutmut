@@ -92,7 +92,7 @@ running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 setup(
     name='mutmut',
     version=read_version(),
-    description='',
+    description='mutation testing for Python 2 and 3',
     long_description=readme,
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
