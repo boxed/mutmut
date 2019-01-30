@@ -491,3 +491,44 @@ OK_KILLED = 'ok_killed'
 OK_SUSPICIOUS = 'ok_suspicious'
 BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
+
+
+class Mutant:
+    """Class representing a Mutant"""
+
+    def __init__(self, source_file, mutation, status=UNTESTED):
+        """
+
+        :param source_file:
+        :type source_file: str
+        :param mutation:
+        :type mutation: MutationID
+        :param status:
+        :type status: str
+        """
+        self.source_file = source_file
+        self.mutation = mutation
+        self.status = status
+
+    @property
+    def _context(self):
+        with open(self.source_file) as f:
+            source = f.read()
+        return Context(
+            source=source,
+            mutation_id=self.mutation,
+            filename=self.source_file
+        )
+
+    def apply(self, backup=True):
+        """Apply the mutation to the existing source file also create
+        a backup"""
+        context = self._context
+        mutate_file(
+            backup=backup,
+            context=context,
+        )
+        if context.number_of_performed_mutations == 0:
+            raise ValueError('No mutation performed. '
+                             'Are you sure the index is not too big?')
+
