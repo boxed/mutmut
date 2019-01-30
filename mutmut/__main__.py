@@ -65,7 +65,10 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
             return this_dir
         else:
             raise FileNotFoundError(
-                'Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+                'Could not figure out where the code to mutate is. '
+                'Please specify it on the command line like "mutmut code_dir" '
+                'or by adding "paths_to_mutate=code_dir" in setup.cfg under '
+                'the section [mutmut]')
     else:
         return paths_to_mutate
 
@@ -179,7 +182,8 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
 
     if use_coverage and not exists('.coverage'):
         raise FileNotFoundError(
-            'No .coverage file found. You must generate a coverage file to use this feature.')
+            'No .coverage file found. You must generate a coverage file '
+            'to use this feature.')
 
     if command == 'results':
         print_result_cache()
@@ -200,8 +204,11 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        raise click.BadOptionUsage('--paths-to-mutate',
-                                   'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise click.BadOptionUsage(
+            '--paths-to-mutate',
+            'You must specify a list of paths to mutate. Either as a command '
+            'line argument, or by setting paths_to_mutate under the '
+            'section [mutmut] in setup.cfg')
 
     tests_dirs = []
     for p in tests_dir.split(':'):
@@ -212,8 +219,8 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
 
-    os.environ[
-        'PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
+    # stop python from creating .pyc files
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
     using_testmon = '--testmon' in runner
 
