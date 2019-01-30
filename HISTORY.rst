@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+1.3.1 (2019-01-30)
+~~~~~~~~~~~~~~~~~~
+
+* Fixed a bug where mutmut crashed if a file contained exactly zero bytes.
+
+
 1.3.0 (2019-01-23)
 ~~~~~~~~~~~~~~~~~~
 

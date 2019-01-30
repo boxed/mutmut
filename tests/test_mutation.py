@@ -308,3 +308,8 @@ def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
     pass
 """
     assert mutate(Context(source=source)) == (source, 0)
+
+
+def test_bug_github_issue_77():
+    # Don't crash on this
+    Context(source='')

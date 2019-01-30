@@ -9,7 +9,7 @@ from parso import parse
 from parso.python.tree import Name, Number, Keyword
 from tri.declarative import evaluate
 
-__version__ = '1.3.0'
+__version__ = '1.3.1'
 
 
 class MutationID(object):
@@ -414,7 +414,7 @@ class Context(object):
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
         self.index = 0
         self.remove_newline_at_end = False
-        if source is not None and source[-1] != '\n':
+        if source and source[-1] != '\n':
             source += '\n'
             self.remove_newline_at_end = True
         self.source = source
