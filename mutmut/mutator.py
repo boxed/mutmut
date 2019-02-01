@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from shutil import move
 
 from parso import parse
 from parso.python.tree import Number, Keyword, Name
@@ -335,8 +336,7 @@ class Context(object):
                 for i, line in enumerate(self.source_by_line_number)
                 if
                 '# pragma:' in line and 'no mutate' in
-                line.partition('# pragma:')[
-                    -1]
+                line.partition('# pragma:')[-1]
             }
         return self._pragma_no_mutate_lines
 
@@ -376,35 +376,32 @@ def mutate_list_of_nodes(result, context):
     :type context: Context
     """
     for i in result.children:
-
         if i.type == 'operator' and i.value == '->':
             return
-
         mutate_node(i, context=context)
-
         # this is just an optimization to stop early
         if context.number_of_performed_mutations and context.mutation_id != ALL:
             return
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :type context: Context
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
 
-        t = i.type
+        t = node.type
 
-        if i.type == 'tfpdef':
+        if node.type == 'tfpdef':
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if hasattr(node, 'children'):
+            mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutation_id != ALL:
@@ -416,16 +413,16 @@ def mutate_node(i, context):
             return
 
         for key, value in sorted(m.items()):
-            old = getattr(i, key)
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
             new = evaluate(
                 value,
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
             assert not callable(new)
             if new is not None and new != old:
@@ -433,7 +430,7 @@ def mutate_node(i, context):
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(
                         context.mutation_id_of_current_index)
-                    setattr(i, key, new)
+                    setattr(node, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
@@ -441,7 +438,6 @@ def mutate_node(i, context):
                 return
     finally:
         context.stack.pop()
-
 
 
 def mutate_file(backup, context):
@@ -463,7 +459,6 @@ def mutate_file(backup, context):
 
 
 class Mutator:
-
     def __init__(self,  source=None, filename=None,
                  exclude=lambda context: False):
         """"""
@@ -480,6 +475,7 @@ class Mutator:
         self.current_line_index = 0
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
+
         self.context = Context(
            source=self.source,
            filename=self.filename,
@@ -499,9 +495,6 @@ class Mutator:
                 yield mutant
 
     def mutate_node(self, node):
-        """
-        :type context: Context
-        """
         self.context.stack.append(node)
         try:
             t = node.type
@@ -544,6 +537,7 @@ class Mutator:
                             source_file=self.filename,
                             mutation=self.context.mutation_id_of_current_index
                         )
+                        setattr(node, key, old)
                     self.context.index += 1
                 # this is just an optimization to stop early
                 # if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
@@ -578,7 +572,6 @@ class Mutant:
 
     def __init__(self, source_file, mutation, status=UNTESTED):
         """
-
         :param source_file:
         :type source_file: str
         :param mutation:
@@ -612,3 +605,5 @@ class Mutant:
             raise ValueError('No mutation performed. '
                              'Are you sure the index is not too big?')
 
+    def revert(self):
+        move(self.source_file + '.bak', self.source_file)

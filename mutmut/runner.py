@@ -445,7 +445,7 @@ class Runner:
                 else:
                     mutant.status = OK_KILLED
         finally:
-            move(mutant.source_file + '.bak', mutant.source_file)
+            mutant.revert()
 
     def time_test_suite(self):
         """Compute the unmutated test suite's execution time
