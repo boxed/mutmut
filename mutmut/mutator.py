@@ -484,11 +484,11 @@ class Mutator:
            exclude=self.exclude,
         )
 
-    def mutate_list_of_nodes(self, node, apply=False):
+    def mutate_list_of_nodes(self, node):
         for child in node.children:
             if child.type == 'operator' and child.value == '->':
                 return
-            for mutant in self.mutate_node(child, apply):
+            for mutant in self.mutate_node(child):
                 if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
                     return
                 yield mutant
@@ -498,7 +498,7 @@ class Mutator:
                 parse(self.source, error_recovery=False)):
                 yield mutant
 
-    def mutate_node(self, node, apply=False):
+    def mutate_node(self, node):
         self.context.stack.append(node)
         try:
             t = node.type
@@ -556,7 +556,7 @@ class Mutator:
     def mutate(self, mutation_id):
         self.context.mutation_id = mutation_id
         result = parse(self.source, error_recovery=False)
-        list(self.mutate_list_of_nodes(result, apply=True))
+        list(self.mutate_list_of_nodes(result))
         return result.get_code().replace(' not not ', ' ')
 
 
