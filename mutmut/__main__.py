@@ -75,10 +75,11 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-    print(filename)
-    for mutant in Mutator(mutation_id=mutation_id, filename=filename,
-                          dict_synonyms=dict_synonyms).yield_mutants():
+    print(filename, mutation_id)
+    print(list(Mutator(mutation_id=mutation_id, filename=filename).yield_mutants()))
+    for mutant in Mutator(mutation_id=mutation_id, filename=filename).yield_mutants():
         print(mutant)
+        print(mutant.get_diff())
         mutant.apply(backup)
     # # TODO: apply mutant
     # if context.number_of_performed_mutations == 0:
@@ -326,9 +327,8 @@ Legend for output:
     for path in paths_to_mutate:
         for filename in python_source_files(path, tests_dirs):
             update_line_numbers(filename)
-            if open(filename).read():
-                for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
-                    mutants.append(mutant)
+            for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
+                mutants.append(mutant)
     print("generated {} mutants".format(len(mutants)))
     register_mutants(mutants)
     # run the mutants
