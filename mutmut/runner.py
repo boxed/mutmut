@@ -5,14 +5,12 @@ import os
 import shlex
 import subprocess
 import sys
-from io import open
-from shutil import copy, move
+from shutil import copy
 from threading import Timer
 from time import time
 
-from mutmut.cache import cached_mutation_status, update_mutant_status, \
-    cached_test_time, set_cached_test_time, register_mutants
-from mutmut.mutator import list_mutations, Context, UNTESTED, \
+from mutmut.cache import cached_test_time, set_cached_test_time
+from mutmut.mutator import UNTESTED, \
     OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
 from mutmut.utils import print, TimeoutError
 
@@ -136,71 +134,6 @@ def tests_pass(config):
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config, filename, mutation_id):
-    context = Context(
-        mutation_id=mutation_id,
-        filename=filename,
-        exclude=config.exclude_callback,
-        dict_synonyms=config.dict_synonyms,
-        config=config,
-    )
-
-    cached_status = cached_mutation_status(filename, mutation_id,
-                                           config.hash_of_tests)
-    if cached_status == BAD_SURVIVED:
-        config.surviving_mutants += 1
-    elif cached_status == BAD_TIMEOUT:
-        config.surviving_mutants_timeout += 1
-    elif cached_status == OK_KILLED:
-        config.killed_mutants += 1
-    elif cached_status == OK_SUSPICIOUS:
-        config.suspicious_mutants += 1
-    else:
-        assert cached_status == UNTESTED, cached_status
-
-    config.print_progress()
-
-    if cached_status != UNTESTED:
-        return cached_status
-
-    try:
-        # number_of_mutations_performed = mutate_file(
-        #     backup=True,
-        #     context=context
-        # )
-        # assert number_of_mutations_performed
-        start = time()
-        try:
-            survived = tests_pass(config)
-        except TimeoutError:
-            context.config.surviving_mutants_timeout += 1
-            return BAD_TIMEOUT
-
-        time_elapsed = time() - start
-        if time_elapsed > config.test_time_base + (
-                config.baseline_time_elapsed * config.test_time_multipler):
-            config.suspicious_mutants += 1
-            return OK_SUSPICIOUS
-
-        if survived:
-            context.config.surviving_mutants += 1
-            return BAD_SURVIVED
-        else:
-            context.config.killed_mutants += 1
-            return OK_KILLED
-    finally:
-        move(filename + '.bak', filename)
-
-
-def run_mutation_tests_for_file(config, file_to_mutate, mutations):
-    for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id)
-        update_mutant_status(file_to_mutate, mutation_id, status,
-                             config.hash_of_tests)
-        config.progress += 1
-        config.print_progress()
-
-
 def time_test_suite(swallow_output, test_command, using_testmon):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
@@ -249,25 +182,6 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     set_cached_test_time(baseline_time_elapsed)
 
     return baseline_time_elapsed
-
-
-def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
-    with open(filename) as f:
-        source = f.read()
-    context = Context(
-        source=source,
-        filename=filename,
-        exclude=exclude,
-        dict_synonyms=dict_synonyms,
-    )
-
-    try:
-        mutations_by_file[filename] = list_mutations(context)
-        register_mutants(mutations_by_file)
-    except Exception as e:
-        raise RuntimeError(
-            'Failed while creating mutations for %s, for line "%s"' % (
-            context.filename, context.current_source_line), e)
 
 
 class Config(object):
@@ -372,7 +286,7 @@ class Runner:
             self.time_test_suite()
         for mutant in mutants:
             # original, mutation = mutant.mutation_original_pair
-            # print("{}['{}'->'{}'] ".format(mutant.source_file, original, mutation), end='')
+            # print("{}['{}'->'{}'] ".format(mutant.source_filename, original, mutation), end='')
             self.test_mutant(mutant)
             print(mutant.status)
             self.print_progress(mutants)

@@ -5,7 +5,7 @@ from __future__ import print_function
 import hashlib
 import os
 import sys
-from difflib import SequenceMatcher, unified_diff
+from difflib import SequenceMatcher
 from functools import wraps
 from io import open
 from itertools import groupby
@@ -14,7 +14,7 @@ from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut.mutator import Context, mutate, MutationID, \
+from mutmut.mutator import MutationID, \
     UNTESTED, OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
 from mutmut.utils import print
 
@@ -155,25 +155,11 @@ def print_result_cache():
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
+# TODO: dict_synonyms config
 def get_unified_diff(argument, dict_synonyms):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
-    with open(filename) as f:
-        source = f.read()
-    context = Context(
-        source=source,
-        filename=filename,
-        mutation_id=mutation_id,
-        dict_synonyms=dict_synonyms,
-    )
-    mutated_source, number_of_mutations_performed = mutate(context)
-    if not number_of_mutations_performed:
-        return ""
-
-    output = ""
-    for line in unified_diff(source.split('\n'), mutated_source.split('\n'),
-                             fromfile=filename, tofile=filename, lineterm=''):
-        output += line + "\n"
-    return output
+    from mutmut.mutator import Mutant as MutantClass
+    return MutantClass(filename, mutation_id).get_diff()
 
 
 @init_db

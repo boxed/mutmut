@@ -14,9 +14,9 @@ from glob2 import glob
 from mutmut import __version__
 from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk, \
     print_result_cache_junitxml, get_unified_diff
-from mutmut.mutator import Context, Mutator
+from mutmut.mutator import Mutator
 from mutmut.runner import time_test_suite, \
-    Runner
+    Runner, compute_exit_code
 from mutmut.utils import print
 
 if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
@@ -71,19 +71,16 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         return paths_to_mutate
 
 
-# TODO: update
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-    context = Context(
-        mutation_id=mutation_id,
-        filename=filename,
-        dict_synonyms=dict_synonyms,
-    )
-    # TODO: apply mutant
-    if context.number_of_performed_mutations == 0:
-        raise RuntimeError(
-            'No mutations performed. Are you sure the index is not too big?')
+    for mutant in Mutator(mutation_id=mutation_id, filename=filename,
+                          dict_synonyms=dict_synonyms).yield_mutants():
+        mutant.apply(backup)
+    # # TODO: apply mutant
+    # if context.number_of_performed_mutations == 0:
+    #     raise RuntimeError(
+    #         'No mutations performed. Are you sure the index is not too big?')
 
 
 null_out = open(os.devnull, 'w')
@@ -325,14 +322,14 @@ Legend for output:
             print(filename)
             if open(filename).read():
                 for mutant in Mutator(
-                        source=open(filename).read(),
                         filename=filename,
                         exclude=_exclude,
                 ).yield_mutants():
                     mutants.append(mutant)
     print("generated {} mutants".format(len(mutants)))
     # run the mutants
-    return mutation_test_runner.run_mutation_tests(mutants)
+    mutation_test_runner.run_mutation_tests(mutants)
+    return compute_exit_code(mutants)
 
 
 def read_coverage_data(use_coverage):

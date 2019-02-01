@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from mutmut.mutator import count_mutations, list_mutations, Context, mutate, \
+from mutmut.mutator import count_mutations, list_mutations, \
     ALL, MutationID
 
 
