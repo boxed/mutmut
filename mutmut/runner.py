@@ -252,8 +252,9 @@ def compute_exit_code(mutants, exception=None):
 
 class Runner:
 
-    def __init__(self, test_command, swallow_output=True,
-                 using_testmon=False, baseline_test_time=None):
+    def __init__(self, test_command, test_time_multiplier, test_time_base,
+                 swallow_output=True, using_testmon=False,
+                 baseline_test_time=None):
         """Construct a MutationTestRunner
 
         :param test_command:
@@ -272,6 +273,10 @@ class Runner:
         self.swallow_output = swallow_output
         self.using_testmon = using_testmon
         self.baseline_test_time = baseline_test_time
+
+        # TODO: doc
+        self.test_time_multipler = test_time_multiplier
+        self.test_time_base = test_time_base
 
     def run_mutation_tests(self, mutants):
         """
@@ -308,7 +313,7 @@ class Runner:
             except TimeoutError:
                 mutant.status = BAD_TIMEOUT
             else:
-                if time() - start > self.baseline_test_time * 2:
+                if time() - start > self.test_time_base + (self.baseline_test_time * self.test_time_multipler):
                     mutant.status = OK_SUSPICIOUS
                 elif survived:
                     mutant.status = BAD_SURVIVED

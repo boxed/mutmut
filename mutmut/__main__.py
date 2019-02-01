@@ -311,6 +311,8 @@ Legend for output:
     # generate mutants
     mutation_test_runner = Runner(
         test_command=runner,
+        test_time_base=test_time_base,
+        test_time_multiplier=test_time_multiplier,
         using_testmon=using_testmon,
         swallow_output=not swallow_output,
         baseline_test_time=baseline_time_elapsed
