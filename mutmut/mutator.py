@@ -423,7 +423,8 @@ def mutate_node(node, context):
             mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
+            if context.number_of_performed_mutations and \
+                context.mutation_id != ALL:
                 return
 
         m = mutations_by_type.get(t)
@@ -483,11 +484,13 @@ class Mutator:
            exclude=self.exclude,
         )
 
-    def mutate_list_of_nodes(self, node):
+    def mutate_list_of_nodes(self, node, apply=False):
         for child in node.children:
             if child.type == 'operator' and child.value == '->':
                 return
-            for mutant in self.mutate_node(child):
+            for mutant in self.mutate_node(child, apply):
+                if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
+                    return
                 yield mutant
 
     def yield_mutants(self):
@@ -495,7 +498,7 @@ class Mutator:
                 parse(self.source, error_recovery=False)):
                 yield mutant
 
-    def mutate_node(self, node):
+    def mutate_node(self, node, apply=False):
         self.context.stack.append(node)
         try:
             t = node.type
@@ -508,6 +511,10 @@ class Mutator:
                 self.context.index = 0  # indexes are unique per line, so start over here!
 
             if hasattr(node, 'children'):
+                # this is just an optimization to stop early
+                if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
+                    return
+
                 for mutant in self.mutate_list_of_nodes(node):
                     yield mutant
             m = mutations_by_type.get(t)
@@ -538,14 +545,19 @@ class Mutator:
                             source_file=self.filename,
                             mutation_id=self.context.mutation_id_of_current_index
                         )
-                        setattr(node, key, old)
+                        # setattr(node, key, old)
                     self.context.index += 1
                 # this is just an optimization to stop early
-                # if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
-                #     return
+                if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
+                    return
         finally:
             self.context.stack.pop()
 
+    def mutate(self, mutation_id):
+        self.context.mutation_id = mutation_id
+        result = parse(self.source, error_recovery=False)
+        list(self.mutate_list_of_nodes(result, apply=True))
+        return result.get_code().replace(' not not ', ' ')
 
 
 class Mutant:
@@ -561,34 +573,20 @@ class Mutant:
         :type status: str
         """
         self.source_file = source_file
-        self.mutation = mutation_id
+        self.mutation_id = mutation_id
         self.status = status
-
-    @property
-    def _context(self):
-        with open(self.source_file) as f:
-            source = f.read()
-        return Context(
-            source=source,
-            mutation_id=self.mutation,
-            filename=self.source_file
-        )
 
     def apply(self, backup=True):
         """Apply the mutation to the existing source file also create
         a backup"""
-        context = self._context
-        with open(context.filename) as f:
+        with open(self.source_file) as f:
             code = f.read()
-        context.source = code
         if backup:
-            with open(context.filename + '.bak', 'w') as f:
+            with open(self.source_file + '.bak', 'w') as f:
                 f.write(code)
-        result, number_of_mutations_performed = mutate(context)
-        if context.number_of_performed_mutations == 0:
-            raise ValueError('No mutation performed. '
-                             'Are you sure the index is not too big?')
-        with open(context.filename, 'w') as f:
+        result = Mutator(filename=self.source_file).mutate(self.mutation_id)
+
+        with open(self.source_file, 'w') as f:
             f.write(result)
 
     def revert(self):
