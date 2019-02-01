@@ -371,6 +371,22 @@ def mutate(context):
     return mutated_source, context.number_of_performed_mutations
 
 
+def mutate_list_of_nodes(result, context):
+    """
+    :type context: Context
+    """
+    for i in result.children:
+
+        if i.type == 'operator' and i.value == '->':
+            return
+
+        mutate_node(i, context=context)
+
+        # this is just an optimization to stop early
+        if context.number_of_performed_mutations and context.mutation_id != ALL:
+            return
+
+
 def mutate_node(i, context):
     """
     :type context: Context
@@ -427,21 +443,6 @@ def mutate_node(i, context):
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
-    """
-    :type context: Context
-    """
-    for i in result.children:
-
-        if i.type == 'operator' and i.value == '->':
-            return
-
-        mutate_node(i, context=context)
-
-        # this is just an optimization to stop early
-        if context.number_of_performed_mutations and context.mutation_id != ALL:
-            return
-
 
 def mutate_file(backup, context):
     """
@@ -463,13 +464,92 @@ def mutate_file(backup, context):
 
 class Mutator:
 
-    def __init__(self, backup):
-        """
+    def __init__(self,  source=None, filename=None,
+                 exclude=lambda context: False):
+        """"""
+        self.source = source
+        if source is None:
+            with open(filename) as f:
+                self.source = f.read()
 
-        :param backup:
-        :type backup: bool
-        """
+        self.filename = filename
+        self.exclude = exclude
 
+        self.stack = []
+        self.index = 0
+        self.current_line_index = 0
+        self._source_by_line_number = None
+        self._pragma_no_mutate_lines = None
+        self.context = Context(
+           source=self.source,
+           filename=self.filename,
+           exclude=self.exclude,
+        )
+
+    def mutate_list_of_nodes(self, node):
+        for child in node.children:
+            if child.type == 'operator' and child.value == '->':
+                return
+            for mutant in self.mutate_node(child):
+                yield mutant
+
+    def yield_mutants(self):
+        for mutant in self.mutate_list_of_nodes(
+                parse(self.source, error_recovery=False)):
+                yield mutant
+
+    def mutate_node(self, node):
+        """
+        :type context: Context
+        """
+        self.context.stack.append(node)
+        try:
+            t = node.type
+
+            if node.type == 'tfpdef':
+                return
+
+            if node.start_pos[0] - 1 != self.context.current_line_index:
+                self.context.current_line_index = node.start_pos[0] - 1
+                self.context.index = 0  # indexes are unique per line, so start over here!
+
+            if hasattr(node, 'children'):
+                for mutant in self.mutate_list_of_nodes(node):
+                    yield mutant
+            m = mutations_by_type.get(t)
+
+            if m is None:
+                return
+
+            for key, value in sorted(m.items()):
+                old = getattr(node, key)
+                if self.context.exclude_line():
+                    continue
+
+                new = evaluate(
+                    value,
+                    context=self.context,
+                    node=node,
+                    value=getattr(node, 'value', None),
+                    children=getattr(node, 'children', None),
+                )
+                assert not callable(new)
+                if new is not None and new != old:
+                    if self.context.should_mutate():
+                        self.context.number_of_performed_mutations += 1
+                        self.context.performed_mutation_ids.append(
+                            self.context.mutation_id_of_current_index)
+                        setattr(node, key, new)
+                        yield Mutant(
+                            source_file=self.filename,
+                            mutation=self.context.mutation_id_of_current_index
+                        )
+                    self.context.index += 1
+                # this is just an optimization to stop early
+                # if self.context.number_of_performed_mutations and self.context.mutation_id != ALL:
+                #     return
+        finally:
+            self.context.stack.pop()
 
 # We have a global whitelist for constants of the
 # pattern __all__, __version__, etc

@@ -16,6 +16,8 @@ from mutmut.mutator import list_mutations, Context, mutate_file, UNTESTED, \
     OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
 from mutmut.utils import print, TimeoutError
 
+spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+
 
 def status_printer():
     """Manage the printing and in-place updating of a line of characters
@@ -35,6 +37,9 @@ def status_printer():
         last_len[0] = len_s
 
     return p
+
+
+print_status = status_printer()
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -341,6 +346,40 @@ class Config(object):
         self.surviving_mutants))
 
 
+def compute_return_code(mutants, exception=None):
+    """Compute an error code similar to how pylint does. (using bit OR)
+
+    The following output status codes are available for muckup:
+     * 0 if all mutants were killed (OK_KILLED)
+     * 1 if a fatal error occurred
+     * 2 if one or more mutants survived (BAD_SURVIVED)
+     * 4 if one or more mutants timed out (BAD_TIMEOUT)
+     * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
+     status codes 1 to 8 will be bit-ORed so you can know which different
+     categories has been issued by analysing the mutmut output status code
+
+    :param mutants: The list of tested mutants.
+    :type mutants: list[Mutant]
+
+    :param exception: If an exception was thrown during test execution
+        it should be given here.
+    :type exception: Exception
+
+    :return: a integer noting the return status of the mutation tests.
+    :rtype: int
+    """
+    code = 0
+    if exception is not None:
+        code = code | 1
+    if any(mutant.status == BAD_SURVIVED for mutant in mutants):
+        code = code | 2
+    if any(mutant.status == BAD_TIMEOUT for mutant in mutants):
+        code = code | 4
+    if any(mutant.status == OK_SUSPICIOUS for mutant in mutants):
+        code = code | 8
+    return code
+
+
 class Runner:
 
     def __init__(self, test_command, swallow_output=True,
@@ -376,11 +415,12 @@ class Runner:
         if self.baseline_test_time is None:
             self.time_test_suite()
         for mutant in mutants:
-            original, mutation = mutant.mutation_original_pair
-            print("{}['{}'->'{}'] ".format(mutant.source_file, original, mutation), end='')
+            # original, mutation = mutant.mutation_original_pair
+            # print("{}['{}'->'{}'] ".format(mutant.source_file, original, mutation), end='')
             self.test_mutant(mutant)
             print(mutant.status)
-        return self.compute_return_code(mutants)
+            self.print_progress(mutants)
+        return mutants
 
     def test_mutant(self, mutant):
         """Test a given mutant and set its respective status on completion
@@ -392,13 +432,13 @@ class Runner:
             return
         try:
             mutant.apply()
-            start = time.time()
+            start = time()
             try:
                 survived = self.run_test(timeout=self.baseline_test_time * 10)
             except TimeoutError:
                 mutant.status = BAD_TIMEOUT
             else:
-                if time.time() - start > self.baseline_test_time * 2:
+                if time() - start > self.baseline_test_time * 2:
                     mutant.status = OK_SUSPICIOUS
                 elif survived:
                     mutant.status = BAD_SURVIVED
@@ -413,10 +453,10 @@ class Runner:
         :raise RuntimeError: If the unmutated tests fail.
             Mutation testing cannot be done on a failing test suite.
         """
-        start_time = time.time()
+        start_time = time()
         green_suite = self.run_test()
         if green_suite:
-            self.baseline_test_time = time.time() - start_time
+            self.baseline_test_time = time() - start_time
             print("Ran unmutated test suite in {} seconds".format(self.baseline_test_time))
         else:
             raise RuntimeError("Mutation tests require a green suite")
@@ -442,40 +482,11 @@ class Runner:
         )
         return returncode == 0 or (self.using_testmon and returncode == 5)
 
-    @staticmethod
-    def compute_return_code(mutants, exception=None):
-        """Compute an error code similar to how pylint does. (using bit OR)
+    def print_progress(self, mutants):
+        pass
+        # TODO:
+        # print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
+        # self.progress, self.total, self.killed_mutants,
+        # self.surviving_mutants_timeout, self.suspicious_mutants,
+        # self.surviving_mutants))
 
-        The following output status codes are available for muckup:
-         * 0 if all mutants were killed (OK_KILLED)
-         * 1 if a fatal error occurred
-         * 2 if one or more mutants survived (BAD_SURVIVED)
-         * 4 if one or more mutants timed out (BAD_TIMEOUT)
-         * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
-         status codes 1 to 8 will be bit-ORed so you can know which different
-         categories has been issued by analysing the mutmut output status code
-
-        :param mutants: The list of tested mutants.
-        :type mutants: list[Mutant]
-
-        :param exception: If an exception was thrown during test execution
-            it should be given here.
-        :type exception: Exception
-
-        :return: a integer noting the return status of the mutation tests.
-        :rtype: int
-        """
-        code = 0
-        if exception is not None:
-            code = code | 1
-        if any(mutant.status == BAD_SURVIVED for mutant in mutants):
-            code = code | 2
-        if any(mutant.status == BAD_TIMEOUT for mutant in mutants):
-            code = code | 4
-        if any(mutant.status == OK_SUSPICIOUS for mutant in mutants):
-            code = code | 8
-        return code
-
-
-print_status = status_printer()
-spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')

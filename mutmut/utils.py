@@ -5,7 +5,6 @@ import sys
 if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     orig_print = print
 
-
     # This little hack is needed to get the click tester working on python 2.7
     def print(x='', **kwargs):
         x = x.decode("utf-8")
