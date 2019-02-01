@@ -5,8 +5,29 @@ from parso import parse
 from parso.python.tree import Number, Keyword, Name
 from tri.declarative import evaluate
 
-from mutmut.patterns import import_from_star_pattern, array_subscript_pattern, \
-    function_call_pattern
+from mutmut.patterns import import_from_star_pattern, \
+    array_subscript_pattern, function_call_pattern
+
+# We have a global whitelist for constants of the
+# pattern __all__, __version__, etc
+DUNDER_WHITELIST = [
+    'all',
+    'version',
+    'title',
+    'package_name',
+    'author',
+    'description',
+    'email',
+    'version',
+    'license',
+    'copyright',
+]
+
+UNTESTED = 'untested'
+OK_KILLED = 'ok_killed'
+OK_SUSPICIOUS = 'ok_suspicious'
+BAD_TIMEOUT = 'bad_timeout'
+BAD_SURVIVED = 'bad_survived'
 
 
 class MutationID(object):
@@ -440,24 +461,6 @@ def mutate_node(node, context):
         context.stack.pop()
 
 
-def mutate_file(backup, context):
-    """
-
-    :type backup: bool
-    :type context: Context
-    """
-    with open(context.filename) as f:
-        code = f.read()
-    context.source = code
-    if backup:
-        with open(context.filename + '.bak', 'w') as f:
-            f.write(code)
-    result, number_of_mutations_performed = mutate(context)
-    with open(context.filename, 'w') as f:
-        f.write(result)
-    return number_of_mutations_performed
-
-
 class Mutator:
     def __init__(self,  source=None, filename=None,
                  exclude=lambda context: False):
@@ -535,7 +538,7 @@ class Mutator:
                         setattr(node, key, new)
                         yield Mutant(
                             source_file=self.filename,
-                            mutation=self.context.mutation_id_of_current_index
+                            mutation_id=self.context.mutation_id_of_current_index
                         )
                         setattr(node, key, old)
                     self.context.index += 1
@@ -545,42 +548,22 @@ class Mutator:
         finally:
             self.context.stack.pop()
 
-# We have a global whitelist for constants of the
-# pattern __all__, __version__, etc
-DUNDER_WHITELIST = [
-    'all',
-    'version',
-    'title',
-    'package_name',
-    'author',
-    'description',
-    'email',
-    'version',
-    'license',
-    'copyright',
-]
-
-UNTESTED = 'untested'
-OK_KILLED = 'ok_killed'
-OK_SUSPICIOUS = 'ok_suspicious'
-BAD_TIMEOUT = 'bad_timeout'
-BAD_SURVIVED = 'bad_survived'
 
 
 class Mutant:
     """Class representing a Mutant"""
 
-    def __init__(self, source_file, mutation, status=UNTESTED):
+    def __init__(self, source_file, mutation_id, status=UNTESTED):
         """
         :param source_file:
         :type source_file: str
-        :param mutation:
-        :type mutation: MutationID
+        :param mutation_id:
+        :type mutation_id: MutationID
         :param status:
         :type status: str
         """
         self.source_file = source_file
-        self.mutation = mutation
+        self.mutation = mutation_id
         self.status = status
 
     @property
@@ -597,13 +580,18 @@ class Mutant:
         """Apply the mutation to the existing source file also create
         a backup"""
         context = self._context
-        mutate_file(
-            backup=backup,
-            context=context,
-        )
+        with open(context.filename) as f:
+            code = f.read()
+        context.source = code
+        if backup:
+            with open(context.filename + '.bak', 'w') as f:
+                f.write(code)
+        result, number_of_mutations_performed = mutate(context)
         if context.number_of_performed_mutations == 0:
             raise ValueError('No mutation performed. '
                              'Are you sure the index is not too big?')
+        with open(context.filename, 'w') as f:
+            f.write(result)
 
     def revert(self):
         move(self.source_file + '.bak', self.source_file)

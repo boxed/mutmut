@@ -12,7 +12,7 @@ from time import time
 
 from mutmut.cache import cached_mutation_status, update_mutant_status, \
     cached_test_time, set_cached_test_time, register_mutants
-from mutmut.mutator import list_mutations, Context, mutate_file, UNTESTED, \
+from mutmut.mutator import list_mutations, Context, UNTESTED, \
     OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
 from mutmut.utils import print, TimeoutError
 
@@ -164,11 +164,11 @@ def run_mutation(config, filename, mutation_id):
         return cached_status
 
     try:
-        number_of_mutations_performed = mutate_file(
-            backup=True,
-            context=context
-        )
-        assert number_of_mutations_performed
+        # number_of_mutations_performed = mutate_file(
+        #     backup=True,
+        #     context=context
+        # )
+        # assert number_of_mutations_performed
         start = time()
         try:
             survived = tests_pass(config)
@@ -199,17 +199,6 @@ def run_mutation_tests_for_file(config, file_to_mutate, mutations):
                              config.hash_of_tests)
         config.progress += 1
         config.print_progress()
-
-
-def run_mutation_tests(config, mutations_by_file):
-    """
-    :type config: Config
-    :type mutations_by_file: dict[str, list[tuple]]
-    """
-    for file_to_mutate, mutations in mutations_by_file.items():
-        config.print_progress()
-
-        run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
@@ -279,39 +268,6 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         raise RuntimeError(
             'Failed while creating mutations for %s, for line "%s"' % (
             context.filename, context.current_source_line), e)
-
-
-def compute_exit_code(config, exception=None):
-    """Compute an exit code for mutmut mutation testing
-
-    The following exit codes are available for mutmut:
-     * 0 if all mutants were killed (OK_KILLED)
-     * 1 if a fatal error occurred
-     * 2 if one or more mutants survived (BAD_SURVIVED)
-     * 4 if one or more mutants timed out (BAD_TIMEOUT)
-     * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
-
-     Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
-     different mutant statuses occurred during mutation testing.
-
-    :param exception:
-    :type exception: Exception
-    :param config:
-    :type config: Config
-
-    :return: integer noting the exit code of the mutation tests.
-    :rtype: int
-    """
-    code = 0
-    if exception is not None:
-        code = code | 1
-    if config.surviving_mutants > 0:
-        code = code | 2
-    if config.surviving_mutants_timeout > 0:
-        code = code | 4
-    if config.suspicious_mutants > 0:
-        code = code | 8
-    return code
 
 
 class Config(object):

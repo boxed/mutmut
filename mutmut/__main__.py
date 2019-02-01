@@ -14,7 +14,7 @@ from glob2 import glob
 from mutmut import __version__
 from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk, \
     print_result_cache_junitxml, get_unified_diff
-from mutmut.mutator import Context, mutate_file, Mutator
+from mutmut.mutator import Context, Mutator
 from mutmut.runner import time_test_suite, \
     Runner
 from mutmut.utils import print
@@ -71,6 +71,7 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
         return paths_to_mutate
 
 
+# TODO: update
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
@@ -79,10 +80,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         filename=filename,
         dict_synonyms=dict_synonyms,
     )
-    mutate_file(
-        backup=backup,
-        context=context,
-    )
+    # TODO: apply mutant
     if context.number_of_performed_mutations == 0:
         raise RuntimeError(
             'No mutations performed. Are you sure the index is not too big?')
