@@ -134,13 +134,11 @@ def argument_mutation(children, context, **_):
 
 
 def keyword_mutation(value, context, **_):
-    if len(context.stack) > 2 and context.stack[
-        -2].type == 'comp_op' and value in ('in', 'is'):
+    if len(context.stack) > 2 and \
+            context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
         return
-
     if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
         return
-
     return {
         # 'not': 'not not',
         'not': '',
