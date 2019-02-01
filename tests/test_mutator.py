@@ -4,10 +4,11 @@ from __future__ import unicode_literals
 
 import sys
 
+import parso
 import pytest
 
 from mutmut.mutator import count_mutations, list_mutations, \
-    ALL, MutationID
+    ALL, MutationID, Mutator
 
 
 @pytest.mark.parametrize(
@@ -67,11 +68,11 @@ from mutmut.mutator import count_mutations, list_mutations, \
     ]
 )
 def test_basic_mutations(original, expected):
-    actual, number_of_performed_mutations = mutate(
-        Context(source=original, mutation_id=ALL,
-                dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed %s mutations for original "%s"' % (
-    number_of_performed_mutations, original)
+    actual = Mutator(source=original, mutation_id=ALL,
+                     dict_synonyms=['Struct', 'FooBarDict']).mutate()
+    assert actual == expected
+    # assert actual == expected, 'Performed %s mutations for original "%s"' % (
+    # number_of_performed_mutations, original)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0),
@@ -84,9 +85,9 @@ def test_basic_mutations(original, expected):
     ]
 )
 def test_basic_mutations_python3(original, expected):
-    actual = mutate(Context(source=original, mutation_id=ALL,
-                            dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == expected
+    actual = Mutator(source=original, mutation_id=ALL,
+                     dict_synonyms=['Struct', 'FooBarDict']).mutate()
+    assert expected in actual
 
 
 @pytest.mark.skipif(sys.version_info < (3, 6),
@@ -98,8 +99,8 @@ def test_basic_mutations_python3(original, expected):
     ]
 )
 def test_basic_mutations_python36(original, expected):
-    actual = mutate(Context(source=original, mutation_id=ALL,
-                            dict_synonyms=['Struct', 'FooBarDict']))[0]
+    actual = Mutator(source=original, mutation_id=ALL,
+                     dict_synonyms=['Struct', 'FooBarDict']).mutate()
     assert actual == expected
 
 
@@ -118,8 +119,8 @@ def test_basic_mutations_python36(original, expected):
     ]
 )
 def test_do_not_mutate(source):
-    actual = mutate(Context(source=source, mutation_id=ALL,
-                            dict_synonyms=['Struct', 'FooBarDict']))[0]
+    actual = Mutator(source=source, mutation_id=ALL,
+                     dict_synonyms=['Struct', 'FooBarDict']).mutate()
     assert actual == source
 
 
@@ -132,16 +133,16 @@ def test_do_not_mutate(source):
     ]
 )
 def test_do_not_mutate_python3(source):
-    actual = mutate(Context(source=source, mutation_id=ALL,
-                            dict_synonyms=['Struct', 'FooBarDict']))[0]
+    actual = Mutator(source=source, mutation_id=ALL,
+                     dict_synonyms=['Struct', 'FooBarDict']).mutate()
     assert actual == source
 
 
 def test_mutate_all():
-    assert mutate(
-        Context(source='def foo():\n    return 1+1', mutation_id=ALL)) == (
-           'def foo():\n    return 2-2', 3)
-
+    # assert Mutator(source='def foo():\n    return 1+1', mutation_id=ALL).mutate() == (
+    #        'def foo():\n    return 2-2', 3)
+    assert Mutator(source='def foo():\n    return 1+1',
+                   mutation_id=ALL).mutate() == 'def foo():\n    return 2-2'
 
 def test_mutate_both():
     source = 'a = b + c'
@@ -248,8 +249,8 @@ def test_performed_mutation_ids():
 
 
 def test_syntax_error():
-    with pytest.raises(Exception) as e:
-        mutate(Context(source=':!'))
+    with pytest.raises(parso.parser.ParserSyntaxError):
+        Mutator(source=':!').mutate()
 
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
@@ -279,13 +280,13 @@ def icon(name):
         return ''
     tpl = '<span class="glyphicon glyphicon-{}"></span>'
     return format_html(tpl, name)"""
-    mutate(Context(source=source))
+    Mutator(source=source).mutate()
 
 
 def test_bug_github_issue_19():
     source = """key = lambda a: "foo"  
 filters = dict((key(field), False) for field in fields)"""
-    mutate(Context(source=source))
+    Mutator(source=source).mutate()
 
 
 @pytest.mark.skipif(sys.version_info < (3, 6),
@@ -295,7 +296,7 @@ def test_bug_github_issue_26():
 class ConfigurationOptions(Protocol):
     min_name_length: int
     """
-    mutate(Context(source=source))
+    Mutator(source=source).mutate()
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0),
@@ -303,6 +304,5 @@ class ConfigurationOptions(Protocol):
 def test_bug_github_issue_30():
     source = """
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
-    pass
-"""
-    assert mutate(Context(source=source)) == (source, 0)
+    pass"""
+    assert Mutator(source=source).mutate() == source

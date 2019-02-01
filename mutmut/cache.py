@@ -269,27 +269,31 @@ def update_line_numbers(filename):
 # TODO: update for new structure
 @init_db
 @db_session
-def register_mutants(mutations_by_file):
-    for filename, mutation_ids in mutations_by_file.items():
-        sourcefile = get_or_create(SourceFile, filename=filename)
+def register_mutants(mutants):
+    """
+    :param mutants:
+    :type mutants: list[Mutant]
+    :return:
+    """
+    for mutant in mutants:
+        sourcefile = get_or_create(SourceFile, filename=mutant.source_filename)
 
-        for mutation_id in mutation_ids:
-            line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
-                            line_number=mutation_id.line_number)
-            assert line is not None
-            get_or_create(Mutant, line=line, index=mutation_id.index,
-                          defaults=dict(status=UNTESTED))
+        line = Line.get(sourcefile=sourcefile, line=mutant.mutation_id.line,
+                        line_number=mutant.mutation_id.line_number)
+        assert line is not None
+        get_or_create(Mutant, line=line, index=mutant.mutation_id.index,
+                      defaults=dict(status=UNTESTED))
 
 
 @init_db
 @db_session
-def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
-    sourcefile = SourceFile.get(filename=file_to_mutate)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
-                    line_number=mutation_id.line_number)
-    mutant = Mutant.get(line=line, index=mutation_id.index)
-    mutant.status = status
-    mutant.tested_against_hash = tests_hash
+def update_mutant_status(mutant, tests_hash):
+    sourcefile = SourceFile.get(filename=mutant.source_filename)
+    line = Line.get(sourcefile=sourcefile, line=mutant.mutation_id.line,
+                    line_number=mutant.mutation_id.line_number)
+    mutant_ = Mutant.get(line=line, index=mutant.mutation_id.index)
+    mutant_.status = mutant.status
+    mutant_.tested_against_hash = tests_hash
 
 
 @init_db

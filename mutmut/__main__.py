@@ -13,7 +13,8 @@ from glob2 import glob
 
 from mutmut import __version__
 from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk, \
-    print_result_cache_junitxml, get_unified_diff
+    print_result_cache_junitxml, get_unified_diff, register_mutants, \
+    hash_of_tests, update_line_numbers
 from mutmut.mutator import Mutator
 from mutmut.runner import time_test_suite, \
     Runner, compute_exit_code
@@ -74,8 +75,10 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+    print(filename)
     for mutant in Mutator(mutation_id=mutation_id, filename=filename,
                           dict_synonyms=dict_synonyms).yield_mutants():
+        print(mutant)
         mutant.apply(backup)
     # # TODO: apply mutant
     # if context.number_of_performed_mutations == 0:
@@ -83,7 +86,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
     #         'No mutations performed. Are you sure the index is not too big?')
 
 
-null_out = open(os.devnull, 'w')
+NULL_OUT = open(os.devnull, 'w')
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
 
@@ -313,6 +316,7 @@ Legend for output:
         test_command=runner,
         test_time_base=test_time_base,
         test_time_multiplier=test_time_multiplier,
+        hash_of_tests=hash_of_tests(tests_dirs),
         using_testmon=using_testmon,
         swallow_output=not swallow_output,
         baseline_test_time=baseline_time_elapsed
@@ -321,14 +325,12 @@ Legend for output:
     mutants = []
     for path in paths_to_mutate:
         for filename in python_source_files(path, tests_dirs):
-            print(filename)
+            update_line_numbers(filename)
             if open(filename).read():
-                for mutant in Mutator(
-                        filename=filename,
-                        exclude=_exclude,
-                ).yield_mutants():
+                for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
                     mutants.append(mutant)
     print("generated {} mutants".format(len(mutants)))
+    register_mutants(mutants)
     # run the mutants
     mutation_test_runner.run_mutation_tests(mutants)
     return compute_exit_code(mutants)

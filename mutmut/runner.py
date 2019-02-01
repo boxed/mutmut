@@ -9,7 +9,8 @@ from shutil import copy
 from threading import Timer
 from time import time
 
-from mutmut.cache import cached_test_time, set_cached_test_time
+from mutmut.cache import cached_test_time, set_cached_test_time, \
+    update_mutant_status
 from mutmut.mutator import UNTESTED, \
     OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
 from mutmut.utils import print, TimeoutError
@@ -120,20 +121,6 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config):
-    if config.using_testmon:
-        copy('.testmondata-initial', '.testmondata')
-
-    def feedback(line):
-        if not config.swallow_output:
-            print(line)
-        config.print_progress()
-
-    returncode = popen_streaming_output(config.test_command, feedback,
-                                        timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
-
-
 def time_test_suite(swallow_output, test_command, using_testmon):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
@@ -184,38 +171,6 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     return baseline_time_elapsed
 
 
-class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback,
-                 baseline_time_elapsed, test_time_multiplier, test_time_base,
-                 backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests):
-        self.swallow_output = swallow_output
-        self.test_command = test_command
-        self.exclude_callback = exclude_callback
-        self.baseline_time_elapsed = baseline_time_elapsed
-        self.test_time_multipler = test_time_multiplier
-        self.test_time_base = test_time_base
-        self.backup = backup
-        self.dict_synonyms = dict_synonyms
-        self.total = total
-        self.using_testmon = using_testmon
-        self.progress = 0
-        self.skipped = 0
-        self.cache_only = cache_only
-        self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
-        self.killed_mutants = 0
-        self.surviving_mutants = 0
-        self.surviving_mutants_timeout = 0
-        self.suspicious_mutants = 0
-
-    def print_progress(self):
-        print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
-        self.progress, self.total, self.killed_mutants,
-        self.surviving_mutants_timeout, self.suspicious_mutants,
-        self.surviving_mutants))
-
-
 def compute_exit_code(mutants, exception=None):
     """Compute an exit code for mutmut mutation testing
 
@@ -252,7 +207,7 @@ def compute_exit_code(mutants, exception=None):
 
 class Runner:
 
-    def __init__(self, test_command, test_time_multiplier, test_time_base,
+    def __init__(self, test_command, test_time_multiplier, test_time_base, hash_of_tests,
                  swallow_output=True, using_testmon=False,
                  baseline_test_time=None):
         """Construct a MutationTestRunner
@@ -278,6 +233,9 @@ class Runner:
         self.test_time_multipler = test_time_multiplier
         self.test_time_base = test_time_base
 
+        # TODO: maybe remove
+        self.hash_of_tests = hash_of_tests
+
     def run_mutation_tests(self, mutants):
         """
 
@@ -290,10 +248,7 @@ class Runner:
         if self.baseline_test_time is None:
             self.time_test_suite()
         for mutant in mutants:
-            # original, mutation = mutant.mutation_original_pair
-            # print("{}['{}'->'{}'] ".format(mutant.source_filename, original, mutation), end='')
             self.test_mutant(mutant)
-            print(mutant.status)
             self.print_progress(mutants)
         return mutants
 
@@ -309,7 +264,9 @@ class Runner:
             mutant.apply()
             start = time()
             try:
-                survived = self.run_test(timeout=self.baseline_test_time * 10)
+                self.pre_test(mutant)
+                # TODO: check time modifications
+                survived = self.run_test(timeout=self.test_time_base + (self.baseline_test_time * self.test_time_multipler))
             except TimeoutError:
                 mutant.status = BAD_TIMEOUT
             else:
@@ -319,8 +276,19 @@ class Runner:
                     mutant.status = BAD_SURVIVED
                 else:
                     mutant.status = OK_KILLED
+            finally:
+                self.post_test(mutant)
         finally:
             mutant.revert()
+
+    def pre_test(self, mutant):
+        pass
+
+    def post_test(self, mutant):
+        pass
+
+    def post_status(self, mutant):
+        update_mutant_status(mutant, self.hash_of_tests)
 
     def time_test_suite(self):
         """Compute the unmutated test suite's execution time
@@ -364,4 +332,3 @@ class Runner:
         # self.progress, self.total, self.killed_mutants,
         # self.surviving_mutants_timeout, self.suspicious_mutants,
         # self.surviving_mutants))
-

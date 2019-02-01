@@ -304,17 +304,22 @@ mutations_by_type = {
 class Mutator:
     """Mutator that creates native mutmut :class:`Mutants`"""
 
-    def __init__(self, filename=None, exclude=lambda context: False, mutation_id=ALL, dict_synonyms=None,):
+    def __init__(self, source=None, filename=None, exclude=lambda context: False,
+                 mutation_id=ALL, dict_synonyms=None,):
         """"""
-        self.filename = filename
 
-        with open(filename) as f:
-            self.source = f.read()
+        if not source and filename:
+            with open(filename) as f:
+                self.source = f.read()
+        else:
+            self.source = source
         if self.source[-1] != '\n':
-            self.source += '\n'
-            self.remove_newline_at_end = True
+                self.source += '\n'
+                self.remove_newline_at_end = True
         else:
             self.remove_newline_at_end = False
+
+        self.filename = filename if filename else "nonesuch"
 
         self.exclude = exclude
         self.mutation_id = mutation_id
@@ -327,7 +332,6 @@ class Mutator:
         self._pragma_no_mutate_lines = None
         self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
-        assert isinstance(mutation_id, MutationID)
         self.current_line_index = 0
         self.filename = filename
         self.exclude = exclude
@@ -405,11 +409,16 @@ class Mutator:
         finally:
             self.stack.pop()
 
-    def mutate(self, mutation_id):
-        self.mutation_id = mutation_id
+    def mutate(self):
         result = parse(self.source, error_recovery=False)
         list(self.mutate_list_of_nodes(result))
-        return result.get_code().replace(' not not ', ' ')
+        # TODO: clean
+
+        mutated_source = result.get_code().replace(' not not ', ' ')
+        if self.remove_newline_at_end:
+            assert mutated_source[-1] == '\n'
+        mutated_source = mutated_source[:-1]
+        return mutated_source
 
     def exclude_line(self):
         current_line = self.source_by_line_number[self.current_line_index]
@@ -476,14 +485,15 @@ class Mutant:
     def apply(self, backup=True):
         """Apply the mutation to the source file"""
         with open(self.source_filename) as f:
-            code = f.read()
+            source = f.read()
         if backup:
             with open(self.source_filename + '.bak', 'w') as f:
-                f.write(code)
-        result = Mutator(filename=self.source_filename).mutate(self.mutation_id)
-
+                f.write(source)
+        mutated_source = Mutator(
+            filename=self.source_filename,
+            mutation_id=self.mutation_id).mutate()
         with open(self.source_filename, 'w') as f:
-            f.write(result)
+            f.write(mutated_source)
 
     def revert(self):
         """Revert the mutation to the source file"""
@@ -494,7 +504,9 @@ class Mutant:
         non-mutated source file"""
         with open(self.source_filename) as f:
             source = f.read()
-        mutated_source = Mutator(filename=self.source_filename).mutate(self.mutation_id)
+        mutated_source = Mutator(
+            filename=self.source_filename,
+            mutation_id=self.mutation_id).mutate()
         output = ""
         for line in unified_diff(
                 source.split('\n'),
