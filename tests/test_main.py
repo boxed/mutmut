@@ -100,7 +100,7 @@ def test_simple_apply(filesystem):
                                 catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    with open(os.path.join(str(filesystem), 'foo.py')) as f:
+    with open(str(filesystem.join('foo.py'))) as f:
         assert f.read() != file_to_mutate_contents
 
 

@@ -345,9 +345,9 @@ class Mutator:
             if child.type == 'operator' and child.value == '->':
                 return
             for mutant in self.mutate_node(child):
+                yield mutant
                 if self.number_of_performed_mutations and self.mutation_id != ALL:
                     return
-                yield mutant
 
     def yield_mutants(self):
         for mutant in self.mutate_list_of_nodes(
@@ -368,11 +368,11 @@ class Mutator:
 
             if hasattr(node, 'children'):
                 # this is just an optimization to stop early
+                for mutant in self.mutate_list_of_nodes(node):
+                    yield mutant
                 if self.number_of_performed_mutations and self.mutation_id != ALL:
                     return
 
-                for mutant in self.mutate_list_of_nodes(node):
-                    yield mutant
             m = mutations_by_type.get(t)
 
             if m is None:
@@ -418,6 +418,7 @@ class Mutator:
         if self.remove_newline_at_end:
             assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
+        assert self.source != mutated_source
         return mutated_source
 
     def exclude_line(self):
@@ -484,9 +485,10 @@ class Mutant:
 
     def apply(self, backup=True):
         """Apply the mutation to the source file"""
-        with open(self.source_filename) as f:
-            source = f.read()
+
         if backup:
+            with open(self.source_filename) as f:
+                source = f.read()
             with open(self.source_filename + '.bak', 'w') as f:
                 f.write(source)
         mutated_source = Mutator(

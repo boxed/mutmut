@@ -75,11 +75,8 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code"""
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-    print(filename, mutation_id)
-    print(list(Mutator(mutation_id=mutation_id, filename=filename).yield_mutants()))
-    for mutant in Mutator(mutation_id=mutation_id, filename=filename).yield_mutants():
-        print(mutant)
-        print(mutant.get_diff())
+    for mutant in Mutator(mutation_id=mutation_id, filename=filename,
+                          dict_synonyms=dict_synonyms).yield_mutants():
         mutant.apply(backup)
     # # TODO: apply mutant
     # if context.number_of_performed_mutations == 0:
