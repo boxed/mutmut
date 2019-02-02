@@ -266,7 +266,6 @@ def update_line_numbers(filename):
             assert False, 'unknown opcode from SequenceMatcher: %s' % command
 
 
-# TODO: update for new structure
 @init_db
 @db_session
 def register_mutants(mutants):
