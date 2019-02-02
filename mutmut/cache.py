@@ -14,9 +14,9 @@ from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
+from mutmut import print
 from mutmut.mutator import MutationID, \
     UNTESTED, OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
-from mutmut.utils import print
 
 try:
     from itertools import zip_longest

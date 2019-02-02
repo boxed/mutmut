@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
+from mutmut import TimeoutError
 from mutmut.runner import popen_streaming_output
-from mutmut.utils import TimeoutError
 
 
 # TODO: fix

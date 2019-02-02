@@ -9,11 +9,11 @@ from shutil import copy
 from threading import Timer
 from time import time
 
+from mutmut import print, TimeoutError
 from mutmut.cache import cached_test_time, set_cached_test_time, \
     update_mutant_status, cached_mutation_status
 from mutmut.mutator import OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED, \
     BAD_EXCEPTION
-from mutmut.utils import print, TimeoutError
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
