@@ -10,9 +10,9 @@ from threading import Timer
 from time import time
 
 from mutmut.cache import cached_test_time, set_cached_test_time, \
-    update_mutant_status
-from mutmut.mutator import UNTESTED, \
-    OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED
+    update_mutant_status, cached_mutation_status
+from mutmut.mutator import OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED, \
+    BAD_EXCEPTION
 from mutmut.utils import print, TimeoutError
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -258,17 +258,21 @@ class Runner:
         :param mutant: The mutant to test.
         :type mutant: Mutant
         """
-        if mutant.status != UNTESTED:
-            return
+        # TODO: do something with this
+        mutant.status = cached_mutation_status(mutant, self.hash_of_tests)
+        self.pre_test(mutant)
         try:
+            if mutant.status == OK_KILLED:
+                return
             mutant.apply()
             try:
-                self.pre_test(mutant)
                 start = time()
                 # TODO: check time modifications
                 survived = self.run_test(timeout=self.test_time_base + (self.baseline_test_time * 10))
             except TimeoutError:
                 mutant.status = BAD_TIMEOUT
+            except Exception:
+                mutant.status = BAD_EXCEPTION
             else:
                 if time() - start > self.test_time_base + (self.baseline_test_time * self.test_time_multipler):
                     mutant.status = OK_SUSPICIOUS
@@ -276,10 +280,9 @@ class Runner:
                     mutant.status = BAD_SURVIVED
                 else:
                     mutant.status = OK_KILLED
-            finally:
-                self.post_test(mutant)
         finally:
             mutant.revert()
+            self.post_test(mutant)
 
     def pre_test(self, mutant):
         pass

@@ -29,7 +29,7 @@ OK_KILLED = 'ok_killed'
 OK_SUSPICIOUS = 'ok_suspicious'
 BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
-
+BAD_EXCEPTION = 'bad_exception'
 
 class MutationID(object):
     def __init__(self, line, index, line_number):
@@ -124,8 +124,8 @@ def argument_mutation(children, context, **_):
 
     power_node = context.stack[stack_pos_of_power_node]
 
-    if power_node.children[0].type == 'name' and power_node.children[
-        0].value in context.dict_synonyms:
+    if power_node.children[0].type == 'name' and \
+            power_node.children[0].value in context.dict_synonyms:
         c = children[0]
         if c.type == 'name':
             children = children[:]
@@ -374,7 +374,8 @@ class Mutator:
 
             if node.start_pos[0] - 1 != self.current_line_index:
                 self.current_line_index = node.start_pos[0] - 1
-                self.index = 0  # indexes are unique per line, so start over here!
+                # indexes are unique per line, so start over here!
+                self.index = 0
 
             if hasattr(node, 'children'):
                 # this is just an optimization to stop early
@@ -496,6 +497,8 @@ class Mutant:
     def apply(self, backup=True):
         """Apply the mutation to the source file"""
         if backup:
+            with open(self.source_filename) as f:
+                source = f.read()
             copy(self.source_filename, self.source_filename + ".bak")
         mutated_source = Mutator(
             filename=self.source_filename,

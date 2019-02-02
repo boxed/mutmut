@@ -297,11 +297,11 @@ def update_mutant_status(mutant, tests_hash):
 
 @init_db
 @db_session
-def cached_mutation_status(filename, mutation_id, hash_of_tests):
-    sourcefile = SourceFile.get(filename=filename)
-    line = Line.get(sourcefile=sourcefile, line=mutation_id.line,
-                    line_number=mutation_id.line_number)
-    mutant = Mutant.get(line=line, index=mutation_id.index)
+def cached_mutation_status(mutant, hash_of_tests):
+    sourcefile = SourceFile.get(filename=mutant.source_filename)
+    line = Line.get(sourcefile=sourcefile, line=mutant.mutation_id.line,
+                    line_number=mutant.mutation_id.line_number)
+    mutant = Mutant.get(line=line, index=mutant.mutation_id.index)
 
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed,
