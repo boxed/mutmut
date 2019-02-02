@@ -246,23 +246,23 @@ Legend for output:
         copy('.testmondata', '.testmondata-initial')
 
     if not use_coverage:
-        def _exclude(context):
+        def _exclude(mutator):
             return False
     else:
         covered_lines_by_filename = {}
         coverage_data = read_coverage_data(use_coverage)
 
-        def _exclude(context):
+        def _exclude(mutator):
             try:
-                covered_lines = covered_lines_by_filename[context.filename]
+                covered_lines = covered_lines_by_filename[mutator.filename]
             except KeyError:
                 covered_lines = coverage_data.lines(
-                    os.path.abspath(context.filename))
-                covered_lines_by_filename[context.filename] = covered_lines
+                    os.path.abspath(mutator.filename))
+                covered_lines_by_filename[mutator.filename] = covered_lines
 
             if covered_lines is None:
                 return True
-            current_line = context.current_line_index + 1
+            current_line = mutator.current_line_index + 1
             if current_line not in covered_lines:
                 return True
             return False
