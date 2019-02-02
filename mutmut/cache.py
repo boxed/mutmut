@@ -333,5 +333,5 @@ def cached_test_time():
 @init_db
 @db_session
 def set_cached_test_time(baseline_time_elapsed):
-    get_or_create(MiscData, key='baseline_time_elapsed').value = str(
-        baseline_time_elapsed)
+    get_or_create(MiscData, key='baseline_time_elapsed').value = \
+        str(baseline_time_elapsed)
