@@ -32,6 +32,7 @@ BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
 BAD_EXCEPTION = 'bad_exception'
 
+
 class MutationID(object):
     def __init__(self, line, index, line_number):
         self.line = line
