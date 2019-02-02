@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 from difflib import unified_diff
 from shutil import move, copy
 
@@ -497,8 +498,6 @@ class Mutant:
     def apply(self, backup=True):
         """Apply the mutation to the source file"""
         if backup:
-            with open(self.source_filename) as f:
-                source = f.read()
             copy(self.source_filename, self.source_filename + ".bak")
         mutated_source = Mutator(
             filename=self.source_filename,
@@ -508,7 +507,8 @@ class Mutant:
 
     def revert(self):
         """Revert the mutation to the source file"""
-        move(self.source_filename + '.bak', self.source_filename)
+        if os.path.exists(self.source_filename + '.bak'):
+            move(self.source_filename + '.bak', self.source_filename)
 
     def get_diff(self):
         """Return a human readable string showing difference between the
