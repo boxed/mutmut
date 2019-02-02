@@ -56,7 +56,8 @@ class ASTPattern(object):
                          x['name'] == 'match' or x['name'] == '']
         if len(pattern_nodes) != 1:
             raise InvalidASTPatternException(
-                "Found more than one match node. Match nodes are nodes with an empty name or with the explicit name 'match'")
+                "Found more than one match node. Match nodes are nodes with "
+                "an empty name or with the explicit name 'match'")
         self.pattern = pattern_nodes[0]
         self.marker_type_by_id = {id(x['node']): x['marker_type'] for x in
                                   self.markers}
