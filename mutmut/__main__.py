@@ -121,7 +121,8 @@ def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
     """
 commands:\n
     run [mutation id]\n
-        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+        Runs mutmut. You probably want to start with just trying this.
+        If you supply a mutation ID mutmut will check just this mutant.\n
     results\n
         Print the results.\n
     apply [mutation id]\n
