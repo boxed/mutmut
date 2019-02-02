@@ -110,23 +110,31 @@ def lambda_mutation(children, **_):
             Keyword(value=' None', start_pos=post[0].start_pos)]
 
 
-def argument_mutation(children, context, **_):
+def partition_node_list(nodes, value):
+    for i, n in enumerate(nodes):
+        if hasattr(n, 'value') and n.value == value:
+            return nodes[:i], n, nodes[i + 1:]
+
+    assert False, "didn't find node to split on"
+
+
+def argument_mutation(children, mutator, **_):
     """
-    :type context: Context
+    :type mutator: Context
     """
-    if len(context.stack) >= 3 and context.stack[-3].type in (
+    if len(mutator.stack) >= 3 and mutator.stack[-3].type in (
             'power', 'atom_expr'):
         stack_pos_of_power_node = -3
-    elif len(context.stack) >= 4 and context.stack[-4].type in (
+    elif len(mutator.stack) >= 4 and mutator.stack[-4].type in (
             'power', 'atom_expr'):
         stack_pos_of_power_node = -4
     else:
         return
 
-    power_node = context.stack[stack_pos_of_power_node]
+    power_node = mutator.stack[stack_pos_of_power_node]
 
     if power_node.children[0].type == 'name' and \
-            power_node.children[0].value in context.dict_synonyms:
+            power_node.children[0].value in mutator.dict_synonyms:
         c = children[0]
         if c.type == 'name':
             children = children[:]
@@ -135,11 +143,11 @@ def argument_mutation(children, context, **_):
             return children
 
 
-def keyword_mutation(value, context, **_):
-    if len(context.stack) > 2 and \
-            context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
+def keyword_mutation(value, mutator, **_):
+    if len(mutator.stack) > 2 and \
+            mutator.stack[-2].type == 'comp_op' and value in ('in', 'is'):
         return
-    if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
+    if len(mutator.stack) > 1 and mutator.stack[-2].type == 'for_stmt':
         return
     return {
         # 'not': 'not not',
@@ -256,36 +264,6 @@ def name_mutation(node, value, **_):
         return 'None'
 
 
-def count_mutations(context):
-    """
-    :type context: Context
-    """
-    assert context.mutation_id == ALL
-    mutator = Mutator(context.filename, context.exclude).mutate(context.mutation_id)
-    context = mutator.context
-    context.number_of_performed_mutations = mutator.context.number_of_performed_mutations
-    return context.number_of_performed_mutations
-
-
-def list_mutations(context):
-    """
-    :type context: Context
-    """
-    assert context.mutation_id == ALL
-    mutator = Mutator(context.filename, context.exclude).mutate(context.mutation_id)
-    context = mutator.context
-    context.number_of_performed_mutations = mutator.context.number_of_performed_mutations
-    return context.performed_mutation_ids
-
-
-def partition_node_list(nodes, value):
-    for i, n in enumerate(nodes):
-        if hasattr(n, 'value') and n.value == value:
-            return nodes[:i], n, nodes[i + 1:]
-
-    assert False, "didn't find node to split on"
-
-
 mutations_by_type = {
     'operator': dict(value=operator_mutation),
     'keyword': dict(value=keyword_mutation),
@@ -357,7 +335,8 @@ class Mutator:
                 return
             for mutant in self.mutate_node(child):
                 yield mutant
-                if self.number_of_performed_mutations and self.mutation_id != ALL:
+                if self.number_of_performed_mutations and \
+                        self.mutation_id != ALL:
                     return
 
     def yield_mutants(self):
@@ -382,7 +361,8 @@ class Mutator:
                 # this is just an optimization to stop early
                 for mutant in self.mutate_list_of_nodes(node):
                     yield mutant
-                if self.number_of_performed_mutations and self.mutation_id != ALL:
+                if self.number_of_performed_mutations and \
+                        self.mutation_id != ALL:
                     return
 
             m = mutations_by_type.get(t)
@@ -397,7 +377,7 @@ class Mutator:
 
                 new = evaluate(
                     value,
-                    context=self,
+                    mutator=self,
                     node=node,
                     value=getattr(node, 'value', None),
                     children=getattr(node, 'children', None),
@@ -416,7 +396,8 @@ class Mutator:
                         # setattr(node, key, old)
                     self.index += 1
                 # this is just an optimization to stop early
-                if self.number_of_performed_mutations and self.mutation_id != ALL:
+                if self.number_of_performed_mutations and \
+                        self.mutation_id != ALL:
                     return
         finally:
             self.stack.pop()
@@ -427,8 +408,7 @@ class Mutator:
         mutated_source = result.get_code().replace(' not not ', ' ')
         if self.remove_newline_at_end:
             assert mutated_source[-1] == '\n'
-        mutated_source = mutated_source[:-1]
-        assert self.source != mutated_source
+            mutated_source = mutated_source[:-1]
         return mutated_source
 
     def exclude_line(self):
@@ -438,7 +418,8 @@ class Mutator:
             if word in DUNDER_WHITELIST and rest.strip()[0] == '=':
                 return True
 
-        if current_line.strip() == "__import__('pkg_resources').declare_namespace(__name__)":
+        if current_line.strip() == \
+                "__import__('pkg_resources').declare_namespace(__name__)":
             return True
 
         return self.current_line_index in self.pragma_no_mutate_lines or \
@@ -473,7 +454,6 @@ class Mutator:
     def should_mutate(self):
         if self.mutation_id == ALL:
             return True
-
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
 
 
