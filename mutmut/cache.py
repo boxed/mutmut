@@ -178,16 +178,16 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy,
                 tc.add_failure_info(message=mutant.status,
                                     output=get_unified_diff(mutant.id,
                                                             dict_synonyms))
-            if mutant.status == BAD_TIMEOUT:
+            elif mutant.status == BAD_TIMEOUT:
                 tc.add_error_info(message=mutant.status, error_type="timeout",
                                   output=get_unified_diff(mutant.id,
                                                           dict_synonyms))
-            if mutant.status == OK_SUSPICIOUS:
+            elif mutant.status == OK_SUSPICIOUS:
                 if suspicious_policy != 'ignore':
                     func = getattr(tc, 'add_{}_info'.format(suspicious_policy))
                     func(message=mutant.status,
                          output=get_unified_diff(mutant.id, dict_synonyms))
-            if mutant.status == UNTESTED:
+            elif mutant.status == UNTESTED:
                 if untested_policy != 'ignore':
                     func = getattr(tc, 'add_{}_info'.format(untested_policy))
                     func(message=mutant.status,
@@ -248,20 +248,16 @@ def update_line_numbers(filename):
                 cached_obj = cached_line_objects[a_index]
                 assert cached_obj.line == existing_lines[b_index]
                 cached_obj.line_number = b_index
-
         elif command == 'delete':
             cached_line_objects[a_index].delete()
-
         elif command == 'insert':
             if b is not None:
                 Line(sourcefile=sourcefile, line=b, line_number=b_index)
-
         elif command == 'replace':
             if a_index is not None:
                 cached_line_objects[a_index].delete()
             if b is not None:
                 Line(sourcefile=sourcefile, line=b, line_number=b_index)
-
         else:
             assert False, 'unknown opcode from SequenceMatcher: %s' % command
 
@@ -307,10 +303,8 @@ def cached_mutation_status(mutant, hash_of_tests):
         # We assume that if a mutant was killed,
         # a change to the test suite will mean it's still killed
         return OK_KILLED
-
-    if mutant.tested_against_hash != hash_of_tests:
+    elif mutant.tested_against_hash != hash_of_tests:
         return UNTESTED
-
     return mutant.status
 
 
