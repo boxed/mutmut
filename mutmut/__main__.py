@@ -273,46 +273,15 @@ Legend for output:
     if command != 'run':
         raise click.BadArgumentUsage("Invalid command %s" % command)
 
-    # mutations_by_file = {}
-    #
-    # if argument is None:
-    #     for path in paths_to_mutate:
-    #         for filename in python_source_files(path, tests_dirs):
-    #             update_line_numbers(filename)
-    #             add_mutations_by_file(mutations_by_file, filename, _exclude,
-    #                                   dict_synonyms)
-    # else:
-    #     filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-    #     mutations_by_file[filename] = [mutation_id]
-
-    # total = sum(len(mutations) for mutations in mutations_by_file.values())
-    #
-    # print()
-    # print('2. Checking mutants')
-    # config = Config(
-    #     swallow_output=not swallow_output,
-    #     test_command=runner,
-    #     exclude_callback=_exclude,
-    #     baseline_time_elapsed=baseline_time_elapsed,
-    #     backup=backup,
-    #     dict_synonyms=dict_synonyms,
-    #     total=total,
-    #     using_testmon=using_testmon,
-    #     cache_only=cache_only,
-    #     tests_dirs=tests_dirs,
-    #     hash_of_tests=hash_of_tests(tests_dirs),
-    #     test_time_multiplier=test_time_multiplier,
-    #     test_time_base=test_time_base,
-    # )
-    #
-    # try:
-    #     run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
-    # except Exception as e:
-    #     traceback.print_exc()
-    #     return compute_exit_code(config, e)
-    # else:
-    #     return compute_exit_code(config)
-    # generate mutants
+    mutants = []
+    for path in paths_to_mutate:
+        for filename in python_source_files(path, tests_dirs):
+            update_line_numbers(filename)
+            for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
+                mutants.append(mutant)
+    print("generated {} mutants".format(len(mutants)))
+    register_mutants(mutants)
+    # run the mutants
     mutation_test_runner = Runner(
         test_command=runner,
         test_time_base=test_time_base,
@@ -323,15 +292,6 @@ Legend for output:
         baseline_test_time=baseline_time_elapsed
     )
 
-    mutants = []
-    for path in paths_to_mutate:
-        for filename in python_source_files(path, tests_dirs):
-            update_line_numbers(filename)
-            for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
-                mutants.append(mutant)
-    print("generated {} mutants".format(len(mutants)))
-    register_mutants(mutants)
-    # run the mutants
     mutation_test_runner.run_mutation_tests(mutants)
     return compute_exit_code(mutants)
 
