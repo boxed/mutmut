@@ -313,7 +313,7 @@ class Mutator:
                 self.source = f.read()
         else:
             self.source = source
-        if self.source[-1] != '\n':
+        if not self.source or self.source[-1] != '\n':
                 self.source += '\n'
                 self.remove_newline_at_end = True
         else:

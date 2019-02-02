@@ -262,11 +262,11 @@ class Runner:
             return
         try:
             mutant.apply()
-            start = time()
             try:
                 self.pre_test(mutant)
+                start = time()
                 # TODO: check time modifications
-                survived = self.run_test(timeout=self.test_time_base + (self.baseline_test_time * self.test_time_multipler))
+                survived = self.run_test(timeout=self.test_time_base + (self.baseline_test_time * 10))
             except TimeoutError:
                 mutant.status = BAD_TIMEOUT
             else:
@@ -285,10 +285,8 @@ class Runner:
         pass
 
     def post_test(self, mutant):
-        pass
-
-    def post_status(self, mutant):
         update_mutant_status(mutant, self.hash_of_tests)
+        print(mutant.status)
 
     def time_test_suite(self):
         """Compute the unmutated test suite's execution time
