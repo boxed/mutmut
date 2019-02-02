@@ -425,7 +425,7 @@ class Mutator:
             return True
 
         return self.current_line_index in self.pragma_no_mutate_lines or \
-            self.exclude(context=self)
+            self.exclude(self)
 
     @property
     def source_by_line_number(self):

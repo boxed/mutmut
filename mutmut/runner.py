@@ -207,8 +207,8 @@ def compute_exit_code(mutants, exception=None):
 
 class Runner:
 
-    def __init__(self, test_command, test_time_multiplier, test_time_base, hash_of_tests,
-                 swallow_output=True, using_testmon=False,
+    def __init__(self, test_command, test_time_multiplier, test_time_base,
+                 hash_of_tests, swallow_output=True, using_testmon=False,
                  baseline_test_time=None):
         """Construct a MutationTestRunner
 
@@ -327,7 +327,6 @@ class Runner:
 
     def print_progress(self, mutants):
         pass
-        # TODO:
         # print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (
         # self.progress, self.total, self.killed_mutants,
         # self.surviving_mutants_timeout, self.suspicious_mutants,
