@@ -12,8 +12,8 @@ from time import time
 from mutmut import print, TimeoutError
 from mutmut.cache import cached_test_time, set_cached_test_time, \
     update_mutant_status, cached_mutation_status
-from mutmut.mutator import OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, BAD_SURVIVED, \
-    BAD_EXCEPTION
+from mutmut.mutator import OK_KILLED, OK_SUSPICIOUS, BAD_TIMEOUT, \
+    BAD_SURVIVED, BAD_EXCEPTION
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
@@ -110,9 +110,8 @@ def popen_streaming_output(cmd, callback, timeout=None):
             # won't get as nice feedback.
             pass
         if not timer.is_alive():
-            raise TimeoutError(
-                "subprocess running command '{}' timed out after {} seconds".format(
-                    cmd, timeout))
+            raise TimeoutError("subprocess running command '{}' timed out "
+                               "after {} seconds".format(cmd, timeout))
         process.poll()
 
     # we have returned from the subprocess cancel the timer if it is running
