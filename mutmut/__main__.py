@@ -274,7 +274,8 @@ Legend for output:
     for path in paths_to_mutate:
         for filename in python_source_files(path, tests_dirs):
             update_line_numbers(filename)
-            for mutant in Mutator(filename=filename, exclude=_exclude).yield_mutants():
+            for mutant in Mutator(filename=filename,
+                                  exclude=_exclude).yield_mutants():
                 mutants.append(mutant)
     print("generated {} mutants".format(len(mutants)))
     register_mutants(mutants)
@@ -303,18 +304,6 @@ def read_coverage_data(use_coverage):
         return cov.get_data()
     else:
         return None
-
-
-def coverage_exclude_callback(context, use_coverage, coverage_data):
-    if use_coverage:
-        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-        if measured_lines is None:
-            return True
-        current_line = context.current_line_index + 1
-        if current_line not in measured_lines:
-            return True
-
-    return False
 
 
 def python_source_files(path, tests_dirs):
