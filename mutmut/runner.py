@@ -139,8 +139,8 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     """
     cached_time = cached_test_time()
     if cached_time is not None:
-        print(
-            '1. Using cached time for baseline tests, to run baseline again delete the cache file')
+        print('1. Using cached time for baseline tests, to run baseline '
+              'again delete the cache file')
         return cached_time
 
     print('1. Running tests without mutations')
@@ -160,8 +160,9 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         baseline_time_elapsed = time() - start_time
     else:
         raise RuntimeError(
-            "Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (
-            test_command, '\n'.join(output)))
+            "Tests don't run cleanly without mutations. "
+            "Test command was: %s\n\nOutput:\n\n%s" %
+            (test_command, '\n'.join(output)))
 
     print(' Done')
 
