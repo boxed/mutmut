@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 import os
 from difflib import unified_diff
 from shutil import move, copy

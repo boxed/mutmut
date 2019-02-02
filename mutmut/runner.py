@@ -257,7 +257,6 @@ class Runner:
         :param mutant: The mutant to test.
         :type mutant: Mutant
         """
-        # TODO: do something with this
         mutant.status = cached_mutation_status(mutant, self.hash_of_tests)
         self.pre_test(mutant)
         try:

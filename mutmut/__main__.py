@@ -12,12 +12,11 @@ import click
 from glob2 import glob
 
 from mutmut import __version__, print
-from mutmut.cache import print_result_cache, filename_and_mutation_id_from_pk, \
-    print_result_cache_junitxml, get_unified_diff, register_mutants, \
-    hash_of_tests, update_line_numbers
+from mutmut.cache import print_result_cache, \
+    filename_and_mutation_id_from_pk, print_result_cache_junitxml, \
+    get_unified_diff, register_mutants, hash_of_tests, update_line_numbers
 from mutmut.mutator import Mutator
-from mutmut.runner import time_test_suite, \
-    Runner, compute_exit_code
+from mutmut.runner import time_test_suite, Runner, compute_exit_code
 
 if sys.version_info < (3, 0):  # pragma: no cover (python 2 specific)
     # noinspection PyCompatibility,PyUnresolvedReferences
