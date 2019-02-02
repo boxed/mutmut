@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from difflib import unified_diff
-from shutil import move
+from shutil import move, copy
 
 from parso import parse
 from parso.python.tree import Number, Keyword, Name
@@ -304,10 +304,26 @@ mutations_by_type = {
 class Mutator:
     """Mutator that creates native mutmut :class:`Mutants`"""
 
-    def __init__(self, source=None, filename=None, exclude=lambda context: False,
-                 mutation_id=ALL, dict_synonyms=None,):
-        """"""
+    def __init__(self, source=None, filename=None,
+                 exclude=lambda context: False, mutation_id=ALL,
+                 dict_synonyms=None):
+        """
 
+        :param source:
+        :type source: str
+
+        :param filename:
+        :type filename: str
+
+        :param exclude:
+        :type exclude: Callable
+
+        :param mutation_id:
+        :type mutation_id: MutationID
+
+        :param dict_synonyms:
+        :type dict_synonyms: list[str]
+        """
         if not source and filename:
             with open(filename) as f:
                 self.source = f.read()
@@ -327,17 +343,11 @@ class Mutator:
 
         self.stack = []
         self.index = 0
-        self.current_line_index = 0
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
         self.current_line_index = 0
-        self.filename = filename
-        self.exclude = exclude
-        self.stack = []
-        self._source_by_line_number = None
-        self._pragma_no_mutate_lines = None
         self._path_by_line = None
 
     def mutate_list_of_nodes(self, node):
@@ -412,8 +422,6 @@ class Mutator:
     def mutate(self):
         result = parse(self.source, error_recovery=False)
         list(self.mutate_list_of_nodes(result))
-        # TODO: clean
-
         mutated_source = result.get_code().replace(' not not ', ' ')
         if self.remove_newline_at_end:
             assert mutated_source[-1] == '\n'
@@ -431,8 +439,8 @@ class Mutator:
         if current_line.strip() == "__import__('pkg_resources').declare_namespace(__name__)":
             return True
 
-        return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(
-            context=self)
+        return self.current_line_index in self.pragma_no_mutate_lines or \
+            self.exclude(context=self)
 
     @property
     def source_by_line_number(self):
@@ -474,8 +482,10 @@ class Mutant:
         """
         :param source_filename: Filename of the affected source file
         :type source_filename: str
+
         :param mutation_id:
         :type mutation_id: MutationID
+
         :param status:
         :type status: str
         """
@@ -485,12 +495,8 @@ class Mutant:
 
     def apply(self, backup=True):
         """Apply the mutation to the source file"""
-
         if backup:
-            with open(self.source_filename) as f:
-                source = f.read()
-            with open(self.source_filename + '.bak', 'w') as f:
-                f.write(source)
+            copy(self.source_filename, self.source_filename + ".bak")
         mutated_source = Mutator(
             filename=self.source_filename,
             mutation_id=self.mutation_id).mutate()
@@ -503,7 +509,10 @@ class Mutant:
 
     def get_diff(self):
         """Return a human readable string showing difference between the
-        mutated and non-mutated source file"""
+        mutated and non-mutated source file
+
+        :rtype: str
+        """
         with open(self.source_filename) as f:
             source = f.read()
         mutated_source = Mutator(
