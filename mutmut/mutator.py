@@ -502,8 +502,8 @@ class Mutant:
         move(self.source_filename + '.bak', self.source_filename)
 
     def get_diff(self):
-        """Get the differences between the mutated and
-        non-mutated source file"""
+        """Return a human readable string showing difference between the
+        mutated and non-mutated source file"""
         with open(self.source_filename) as f:
             source = f.read()
         mutated_source = Mutator(
