@@ -143,7 +143,7 @@ dunder_whitelist = [
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
+    text_types = (str, unicode)  # noqa: F821
 else:
     text_types = (str,)
 
@@ -215,7 +215,7 @@ def string_mutation(value, **_):
 def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
-            return nodes[:i], n, nodes[i+1:]
+            return nodes[:i], n, nodes[i + 1:]
 
     assert False, "didn't find node to split on"
 

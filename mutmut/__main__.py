@@ -272,22 +272,22 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     using_testmon = '--testmon' in runner
 
     print("""
-- Mutation testing starting - 
+- Mutation testing starting -
 
 These are the steps:
-1. A full test suite run will be made to make sure we 
-   can run the tests successfully and we know how long 
+1. A full test suite run will be made to make sure we
+   can run the tests successfully and we know how long
    it takes (to detect infinite loops for example)
 2. Mutants will be generated and checked
 
-Mutants are written to the cache in the .mutmut-cache 
+Mutants are written to the cache in the .mutmut-cache
 directory. Print found mutants with `mutmut results`.
 
 Legend for output:
-🎉 Killed mutants. The goal is for everything to end up in this bucket. 
-⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.  
-🤔 Suspicious. Tests took a long time, but not long enough to be fatal. 
-🙁 Survived. This means your tests needs to be expanded. 
+🎉 Killed mutants. The goal is for everything to end up in this bucket.
+⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.
+🤔 Suspicious. Tests took a long time, but not long enough to be fatal.
+🙁 Survived. This means your tests needs to be expanded.
 """)
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,

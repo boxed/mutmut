@@ -1,6 +1,7 @@
 language: python
 
 stages:
+  - lint
   - test
   - build
   - deploy
@@ -18,6 +19,15 @@ after_success:
 
 jobs:
   include:
+    - stage: lint
+      python: 3.6
+      before_install:
+        - pip install flake8
+      before_script: skip
+      after_script: skip
+      script:
+        - flake8 mutmut
+    - stage: test
     - python: 2.7
     - python: pypy
     - python: 3.6

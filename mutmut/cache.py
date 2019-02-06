@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover (python2)
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_type = unicode
+    text_type = unicode  # noqa: F821
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 
@@ -33,7 +33,6 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
         orig_print(x.encode("utf-8"), **kwargs)
 
 else:
-    from itertools import zip_longest
     text_type = str
 
 
@@ -136,12 +135,12 @@ def print_result_cache():
     print('    mutmut show <id>')
     print('')
 
-    def print_stuff(title, query):
-        l = list(query)
-        if l:
+    def print_stuff(title, mutant_query):
+        mutant_list = list(mutant_query)
+        if mutant_list:
             print('')
-            print("{} ({})".format(title, len(l)))
-            for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+            print("{} ({})".format(title, len(mutant_list)))
+            for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
                 mutants = list(mutants)
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
@@ -178,8 +177,8 @@ def get_unified_diff(argument, dict_synonyms):
 @db_session
 def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
     test_cases = []
-    l = list(select(x for x in Mutant))
-    for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+    mutant_list = list(select(x for x in Mutant))
+    for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
         for mutant in mutants:
             tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
             if mutant.status == BAD_SURVIVED:
