@@ -215,7 +215,7 @@ def string_mutation(value, **_):
 def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
-            return nodes[:i], n, nodes[i+1:]
+            return nodes[:i], n, nodes[i + 1:]
 
     assert False, "didn't find node to split on"
 
