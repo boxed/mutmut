@@ -33,7 +33,6 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
         orig_print(x.encode("utf-8"), **kwargs)
 
 else:
-    from itertools import zip_longest
     text_type = str
 
 
