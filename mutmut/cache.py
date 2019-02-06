@@ -24,7 +24,7 @@ except ImportError:  # pragma: no cover (python2)
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_type = unicode
+    text_type = unicode  # noqa: F821
     # This little hack is needed to get the click tester working on python 2.7
     orig_print = print
 

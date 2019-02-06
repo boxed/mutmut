@@ -143,7 +143,7 @@ dunder_whitelist = [
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
+    text_types = (str, unicode)  # noqa: F821
 else:
     text_types = (str,)
 
