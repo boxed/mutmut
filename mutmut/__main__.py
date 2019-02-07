@@ -603,6 +603,14 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
 
 
 def coverage_exclude_callback(context, use_coverage, coverage_data):
+    """
+    :type context: Context
+    :type use_coverage: bool
+    :type coverage_data: CoverageData
+    :return: boolean indicating whether to exclude the context's current line
+        from mutations
+    :rtype: bool
+    """
     if use_coverage:
         measured_lines = coverage_data.lines(os.path.abspath(context.filename))
         if measured_lines is None:
