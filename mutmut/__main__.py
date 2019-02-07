@@ -381,7 +381,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
     :return: the return code of the executed subprocess
     :rtype: int
     """
-    if os.name == 'nt': # pragma: no cover
+    if os.name == 'nt':  # pragma: no cover
         process = subprocess.Popen(
             shlex.split(cmd),
             stdout=subprocess.PIPE,
@@ -412,7 +412,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
     while process.returncode is None:
         try:
-            if os.name == 'nt': # pragma: no cover
+            if os.name == 'nt':  # pragma: no cover
                 line = stdout.readline()
                 # windows gives readline() raw stdout as a b''
                 # need to decode it
