@@ -552,16 +552,16 @@ def mutate_node(node, context):
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
+def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-    for i in result.children:
+    for child_node in node.children:
 
-        if i.type == 'operator' and i.value == '->':
+        if child_node.type == 'operator' and child_node.value == '->':
             return
 
-        mutate_node(i, context=context)
+        mutate_node(child_node, context=context)
 
         # this is just an optimization to stop early
         if context.number_of_performed_mutations and context.mutation_id != ALL:
