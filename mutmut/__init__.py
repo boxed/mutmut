@@ -9,7 +9,7 @@ from parso import parse
 from parso.python.tree import Name, Number, Keyword
 from tri.declarative import evaluate
 
-__version__ = '1.3.0'
+__version__ = '1.3.1'
 
 
 class MutationID(object):
@@ -143,7 +143,7 @@ dunder_whitelist = [
 
 if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
+    text_types = (str, unicode)  # noqa: F821
 else:
     text_types = (str,)
 
@@ -215,7 +215,7 @@ def string_mutation(value, **_):
 def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
-            return nodes[:i], n, nodes[i+1:]
+            return nodes[:i], n, nodes[i + 1:]
 
     assert False, "didn't find node to split on"
 
@@ -414,7 +414,7 @@ class Context(object):
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
         self.index = 0
         self.remove_newline_at_end = False
-        if source is not None and source[-1] != '\n':
+        if source and source[-1] != '\n':
             source += '\n'
             self.remove_newline_at_end = True
         self.source = source
