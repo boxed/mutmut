@@ -478,6 +478,7 @@ def mutate(context):
     """
     :type context: Context
     :return: tuple: mutated source code, number of mutations performed
+    :rtype: tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
