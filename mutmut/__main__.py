@@ -441,6 +441,11 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def tests_pass(config):
+    """
+    :type config: Config
+    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
+    :rtype: bool
+    """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
