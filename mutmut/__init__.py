@@ -589,7 +589,6 @@ def list_mutations(context):
 
 def mutate_file(backup, context):
     """
-
     :type backup: bool
     :type context: Context
     """
