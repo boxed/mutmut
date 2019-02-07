@@ -607,6 +607,12 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    """
+    :type mutations_by_file: dict[str, list[MutationID]]
+    :type filename: str
+    :type exclude: Callable[[Context], bool]
+    :type dict_synonyms: list[str]
+    """
     with open(filename) as f:
         source = f.read()
     context = Context(
