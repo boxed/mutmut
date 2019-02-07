@@ -498,52 +498,52 @@ def mutate(context):
     return mutated_source, context.number_of_performed_mutations
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :type context: Context
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
 
-        t = i.type
+        node_type = node.type
 
-        if i.type == 'tfpdef':
+        if node.type == 'tfpdef':
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if hasattr(node, 'children'):
+            mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutation_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        mutations = mutations_by_type.get(node_type)
 
-        if m is None:
+        if mutations is None:
             return
 
-        for key, value in sorted(m.items()):
-            old = getattr(i, key)
+        for key, value in sorted(mutations.items()):
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
             new = evaluate(
                 value,
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
             assert not callable(new)
             if new is not None and new != old:
                 if context.should_mutate():
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                    setattr(i, key, new)
+                    setattr(node, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
