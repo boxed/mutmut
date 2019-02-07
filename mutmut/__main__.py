@@ -92,6 +92,10 @@ print_status = status_printer()
 
 
 def get_or_guess_paths_to_mutate(paths_to_mutate):
+    """
+    :type paths_to_mutate: str or None
+    :rtype: str
+    """
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
