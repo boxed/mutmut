@@ -459,6 +459,13 @@ def tests_pass(config):
 
 
 def run_mutation(config, filename, mutation_id):
+    """
+    :type config: Config
+    :type filename: str
+    :type mutation_id: MutationID
+    :return: the (computed or cached) status of the tested mutant
+    :rtype: str
+    """
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
