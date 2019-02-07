@@ -527,6 +527,10 @@ def run_mutation_tests(config, mutations_by_file):
 
 
 def read_coverage_data(use_coverage):
+    """
+    :type use_coverage: bool
+    :rtype: CoverageData or None
+    """
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
