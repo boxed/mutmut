@@ -471,7 +471,6 @@ class Context(object):
     def should_mutate(self):
         if self.mutation_id == ALL:
             return True
-
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
 
 
@@ -504,7 +503,6 @@ def mutate_node(node, context):
     """
     context.stack.append(node)
     try:
-
         node_type = node.type
 
         if node.type == 'tfpdef':
