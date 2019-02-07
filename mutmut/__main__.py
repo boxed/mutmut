@@ -520,6 +520,11 @@ def run_mutation(config, filename, mutation_id):
 
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """
+    :type config: Config
+    :type file_to_mutate: str
+    :type mutations: list[MutationID]
+    """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
