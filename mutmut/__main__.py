@@ -92,6 +92,10 @@ print_status = status_printer()
 
 
 def get_or_guess_paths_to_mutate(paths_to_mutate):
+    """
+    :type paths_to_mutate: str or None
+    :rtype: str
+    """
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -108,7 +112,18 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
-    """Apply a specified mutant to the source code"""
+    """Apply a specified mutant to the source code
+
+    :param mutation_pk: mutmut cache primary key of the mutant to apply
+    :type mutation_pk: str
+
+    :param dict_synonyms: list of synonym keywords for a python dictionary
+    :type dict_synonyms: list[str]
+
+    :param backup: if :obj:`True` create a backup of the source file
+        before applying the mutation
+    :type backup: bool
+    """
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
     context = Context(
         mutation_id=mutation_id,
@@ -441,6 +456,11 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def tests_pass(config):
+    """
+    :type config: Config
+    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
+    :rtype: bool
+    """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
@@ -454,6 +474,13 @@ def tests_pass(config):
 
 
 def run_mutation(config, filename, mutation_id):
+    """
+    :type config: Config
+    :type filename: str
+    :type mutation_id: MutationID
+    :return: (computed or cached) status of the tested mutant
+    :rtype: str
+    """
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -508,6 +535,11 @@ def run_mutation(config, filename, mutation_id):
 
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """
+    :type config: Config
+    :type file_to_mutate: str
+    :type mutations: list[MutationID]
+    """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
@@ -527,6 +559,10 @@ def run_mutation_tests(config, mutations_by_file):
 
 
 def read_coverage_data(use_coverage):
+    """
+    :type use_coverage: bool
+    :rtype: CoverageData or None
+    """
     if use_coverage:
         print('Using coverage data from .coverage file')
         # noinspection PyPackageRequirements,PyUnresolvedReferences
@@ -586,6 +622,12 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    """
+    :type mutations_by_file: dict[str, list[MutationID]]
+    :type filename: str
+    :type exclude: Callable[[Context], bool]
+    :type dict_synonyms: list[str]
+    """
     with open(filename) as f:
         source = f.read()
     context = Context(
@@ -603,6 +645,14 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
 
 
 def coverage_exclude_callback(context, use_coverage, coverage_data):
+    """
+    :type context: Context
+    :type use_coverage: bool
+    :type coverage_data: CoverageData
+    :return: :obj:`True` if the context's current line should be excluded from
+        mutations, otherwise :obj:`False`
+    :rtype: bool
+    """
     if use_coverage:
         measured_lines = coverage_data.lines(os.path.abspath(context.filename))
         if measured_lines is None:
