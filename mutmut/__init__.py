@@ -504,8 +504,6 @@ def mutate_node(node, context):
     """
     context.stack.append(node)
     try:
-        node_type = node.type
-
         if node.type == 'tfpdef':
             return
 
@@ -520,7 +518,7 @@ def mutate_node(node, context):
             if context.number_of_performed_mutations and context.mutation_id != ALL:
                 return
 
-        mutations = mutations_by_type.get(node_type)
+        mutations = mutations_by_type.get(node.type)
 
         if mutations is None:
             return
