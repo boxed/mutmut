@@ -518,12 +518,12 @@ def mutate_node(node, context):
             if context.number_of_performed_mutations and context.mutation_id != ALL:
                 return
 
-        mutations = mutations_by_type.get(node.type)
+        mutation = mutations_by_type.get(node.type)
 
-        if mutations is None:
+        if mutation is None:
             return
 
-        for key, value in sorted(mutations.items()):
+        for key, value in sorted(mutation.items()):
             old = getattr(node, key)
             if context.exclude_line():
                 continue
