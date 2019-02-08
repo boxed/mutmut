@@ -649,8 +649,8 @@ def coverage_exclude_callback(context, use_coverage, coverage_data):
     :type context: Context
     :type use_coverage: bool
     :type coverage_data: CoverageData
-    :return: boolean indicating whether to exclude the context's current line
-        from mutations
+    :return: :obj:`True` if the context's current line should be excluded from
+        mutations, otherwise :obj:`False`
     :rtype: bool
     """
     if use_coverage:
