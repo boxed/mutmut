@@ -47,7 +47,7 @@ from foo import *
 def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
-   
+
    assert e == 1
    assert f == 3
    assert d == dict(e=f)

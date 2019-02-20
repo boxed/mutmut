@@ -35,14 +35,22 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     orig_print = print
 
     def print(x='', **kwargs):
+        # noinspection PyUnresolvedReferences
         x = x.decode("utf-8")
         orig_print(x.encode("utf-8"), **kwargs)
 
+    # noinspection PyShadowingBuiltins
     class TimeoutError(OSError):
         """Defining TimeoutError for Python 2 compatibility"""
+
+    # noinspection PyShadowingBuiltins
+    class FileNotFoundError(OSError):
+        """Defining FileNotFoundError for Python 2 compatibility"""
 else:
     # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
+
+    # noinspection PyShadowingBuiltins
     TimeoutError = TimeoutError
 
 
@@ -145,7 +153,7 @@ class Config(object):
     def __init__(self, swallow_output, test_command, exclude_callback,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests):
+                 tests_dirs, hash_of_tests, pre_mutation, post_mutation):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -165,6 +173,8 @@ class Config(object):
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
+        self.post_mutation = post_mutation
+        self.pre_mutation = pre_mutation
 
     def print_progress(self):
         print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
@@ -189,15 +199,19 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--version', is_flag=True, default=False)
 @click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
+    pre_mutation=None,
+    post_mutation=None,
 )
 def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy):
+            suspicious_policy, untested_policy, pre_mutation, post_mutation):
     """
 commands:\n
     run [mutation id]\n
@@ -216,14 +230,14 @@ commands:\n
     sys.exit(main(command, argument, paths_to_mutate, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
-                  version, suspicious_policy, untested_policy))
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation))
 
 
 def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
-         suspicious_policy,
-         untested_policy):
+         suspicious_policy, untested_policy, pre_mutation, post_mutation):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -315,6 +329,7 @@ Legend for output:
 
     if not use_coverage:
         def _exclude(context):
+            del context
             return False
     else:
         covered_lines_by_filename = {}
@@ -366,6 +381,8 @@ Legend for output:
         hash_of_tests=hash_of_tests(tests_dirs),
         test_time_multiplier=test_time_multiplier,
         test_time_base=test_time_base,
+        pre_mutation=pre_mutation,
+        post_mutation=post_mutation,
     )
 
     try:
@@ -506,6 +523,9 @@ def run_mutation(config, filename, mutation_id):
     if cached_status != UNTESTED:
         return cached_status
 
+    if config.pre_mutation:
+        subprocess.check_output(config.pre_mutation, shell=True)
+
     try:
         number_of_mutations_performed = mutate_file(
             backup=True,
@@ -532,6 +552,9 @@ def run_mutation(config, filename, mutation_id):
             return OK_KILLED
     finally:
         move(filename + '.bak', filename)
+
+        if config.post_mutation:
+            subprocess.check_output(config.post_mutation, shell=True)
 
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
