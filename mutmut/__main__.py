@@ -208,6 +208,8 @@ commands:\n
         Apply a mutation on disk.\n
     show [mutation id]\n
         Show a mutation diff.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
     """
     if test_time_base is None:  # click sets the default=0.0 to None
         test_time_base = 0.0
