@@ -557,7 +557,7 @@ def mutate_list_of_nodes(node, context):
     for child_node in node.children:
 
         if child_node.type == 'operator' and child_node.value == '->':
-            return
+            continue
 
         mutate_node(child_node, context=context)
 
