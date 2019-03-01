@@ -524,7 +524,9 @@ def run_mutation(config, filename, mutation_id):
         return cached_status
 
     if config.pre_mutation:
-        subprocess.check_output(config.pre_mutation, shell=True)
+        result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
+        if result:
+            print(result)
 
     try:
         number_of_mutations_performed = mutate_file(
@@ -554,7 +556,9 @@ def run_mutation(config, filename, mutation_id):
         move(filename + '.bak', filename)
 
         if config.post_mutation:
-            subprocess.check_output(config.post_mutation, shell=True)
+            result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
+            if result:
+                print(result)
 
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
