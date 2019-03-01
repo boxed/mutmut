@@ -50,13 +50,13 @@ for x in y:
 
     n = parse("""for a in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
     n = parse("""for a, b in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
@@ -253,7 +253,7 @@ def test_performed_mutation_ids():
 
 
 def test_syntax_error():
-    with pytest.raises(Exception) as e:
+    with pytest.raises(Exception):
         mutate(Context(source=':!'))
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
@@ -287,7 +287,7 @@ def icon(name):
 
 
 def test_bug_github_issue_19():
-    source = """key = lambda a: "foo"  
+    source = """key = lambda a: "foo"
 filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 

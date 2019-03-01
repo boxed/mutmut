@@ -47,7 +47,7 @@ from foo import *
 def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
-   
+
    assert e == 1
    assert f == 3
    assert d == dict(e=f)
@@ -339,3 +339,19 @@ def test_use_coverage(capsys, filesystem):
         assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
         assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+
+
+def test_pre_and_post_mutation_hook(filesystem):
+    result = CliRunner().invoke(
+        climain, [
+            'run',
+            '--paths-to-mutate=foo.py',
+            "--test-time-base=15.0",
+            "--pre-mutation=echo pre mutation stub",
+            "--post-mutation=echo post mutation stub",
+        ], catch_exceptions=False)
+    print(result.output)
+    assert result.exit_code == 0
+    assert "pre mutation stub" in result.output
+    assert "post mutation stub" in result.output
+    assert result.output.index("pre mutation stub") < result.output.index("post mutation stub")

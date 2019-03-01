@@ -3,7 +3,6 @@ from mutmut import (
     partition_node_list,
     name_mutation,
     Context,
-    ASTPattern
 )
 
 
