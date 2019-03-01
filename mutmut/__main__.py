@@ -394,6 +394,8 @@ Legend for output:
         return compute_exit_code(config, e)
     else:
         return compute_exit_code(config)
+    finally:
+        print()  # make sure we end the output with a newline
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
