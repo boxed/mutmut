@@ -149,6 +149,7 @@ def test_basic_mutations_python36(original, expected):
         "'''foo'''",  # don't mutate things we assume to be docstrings
         "NotADictSynonym(a=b)",
         'from foo import *',
+        'from .foo import *',
         'import foo',
         'import foo as bar',
         'foo.bar',
@@ -156,6 +157,7 @@ def test_basic_mutations_python36(original, expected):
         'a[None]',
         'a(None)',
         'def foo(a, *args, **kwargs): pass',
+        'import foo',
     ]
 )
 def test_do_not_mutate(source):

@@ -504,7 +504,7 @@ def mutate_node(node, context):
     """
     context.stack.append(node)
     try:
-        if node.type == 'tfpdef':
+        if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
         if node.start_pos[0] - 1 != context.current_line_index:
