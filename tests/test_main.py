@@ -124,8 +124,7 @@ def test_compute_return_code():
 
 
 def test_read_coverage_data(filesystem):
-    assert read_coverage_data(False) is None
-    assert isinstance(read_coverage_data(True), CoverageData)
+    assert isinstance(read_coverage_data(), CoverageData)
 
 
 @pytest.mark.parametrize(
@@ -339,6 +338,32 @@ def test_use_coverage(capsys, filesystem):
         assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
         assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+
+
+def test_use_patch_file(filesystem):
+    patch_contents = """diff --git a/foo.py b/foo.py
+index b9a5fb4..c6a496c 100644
+--- a/foo.py
++++ b/foo.py
+@@ -1,5 +1,5 @@
+ def foo(a, b):
+     return a < b
+ e = 1
+-f = 3
++f = 5
+ d = dict(e=f)
+\ No newline at end of file
+"""
+    with open('patch', 'w') as f:
+        f.write(patch_contents)
+
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    if EXPECTED_MUTANTS == 8:  # python3
+        assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    else:  # python2
+        assert '2/2  \\U0001f389 2  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
 
 
 def test_pre_and_post_mutation_hook(filesystem):
