@@ -190,6 +190,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
@@ -201,7 +202,6 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
-@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
@@ -336,6 +336,7 @@ Legend for output:
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
 
+    # if we're running in a mode with externally whitelisted lines
     if use_coverage or use_patch_file:
         covered_lines_by_filename = {}
         if use_coverage:
@@ -615,15 +616,15 @@ def read_coverage_data():
     return cov.get_data()
 
 
-def read_patch_data(use_patch_file):
-    print('Using patch data from ' + use_patch_file)
+def read_patch_data(patch_file_path):
+    print('Using patch data from ' + patch_file_path)
     try:
         # noinspection PyPackageRequirements
         import whatthepatch
     except ImportError:
         print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"')
-        return -1
-    with open(use_patch_file) as f:
+        raise
+    with open(patch_file_path) as f:
         diffs = whatthepatch.parse_patch(f.read())
 
     return {
