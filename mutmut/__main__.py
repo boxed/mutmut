@@ -605,7 +605,6 @@ def run_mutation_tests(config, mutations_by_file):
 
 def read_coverage_data():
     """
-    :type use_coverage: bool
     :rtype: CoverageData or None
     """
     print('Using coverage data from .coverage file')
@@ -622,7 +621,7 @@ def read_patch_data(patch_file_path):
         # noinspection PyPackageRequirements
         import whatthepatch
     except ImportError:
-        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"')
+        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"', file=sys.stderr)
         raise
     with open(patch_file_path) as f:
         diffs = whatthepatch.parse_patch(f.read())
