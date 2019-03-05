@@ -190,6 +190,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
@@ -207,11 +208,13 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     tests_dir=DEFAULT_TESTS_DIR,
     pre_mutation=None,
     post_mutation=None,
+    use_patch_file=None,
 )
 def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy, pre_mutation, post_mutation):
+            suspicious_policy, untested_policy, pre_mutation, post_mutation,
+            use_patch_file):
     """
 commands:\n
     run [mutation id]\n
@@ -233,13 +236,14 @@ commands:\n
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation))
+                  post_mutation, use_patch_file))
 
 
 def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
-         suspicious_policy, untested_policy, pre_mutation, post_mutation):
+         suspicious_policy, untested_policy, pre_mutation, post_mutation,
+         use_patch_file):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -248,6 +252,9 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     if version:
         print("mutmut version %s" % __version__)
         return 0
+
+    if use_coverage and use_patch_file:
+        raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
@@ -329,26 +336,35 @@ Legend for output:
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
 
-    if not use_coverage:
-        def _exclude(context):
-            del context
-            return False
-    else:
+    # if we're running in a mode with externally whitelisted lines
+    if use_coverage or use_patch_file:
         covered_lines_by_filename = {}
-        coverage_data = read_coverage_data(use_coverage)
+        if use_coverage:
+            coverage_data = read_coverage_data()
+        else:
+            assert use_patch_file
+            covered_lines_by_filename = read_patch_data(use_patch_file)
+            coverage_data = None
 
         def _exclude(context):
             try:
                 covered_lines = covered_lines_by_filename[context.filename]
             except KeyError:
-                covered_lines = coverage_data.lines(os.path.abspath(context.filename))
-                covered_lines_by_filename[context.filename] = covered_lines
+                if coverage_data is not None:
+                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
+                    covered_lines_by_filename[context.filename] = covered_lines
+                else:
+                    covered_lines = None
 
             if covered_lines is None:
                 return True
             current_line = context.current_line_index + 1
             if current_line not in covered_lines:
                 return True
+            return False
+    else:
+        def _exclude(context):
+            del context
             return False
 
     if command != 'run':
@@ -589,20 +605,33 @@ def run_mutation_tests(config, mutations_by_file):
         run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
-def read_coverage_data(use_coverage):
+def read_coverage_data():
     """
-    :type use_coverage: bool
     :rtype: CoverageData or None
     """
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        from coverage import Coverage
-        cov = Coverage('.coverage')
-        cov.load()
-        return cov.get_data()
-    else:
-        return None
+    print('Using coverage data from .coverage file')
+    # noinspection PyPackageRequirements,PyUnresolvedReferences
+    from coverage import Coverage
+    cov = Coverage('.coverage')
+    cov.load()
+    return cov.get_data()
+
+
+def read_patch_data(patch_file_path):
+    print('Using patch data from ' + patch_file_path)
+    try:
+        # noinspection PyPackageRequirements
+        import whatthepatch
+    except ImportError:
+        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"', file=sys.stderr)
+        raise
+    with open(patch_file_path) as f:
+        diffs = whatthepatch.parse_patch(f.read())
+
+    return {
+        diff.header.new_path: {line_number for old_line_number, line_number, text in diff.changes if old_line_number is None}
+        for diff in diffs
+    }
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
@@ -673,26 +702,6 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         register_mutants(mutations_by_file)
     except Exception as e:
         raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
-
-
-def coverage_exclude_callback(context, use_coverage, coverage_data):
-    """
-    :type context: Context
-    :type use_coverage: bool
-    :type coverage_data: CoverageData
-    :return: :obj:`True` if the context's current line should be excluded from
-        mutations, otherwise :obj:`False`
-    :rtype: bool
-    """
-    if use_coverage:
-        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-        if measured_lines is None:
-            return True
-        current_line = context.current_line_index + 1
-        if current_line not in measured_lines:
-            return True
-
-    return False
 
 
 def python_source_files(path, tests_dirs):
