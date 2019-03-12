@@ -41,6 +41,9 @@ db = Database()
 current_db_version = 2
 
 
+NO_TESTS_FOUND = 'NO TESTS FOUND'
+
+
 class MiscData(db.Entity):
     key = PrimaryKey(text_type, auto=True)
     value = Optional(text_type, autostrip=False)
@@ -112,11 +115,15 @@ def hash_of(filename):
 
 def hash_of_tests(tests_dirs):
     m = hashlib.sha256()
+    found_something = False
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
             for filename in files:
                 with open(os.path.join(root, filename), 'rb') as f:
                     m.update(f.read())
+                    found_something = True
+    if not found_something:
+        return NO_TESTS_FOUND
     return m.hexdigest()
 
 
@@ -298,7 +305,7 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
         # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests:
+    if mutant.tested_against_hash != hash_of_tests or mutant.tested_against_hash == NO_TESTS_FOUND or hash_of_tests == NO_TESTS_FOUND:
         return UNTESTED
 
     return mutant.status
