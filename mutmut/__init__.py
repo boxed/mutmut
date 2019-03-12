@@ -289,7 +289,7 @@ def operator_mutation(value, node, **_):
     if value == '*' and node.parent.type == 'parameters':
         return
 
-    if value in ('*', '**') and node.parent.type == 'argument':
+    if value in ('*', '**') and node.parent.type in ('argument', 'arglist'):
         return
 
     return {
