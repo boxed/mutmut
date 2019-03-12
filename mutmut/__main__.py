@@ -113,6 +113,14 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
             return 'src'
         elif isdir(this_dir):
             return this_dir
+        elif isdir(this_dir.replace('-', '_')):
+            return this_dir.replace('-', '_')
+        elif isdir(this_dir.replace(' ', '_')):
+            return this_dir.replace(' ', '_')
+        elif isdir(this_dir.replace('-', '')):
+            return this_dir.replace('-', '')
+        elif isdir(this_dir.replace(' ', '')):
+            return this_dir.replace(' ', '')
         else:
             raise FileNotFoundError('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
     else:
