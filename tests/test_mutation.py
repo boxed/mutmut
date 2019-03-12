@@ -178,6 +178,16 @@ def test_do_not_mutate_python3(source):
     assert actual == source
 
 
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+def test_mutate_body_of_function_with_return_type_annotation():
+    source = """
+def foo() -> int:
+    return 0
+    """
+
+    assert mutate(Context(source=source, mutation_id=ALL))[0] == source.replace('0', '1')
+
+
 def test_mutate_all():
     assert mutate(Context(source='def foo():\n    return 1+1', mutation_id=ALL)) == ('def foo():\n    return 2-2', 3)
 
