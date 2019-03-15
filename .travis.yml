@@ -43,14 +43,13 @@ jobs:
         - python -m pip install codecov
       after_success:
         - python -m codecov
-    - stage: build
+    - stage: deploy
       python:
         - 3.6
       before_script: skip
       after_script: skip
       script:
         - python setup.py sdist
-    - stage: deploy
       deploy:
         provider: pypi
         user: boxed
