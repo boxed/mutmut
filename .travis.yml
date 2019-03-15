@@ -20,7 +20,7 @@ after_success:
 jobs:
   include:
     - stage: lint
-      python: 3.6
+      python: "3.6"
       before_install:
         - pip install flake8
       before_script: skip
@@ -28,14 +28,14 @@ jobs:
       script:
         - flake8 mutmut
     - stage: test
-    - python: 2.7
+    - python: "2.7"
     - python: pypy
-    - python: 3.6
-    - python: 3.7
+    - python: "3.6"
+    - python: "3.7"
       dist: xenial
     - os: windows
       language: sh
-      python: 3.7
+      python: "3.7"
       before_install:
         - choco install python --version 3.7.2
         - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
