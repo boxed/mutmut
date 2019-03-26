@@ -1,6 +1,32 @@
 Changelog
 ---------
 
+1.4.0 (2019-03-26)
+~~~~~~~~~~~~~~~~~~
+
+* New setting: `--test-time-base=15.0`. This flag can be used to avoid issues with timing.
+
+* Post and pre hooks for the mutation step: `--pre-mutation=command` and `--post-mutation=command` if you want to run some command before and after a mutation testing round.
+
+* Fixed a bug with mutation of imports.
+
+* Fixed missing newline at end of the output of mutmut.
+
+* Support for mutating only lines specified by a patch file: `--use-patch-file=foo.patch`.
+
+* Fixed mutation of arguments in function call.
+
+* Looser heuristics for finding the source to mutate. This should mean more projects will just work out of the box.
+
+* Fixed mutation of arguments in function call for python 2.7.
+
+* Fixed a bug where if mutmut couldn't find the test code it thought the tests hadn't changed. Now mutmut treats this situation as the tests always being changed.
+
+* Fixed bug where the function body was skipped for mutation if a return type annotation existed.
+
+*
+
+
 1.3.1 (2019-01-30)
 ~~~~~~~~~~~~~~~~~~
 
