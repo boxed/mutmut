@@ -143,7 +143,7 @@ def print_result_cache():
     print('')
 
     def print_stuff(title, mutant_query):
-        mutant_list = list(mutant_query)
+        mutant_list = list(sorted(mutant_query, key=lambda x: x.line.sourcefile.filename))
         if mutant_list:
             print('')
             print("{} ({})".format(title, len(mutant_list)))
