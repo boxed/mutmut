@@ -197,6 +197,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('command', nargs=1, required=False)
 @click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
@@ -221,7 +222,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     post_mutation=None,
     use_patch_file=None,
 )
-def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
+def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy, pre_mutation, post_mutation,
@@ -243,14 +244,14 @@ commands:\n
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, paths_to_mutate, backup, runner,
+    sys.exit(main(command, argument, argument2, paths_to_mutate, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
                   post_mutation, use_patch_file))
 
 
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
@@ -282,7 +283,7 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
             return 0
 
         if argument == 'all':
-            print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms)
+            print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=argument2)
             return 0
 
         print(get_unified_diff(argument, dict_synonyms))

@@ -134,7 +134,7 @@ def get_apply_line(mutant):
 
 @init_db
 @db_session
-def print_result_cache(show_diffs=False, dict_synonyms=None):
+def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None):
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -148,12 +148,15 @@ def print_result_cache(show_diffs=False, dict_synonyms=None):
             print('')
             print("{} ({})".format(title, len(mutant_list)))
             for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
+                if print_only_filename is not None and print_only_filename != filename:
+                    continue
                 mutants = list(mutants)
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
                 if show_diffs:
                     for x in mutants:
+                        print('# mutant %s' % x.id)
                         print(get_unified_diff(x.id, dict_synonyms))
                 else:
                     print(', '.join([str(x.id) for x in mutants]))
