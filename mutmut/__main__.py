@@ -334,8 +334,8 @@ These are the steps:
    it takes (to detect infinite loops for example)
 2. Mutants will be generated and checked
 
-Mutants are written to the cache in the .mutmut-cache
-directory. Print found mutants with `mutmut results`.
+Results are stored in .mutmut-cache.
+Print found mutants with `mutmut results`.
 
 Legend for output:
 🎉 Killed mutants. The goal is for everything to end up in this bucket.
