@@ -281,6 +281,10 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
             print_result_cache()
             return 0
 
+        if argument == 'all':
+            print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms)
+            return 0
+
         print(get_unified_diff(argument, dict_synonyms))
         return 0
 

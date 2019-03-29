@@ -134,7 +134,7 @@ def get_apply_line(mutant):
 
 @init_db
 @db_session
-def print_result_cache():
+def print_result_cache(show_diffs=False, dict_synonyms=None):
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -152,7 +152,11 @@ def print_result_cache():
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
-                print(', '.join([str(x.id) for x in mutants]))
+                if show_diffs:
+                    for x in mutants:
+                        print(get_unified_diff(x.id, dict_synonyms))
+                else:
+                    print(', '.join([str(x.id) for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
