@@ -169,6 +169,9 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
 
 def get_unified_diff(argument, dict_synonyms):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+
+    update_line_numbers(filename)
+
     with open(filename) as f:
         source = f.read()
     context = Context(
