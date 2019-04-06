@@ -144,6 +144,9 @@ def do_apply(mutation_pk, dict_synonyms, backup):
     :type backup: bool
     """
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+
+    update_line_numbers(filename)
+
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -154,7 +157,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         context=context,
     )
     if context.number_of_performed_mutations == 0:
-        raise RuntimeError('No mutations performed. Are you sure the index is not too big?')
+        raise RuntimeError('No mutations performed.')
 
 
 null_out = open(os.devnull, 'w')
