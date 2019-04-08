@@ -97,11 +97,12 @@ Workflow
 This section describes how to work with mutmut to enhance your test suite.
 
 1. Run mutmut with `mutmut run`. A full run is preferred but if you're just getting started you can exit in the middle and start working with what you have found so far.
-2. Apply a surviving mutant to disk by copying and running the apply command from the output of `mutmut results`.
-3. Write a new test that fails
-4. Revert the mutant on disk
-5. Rerun the new test to see that it now passes
-6. Go back to point 2.
+2. Show the mutants with `mutmut results`
+3. Apply a surviving mutant to disk running `mutmut apply 3` (replace 3 with the relevant mutant ID from `mutmut results`)
+4. Write a new test that fails
+5. Revert the mutant on disk
+6. Rerun the new test to see that it now passes
+7. Go back to point 2.
 
 Mutmut keeps a result cache in `.mutmut-cache` so if you want to make sure you run a full mutmut run just delete this file.
 

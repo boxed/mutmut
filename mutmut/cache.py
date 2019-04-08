@@ -41,6 +41,9 @@ db = Database()
 current_db_version = 2
 
 
+NO_TESTS_FOUND = 'NO TESTS FOUND'
+
+
 class MiscData(db.Entity):
     key = PrimaryKey(text_type, auto=True)
     value = Optional(text_type, autostrip=False)
@@ -112,11 +115,15 @@ def hash_of(filename):
 
 def hash_of_tests(tests_dirs):
     m = hashlib.sha256()
+    found_something = False
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
             for filename in files:
                 with open(os.path.join(root, filename), 'rb') as f:
                     m.update(f.read())
+                    found_something = True
+    if not found_something:
+        return NO_TESTS_FOUND
     return m.hexdigest()
 
 
@@ -127,7 +134,7 @@ def get_apply_line(mutant):
 
 @init_db
 @db_session
-def print_result_cache():
+def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None):
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -136,16 +143,23 @@ def print_result_cache():
     print('')
 
     def print_stuff(title, mutant_query):
-        mutant_list = list(mutant_query)
+        mutant_list = list(sorted(mutant_query, key=lambda x: x.line.sourcefile.filename))
         if mutant_list:
             print('')
             print("{} ({})".format(title, len(mutant_list)))
             for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
+                if print_only_filename is not None and print_only_filename != filename:
+                    continue
                 mutants = list(mutants)
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
-                print(', '.join([str(x.id) for x in mutants]))
+                if show_diffs:
+                    for x in mutants:
+                        print('# mutant %s' % x.id)
+                        print(get_unified_diff(x.id, dict_synonyms))
+                else:
+                    print(', '.join([str(x.id) for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
@@ -155,6 +169,9 @@ def print_result_cache():
 
 def get_unified_diff(argument, dict_synonyms):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+
+    update_line_numbers(filename)
+
     with open(filename) as f:
         source = f.read()
     context = Context(
@@ -298,7 +315,7 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
         # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests:
+    if mutant.tested_against_hash != hash_of_tests or mutant.tested_against_hash == NO_TESTS_FOUND or hash_of_tests == NO_TESTS_FOUND:
         return UNTESTED
 
     return mutant.status

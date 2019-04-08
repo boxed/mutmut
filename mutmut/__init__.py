@@ -9,7 +9,7 @@ from parso import parse
 from parso.python.tree import Name, Number, Keyword
 from tri.declarative import evaluate
 
-__version__ = '1.3.1'
+__version__ = '1.4.0'
 
 
 class MutationID(object):
@@ -283,10 +283,13 @@ def operator_mutation(value, node, **_):
     if import_from_star_pattern.matches(node=node):
         return
 
-    if value in ('**', '*') and node.parent.type == 'param':
+    if value in ('*', '**') and node.parent.type == 'param':
         return
 
     if value == '*' and node.parent.type == 'parameters':
+        return
+
+    if value in ('*', '**') and node.parent.type in ('argument', 'arglist'):
         return
 
     return {
@@ -471,7 +474,6 @@ class Context(object):
     def should_mutate(self):
         if self.mutation_id == ALL:
             return True
-
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
 
 
@@ -479,6 +481,7 @@ def mutate(context):
     """
     :type context: Context
     :return: tuple: mutated source code, number of mutations performed
+    :rtype: tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -498,52 +501,49 @@ def mutate(context):
     return mutated_source, context.number_of_performed_mutations
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :type context: Context
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
-
-        t = i.type
-
-        if i.type == 'tfpdef':
+        if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if hasattr(node, 'children'):
+            mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutation_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        mutation = mutations_by_type.get(node.type)
 
-        if m is None:
+        if mutation is None:
             return
 
-        for key, value in sorted(m.items()):
-            old = getattr(i, key)
+        for key, value in sorted(mutation.items()):
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
             new = evaluate(
                 value,
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
             assert not callable(new)
             if new is not None and new != old:
                 if context.should_mutate():
                     context.number_of_performed_mutations += 1
                     context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                    setattr(i, key, new)
+                    setattr(node, key, new)
                 context.index += 1
 
             # this is just an optimization to stop early
@@ -553,16 +553,25 @@ def mutate_node(i, context):
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
+def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-    for i in result.children:
 
-        if i.type == 'operator' and i.value == '->':
-            return
+    return_annotation_started = False
 
-        mutate_node(i, context=context)
+    for child_node in node.children:
+
+        if child_node.type == 'operator' and child_node.value == '->':
+            return_annotation_started = True
+
+        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
+            return_annotation_started = False
+
+        if return_annotation_started:
+            continue
+
+        mutate_node(child_node, context=context)
 
         # this is just an optimization to stop early
         if context.number_of_performed_mutations and context.mutation_id != ALL:
@@ -589,7 +598,6 @@ def list_mutations(context):
 
 def mutate_file(backup, context):
     """
-
     :type backup: bool
     :type context: Context
     """

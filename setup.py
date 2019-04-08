@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import io
+import inspect
 
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
@@ -84,7 +85,6 @@ class PyTest(test):
         sys.exit(errno)
 
 
-import inspect
 running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
 # NB: _don't_ add namespace_packages to setup(), it'll break

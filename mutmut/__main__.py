@@ -35,14 +35,22 @@ if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
     orig_print = print
 
     def print(x='', **kwargs):
+        # noinspection PyUnresolvedReferences
         x = x.decode("utf-8")
         orig_print(x.encode("utf-8"), **kwargs)
 
+    # noinspection PyShadowingBuiltins
     class TimeoutError(OSError):
         """Defining TimeoutError for Python 2 compatibility"""
+
+    # noinspection PyShadowingBuiltins
+    class FileNotFoundError(OSError):
+        """Defining FileNotFoundError for Python 2 compatibility"""
 else:
     # noinspection PyUnresolvedReferences,PyCompatibility
     from configparser import ConfigParser, NoOptionError, NoSectionError
+
+    # noinspection PyShadowingBuiltins
     TimeoutError = TimeoutError
 
 
@@ -92,6 +100,10 @@ print_status = status_printer()
 
 
 def get_or_guess_paths_to_mutate(paths_to_mutate):
+    """
+    :type paths_to_mutate: str or None
+    :rtype: str
+    """
     if paths_to_mutate is None:
         # Guess path with code
         this_dir = os.getcwd().split(os.sep)[-1]
@@ -101,15 +113,40 @@ def get_or_guess_paths_to_mutate(paths_to_mutate):
             return 'src'
         elif isdir(this_dir):
             return this_dir
+        elif isdir(this_dir.replace('-', '_')):
+            return this_dir.replace('-', '_')
+        elif isdir(this_dir.replace(' ', '_')):
+            return this_dir.replace(' ', '_')
+        elif isdir(this_dir.replace('-', '')):
+            return this_dir.replace('-', '')
+        elif isdir(this_dir.replace(' ', '')):
+            return this_dir.replace(' ', '')
         else:
-            raise FileNotFoundError('Could not figure out where the code to mutate is. Please specify it on the command line like "mutmut code_dir" or by adding "paths_to_mutate=code_dir" in setup.cfg under the section [mutmut]')
+            raise FileNotFoundError(
+                'Could not figure out where the code to mutate is. '
+                'Please specify it on the command line using --paths-to-mutate, '
+                'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
     else:
         return paths_to_mutate
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
-    """Apply a specified mutant to the source code"""
+    """Apply a specified mutant to the source code
+
+    :param mutation_pk: mutmut cache primary key of the mutant to apply
+    :type mutation_pk: str
+
+    :param dict_synonyms: list of synonym keywords for a python dictionary
+    :type dict_synonyms: list[str]
+
+    :param backup: if :obj:`True` create a backup of the source file
+        before applying the mutation
+    :type backup: bool
+    """
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+
+    update_line_numbers(filename)
+
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -120,7 +157,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         context=context,
     )
     if context.number_of_performed_mutations == 0:
-        raise RuntimeError('No mutations performed. Are you sure the index is not too big?')
+        raise RuntimeError('No mutations performed.')
 
 
 null_out = open(os.devnull, 'w')
@@ -130,7 +167,7 @@ class Config(object):
     def __init__(self, swallow_output, test_command, exclude_callback,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests):
+                 tests_dirs, hash_of_tests, pre_mutation, post_mutation):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.exclude_callback = exclude_callback
@@ -150,6 +187,8 @@ class Config(object):
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
+        self.post_mutation = post_mutation
+        self.pre_mutation = pre_mutation
 
     def print_progress(self):
         print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
@@ -161,10 +200,12 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('command', nargs=1, required=False)
 @click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
@@ -174,15 +215,21 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--version', is_flag=True, default=False)
 @click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
 @config_from_setup_cfg(
     dict_synonyms='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
 )
-def climain(command, argument, paths_to_mutate, backup, runner, tests_dir,
+def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy):
+            suspicious_policy, untested_policy, pre_mutation, post_mutation,
+            use_patch_file):
     """
 commands:\n
     run [mutation id]\n
@@ -193,22 +240,25 @@ commands:\n
         Apply a mutation on disk.\n
     show [mutation id]\n
         Show a mutation diff.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
     """
     if test_time_base is None:  # click sets the default=0.0 to None
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, paths_to_mutate, backup, runner,
+    sys.exit(main(command, argument, argument2, paths_to_mutate, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
-                  version, suspicious_policy, untested_policy))
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file))
 
 
-def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
+def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
-         suspicious_policy,
-         untested_policy):
+         suspicious_policy, untested_policy, pre_mutation, post_mutation,
+         use_patch_file):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -217,6 +267,9 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     if version:
         print("mutmut version %s" % __version__)
         return 0
+
+    if use_coverage and use_patch_file:
+        raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
@@ -230,6 +283,10 @@ def main(command, argument, paths_to_mutate, backup, runner, tests_dir,
     if command in ('show', 'diff'):
         if not argument:
             print_result_cache()
+            return 0
+
+        if argument == 'all':
+            print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=argument2)
             return 0
 
         print(get_unified_diff(argument, dict_synonyms))
@@ -280,14 +337,14 @@ These are the steps:
    it takes (to detect infinite loops for example)
 2. Mutants will be generated and checked
 
-Mutants are written to the cache in the .mutmut-cache
-directory. Print found mutants with `mutmut results`.
+Results are stored in .mutmut-cache.
+Print found mutants with `mutmut results`.
 
 Legend for output:
-🎉 Killed mutants. The goal is for everything to end up in this bucket.
-⏰ Timeout. Test suite took 10 times as long as the baseline so were killed.
-🤔 Suspicious. Tests took a long time, but not long enough to be fatal.
-🙁 Survived. This means your tests needs to be expanded.
+🎉 Killed mutants.   The goal is for everything to end up in this bucket.
+⏰ Timeout.          Test suite took 10 times as long as the baseline so were killed.
+🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
+🙁 Survived.         This means your tests needs to be expanded.
 """)
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,
@@ -298,25 +355,35 @@ Legend for output:
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
 
-    if not use_coverage:
-        def _exclude(context):
-            return False
-    else:
+    # if we're running in a mode with externally whitelisted lines
+    if use_coverage or use_patch_file:
         covered_lines_by_filename = {}
-        coverage_data = read_coverage_data(use_coverage)
+        if use_coverage:
+            coverage_data = read_coverage_data()
+        else:
+            assert use_patch_file
+            covered_lines_by_filename = read_patch_data(use_patch_file)
+            coverage_data = None
 
         def _exclude(context):
             try:
                 covered_lines = covered_lines_by_filename[context.filename]
             except KeyError:
-                covered_lines = coverage_data.lines(os.path.abspath(context.filename))
-                covered_lines_by_filename[context.filename] = covered_lines
+                if coverage_data is not None:
+                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
+                    covered_lines_by_filename[context.filename] = covered_lines
+                else:
+                    covered_lines = None
 
             if covered_lines is None:
                 return True
             current_line = context.current_line_index + 1
             if current_line not in covered_lines:
                 return True
+            return False
+    else:
+        def _exclude(context):
+            del context
             return False
 
     if command != 'run':
@@ -351,6 +418,8 @@ Legend for output:
         hash_of_tests=hash_of_tests(tests_dirs),
         test_time_multiplier=test_time_multiplier,
         test_time_base=test_time_base,
+        pre_mutation=pre_mutation,
+        post_mutation=post_mutation,
     )
 
     try:
@@ -360,6 +429,8 @@ Legend for output:
         return compute_exit_code(config, e)
     else:
         return compute_exit_code(config)
+    finally:
+        print()  # make sure we end the output with a newline
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -441,6 +512,11 @@ def popen_streaming_output(cmd, callback, timeout=None):
 
 
 def tests_pass(config):
+    """
+    :type config: Config
+    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
+    :rtype: bool
+    """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
@@ -454,6 +530,13 @@ def tests_pass(config):
 
 
 def run_mutation(config, filename, mutation_id):
+    """
+    :type config: Config
+    :type filename: str
+    :type mutation_id: MutationID
+    :return: (computed or cached) status of the tested mutant
+    :rtype: str
+    """
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
@@ -478,6 +561,11 @@ def run_mutation(config, filename, mutation_id):
 
     if cached_status != UNTESTED:
         return cached_status
+
+    if config.pre_mutation:
+        result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
+        if result:
+            print(result)
 
     try:
         number_of_mutations_performed = mutate_file(
@@ -506,8 +594,18 @@ def run_mutation(config, filename, mutation_id):
     finally:
         move(filename + '.bak', filename)
 
+        if config.post_mutation:
+            result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
+            if result:
+                print(result)
+
 
 def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+    """
+    :type config: Config
+    :type file_to_mutate: str
+    :type mutations: list[MutationID]
+    """
     for mutation_id in mutations:
         status = run_mutation(config, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
@@ -526,16 +624,33 @@ def run_mutation_tests(config, mutations_by_file):
         run_mutation_tests_for_file(config, file_to_mutate, mutations)
 
 
-def read_coverage_data(use_coverage):
-    if use_coverage:
-        print('Using coverage data from .coverage file')
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        from coverage import Coverage
-        cov = Coverage('.coverage')
-        cov.load()
-        return cov.get_data()
-    else:
-        return None
+def read_coverage_data():
+    """
+    :rtype: CoverageData or None
+    """
+    print('Using coverage data from .coverage file')
+    # noinspection PyPackageRequirements,PyUnresolvedReferences
+    from coverage import Coverage
+    cov = Coverage('.coverage')
+    cov.load()
+    return cov.get_data()
+
+
+def read_patch_data(patch_file_path):
+    print('Using patch data from ' + patch_file_path)
+    try:
+        # noinspection PyPackageRequirements
+        import whatthepatch
+    except ImportError:
+        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"', file=sys.stderr)
+        raise
+    with open(patch_file_path) as f:
+        diffs = whatthepatch.parse_patch(f.read())
+
+    return {
+        diff.header.new_path: {line_number for old_line_number, line_number, text in diff.changes if old_line_number is None}
+        for diff in diffs
+    }
 
 
 def time_test_suite(swallow_output, test_command, using_testmon):
@@ -586,6 +701,12 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
 
 def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+    """
+    :type mutations_by_file: dict[str, list[MutationID]]
+    :type filename: str
+    :type exclude: Callable[[Context], bool]
+    :type dict_synonyms: list[str]
+    """
     with open(filename) as f:
         source = f.read()
     context = Context(
@@ -600,18 +721,6 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         register_mutants(mutations_by_file)
     except Exception as e:
         raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
-
-
-def coverage_exclude_callback(context, use_coverage, coverage_data):
-    if use_coverage:
-        measured_lines = coverage_data.lines(os.path.abspath(context.filename))
-        if measured_lines is None:
-            return True
-        current_line = context.current_line_index + 1
-        if current_line not in measured_lines:
-            return True
-
-    return False
 
 
 def python_source_files(path, tests_dirs):

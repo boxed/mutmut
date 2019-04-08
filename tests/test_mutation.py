@@ -50,13 +50,13 @@ for x in y:
 
     n = parse("""for a in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
     n = parse("""for a, b in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
@@ -146,9 +146,11 @@ def test_basic_mutations_python36(original, expected):
 
 @pytest.mark.parametrize(
     'source', [
+        'foo(a, *args, **kwargs)',
         "'''foo'''",  # don't mutate things we assume to be docstrings
         "NotADictSynonym(a=b)",
         'from foo import *',
+        'from .foo import *',
         'import foo',
         'import foo as bar',
         'foo.bar',
@@ -156,6 +158,7 @@ def test_basic_mutations_python36(original, expected):
         'a[None]',
         'a(None)',
         'def foo(a, *args, **kwargs): pass',
+        'import foo',
     ]
 )
 def test_do_not_mutate(source):
@@ -173,6 +176,16 @@ def test_do_not_mutate(source):
 def test_do_not_mutate_python3(source):
     actual = mutate(Context(source=source, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == source
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+def test_mutate_body_of_function_with_return_type_annotation():
+    source = """
+def foo() -> int:
+    return 0
+    """
+
+    assert mutate(Context(source=source, mutation_id=ALL))[0] == source.replace('0', '1')
 
 
 def test_mutate_all():
@@ -253,7 +266,7 @@ def test_performed_mutation_ids():
 
 
 def test_syntax_error():
-    with pytest.raises(Exception) as e:
+    with pytest.raises(Exception):
         mutate(Context(source=':!'))
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
@@ -287,7 +300,7 @@ def icon(name):
 
 
 def test_bug_github_issue_19():
-    source = """key = lambda a: "foo"  
+    source = """key = lambda a: "foo"
 filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
