@@ -9,7 +9,7 @@ from parso import parse
 from parso.python.tree import Name, Number, Keyword
 from tri.declarative import evaluate
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 
 
 class MutationID(object):
@@ -345,7 +345,7 @@ def expression_mutation(children, **_):
         if getattr(children[2], 'value', '---') != 'None':
             x = ' None'
         else:
-            x = ' 7'
+            x = ' ""'
         children = children[:]
         children[2] = Name(value=x, start_pos=children[2].start_pos)
 
@@ -382,7 +382,7 @@ def name_mutation(node, value, **_):
         'True': 'False',
         'False': 'True',
         'deepcopy': 'copy',
-        # TODO: This breaks some tests, so should figure out why first: 'None': '0',
+        'None': '""',
         # TODO: probably need to add a lot of things here... some builtins maybe, what more?
     }
     if value in simple_mutants:

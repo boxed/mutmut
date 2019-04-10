@@ -1,6 +1,25 @@
 Changelog
 ---------
 
+1.5.0 (2019-04-10)
+~~~~~~~~~~~~~~~~~~
+
+* New mutation: None -> ''
+
+* Display all diffs for surviving mutants for a specific file with `mutmut show all path/to/file.py`
+
+* Display all diffs for surviving mutants with `mutmut show all`
+
+* Fixed a bug with grouping of the results for `mutmut results`
+
+* Fixed bug where `mutmut show X` sometimes showed no diff
+
+* Fixed bug where `mutmut apply X` sometimes didn't apply a mutation
+
+* Improved error message when trying to find the code
+
+* Fixed incorrect help message
+
 1.4.0 (2019-03-26)
 ~~~~~~~~~~~~~~~~~~
 
