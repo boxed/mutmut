@@ -160,8 +160,8 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
 
     # act, assert
     assert set(python_source_files(project_dir.strpath, [], paths_to_exclude)) == {
-        os.path.join(project_dir, 'services', 'main.py'),
-        os.path.join(project_dir, 'services', 'utils.py'),
+        os.path.join(project_dir.strpath, 'services', 'main.py'),
+        os.path.join(project_dir.strpath, 'services', 'utils.py'),
     }
 
 
