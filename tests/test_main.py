@@ -140,17 +140,28 @@ def test_python_source_files(expected, source_path, tests_dirs, filesystem):
     assert list(python_source_files(source_path, tests_dirs)) == expected
 
 
-def test_python_source_files__with_paths_to_exclude(fs):
+def test_python_source_files__with_paths_to_exclude(tmpdir):
+    # arrange
     paths_to_exclude = ['entities*']
 
-    fs.create_file('project/services/entities.py')
-    fs.create_file('project/services/main.py')
-    fs.create_file('project/services/utils.py')
-    fs.create_file('project/entities/user.py')
+    project_dir = tmpdir.mkdir('project')
+    service_dir = project_dir.mkdir('services')
 
-    assert set(python_source_files('project', [], paths_to_exclude)) == {
-        'project/services/main.py',
-        'project/services/utils.py',
+    f = service_dir.join('entities.py')
+    f.write('')
+    f = service_dir.join('main.py')
+    f.write('')
+    f = service_dir.join('utils.py')
+    f.write('')
+
+    entities_dir = project_dir.mkdir('entities')
+    f = entities_dir.join('user.py')
+    f.write('')
+
+    # act, assert
+    assert set(python_source_files(project_dir.strpath, [], paths_to_exclude)) == {
+        os.path.join(project_dir, 'services', 'main.py'),
+        os.path.join(project_dir, 'services', 'utils.py'),
     }
 
 

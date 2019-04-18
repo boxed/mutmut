@@ -3,4 +3,3 @@ pytest-cov<=2.6.0
 mock==2.0.0
 coverage
 whatthepatch>=0.0.5,<1.0.0
-pyfakefs==3.5.8
