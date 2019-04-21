@@ -208,7 +208,7 @@ def string_mutation(value, **_):
     if value.startswith('"""') or value.startswith("'''"):
         # We assume here that triple-quoted stuff are docs or other things
         # that mutation is meaningless for
-        return value
+        return prefix + value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 

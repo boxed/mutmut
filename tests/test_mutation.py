@@ -148,6 +148,7 @@ def test_basic_mutations_python36(original, expected):
     'source', [
         'foo(a, *args, **kwargs)',
         "'''foo'''",  # don't mutate things we assume to be docstrings
+        "r'''foo'''",  # don't mutate things we assume to be docstrings
         "NotADictSynonym(a=b)",
         'from foo import *',
         'from .foo import *',
