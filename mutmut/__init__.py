@@ -126,7 +126,7 @@ class ASTPattern(object):
 
 
 def full_statement_from_node(node):
-    while node.parent and not node.type.endswith('_stmt') and not node.type.endswith('def') and not node.type in ('suite', 'endmarker'):
+    while node.parent and not node.type.endswith('_stmt') and not node.type.endswith('def') and node.type not in ('suite', 'endmarker'):
         node = node.parent
 
     return node.get_code()
