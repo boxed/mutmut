@@ -327,3 +327,13 @@ def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
 def test_bug_github_issue_77():
     # Don't crash on this
     Context(source='')
+
+
+def test_multiline_dunder_whitelist():
+    source = """
+__all__ = [
+    1,
+    2,
+]
+"""
+    assert mutate(Context(source=source)) == (source, 0)

@@ -125,6 +125,13 @@ class ASTPattern(object):
         return True
 
 
+def full_statement_from_node(node):
+    while node.parent and not node.type.endswith('_stmt') and not node.type.endswith('def') and not node.type in ('suite', 'endmarker'):
+        node = node.parent
+
+    return node.get_code()
+
+
 # We have a global whitelist for constants of the pattern __all__, __version__, etc
 
 dunder_whitelist = [
@@ -436,13 +443,14 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        current_line = self.source_by_line_number[self.current_line_index]
-        if current_line.startswith('__'):
-            word, _, rest = current_line[2:].partition('__')
+        current_statement = full_statement_from_node(self.stack[-1]).strip()
+
+        if current_statement.startswith('__'):
+            word, _, rest = current_statement[2:].partition('__')
             if word in dunder_whitelist and rest.strip()[0] == '=':
                 return True
 
-        if current_line.strip() == "__import__('pkg_resources').declare_namespace(__name__)":
+        if current_statement == "__import__('pkg_resources').declare_namespace(__name__)":
             return True
 
         return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
