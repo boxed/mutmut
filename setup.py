@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import os
@@ -130,7 +130,8 @@ setup(
     entry_points={
         'pytest11': [
             'mutmut = mutmut.pytestplugin',
-        ]
-    } if running_inside_tests else {},
-    scripts=['bin/mutmut'],
+        ],
+    } if running_inside_tests else {
+        'console_scripts': ["mutmut = mutmut.__main__:climain"],
+    },
 )
