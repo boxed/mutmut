@@ -581,7 +581,7 @@ def run_mutation(config, filename, mutation_id):
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
