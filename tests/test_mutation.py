@@ -334,6 +334,8 @@ def test_multiline_dunder_whitelist():
 __all__ = [
     1,
     2,
+    'foo',
+    'bar',
 ]
 """
     assert mutate(Context(source=source)) == (source, 0)

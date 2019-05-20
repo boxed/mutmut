@@ -155,9 +155,12 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
                 print("---- {} ({}) ----".format(filename, len(mutants)))
                 print('')
                 if show_diffs:
+                    with open(filename) as f:
+                        source = f.read()
+
                     for x in mutants:
                         print('# mutant %s' % x.id)
-                        print(get_unified_diff(x.id, dict_synonyms))
+                        print(get_unified_diff(x.id, dict_synonyms, update_cache=False, source=source))
                 else:
                     print(', '.join([str(x.id) for x in mutants]))
 
@@ -167,13 +170,15 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
     print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
 
 
-def get_unified_diff(argument, dict_synonyms):
+def get_unified_diff(argument, dict_synonyms, update_cache=True, source=None):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
 
-    update_line_numbers(filename)
+    if update_cache:
+        update_line_numbers(filename)
 
-    with open(filename) as f:
-        source = f.read()
+    if source is None:
+        with open(filename) as f:
+            source = f.read()
     context = Context(
         source=source,
         filename=filename,

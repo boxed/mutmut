@@ -125,13 +125,6 @@ class ASTPattern(object):
         return True
 
 
-def full_statement_from_node(node):
-    while node.parent and not node.type.endswith('_stmt') and not node.type.endswith('def') and node.type not in ('suite', 'endmarker'):
-        node = node.parent
-
-    return node.get_code()
-
-
 # We have a global whitelist for constants of the pattern __all__, __version__, etc
 
 dunder_whitelist = [
@@ -443,16 +436,6 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        current_statement = full_statement_from_node(self.stack[-1]).strip()
-
-        if current_statement.startswith('__'):
-            word, _, rest = current_statement[2:].partition('__')
-            if word in dunder_whitelist and rest.strip()[0] == '=':
-                return True
-
-        if current_statement == "__import__('pkg_resources').declare_namespace(__name__)":
-            return True
-
         return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
@@ -518,9 +501,17 @@ def mutate_node(node, context):
         if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
+        if node.type == 'atom_expr' and node.children and node.children[0].type == 'name' and node.children[0].value == '__import__':
+            return
+
         if node.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
+
+        if node.type == 'expr_stmt':
+            if node.children[0].type == 'name' and node.children[0].value.startswith('__') and node.children[0].value.endswith('__'):
+                if node.children[0].value[2:-2] in dunder_whitelist:
+                    return
 
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
