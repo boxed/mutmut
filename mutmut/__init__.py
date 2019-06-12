@@ -7,7 +7,7 @@ import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
-from tri.declarative import evaluate
+from tri_declarative import evaluate
 
 __version__ = '1.5.0'
 
