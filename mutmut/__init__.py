@@ -9,7 +9,7 @@ from parso import parse
 from parso.python.tree import Name, Number, Keyword
 from tri_declarative import evaluate
 
-__version__ = '1.5.0'
+__version__ = '1.5.1'
 
 
 class MutationID(object):
