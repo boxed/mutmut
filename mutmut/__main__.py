@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 
+import fnmatch
 import itertools
 import os
 import shlex
@@ -202,6 +203,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.argument('argument', nargs=1, required=False)
 @click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--paths-to-exclude', type=click.STRING, required=False)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
@@ -229,7 +231,7 @@ def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy, pre_mutation, post_mutation,
-            use_patch_file):
+            use_patch_file, paths_to_exclude):
     """
 commands:\n
     run [mutation id]\n
@@ -251,14 +253,14 @@ commands:\n
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation, use_patch_file))
+                  post_mutation, use_patch_file, paths_to_exclude))
 
 
 def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
-         use_patch_file):
+         use_patch_file, paths_to_exclude):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -391,9 +393,13 @@ Legend for output:
 
     mutations_by_file = {}
 
+    paths_to_exclude = paths_to_exclude or ''
+    if paths_to_exclude:
+        paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+
     if argument is None:
         for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs):
+            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
                 update_line_numbers(filename)
                 add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
     else:
@@ -581,7 +587,7 @@ def run_mutation(config, filename, mutation_id):
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
             config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
@@ -723,7 +729,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
 
 
-def python_source_files(path, tests_dirs):
+def python_source_files(path, tests_dirs, paths_to_exclude=None):
     """Attempt to guess where the python source files to mutate are and yield
     their paths
 
@@ -734,11 +740,19 @@ def python_source_files(path, tests_dirs):
         (we do not want to mutate these!)
     :type tests_dirs: list[str]
 
+    :param paths_to_exclude: list of UNIX filename patterns to exclude
+    :type paths_to_exclude: list[str]
+
     :return: generator listing the paths to the python source files to mutate
     :rtype: Generator[str, None, None]
     """
+    paths_to_exclude = paths_to_exclude or []
     if isdir(path):
-        for root, dirs, files in os.walk(path):
+        for root, dirs, files in os.walk(path, topdown=True):
+            for exclude_pattern in paths_to_exclude:
+                dirs[:] = [dir for dir in dirs if not fnmatch.fnmatch(dir, exclude_pattern)]
+                files[:] = [file for file in files if not fnmatch.fnmatch(file, exclude_pattern)]
+
             dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
             for filename in files:
                 if filename.endswith('.py'):

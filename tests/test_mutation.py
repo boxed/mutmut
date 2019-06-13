@@ -64,7 +64,6 @@ for x in y:
 @pytest.mark.parametrize(
     'original, expected', [
         ('lambda: 0', 'lambda: None'),
-        ('lambda: None', 'lambda: 0'),
         ('a(b)', 'a(None)'),
         ('a[b]', 'a[None]'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
@@ -108,9 +107,7 @@ for x in y:
         ("Struct(a=b)", "Struct(aXX=b)"),
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
-        ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('a = {x for x in y}', 'a = None'),
-        ('a = None', 'a = 7'),
         ('break', 'continue'),
     ]
 )
@@ -123,8 +120,11 @@ def test_basic_mutations(original, expected):
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
+        ('a = None', 'a = ""'),
+        ('lambda **kwargs: None', 'lambda **kwargs: 0'),
+        ('lambda: None', 'lambda: 0'),
     ]
 )
 def test_basic_mutations_python3(original, expected):
@@ -136,7 +136,7 @@ def test_basic_mutations_python3(original, expected):
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
     ]
 )
 def test_basic_mutations_python36(original, expected):
@@ -148,6 +148,7 @@ def test_basic_mutations_python36(original, expected):
     'source', [
         'foo(a, *args, **kwargs)',
         "'''foo'''",  # don't mutate things we assume to be docstrings
+        "r'''foo'''",  # don't mutate things we assume to be docstrings
         "NotADictSynonym(a=b)",
         'from foo import *',
         'from .foo import *',
@@ -155,8 +156,6 @@ def test_basic_mutations_python36(original, expected):
         'import foo as bar',
         'foo.bar',
         'for x in y: pass',
-        'a[None]',
-        'a(None)',
         'def foo(a, *args, **kwargs): pass',
         'import foo',
     ]
@@ -171,6 +170,8 @@ def test_do_not_mutate(source):
     'source', [
         'def foo(s: str): pass',
         'def foo(a, *, b): pass',
+        'a[None]',
+        'a(None)',
     ]
 )
 def test_do_not_mutate_python3(source):
@@ -326,3 +327,15 @@ def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
 def test_bug_github_issue_77():
     # Don't crash on this
     Context(source='')
+
+
+def test_multiline_dunder_whitelist():
+    source = """
+__all__ = [
+    1,
+    2,
+    'foo',
+    'bar',
+]
+"""
+    assert mutate(Context(source=source)) == (source, 0)

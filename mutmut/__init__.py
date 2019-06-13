@@ -7,9 +7,9 @@ import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
-from tri.declarative import evaluate
+from tri_declarative import evaluate
 
-__version__ = '1.4.0'
+__version__ = '1.5.1'
 
 
 class MutationID(object):
@@ -208,7 +208,7 @@ def string_mutation(value, **_):
     if value.startswith('"""') or value.startswith("'''"):
         # We assume here that triple-quoted stuff are docs or other things
         # that mutation is meaningless for
-        return value
+        return prefix + value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
@@ -345,7 +345,7 @@ def expression_mutation(children, **_):
         if getattr(children[2], 'value', '---') != 'None':
             x = ' None'
         else:
-            x = ' 7'
+            x = ' ""'
         children = children[:]
         children[2] = Name(value=x, start_pos=children[2].start_pos)
 
@@ -382,7 +382,7 @@ def name_mutation(node, value, **_):
         'True': 'False',
         'False': 'True',
         'deepcopy': 'copy',
-        # TODO: This breaks some tests, so should figure out why first: 'None': '0',
+        'None': '""',
         # TODO: probably need to add a lot of things here... some builtins maybe, what more?
     }
     if value in simple_mutants:
@@ -436,15 +436,6 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        current_line = self.source_by_line_number[self.current_line_index]
-        if current_line.startswith('__'):
-            word, _, rest = current_line[2:].partition('__')
-            if word in dunder_whitelist and rest.strip()[0] == '=':
-                return True
-
-        if current_line.strip() == "__import__('pkg_resources').declare_namespace(__name__)":
-            return True
-
         return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
 
     @property
@@ -510,9 +501,17 @@ def mutate_node(node, context):
         if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
+        if node.type == 'atom_expr' and node.children and node.children[0].type == 'name' and node.children[0].value == '__import__':
+            return
+
         if node.start_pos[0] - 1 != context.current_line_index:
             context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
+
+        if node.type == 'expr_stmt':
+            if node.children[0].type == 'name' and node.children[0].value.startswith('__') and node.children[0].value.endswith('__'):
+                if node.children[0].value[2:-2] in dunder_whitelist:
+                    return
 
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
