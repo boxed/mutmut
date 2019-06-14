@@ -116,6 +116,20 @@ def test_basic_mutations(original, expected):
     assert actual == expected, 'Performed %s mutations for original "%s"' % (number_of_performed_mutations, original)
 
 
+@pytest.mark.parametrize(
+    'original, expected', [
+         ('x+=1', 'x=1'),
+    ]
+)
+def test_multiple_mutations(original, expected):
+    mutations = list_mutations(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
+    print(mutations)
+    mutations = list_mutations(Context(source=original))
+    assert len(mutations) == 4
+    assert mutate(Context(source=original, mutation_id=mutations[0])) == ('x-=1', 1)
+    assert mutate(Context(source=original, mutation_id=mutations[1])) == ('x=1', 1)
+
+
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'original, expected', [

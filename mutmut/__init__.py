@@ -307,8 +307,8 @@ def operator_mutation(value, node, **_):
         '**': '*',
         '~': '',
 
-        '+=': '-=',
-        '-=': '+=',
+        '+=': ['-=', '='],
+        '-=': ['+=', '='], # TODO: add multiple values
         '*=': '/=',
         '/=': '*=',
         '//=': '/=',
@@ -537,13 +537,27 @@ def mutate_node(node, context):
                 value=getattr(node, 'value', None),
                 children=getattr(node, 'children', None),
             )
-            assert not callable(new)
-            if new is not None and new != old:
-                if context.should_mutate():
-                    context.number_of_performed_mutations += 1
-                    context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                    setattr(node, key, new)
-                context.index += 1
+            if isinstance(new, list) and not isinstance(old, list):
+                # multiple values
+                news = new
+                for new in news:
+                    assert not callable(new)
+                    if new is not None and new != old:
+                        if context.should_mutate():
+                            context.number_of_performed_mutations += 1
+                            context.performed_mutation_ids.append(
+                                context.mutation_id_of_current_index)
+                            setattr(node, key, new)
+                        context.index += 1
+            else:
+                # normal replace
+                assert not callable(new)
+                if new is not None and new != old:
+                    if context.should_mutate():
+                        context.number_of_performed_mutations += 1
+                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+                        setattr(node, key, new)
+                    context.index += 1
 
             # this is just an optimization to stop early
             if context.number_of_performed_mutations and context.mutation_id != ALL:
