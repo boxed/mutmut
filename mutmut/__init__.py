@@ -526,6 +526,7 @@ def mutate_node(node, context):
             return
 
         for key, value in sorted(mutation.items()):
+            # TODO mutaiton could have multiple values now
             old = getattr(node, key)
             if context.exclude_line():
                 continue
@@ -540,22 +541,16 @@ def mutate_node(node, context):
             if isinstance(new, list) and not isinstance(old, list):
                 # multiple values
                 news = new
-                for new in news:
-                    assert not callable(new)
-                    if new is not None and new != old:
-                        if context.should_mutate():
-                            context.number_of_performed_mutations += 1
-                            context.performed_mutation_ids.append(
-                                context.mutation_id_of_current_index)
-                            setattr(node, key, new)
-                        context.index += 1
             else:
-                # normal replace
+                news = [new]
+
+            for new in news:
                 assert not callable(new)
                 if new is not None and new != old:
                     if context.should_mutate():
                         context.number_of_performed_mutations += 1
-                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+                        context.performed_mutation_ids.append(
+                            context.mutation_id_of_current_index)
                         setattr(node, key, new)
                     context.index += 1
 
