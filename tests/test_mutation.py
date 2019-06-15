@@ -118,7 +118,18 @@ def test_basic_mutations(original, expected):
 
 @pytest.mark.parametrize(
     'original, expected', [
-         ('x+=1', 'x=1'),
+        ('x+=1', ['x-=1', 'x=1']),
+        ('x-=1', ['x+=1', 'x=1']),
+        ('x*=1', ['x/=1', 'x=1']),
+        ('x/=1', ['x*=1', 'x=1']),
+        ('x//=1', ['x/=1', 'x=1']),
+        ('x%=1', ['x/=1', 'x=1']),
+        ('x<<=1', ['x>>=1', 'x=1']),
+        ('x>>=1', ['x<<=1', 'x=1']),
+        ('x&=1', ['x|=1', 'x=1']),
+        ('x|=1', ['x&=1', 'x=1']),
+        ('x^=1', ['x&=1', 'x=1']),
+        ('x**=1', ['x*=1', 'x=1']),
     ]
 )
 def test_multiple_mutations(original, expected):
@@ -126,8 +137,8 @@ def test_multiple_mutations(original, expected):
     print(mutations)
     mutations = list_mutations(Context(source=original))
     assert len(mutations) == 4
-    assert mutate(Context(source=original, mutation_id=mutations[0])) == ('x-=1', 1)
-    assert mutate(Context(source=original, mutation_id=mutations[1])) == ('x=1', 1)
+    assert mutate(Context(source=original, mutation_id=mutations[0])) == (expected[0], 1)
+    assert mutate(Context(source=original, mutation_id=mutations[1])) == (expected[1], 1)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
