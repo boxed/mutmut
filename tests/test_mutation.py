@@ -133,8 +133,6 @@ def test_basic_mutations(original, expected):
     ]
 )
 def test_multiple_mutations(original, expected):
-    mutations = list_mutations(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    print(mutations)
     mutations = list_mutations(Context(source=original))
     assert len(mutations) == 4
     assert mutate(Context(source=original, mutation_id=mutations[0])) == (expected[0], 1)
