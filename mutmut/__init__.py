@@ -526,7 +526,6 @@ def mutate_node(node, context):
             return
 
         for key, value in sorted(mutation.items()):
-            # TODO mutaiton could have multiple values now
             old = getattr(node, key)
             if context.exclude_line():
                 continue
@@ -539,9 +538,10 @@ def mutate_node(node, context):
                 children=getattr(node, 'children', None),
             )
             if isinstance(new, list) and not isinstance(old, list):
-                # multiple values
+                # multiple mutations
                 news = new
             else:
+                # one mutation
                 news = [new]
 
             for new in news:
