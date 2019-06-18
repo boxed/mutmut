@@ -373,7 +373,7 @@ def test_use_patch_file(filesystem):
 index b9a5fb4..c6a496c 100644
 --- a/foo.py
 +++ b/foo.py
-@@ -1,5 +1,5 @@
+@@ -1,7 +1,7 @@
  def foo(a, b):
      return a < b
  c = 1
