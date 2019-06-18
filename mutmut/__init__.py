@@ -560,7 +560,6 @@ def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-
     return_annotation_started = False
 
     for child_node in node.children:
