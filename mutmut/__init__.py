@@ -470,8 +470,8 @@ class Context(object):
 def mutate(context):
     """
     :type context: Context
-    :return: tuple: mutated source code, number of mutations performed
-    :rtype: str
+    :return: tuple of mutated source code and number of mutations performed
+    :rtype: Tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -485,9 +485,14 @@ def mutate(context):
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
 
-    assert context.source != mutated_source
+    # If we said we mutated the code, check that it has actually changed
+    if context.performed_mutation_ids:
+        if context.source == mutated_source:
+            raise RuntimeError(
+                "Mutation context states that a mutation occurred but the "
+                "mutated source remains the same as original")
     context.mutated_source = mutated_source
-    return mutated_source
+    return mutated_source, len(context.performed_mutation_ids)
 
 
 def mutate_node(node, context):
@@ -597,7 +602,7 @@ def mutate_file(backup, context):
     if backup:
         with open(context.filename + '.bak', 'w') as f:
             f.write(original)
-    mutated = mutate(context)
+    mutated, _ = mutate(context)
     with open(context.filename, 'w') as f:
         f.write(mutated)
     return original, mutated

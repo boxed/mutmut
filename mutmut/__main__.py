@@ -153,12 +153,10 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         filename=filename,
         dict_synonyms=dict_synonyms,
     )
-    original, mutated = mutate_file(
+    mutate_file(
         backup=backup,
         context=context,
     )
-    assert original != mutated
-    # TODO: assert that a mutation has occurred
 
 
 null_out = open(os.devnull, 'w')
