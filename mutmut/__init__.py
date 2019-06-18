@@ -514,6 +514,10 @@ def mutate_node(node, context):
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
 
+            # this is just an optimization to stop early
+            if context.performed_mutation_ids and context.mutation_id != ALL:
+                return
+
         mutation = mutations_by_type.get(node.type)
 
         if mutation is None:
@@ -542,12 +546,12 @@ def mutate_node(node, context):
                 assert not callable(new)
                 if new is not None and new != old:
                     if context.should_mutate():
-                        context.number_of_performed_mutations += 1
-                        context.performed_mutation_ids.append(
-                            context.mutation_id_of_current_index)
+                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
                         setattr(node, key, new)
                     context.index += 1
-
+                # this is just an optimization to stop early
+                if context.performed_mutation_ids and context.mutation_id != ALL:
+                    return
     finally:
         context.stack.pop()
 
