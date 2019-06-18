@@ -4,7 +4,7 @@ import sys
 
 from parso import parse
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
+from mutmut import mutate, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
 import pytest
 
 
@@ -222,10 +222,6 @@ def test_mutate_both():
     assert len(mutations) == 2
     assert mutate(Context(source=source, mutation_id=mutations[0])) == ('a = b - c', 1)
     assert mutate(Context(source=source, mutation_id=mutations[1])) == ('a = None', 1)
-
-
-def test_count_available_mutations():
-    assert count_mutations(Context(source='def foo():\n    return 1+1')) == 3
 
 
 def test_perform_one_indexed_mutation():
