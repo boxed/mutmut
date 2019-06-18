@@ -422,7 +422,6 @@ class Context(object):
             self.remove_newline_at_end = True
         self.source = source
         self.mutation_id = mutation_id
-        self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
         assert isinstance(mutation_id, MutationID)
         self.current_line_index = 0
@@ -472,7 +471,7 @@ def mutate(context):
     """
     :type context: Context
     :return: tuple: mutated source code, number of mutations performed
-    :rtype: tuple[str, int]
+    :rtype: str
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -485,11 +484,10 @@ def mutate(context):
     if context.remove_newline_at_end:
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
-    if context.number_of_performed_mutations:
-        # If we said we mutated the code, check that it has actually changed
-        assert context.source != mutated_source
+
+    assert context.source != mutated_source
     context.mutated_source = mutated_source
-    return mutated_source, context.number_of_performed_mutations
+    return mutated_source
 
 
 def mutate_node(node, context):
@@ -515,10 +513,6 @@ def mutate_node(node, context):
 
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
-
-            # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
-                return
 
         mutation = mutations_by_type.get(node.type)
 
@@ -554,9 +548,6 @@ def mutate_node(node, context):
                         setattr(node, key, new)
                     context.index += 1
 
-            # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
-                return
     finally:
         context.stack.pop()
 
@@ -569,7 +560,6 @@ def mutate_list_of_nodes(node, context):
     return_annotation_started = False
 
     for child_node in node.children:
-
         if child_node.type == 'operator' and child_node.value == '->':
             return_annotation_started = True
 
@@ -580,19 +570,6 @@ def mutate_list_of_nodes(node, context):
             continue
 
         mutate_node(child_node, context=context)
-
-        # this is just an optimization to stop early
-        if context.number_of_performed_mutations and context.mutation_id != ALL:
-            return
-
-
-def count_mutations(context):
-    """
-    :type context: Context
-    """
-    assert context.mutation_id == ALL
-    mutate(context)
-    return context.number_of_performed_mutations
 
 
 def list_mutations(context):
@@ -608,14 +585,20 @@ def mutate_file(backup, context):
     """
     :type backup: bool
     :type context: Context
+
+    :return: Tuple[str, str]
     """
     with open(context.filename) as f:
-        code = f.read()
-    context.source = code
+        original = f.read()
+    context.source = original
     if backup:
         with open(context.filename + '.bak', 'w') as f:
-            f.write(code)
-    result, number_of_mutations_performed = mutate(context)
+            f.write(original)
+    mutated = mutate(context)
     with open(context.filename, 'w') as f:
-        f.write(result)
-    return number_of_mutations_performed
+        f.write(mutated)
+    print("ORIGINAL:")
+    print(original)
+    print("MUTATED:")
+    print(mutated)
+    return original, mutated
