@@ -597,8 +597,4 @@ def mutate_file(backup, context):
     mutated = mutate(context)
     with open(context.filename, 'w') as f:
         f.write(mutated)
-    print("ORIGINAL:")
-    print(original)
-    print("MUTATED:")
-    print(mutated)
     return original, mutated
