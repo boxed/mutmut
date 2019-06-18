@@ -49,6 +49,7 @@ from foo import *
 def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
+
    assert c == 2
    assert e == 1
    assert f == 3
@@ -290,7 +291,7 @@ def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
+    if sys.version_info >= (3, 6):
         assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -361,7 +362,7 @@ def test_use_coverage(capsys, filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
+    if sys.version_info >= (3, 6):
         assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
         assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
@@ -387,7 +388,7 @@ index b9a5fb4..c6a496c 100644
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
+    if sys.version_info >= (3, 6):
         assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
         assert '2/2  \\U0001f389 2  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
