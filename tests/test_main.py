@@ -24,6 +24,8 @@ except ImportError:
 file_to_mutate_lines = [
     "def foo(a, b):",
     "    return a < b",
+    "c = 1",
+    "c += 1",
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
@@ -47,6 +49,7 @@ from foo import *
 def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
+   assert c == 2
    assert e == 1
    assert f == 3
    assert d == dict(e=f)
