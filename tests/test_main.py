@@ -363,9 +363,9 @@ def test_use_coverage(capsys, filesystem):
     print(repr(result.output))
     assert result.exit_code == 0
     if sys.version_info >= (3, 6):
-        assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+        assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
-        assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+        assert '14/14  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
 
 
 def test_use_patch_file(filesystem):
@@ -376,6 +376,8 @@ index b9a5fb4..c6a496c 100644
 @@ -1,5 +1,5 @@
  def foo(a, b):
      return a < b
+ c = 1
+ c += 1
  e = 1
 -f = 3
 +f = 5
