@@ -118,23 +118,23 @@ def test_basic_mutations(original, expected):
 
 @pytest.mark.parametrize(
     'original, expected', [
-        ('x+=1', ['x-=1', 'x=1']),
-        ('x-=1', ['x+=1', 'x=1']),
-        ('x*=1', ['x/=1', 'x=1']),
-        ('x/=1', ['x*=1', 'x=1']),
-        ('x//=1', ['x/=1', 'x=1']),
-        ('x%=1', ['x/=1', 'x=1']),
-        ('x<<=1', ['x>>=1', 'x=1']),
-        ('x>>=1', ['x<<=1', 'x=1']),
-        ('x&=1', ['x|=1', 'x=1']),
-        ('x|=1', ['x&=1', 'x=1']),
-        ('x^=1', ['x&=1', 'x=1']),
-        ('x**=1', ['x*=1', 'x=1']),
+        ('x+=1', ['x=1', 'x-=1']),
+        ('x-=1', ['x=1', 'x+=1']),
+        ('x*=1', ['x=1', 'x/=1']),
+        ('x/=1', ['x=1', 'x*=1']),
+        ('x//=1', ['x=1', 'x/=1']),
+        ('x%=1', ['x=1', 'x/=1']),
+        ('x<<=1', ['x=1', 'x>>=1']),
+        ('x>>=1', ['x=1', 'x<<=1']),
+        ('x&=1', ['x=1', 'x|=1']),
+        ('x|=1', ['x=1', 'x&=1']),
+        ('x^=1', ['x=1', 'x&=1']),
+        ('x**=1', ['x=1', 'x*=1']),
     ]
 )
 def test_multiple_mutations(original, expected):
     mutations = list_mutations(Context(source=original))
-    assert len(mutations) == 4
+    assert len(mutations) == 3
     assert mutate(Context(source=original, mutation_id=mutations[0])) == (expected[0], 1)
     assert mutate(Context(source=original, mutation_id=mutations[1])) == (expected[1], 1)
 
