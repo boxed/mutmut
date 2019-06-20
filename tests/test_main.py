@@ -38,7 +38,7 @@ else:
     # python2 is given a more primitive mutation base
     # thus can obtain 1 more mutant
     file_to_mutate_lines.append("g = 2")
-    EXPECTED_MUTANTS = 15
+    EXPECTED_MUTANTS = 14
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -315,11 +315,11 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (15)
+Suspicious 🤔 (14)
 
----- foo.py (15) ----
+---- foo.py (14) ----
 
-1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 """.strip()
 
 

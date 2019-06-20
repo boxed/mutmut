@@ -547,7 +547,10 @@ def mutate_node(node, context):
                 # one mutation
                 news = [new]
 
-            for new in news:
+            # go through the alternate mutations in reverse as they may have
+            # adverse effects on subsequent mutations, this ensures the last
+            # mutation applied is the original/default/legacy mutmut mutation
+            for new in reversed(news):
                 assert not callable(new)
                 if new is not None and new != old:
                     if context.should_mutate():
