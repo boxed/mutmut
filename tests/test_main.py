@@ -33,7 +33,7 @@ file_to_mutate_lines = [
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
-    EXPECTED_MUTANTS = 14
+    EXPECTED_MUTANTS = 13
 else:
     # python2 is given a more primitive mutation base
     # thus can obtain 1 more mutant
@@ -300,11 +300,11 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (14)
+Suspicious 🤔 (13)
 
----- foo.py (14) ----
+---- foo.py (13) ----
 
-1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 """.strip()
     else:  # python2
         assert result.output.strip() == u"""
