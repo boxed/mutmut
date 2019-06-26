@@ -102,7 +102,7 @@ setup(
     include_package_data=True,
     license="BSD",
     zip_safe=False,
-    keywords='',
+    keywords='mutmut mutant mutation test testing',
     install_requires=read_reqs('requirements.txt'),
     tests_require=read_reqs('test_requirements.txt'),
     classifiers=[
