@@ -582,6 +582,10 @@ def mutate_list_of_nodes(node, context):
 
         mutate_node(child_node, context=context)
 
+        # this is just an optimization to stop early
+        if context.performed_mutation_ids and context.mutation_id != ALL:
+            return
+
 
 def list_mutations(context):
     """
