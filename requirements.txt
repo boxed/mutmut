@@ -1,6 +1,6 @@
 glob2
 parso
-tri.declarative>=3.0.0,<4.0.0
+tri.declarative==3.0.0
 click
 pony
 junit-xml==1.8
