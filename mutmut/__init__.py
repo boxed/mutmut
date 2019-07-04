@@ -7,7 +7,6 @@ import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
-from tri_declarative import evaluate
 
 __version__ = '1.5.1'
 
@@ -533,13 +532,13 @@ def mutate_node(node, context):
             if context.exclude_line():
                 continue
 
-            new = evaluate(
-                value,
+            new = value(
                 context=context,
                 node=node,
                 value=getattr(node, 'value', None),
                 children=getattr(node, 'children', None),
             )
+
             if isinstance(new, list) and not isinstance(old, list):
                 # multiple mutations
                 new_list = new
