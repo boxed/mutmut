@@ -24,6 +24,8 @@ except ImportError:
 file_to_mutate_lines = [
     "def foo(a, b):",
     "    return a < b",
+    "c = 1",
+    "c += 1",
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
@@ -31,12 +33,12 @@ file_to_mutate_lines = [
 
 if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
     file_to_mutate_lines.append("g: int = 2")
-    EXPECTED_MUTANTS = 8
+    EXPECTED_MUTANTS = 13
 else:
     # python2 is given a more primitive mutation base
     # thus can obtain 1 more mutant
     file_to_mutate_lines.append("g = 2")
-    EXPECTED_MUTANTS = 9
+    EXPECTED_MUTANTS = 14
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -48,6 +50,7 @@ def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
 
+   assert c == 2
    assert e == 1
    assert f == 3
    assert d == dict(e=f)
@@ -238,7 +241,7 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
 
 def test_full_run_one_surviving_mutant(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
-        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+        f.write(test_file_contents.replace('assert foo(2, 2) is False', ''))
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
@@ -288,7 +291,7 @@ def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
+    if sys.version_info >= (3, 6):
         assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
@@ -297,11 +300,11 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (8)
+Suspicious 🤔 (13)
 
----- foo.py (8) ----
+---- foo.py (13) ----
 
-1, 2, 3, 4, 5, 6, 7, 8
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 """.strip()
     else:  # python2
         assert result.output.strip() == u"""
@@ -312,11 +315,11 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (9)
+Suspicious 🤔 (14)
 
----- foo.py (9) ----
+---- foo.py (14) ----
 
-1, 2, 3, 4, 5, 6, 7, 8, 9
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 """.strip()
 
 
@@ -359,10 +362,10 @@ def test_use_coverage(capsys, filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
-        assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    if sys.version_info >= (3, 6):
+        assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
-        assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+        assert '13/13  \\U0001f389 13  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
 
 
 def test_use_patch_file(filesystem):
@@ -370,9 +373,11 @@ def test_use_patch_file(filesystem):
 index b9a5fb4..c6a496c 100644
 --- a/foo.py
 +++ b/foo.py
-@@ -1,5 +1,5 @@
+@@ -1,7 +1,7 @@
  def foo(a, b):
      return a < b
+ c = 1
+ c += 1
  e = 1
 -f = 3
 +f = 5
@@ -385,7 +390,7 @@ index b9a5fb4..c6a496c 100644
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
+    if sys.version_info >= (3, 6):
         assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
     else:  # python2
         assert '2/2  \\U0001f389 2  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
