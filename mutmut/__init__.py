@@ -465,7 +465,7 @@ def mutate(context):
     try:
         result = parse(context.source, error_recovery=False)
     except Exception:
-        print('Failed to parse %s. Internal error from parso follows.' % context.filename)
+        print('Failed to parse {}. Internal error from parso follows.'.format(context.filename))
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)
