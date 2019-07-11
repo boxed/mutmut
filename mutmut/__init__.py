@@ -15,7 +15,7 @@ class MutationID(object):
         self.line_number = line_number
 
     def __repr__(self):
-        return 'MutationID(line="%s", index=%s, line_number=%s)' % (self.line, self.index, self.line_number)
+        return 'MutationID(line="{}", index={}, line_number={})'.format(self.line, self.index, self.line_number)
 
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
