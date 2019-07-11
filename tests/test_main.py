@@ -3,6 +3,7 @@
 import os
 import xml.etree.ElementTree as ET
 from time import time
+from unittest.mock import MagicMock, call
 
 import pytest
 from click.testing import CliRunner
@@ -11,9 +12,6 @@ from coverage import CoverageData
 from mutmut.__main__ import climain, python_source_files, \
     popen_streaming_output, Config, compute_exit_code, \
     read_coverage_data
-
-from unittest.mock import MagicMock, call
-
 
 file_to_mutate_lines = [
     "def foo(a, b):",

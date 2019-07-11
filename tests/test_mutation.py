@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 
+import pytest
 from parso import parse
 
-from mutmut import mutate, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
-import pytest
+from mutmut import mutate, ALL, Context, list_mutations, MutationID, \
+    array_subscript_pattern, function_call_pattern, ASTPattern
 
 
 def test_matches_py3():

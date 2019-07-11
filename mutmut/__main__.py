@@ -8,13 +8,13 @@ import shlex
 import subprocess
 import sys
 import traceback
+from configparser import ConfigParser, NoOptionError, NoSectionError
 from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
 from threading import Timer
 from time import time
-from configparser import ConfigParser, NoOptionError, NoSectionError
 
 import click
 from glob2 import glob

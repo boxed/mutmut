@@ -5,7 +5,7 @@ import os
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
-from itertools import groupby
+from itertools import groupby, zip_longest
 
 from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
@@ -13,8 +13,6 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
     OK_KILLED, MutationID, Context, mutate
-from itertools import zip_longest
-
 
 db = Database()
 
