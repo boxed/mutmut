@@ -1,5 +1,8 @@
 language: python
 
+python:
+  - 3.6
+
 stages:
   - lint
   - test
@@ -8,8 +11,6 @@ stages:
 
 before_install:
   - pip install codecov
-
-
 install:
   - pip install .
 script:
