@@ -7,7 +7,6 @@ import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
-from tri_declarative import evaluate
 
 __version__ = '1.5.1'
 
@@ -307,18 +306,18 @@ def operator_mutation(value, node, **_):
         '**': '*',
         '~': '',
 
-        '+=': '-=',
-        '-=': '+=',
-        '*=': '/=',
-        '/=': '*=',
-        '//=': '/=',
-        '%=': '/=',
-        '<<=': '>>=',
-        '>>=': '<<=',
-        '&=': '|=',
-        '|=': '&=',
-        '^=': '&=',
-        '**=': '*=',
+        '+=': ['-=', '='],
+        '-=': ['+=', '='],
+        '*=': ['/=', '='],
+        '/=': ['*=', '='],
+        '//=': ['/=', '='],
+        '%=': ['/=', '='],
+        '<<=': ['>>=', '='],
+        '>>=': ['<<=', '='],
+        '&=': ['|=', '='],
+        '|=': ['&=', '='],
+        '^=': ['&=', '='],
+        '**=': ['*=', '='],
         '~=': '=',
 
         '<': '<=',
@@ -422,7 +421,6 @@ class Context(object):
             self.remove_newline_at_end = True
         self.source = source
         self.mutation_id = mutation_id
-        self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
         assert isinstance(mutation_id, MutationID)
         self.current_line_index = 0
@@ -471,8 +469,8 @@ class Context(object):
 def mutate(context):
     """
     :type context: Context
-    :return: tuple: mutated source code, number of mutations performed
-    :rtype: tuple[str, int]
+    :return: tuple of mutated source code and number of mutations performed
+    :rtype: Tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
@@ -485,11 +483,15 @@ def mutate(context):
     if context.remove_newline_at_end:
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
-    if context.number_of_performed_mutations:
-        # If we said we mutated the code, check that it has actually changed
-        assert context.source != mutated_source
+
+    # If we said we mutated the code, check that it has actually changed
+    if context.performed_mutation_ids:
+        if context.source == mutated_source:
+            raise RuntimeError(
+                "Mutation context states that a mutation occurred but the "
+                "mutated source remains the same as original")
     context.mutated_source = mutated_source
-    return mutated_source, context.number_of_performed_mutations
+    return mutated_source, len(context.performed_mutation_ids)
 
 
 def mutate_node(node, context):
@@ -517,7 +519,7 @@ def mutate_node(node, context):
             mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
+            if context.performed_mutation_ids and context.mutation_id != ALL:
                 return
 
         mutation = mutations_by_type.get(node.type)
@@ -530,24 +532,33 @@ def mutate_node(node, context):
             if context.exclude_line():
                 continue
 
-            new = evaluate(
-                value,
+            new = value(
                 context=context,
                 node=node,
                 value=getattr(node, 'value', None),
                 children=getattr(node, 'children', None),
             )
-            assert not callable(new)
-            if new is not None and new != old:
-                if context.should_mutate():
-                    context.number_of_performed_mutations += 1
-                    context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                    setattr(node, key, new)
-                context.index += 1
 
-            # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
-                return
+            if isinstance(new, list) and not isinstance(old, list):
+                # multiple mutations
+                new_list = new
+            else:
+                # one mutation
+                new_list = [new]
+
+            # go through the alternate mutations in reverse as they may have
+            # adverse effects on subsequent mutations, this ensures the last
+            # mutation applied is the original/default/legacy mutmut mutation
+            for new in reversed(new_list):
+                assert not callable(new)
+                if new is not None and new != old:
+                    if context.should_mutate():
+                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+                        setattr(node, key, new)
+                    context.index += 1
+                # this is just an optimization to stop early
+                if context.performed_mutation_ids and context.mutation_id != ALL:
+                    return
     finally:
         context.stack.pop()
 
@@ -556,11 +567,9 @@ def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-
     return_annotation_started = False
 
     for child_node in node.children:
-
         if child_node.type == 'operator' and child_node.value == '->':
             return_annotation_started = True
 
@@ -573,17 +582,8 @@ def mutate_list_of_nodes(node, context):
         mutate_node(child_node, context=context)
 
         # this is just an optimization to stop early
-        if context.number_of_performed_mutations and context.mutation_id != ALL:
+        if context.performed_mutation_ids and context.mutation_id != ALL:
             return
-
-
-def count_mutations(context):
-    """
-    :type context: Context
-    """
-    assert context.mutation_id == ALL
-    mutate(context)
-    return context.number_of_performed_mutations
 
 
 def list_mutations(context):
@@ -599,14 +599,16 @@ def mutate_file(backup, context):
     """
     :type backup: bool
     :type context: Context
+
+    :return: Tuple[str, str]
     """
     with open(context.filename) as f:
-        code = f.read()
-    context.source = code
+        original = f.read()
+    context.source = original
     if backup:
         with open(context.filename + '.bak', 'w') as f:
-            f.write(code)
-    result, number_of_mutations_performed = mutate(context)
+            f.write(original)
+    mutated, _ = mutate(context)
     with open(context.filename, 'w') as f:
-        f.write(result)
-    return number_of_mutations_performed
+        f.write(mutated)
+    return original, mutated

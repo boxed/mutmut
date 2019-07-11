@@ -157,8 +157,6 @@ def do_apply(mutation_pk, dict_synonyms, backup):
         backup=backup,
         context=context,
     )
-    if context.number_of_performed_mutations == 0:
-        raise RuntimeError('No mutations performed.')
 
 
 null_out = open(os.devnull, 'w')
@@ -574,11 +572,10 @@ def run_mutation(config, filename, mutation_id):
             print(result)
 
     try:
-        number_of_mutations_performed = mutate_file(
+        mutate_file(
             backup=True,
             context=context
         )
-        assert number_of_mutations_performed
         start = time()
         try:
             survived = tests_pass(config)
