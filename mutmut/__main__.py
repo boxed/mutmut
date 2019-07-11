@@ -16,6 +16,7 @@ from os.path import isdir, exists
 from shutil import move, copy
 from threading import Timer
 from time import time
+from configparser import ConfigParser, NoOptionError, NoSectionError
 
 import click
 from glob2 import glob
@@ -28,31 +29,6 @@ from mutmut.cache import register_mutants, update_mutant_status, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
-    # This little hack is needed to get the click tester working on python 2.7
-    orig_print = print
-
-    def print(x='', **kwargs):
-        # noinspection PyUnresolvedReferences
-        x = x.decode("utf-8")
-        orig_print(x.encode("utf-8"), **kwargs)
-
-    # noinspection PyShadowingBuiltins
-    class TimeoutError(OSError):
-        """Defining TimeoutError for Python 2 compatibility"""
-
-    # noinspection PyShadowingBuiltins
-    class FileNotFoundError(OSError):
-        """Defining FileNotFoundError for Python 2 compatibility"""
-else:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    from configparser import ConfigParser, NoOptionError, NoSectionError
-
-    # noinspection PyShadowingBuiltins
-    TimeoutError = TimeoutError
 
 
 # decorator

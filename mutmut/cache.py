@@ -16,24 +16,7 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
     OK_KILLED, MutationID, Context, mutate
-
-try:
-    from itertools import zip_longest
-except ImportError:  # pragma: no cover (python2)
-    from itertools import izip_longest as zip_longest
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_type = unicode  # noqa: F821
-    # This little hack is needed to get the click tester working on python 2.7
-    orig_print = print
-
-    def print(x='', **kwargs):
-        x = x.decode("utf-8")
-        orig_print(x.encode("utf-8"), **kwargs)
-
-else:
-    text_type = str
+from itertools import zip_longest
 
 
 db = Database()
@@ -45,18 +28,18 @@ NO_TESTS_FOUND = 'NO TESTS FOUND'
 
 
 class MiscData(db.Entity):
-    key = PrimaryKey(text_type, auto=True)
-    value = Optional(text_type, autostrip=False)
+    key = PrimaryKey(str, auto=True)
+    value = Optional(str, autostrip=False)
 
 
 class SourceFile(db.Entity):
-    filename = Required(text_type, autostrip=False)
+    filename = Required(str, autostrip=False)
     lines = Set('Line')
 
 
 class Line(db.Entity):
     sourcefile = Required(SourceFile)
-    line = Optional(text_type, autostrip=False)
+    line = Optional(str, autostrip=False)
     line_number = Required(int)
     mutants = Set('Mutant')
 
@@ -64,8 +47,8 @@ class Line(db.Entity):
 class Mutant(db.Entity):
     line = Required(Line)
     index = Required(int)
-    tested_against_hash = Optional(text_type, autostrip=False)
-    status = Required(text_type, autostrip=False)  # really an enum of mutant_statuses
+    tested_against_hash = Optional(str, autostrip=False)
+    status = Required(str, autostrip=False)  # really an enum of mutant_statuses
 
 
 def init_db(f):

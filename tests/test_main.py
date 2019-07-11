@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from coverage import CoverageData
 
 from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, TimeoutError, Config, compute_exit_code, \
+    popen_streaming_output, Config, compute_exit_code, \
     read_coverage_data
 
 try:
