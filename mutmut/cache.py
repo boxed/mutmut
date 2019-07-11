@@ -4,7 +4,6 @@ from __future__ import print_function
 
 import hashlib
 import os
-import sys
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
