@@ -278,7 +278,8 @@ def register_mutants(mutations_by_file):
 
         for mutation_id in mutation_ids:
             line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
-            assert line is not None
+            if line is None:
+                raise ValueError("Obtained null line for mutation_id: {}".format(mutation_id))
             get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
 
