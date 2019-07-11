@@ -267,7 +267,7 @@ def update_line_numbers(filename):
                 Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % command
+            raise ValueError('Unknown opcode from SequenceMatcher: {}'.format(command))
 
 
 @init_db
