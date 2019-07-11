@@ -301,10 +301,13 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
     if mutant.status == OK_KILLED:
-        # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
+        # We assume that if a mutant was killed, a change to the test
+        # suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests or mutant.tested_against_hash == NO_TESTS_FOUND or hash_of_tests == NO_TESTS_FOUND:
+    if mutant.tested_against_hash != hash_of_tests or \
+            mutant.tested_against_hash == NO_TESTS_FOUND or \
+            hash_of_tests == NO_TESTS_FOUND:
         return UNTESTED
 
     return mutant.status
