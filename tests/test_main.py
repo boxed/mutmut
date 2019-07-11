@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import os
 import xml.etree.ElementTree as ET
 from time import time
@@ -14,10 +12,7 @@ from mutmut.__main__ import climain, python_source_files, \
     popen_streaming_output, Config, compute_exit_code, \
     read_coverage_data
 
-try:
-    from unittest.mock import MagicMock, call
-except ImportError:
-    from mock import MagicMock, call
+from unittest.mock import MagicMock, call
 
 
 file_to_mutate_lines = [
@@ -28,9 +23,9 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
+    "g: int = 2",
 ]
 
-file_to_mutate_lines.append("g: int = 2")
 EXPECTED_MUTANTS = 13
 
 
