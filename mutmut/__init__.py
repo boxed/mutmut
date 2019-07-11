@@ -82,11 +82,13 @@ class ASTPattern(object):
         check_value = True
         check_children = True
 
-        # Match type based on the name, so _keyword matches all keywords. Special case for _all that matches everything
+        # Match type based on the name, so _keyword matches all keywords.
+        # Special case for _all that matches everything
         if pattern.type == 'name' and pattern.value.startswith('_') and pattern.value[1:] in ('any', node.type):
             check_value = False
 
-        # The advanced case where we've explicitly marked up a node with the accepted types
+        # The advanced case where we've explicitly marked up a node with
+        # the accepted types
         elif id(pattern) in self.marker_type_by_id:
             if self.marker_type_by_id[id(pattern)] in (pattern.type, 'any'):
                 check_value = False
