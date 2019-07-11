@@ -320,8 +320,7 @@ def mutation_id_from_pk(pk):
 def filename_and_mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
     if mutant is None:
-        print('Invalid mutation id {}'.format(pk))
-        exit(16)
+        raise ValueError("Obtained null mutant for pk: {}".format(pk))
     return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)
 
 
