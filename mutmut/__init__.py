@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import unicode_literals
-
 import re
-import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword

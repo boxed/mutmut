@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import hashlib
 import os
 from difflib import SequenceMatcher, unified_diff
