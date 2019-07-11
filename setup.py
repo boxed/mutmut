@@ -39,9 +39,9 @@ class Tag(Command):
     def run(self):
         from subprocess import call
         version = read_version()
-        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version %s' % version])
+        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version {}'.format(version)])
         if errno == 0:
-            print("Added tag for version %s" % version)
+            print("Added tag for version {}".format(version))
         raise SystemExit(errno)
 
 
@@ -59,7 +59,7 @@ class ReleaseCheck(Command):
         tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
         version = read_version()
         if tag != version:
-            print('Missing %s tag on release' % version)
+            print('Missing {} tag on release'.format(version))
             raise SystemExit(1)
 
         current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
