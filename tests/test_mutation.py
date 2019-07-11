@@ -113,7 +113,7 @@ for x in y:
 )
 def test_basic_mutations(original, expected):
     actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed %s mutations for original "%s"' % (number_of_performed_mutations, original)
+    assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
 
 
 @pytest.mark.parametrize(
