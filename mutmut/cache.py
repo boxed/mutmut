@@ -108,7 +108,7 @@ def hash_of_tests(tests_dirs):
 
 
 def get_apply_line(mutant):
-    apply_line = 'mutmut apply %s' % mutant.id
+    apply_line = 'mutmut apply {}'.format(mutant.id)
     return apply_line
 
 
@@ -139,7 +139,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
                         source = f.read()
 
                     for x in mutants:
-                        print('# mutant %s' % x.id)
+                        print('# mutant {}'.format(x.id))
                         print(get_unified_diff(x.id, dict_synonyms, update_cache=False, source=source))
                 else:
                     print(', '.join([str(x.id) for x in mutants]))
