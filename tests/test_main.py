@@ -1,25 +1,17 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import os
-import sys
 import xml.etree.ElementTree as ET
 from time import time
+from unittest.mock import MagicMock, call
 
 import pytest
 from click.testing import CliRunner
 from coverage import CoverageData
 
 from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, TimeoutError, Config, compute_exit_code, \
+    popen_streaming_output, Config, compute_exit_code, \
     read_coverage_data
-
-try:
-    from unittest.mock import MagicMock, call
-except ImportError:
-    from mock import MagicMock, call
-
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -29,16 +21,10 @@ file_to_mutate_lines = [
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
+    "g: int = 2",
 ]
 
-if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
-    file_to_mutate_lines.append("g: int = 2")
-    EXPECTED_MUTANTS = 13
-else:
-    # python2 is given a more primitive mutation base
-    # thus can obtain 1 more mutant
-    file_to_mutate_lines.append("g = 2")
-    EXPECTED_MUTANTS = 14
+EXPECTED_MUTANTS = 13
 
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
@@ -291,8 +277,7 @@ def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if sys.version_info >= (3, 6):
-        assert result.output.strip() == u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -305,21 +290,6 @@ Suspicious 🤔 (13)
 ---- foo.py (13) ----
 
 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-""".strip()
-    else:  # python2
-        assert result.output.strip() == u"""
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
-
-
-Suspicious 🤔 (14)
-
----- foo.py (14) ----
-
-1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 """.strip()
 
 
@@ -362,10 +332,7 @@ def test_use_coverage(capsys, filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if sys.version_info >= (3, 6):
-        assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
-    else:  # python2
-        assert '13/13  \\U0001f389 13  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+    assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
 
 def test_use_patch_file(filesystem):
@@ -390,10 +357,7 @@ index b9a5fb4..c6a496c 100644
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if sys.version_info >= (3, 6):
-        assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
-    else:  # python2
-        assert '2/2  \\U0001f389 2  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+    assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
 
 def test_pre_and_post_mutation_hook(filesystem):

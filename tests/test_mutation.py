@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-import sys
 
+import pytest
 from parso import parse
 
-from mutmut import mutate, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
-import pytest
+from mutmut import mutate, ALL, Context, list_mutations, MutationID, \
+    array_subscript_pattern, function_call_pattern, ASTPattern
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_matches_py3():
     node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
     assert not array_subscript_pattern.matches(node=node)
@@ -113,7 +111,7 @@ for x in y:
 )
 def test_basic_mutations(original, expected):
     actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed %s mutations for original "%s"' % (number_of_performed_mutations, original)
+    assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
 
 
 @pytest.mark.parametrize(
@@ -139,7 +137,6 @@ def test_multiple_mutations(original, expected):
     assert mutate(Context(source=original, mutation_id=mutations[1])) == (expected[1], 1)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
@@ -155,7 +152,6 @@ def test_basic_mutations_python3(original, expected):
     assert actual == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
@@ -188,7 +184,6 @@ def test_do_not_mutate(source):
     assert actual == source
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'source', [
         'def foo(s: str): pass',
@@ -202,7 +197,6 @@ def test_do_not_mutate_python3(source):
     assert actual == source
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_mutate_body_of_function_with_return_type_annotation():
     source = """
 def foo() -> int:
@@ -240,7 +234,6 @@ def test_function():
     assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 2, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
     assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
@@ -325,7 +318,6 @@ filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
 def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
@@ -334,7 +326,6 @@ class ConfigurationOptions(Protocol):
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_bug_github_issue_30():
     source = """
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
