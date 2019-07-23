@@ -183,7 +183,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
-@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('-s', '--no-capture', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
 @click.option('--version', is_flag=True, default=False)
@@ -201,7 +201,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 )
 def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
             test_time_multiplier, test_time_base,
-            swallow_output, use_coverage, dict_synonyms, cache_only, version,
+            no_capture, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy, pre_mutation, post_mutation,
             use_patch_file, paths_to_exclude):
     """
@@ -223,14 +223,14 @@ commands:\n
         test_time_multiplier = 0.0
     sys.exit(main(command, argument, argument2, paths_to_mutate, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
-                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  no_capture, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
                   post_mutation, use_patch_file, paths_to_exclude))
 
 
 def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
-         swallow_output, use_coverage, dict_synonyms, cache_only, version,
+         no_capture, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
          use_patch_file, paths_to_exclude):
     """return exit code, after performing an mutation test run.
@@ -321,7 +321,7 @@ Legend for output:
 🙁 Survived.         This means your tests needs to be expanded.
 """)
     baseline_time_elapsed = time_test_suite(
-        swallow_output=not swallow_output,
+        swallow_output=not no_capture,
         test_command=runner,
         using_testmon=using_testmon
     )
@@ -383,7 +383,7 @@ Legend for output:
     print()
     print('2. Checking mutants')
     config = Config(
-        swallow_output=not swallow_output,
+        swallow_output=not no_capture,
         test_command=runner,
         exclude_callback=_exclude,
         baseline_time_elapsed=baseline_time_elapsed,
@@ -634,7 +634,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
 
-    :param swallow_output: if :obj:`True` test stdout will be not be printed
+    :param swallow_output: if :obj:`True` test stdout will not be printed
     :type swallow_output: bool
 
     :param test_command: command to spawn the testing subprocess
