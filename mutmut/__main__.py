@@ -193,7 +193,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--post-mutation')
 @config_from_setup_cfg(
     dict_synonyms='',
-    runner='python -m pytest -x',
+    runner='"' + sys.executable + '" -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
     pre_mutation=None,
     post_mutation=None,
