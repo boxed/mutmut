@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import unicode_literals
-
 import re
-import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
@@ -18,7 +15,7 @@ class MutationID(object):
         self.line_number = line_number
 
     def __repr__(self):
-        return 'MutationID(line="%s", index=%s, line_number=%s)' % (self.line, self.index, self.line_number)
+        return 'MutationID(line="{}", index={}, line_number={})'.format(self.line, self.index, self.line_number)
 
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
@@ -85,11 +82,13 @@ class ASTPattern(object):
         check_value = True
         check_children = True
 
-        # Match type based on the name, so _keyword matches all keywords. Special case for _all that matches everything
+        # Match type based on the name, so _keyword matches all keywords.
+        # Special case for _all that matches everything
         if pattern.type == 'name' and pattern.value.startswith('_') and pattern.value[1:] in ('any', node.type):
             check_value = False
 
-        # The advanced case where we've explicitly marked up a node with the accepted types
+        # The advanced case where we've explicitly marked up a node with
+        # the accepted types
         elif id(pattern) in self.marker_type_by_id:
             if self.marker_type_by_id[id(pattern)] in (pattern.type, 'any'):
                 check_value = False
@@ -138,13 +137,6 @@ dunder_whitelist = [
     'license',
     'copyright',
 ]
-
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)  # noqa: F821
-else:
-    text_types = (str,)
 
 
 UNTESTED = 'untested'
@@ -475,7 +467,7 @@ def mutate(context):
     try:
         result = parse(context.source, error_recovery=False)
     except Exception:
-        print('Failed to parse %s. Internal error from parso follows.' % context.filename)
+        print('Failed to parse {}. Internal error from parso follows.'.format(context.filename))
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)

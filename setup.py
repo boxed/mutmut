@@ -39,9 +39,9 @@ class Tag(Command):
     def run(self):
         from subprocess import call
         version = read_version()
-        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version %s' % version])
+        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version {}'.format(version)])
         if errno == 0:
-            print("Added tag for version %s" % version)
+            print("Added tag for version {}".format(version))
         raise SystemExit(errno)
 
 
@@ -59,7 +59,7 @@ class ReleaseCheck(Command):
         tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
         version = read_version()
         if tag != version:
-            print('Missing %s tag on release' % version)
+            print('Missing {} tag on release'.format(version))
             raise SystemExit(1)
 
         current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
@@ -92,7 +92,7 @@ running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 setup(
     name='mutmut',
     version=read_version(),
-    description='mutation testing for Python 2 and 3',
+    description='mutation testing for Python 3',
     long_description=readme,
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
@@ -110,8 +110,6 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',

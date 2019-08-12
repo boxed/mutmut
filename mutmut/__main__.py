@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import fnmatch
 import itertools
 import os
@@ -10,6 +8,7 @@ import shlex
 import subprocess
 import sys
 import traceback
+from configparser import ConfigParser, NoOptionError, NoSectionError
 from functools import wraps
 from io import open
 from os.path import isdir, exists
@@ -28,31 +27,6 @@ from mutmut.cache import register_mutants, update_mutant_status, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from ConfigParser import ConfigParser, NoOptionError, NoSectionError
-    # This little hack is needed to get the click tester working on python 2.7
-    orig_print = print
-
-    def print(x='', **kwargs):
-        # noinspection PyUnresolvedReferences
-        x = x.decode("utf-8")
-        orig_print(x.encode("utf-8"), **kwargs)
-
-    # noinspection PyShadowingBuiltins
-    class TimeoutError(OSError):
-        """Defining TimeoutError for Python 2 compatibility"""
-
-    # noinspection PyShadowingBuiltins
-    class FileNotFoundError(OSError):
-        """Defining FileNotFoundError for Python 2 compatibility"""
-else:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    from configparser import ConfigParser, NoOptionError, NoSectionError
-
-    # noinspection PyShadowingBuiltins
-    TimeoutError = TimeoutError
 
 
 # decorator
@@ -190,7 +164,7 @@ class Config(object):
         self.pre_mutation = pre_mutation
 
     def print_progress(self):
-        print_status('%s/%s  🎉 %s  ⏰ %s  🤔 %s  🙁 %s' % (self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
 
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
@@ -265,7 +239,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     :rtype: int
     """
     if version:
-        print("mutmut version %s" % __version__)
+        print("mutmut version {}".format(__version__))
         return 0
 
     if use_coverage and use_patch_file:
@@ -273,10 +247,10 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
-        raise click.BadArgumentUsage('%s is not a valid command, must be one of %s' % (command, ', '.join(valid_commands)))
+        raise click.BadArgumentUsage('{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
 
     if command == 'results' and argument:
-        raise click.BadArgumentUsage('The %s command takes no arguments' % command)
+        raise click.BadArgumentUsage('The {} command takes no arguments'.format(command))
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
@@ -387,7 +361,7 @@ Legend for output:
             return False
 
     if command != 'run':
-        raise click.BadArgumentUsage("Invalid command %s" % command)
+        raise click.BadArgumentUsage("Invalid command {}".format(command))
 
     mutations_by_file = {}
 
@@ -694,7 +668,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time() - start_time
     else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: %s\n\nOutput:\n\n%s" % (test_command, '\n'.join(output)))
+        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
 
     print(' Done')
 
@@ -723,7 +697,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception as e:
-        raise RuntimeError('Failed while creating mutations for %s, for line "%s"' % (context.filename, context.current_source_line), e)
+        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line), e)
 
 
 def python_source_files(path, tests_dirs, paths_to_exclude=None):

@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import hashlib
 import os
-import sys
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
-from itertools import groupby
+from itertools import groupby, zip_longest
 
 from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
@@ -16,25 +13,6 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
     OK_KILLED, MutationID, Context, mutate
-
-try:
-    from itertools import zip_longest
-except ImportError:  # pragma: no cover (python2)
-    from itertools import izip_longest as zip_longest
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_type = unicode  # noqa: F821
-    # This little hack is needed to get the click tester working on python 2.7
-    orig_print = print
-
-    def print(x='', **kwargs):
-        x = x.decode("utf-8")
-        orig_print(x.encode("utf-8"), **kwargs)
-
-else:
-    text_type = str
-
 
 db = Database()
 
@@ -45,18 +23,18 @@ NO_TESTS_FOUND = 'NO TESTS FOUND'
 
 
 class MiscData(db.Entity):
-    key = PrimaryKey(text_type, auto=True)
-    value = Optional(text_type, autostrip=False)
+    key = PrimaryKey(str, auto=True)
+    value = Optional(str, autostrip=False)
 
 
 class SourceFile(db.Entity):
-    filename = Required(text_type, autostrip=False)
+    filename = Required(str, autostrip=False)
     lines = Set('Line')
 
 
 class Line(db.Entity):
     sourcefile = Required(SourceFile)
-    line = Optional(text_type, autostrip=False)
+    line = Optional(str, autostrip=False)
     line_number = Required(int)
     mutants = Set('Mutant')
 
@@ -64,8 +42,8 @@ class Line(db.Entity):
 class Mutant(db.Entity):
     line = Required(Line)
     index = Required(int)
-    tested_against_hash = Optional(text_type, autostrip=False)
-    status = Required(text_type, autostrip=False)  # really an enum of mutant_statuses
+    tested_against_hash = Optional(str, autostrip=False)
+    status = Required(str, autostrip=False)  # really an enum of mutant_statuses
 
 
 def init_db(f):
@@ -128,7 +106,7 @@ def hash_of_tests(tests_dirs):
 
 
 def get_apply_line(mutant):
-    apply_line = 'mutmut apply %s' % mutant.id
+    apply_line = 'mutmut apply {}'.format(mutant.id)
     return apply_line
 
 
@@ -159,7 +137,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
                         source = f.read()
 
                     for x in mutants:
-                        print('# mutant %s' % x.id)
+                        print('# mutant {}'.format(x.id))
                         print(get_unified_diff(x.id, dict_synonyms, update_cache=False, source=source))
                 else:
                     print(', '.join([str(x.id) for x in mutants]))
@@ -284,7 +262,7 @@ def update_line_numbers(filename):
                 Line(sourcefile=sourcefile, line=b, line_number=b_index)
 
         else:
-            assert False, 'unknown opcode from SequenceMatcher: %s' % command
+            raise ValueError('Unknown opcode from SequenceMatcher: {}'.format(command))
 
 
 @init_db
@@ -295,7 +273,8 @@ def register_mutants(mutations_by_file):
 
         for mutation_id in mutation_ids:
             line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
-            assert line is not None
+            if line is None:
+                raise ValueError("Obtained null line for mutation_id: {}".format(mutation_id))
             get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
 
@@ -317,10 +296,13 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
     if mutant.status == OK_KILLED:
-        # We assume that if a mutant was killed, a change to the test suite will mean it's still killed
+        # We assume that if a mutant was killed, a change to the test
+        # suite will mean it's still killed
         return OK_KILLED
 
-    if mutant.tested_against_hash != hash_of_tests or mutant.tested_against_hash == NO_TESTS_FOUND or hash_of_tests == NO_TESTS_FOUND:
+    if mutant.tested_against_hash != hash_of_tests or \
+            mutant.tested_against_hash == NO_TESTS_FOUND or \
+            hash_of_tests == NO_TESTS_FOUND:
         return UNTESTED
 
     return mutant.status
@@ -338,8 +320,7 @@ def mutation_id_from_pk(pk):
 def filename_and_mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
     if mutant is None:
-        print('Invalid mutation id %s' % pk)
-        exit(16)
+        raise ValueError("Obtained null mutant for pk: {}".format(pk))
     return mutant.line.sourcefile.filename, mutation_id_from_pk(pk)
 
 
