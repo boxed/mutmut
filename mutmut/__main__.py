@@ -5,7 +5,6 @@ import asyncio
 import fnmatch
 import itertools
 import os
-import shlex
 import subprocess
 import sys
 import traceback
@@ -15,7 +14,6 @@ from functools import wraps
 from io import open
 from os.path import isdir, exists
 from shutil import move, copy
-from threading import Timer
 from time import time
 
 import click
