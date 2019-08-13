@@ -462,6 +462,7 @@ def tests_pass(config):
             print(line)
         config.print_progress()
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     returncode = loop.run_until_complete(popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10))
     loop.close()
     return returncode == 0 or (config.using_testmon and returncode == 5)
@@ -624,6 +625,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         output.append(line)
 
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     returncode = loop.run_until_complete(popen_streaming_output(test_command, feedback))
     loop.close()
 
