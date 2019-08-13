@@ -413,11 +413,12 @@ Legend for output:
         print()  # make sure we end the output with a newline
 
 
-async def popen_streaming_output(cmd, callback, timeout=None):
-    process = await asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
+@asyncio.coroutine
+def popen_streaming_output(cmd, callback, timeout=None):
+    process = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
     while process.returncode is None:
         try:
-            line = await asyncio.wait_for(process.stdout.readline(), timeout)
+            line = yield from asyncio.wait_for(process.stdout.readline(), timeout)
         except asyncio.TimeoutError:
             process.terminate()
             raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
@@ -427,7 +428,7 @@ async def popen_streaming_output(cmd, callback, timeout=None):
             else:
                 callback(line.decode("utf-8").rstrip())
                 continue
-    return await process.wait()
+    return (yield from process.wait())
 
 
 def tests_pass(config):
