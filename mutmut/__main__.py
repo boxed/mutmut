@@ -416,15 +416,15 @@ def popen_streaming_output(cmd, callback, timeout=None):
     process = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
     while process.returncode is None:
         try:
-            line = yield from asyncio.wait_for(process.stdout.readline(), timeout)
+            chunk = yield from asyncio.wait_for(process.stdout.read(1024), timeout)
         except asyncio.TimeoutError:
             process.terminate()
             raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
         else:
-            if not line:  # EOF
+            if not chunk:  # EOF
                 break
             else:
-                callback(line)
+                callback(chunk)
                 continue
     return (yield from process.wait())
 
