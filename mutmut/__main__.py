@@ -419,7 +419,7 @@ async def popen_streaming_output(cmd, callback, timeout=None):
         try:
             line = await asyncio.wait_for(process.stdout.readline(), timeout)
         except asyncio.TimeoutError:
-            process.kill()
+            process.terminate()
             raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
         else:
             if not line:  # EOF
