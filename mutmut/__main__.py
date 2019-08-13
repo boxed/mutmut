@@ -426,7 +426,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
             if not line:  # EOF
                 break
             else:
-                callback(line.decode("utf-8").rstrip())
+                callback(line)
                 continue
     return (yield from process.wait())
 

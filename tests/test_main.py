@@ -171,14 +171,14 @@ def test_popen_streaming_output_stream():
         'python -c "print(\'first\'); print(\'second\')"',
         callback=mock
     ))
-    mock.assert_has_calls([call('first'), call('second')])
+    mock.assert_has_calls([call(b'first\r\n'), call(b'second\r\n')])
 
     mock = MagicMock()
     loop.run_until_complete(popen_streaming_output(
         'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
         callback=mock
     ))
-    mock.assert_has_calls([call('first'), call('second'), call('third')])
+    mock.assert_has_calls([call(b'first\r\n'), call(b'second\r\n'), call(b'third\r\n')])
 
     mock = MagicMock()
     loop.run_until_complete(popen_streaming_output('python -c "exit(0);"', callback=mock))
