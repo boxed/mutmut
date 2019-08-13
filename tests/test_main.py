@@ -157,7 +157,7 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
 def test_popen_streaming_output_timeout():
     start = time()
     with pytest.raises(TimeoutError):
-        loop = asyncio.ProactorEventLoop()
+        loop = asyncio.new_event_loop()
         loop.run_until_complete(popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1))
         loop.close()
 
@@ -166,7 +166,7 @@ def test_popen_streaming_output_timeout():
 
 def test_popen_streaming_output_stream():
     mock = MagicMock()
-    loop = asyncio.ProactorEventLoop()
+    loop = asyncio.new_event_loop()
     loop.run_until_complete(popen_streaming_output(
         'python -c "print(\'first\'); print(\'second\')"',
         callback=mock

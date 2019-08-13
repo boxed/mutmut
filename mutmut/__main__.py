@@ -28,6 +28,25 @@ from mutmut.cache import register_mutants, update_mutant_status, \
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
+if sys.platform == 'win32':
+    # TODO: more elegant solution?
+    class ProactorEventLoopPolicy(asyncio.AbstractEventLoopPolicy):
+        def __init__(self):
+            self.loop = None
+
+        def set_event_loop(self, loop) -> None:
+            self.loop = loop
+
+        def new_event_loop(self):
+            return asyncio.ProactorEventLoop()
+
+        def get_event_loop(self):
+            if self.loop is None:
+                self.set_event_loop(self.new_event_loop())
+            return self.loop
+
+    asyncio.set_event_loop_policy(ProactorEventLoopPolicy())
+
 
 # decorator
 def config_from_setup_cfg(**defaults):
@@ -442,7 +461,7 @@ def tests_pass(config):
         if not config.swallow_output:
             print(line)
         config.print_progress()
-    loop = asyncio.ProactorEventLoop()
+    loop = asyncio.new_event_loop()
     returncode = loop.run_until_complete(popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10))
     loop.close()
     return returncode == 0 or (config.using_testmon and returncode == 5)
@@ -604,7 +623,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         print_status('Running...')
         output.append(line)
 
-    loop = asyncio.ProactorEventLoop()
+    loop = asyncio.new_event_loop()
     returncode = loop.run_until_complete(popen_streaming_output(test_command, feedback))
     loop.close()
 
