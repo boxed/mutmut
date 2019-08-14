@@ -157,10 +157,7 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
 def test_popen_streaming_output_timeout():
     start = time()
     with pytest.raises(TimeoutError):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1))
-        loop.close()
+        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
 
     assert (time() - start) < 3
 
@@ -169,22 +166,21 @@ def test_popen_streaming_output_stream():
     mock = MagicMock()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(popen_streaming_output(
+    popen_streaming_output(
         'python -c "print(\'first\'); print(\'second\')"',
         callback=mock
-    ))
+    )
     mock.assert_has_calls([call(b'first\r\nsecond\r\n')])
 
     mock = MagicMock()
-    loop.run_until_complete(popen_streaming_output(
+    popen_streaming_output(
         'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
         callback=mock
-    ))
+    )
     mock.assert_has_calls([call(b'first\r\n'), call(b'second\r\nthird\r\n')])
 
     mock = MagicMock()
-    loop.run_until_complete(popen_streaming_output('python -c "exit(0);"', callback=mock))
-    loop.close()
+    popen_streaming_output('python -c "exit(0);"', callback=mock)
     mock.assert_not_called()
 
 

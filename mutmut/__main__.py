@@ -431,21 +431,30 @@ Legend for output:
 
 
 @asyncio.coroutine
-def popen_streaming_output(cmd, callback, timeout=None):
+def popen_streaming_output_coro(cmd, callback, timeout):
     process = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
-    while process.returncode is None:
-        try:
-            chunk = yield from asyncio.wait_for(process.stdout.read(1024), timeout)
-        except asyncio.TimeoutError:
-            process.terminate()
-            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
+    while True:
+        byte = yield from asyncio.wait_for(process.stdout.read(1), timeout=timeout)
+        if not byte:  # EOF
+            break
         else:
-            if not chunk:  # EOF
-                break
-            else:
-                callback(chunk)
-                continue
+            callback(byte)
+            continue
     return (yield from process.wait())
+
+
+def popen_streaming_output(cmd, callback, timeout=None):
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(
+            asyncio.wait_for(popen_streaming_output_coro(cmd, callback, timeout), timeout))
+    except asyncio.TimeoutError as e:
+        raise TimeoutError("command '{}' subprocess timed out after {} seconds".format(cmd, timeout)) from e
+    finally:
+        loop.close()
 
 
 def tests_pass(config):
@@ -461,10 +470,7 @@ def tests_pass(config):
         if not config.swallow_output:
             print(line)
         config.print_progress()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    returncode = loop.run_until_complete(popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10))
-    loop.close()
+    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
@@ -624,15 +630,12 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         print_status('Running...')
         output.append(line)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    returncode = loop.run_until_complete(popen_streaming_output(test_command, feedback))
-    loop.close()
+    returncode = popen_streaming_output(test_command, feedback)
 
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time() - start_time
     else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
+        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nreturncode: {}\n\nOutput:\n\n{}".format(test_command, returncode, b''.join(output)))
 
     print(' Done')
 
