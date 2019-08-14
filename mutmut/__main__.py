@@ -439,7 +439,6 @@ def popen_streaming_output_coro(cmd, callback, timeout):
             break
         else:
             callback(byte)
-            continue
     return (yield from process.wait())
 
 
