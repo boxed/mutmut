@@ -164,24 +164,11 @@ def test_popen_streaming_output_timeout():
 
 def test_popen_streaming_output_stream():
     mock = MagicMock()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     popen_streaming_output(
-        'python -c "print(\'first\'); print(\'second\')"',
+        'python -c "print(\'1\', end=\'\'); print(\'2\', end=\'\')"',
         callback=mock
     )
-    mock.assert_has_calls([call(b'first\r\nsecond\r\n')])
-
-    mock = MagicMock()
-    popen_streaming_output(
-        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
-        callback=mock
-    )
-    mock.assert_has_calls([call(b'first\r\n'), call(b'second\r\nthird\r\n')])
-
-    mock = MagicMock()
-    popen_streaming_output('python -c "exit(0);"', callback=mock)
-    mock.assert_not_called()
+    mock.assert_has_calls([call(b'1'), call(b'2')])
 
 
 def test_simple_apply(filesystem):
@@ -351,7 +338,7 @@ index b9a5fb4..c6a496c 100644
 -f = 3
 +f = 5
  d = dict(e=f)
-\ No newline at end of file
+\\ No newline at end of file
 """
     with open('patch', 'w') as f:
         f.write(patch_contents)
