@@ -434,11 +434,11 @@ async def popen_streaming_output_coro(cmd, callback, timeout):
     process = await asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
     try:
         while True:
-            line = await asyncio.wait_for(process.stdout.read(1), timeout)
-            if not line:  # EOF
+            byte = await asyncio.wait_for(process.stdout.read(1), timeout)
+            if not byte:  # EOF
                 break
             else:
-                callback(line)
+                callback(byte)
                 continue
     except asyncio.TimeoutError:
         pass
@@ -450,13 +450,17 @@ async def popen_streaming_output_coro(cmd, callback, timeout):
         return await process.wait()
 
 
-def popen_streaming_output(cmd, callback, timeout=None):
+def get_event_loop():
     if sys.platform == 'win32':
         loop = asyncio.ProactorEventLoop()
     else:
         loop = asyncio.get_event_loop()
-
     asyncio.set_event_loop(loop)
+    return loop
+
+
+def popen_streaming_output(cmd, callback, timeout=None):
+    loop = get_event_loop()
     try:
         return loop.run_until_complete(asyncio.wait_for(popen_streaming_output_coro(cmd, callback, timeout), timeout=timeout))
     except asyncio.TimeoutError as e:
