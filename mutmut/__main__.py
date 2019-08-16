@@ -430,30 +430,37 @@ Legend for output:
         print()  # make sure we end the output with a newline
 
 
-@asyncio.coroutine
-def popen_streaming_output_coro(cmd, callback, timeout):
-    process = yield from asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
-    while True:
-        byte = yield from asyncio.wait_for(process.stdout.read(1), timeout=timeout)
-        if not byte:  # EOF
-            break
-        else:
-            callback(byte)
-    return (yield from process.wait())
+async def popen_streaming_output_coro(cmd, callback, timeout):
+    process = await asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
+    try:
+        while True:
+            line = await asyncio.wait_for(process.stdout.read(1), timeout)
+            if not line:  # EOF
+                break
+            else:
+                callback(line)
+                continue
+    except asyncio.TimeoutError:
+        pass
+    finally:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        return await process.wait()
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
     if sys.platform == 'win32':
         loop = asyncio.ProactorEventLoop()
     else:
-        loop = asyncio.new_event_loop()
+        loop = asyncio.get_event_loop()
+
+    asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(
-            asyncio.wait_for(popen_streaming_output_coro(cmd, callback, timeout), timeout))
+        return loop.run_until_complete(asyncio.wait_for(popen_streaming_output_coro(cmd, callback, timeout), timeout=timeout))
     except asyncio.TimeoutError as e:
         raise TimeoutError("command '{}' subprocess timed out after {} seconds".format(cmd, timeout)) from e
-    finally:
-        loop.close()
 
 
 def tests_pass(config):
