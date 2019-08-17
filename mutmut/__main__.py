@@ -28,25 +28,6 @@ from mutmut.cache import register_mutants, update_mutant_status, \
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
-if sys.platform == 'win32':
-    # TODO: more elegant solution?
-    class ProactorEventLoopPolicy(asyncio.AbstractEventLoopPolicy):
-        def __init__(self):
-            self.loop = None
-
-        def set_event_loop(self, loop) -> None:
-            self.loop = loop
-
-        def new_event_loop(self):
-            return asyncio.ProactorEventLoop()
-
-        def get_event_loop(self):
-            if self.loop is None:
-                self.set_event_loop(self.new_event_loop())
-            return self.loop
-
-    asyncio.set_event_loop_policy(ProactorEventLoopPolicy())
-
 
 # decorator
 def config_from_setup_cfg(**defaults):
