@@ -338,7 +338,7 @@ index b9a5fb4..c6a496c 100644
 -f = 3
 +f = 5
  d = dict(e=f)
-\\ No newline at end of file
+\ No newline at end of file
 """
     with open('patch', 'w') as f:
         f.write(patch_contents)
