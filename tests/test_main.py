@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import asyncio
+
 import os
 import xml.etree.ElementTree as ET
 from time import time
