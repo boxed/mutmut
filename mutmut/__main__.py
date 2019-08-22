@@ -294,7 +294,6 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     for p in paths_to_mutate:
         for pt in tests_dir.split(':'):
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
-    del tests_dir
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
