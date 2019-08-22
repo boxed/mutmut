@@ -590,7 +590,6 @@ def read_coverage_data():
     """
     :rtype: CoverageData or None
     """
-    print('Using coverage data from .coverage file')
     # noinspection PyPackageRequirements,PyUnresolvedReferences
     from coverage import Coverage
     cov = Coverage('.coverage')
@@ -599,7 +598,6 @@ def read_coverage_data():
 
 
 def read_patch_data(patch_file_path):
-    print('Using patch data from ' + patch_file_path)
     try:
         # noinspection PyPackageRequirements
         import whatthepatch
