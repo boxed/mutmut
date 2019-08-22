@@ -532,8 +532,6 @@ def run_mutation(config, filename, mutation_id):
     else:
         assert cached_status == UNTESTED, cached_status
 
-    config.print_progress()
-
     if cached_status != UNTESTED:
         return cached_status
 
@@ -574,28 +572,18 @@ def run_mutation(config, filename, mutation_id):
                 print(result)
 
 
-def run_mutation_tests_for_file(config, file_to_mutate, mutations):
-    """
-    :type config: Config
-    :type file_to_mutate: str
-    :type mutations: list[MutationID]
-    """
-    for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id)
-        update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
-        config.progress += 1
-        config.print_progress()
-
-
 def run_mutation_tests(config, mutations_by_file):
     """
     :type config: Config
     :type mutations_by_file: dict[str, list[tuple]]
     """
-    for file_to_mutate, mutations in mutations_by_file.items():
-        config.print_progress()
-
-        run_mutation_tests_for_file(config, file_to_mutate, mutations)
+    config.print_progress()
+    for file, mutations in mutations_by_file.items():
+        for mutation_id in mutations:
+            status = run_mutation(config, file, mutation_id)
+            update_mutant_status(file, mutation_id, status, config.hash_of_tests)
+            config.progress += 1
+            config.print_progress()
 
 
 def read_coverage_data():
