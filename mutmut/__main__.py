@@ -635,7 +635,7 @@ def read_patch_data(patch_file_path):
         diffs = whatthepatch.parse_patch(f.read())
 
     return {
-        diff.header.new_path: {line_number for old_line_number, line_number, text in diff.changes if old_line_number is None}
+        diff.header.new_path: {line_number for old_line_number, line_number, text, *_ in diff.changes if old_line_number is None}
         for diff in diffs
     }
 
