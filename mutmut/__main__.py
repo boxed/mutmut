@@ -189,6 +189,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--post-mutation')
 @config_from_setup_cfg(
     dict_synonyms='',
+    paths_to_exclude='',
     runner='python -m pytest -x',
     tests_dir=DEFAULT_TESTS_DIR,
     pre_mutation=None,
@@ -359,22 +360,15 @@ Legend for output:
 
     if command != 'run':
         raise click.BadArgumentUsage("Invalid command {}".format(command))
-
-    mutations_by_file = {}
-
-    paths_to_exclude = paths_to_exclude or ''
-    if paths_to_exclude:
-        paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
-
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
+    paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+    mutations_by_file = get_mutations_by_file(
+        paths_to_mutate=paths_to_mutate,
+        tests_dirs=tests_dirs,
+        paths_to_exclude=paths_to_exclude,
+        dict_synonyms=dict_synonyms,
+        exclude_check=_exclude,
+        mutation_pk=argument
+    )
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
     print('2. Checking mutants')
@@ -405,6 +399,37 @@ Legend for output:
         return compute_exit_code(config)
     finally:
         print()  # make sure we end the output with a newline
+
+
+def get_mutations_by_file(paths_to_mutate, tests_dirs, paths_to_exclude,
+                          dict_synonyms, exclude_check=lambda x: False,
+                          mutation_pk=None):
+    mutations_by_file = {}
+    if mutation_pk:
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+        mutations_by_file[filename] = [mutation_id]
+    else:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                update_line_numbers(filename)
+                with open(filename) as f:
+                    source = f.read()
+                context = Context(
+                    source=source,
+                    filename=filename,
+                    exclude=exclude_check,
+                    dict_synonyms=dict_synonyms,
+                )
+
+                try:
+                    mutations_by_file[filename] = list_mutations(context)
+                    register_mutants(mutations_by_file)
+                except Exception as e:
+                    raise RuntimeError(
+                        'Failed while creating mutations for file {} on line "{}"'.format(
+                            context.filename, context.current_source_line)) from e
+
+    return mutations_by_file
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -659,29 +684,6 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     set_cached_test_time(baseline_time_elapsed)
 
     return baseline_time_elapsed
-
-
-def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
-    """
-    :type mutations_by_file: dict[str, list[MutationID]]
-    :type filename: str
-    :type exclude: Callable[[Context], bool]
-    :type dict_synonyms: list[str]
-    """
-    with open(filename) as f:
-        source = f.read()
-    context = Context(
-        source=source,
-        filename=filename,
-        exclude=exclude,
-        dict_synonyms=dict_synonyms,
-    )
-
-    try:
-        mutations_by_file[filename] = list_mutations(context)
-        register_mutants(mutations_by_file)
-    except Exception as e:
-        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line), e)
 
 
 def python_source_files(path, tests_dirs, paths_to_exclude=None):
