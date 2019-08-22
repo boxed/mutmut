@@ -94,11 +94,10 @@ def guess_paths_to_mutate():
         return this_dir.replace('-', '')
     elif isdir(this_dir.replace(' ', '')):
         return this_dir.replace(' ', '')
-    else:
-        raise FileNotFoundError(
-            'Could not figure out where the code to mutate is. '
-            'Please specify it on the command line using --paths-to-mutate, '
-            'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
+    raise FileNotFoundError(
+        'Could not figure out where the code to mutate is. '
+        'Please specify it on the command line using --paths-to-mutate, '
+        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
