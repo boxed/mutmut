@@ -655,7 +655,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     else:
         raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
 
-    print(' Done')
+    print('Done')
 
     set_cached_test_time(baseline_time_elapsed)
 
