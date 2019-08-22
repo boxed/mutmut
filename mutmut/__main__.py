@@ -590,8 +590,11 @@ def read_coverage_data():
     """
     :rtype: CoverageData or None
     """
-    # noinspection PyPackageRequirements,PyUnresolvedReferences
-    from coverage import Coverage
+    try:
+        # noinspection PyPackageRequirements,PyUnresolvedReferences
+        from coverage import Coverage
+    except ImportError as e:
+        raise ImportError('The --use-coverage feature requires the coverage library. Run "pip install coverage"') from e
     cov = Coverage('.coverage')
     cov.load()
     return cov.get_data()
@@ -601,9 +604,8 @@ def read_patch_data(patch_file_path):
     try:
         # noinspection PyPackageRequirements
         import whatthepatch
-    except ImportError:
-        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"', file=sys.stderr)
-        raise
+    except ImportError as e:
+        raise ImportError('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"') from e
     with open(patch_file_path) as f:
         diffs = whatthepatch.parse_patch(f.read())
 
