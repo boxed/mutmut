@@ -361,14 +361,17 @@ Legend for output:
     if command != 'run':
         raise click.BadArgumentUsage("Invalid command {}".format(command))
     paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
-    mutations_by_file = get_mutations_by_file(
-        paths_to_mutate=paths_to_mutate,
-        tests_dirs=tests_dirs,
-        paths_to_exclude=paths_to_exclude,
-        dict_synonyms=dict_synonyms,
-        exclude_check=_exclude,
-        mutation_pk=argument
-    )
+    if argument:
+        mutations_by_file = get_mutations_by_file_from_cache(argument)
+    else:
+        mutations_by_file = gen_mutations_by_file(
+            paths_to_mutate=paths_to_mutate,
+            tests_dirs=tests_dirs,
+            paths_to_exclude=paths_to_exclude,
+            dict_synonyms=dict_synonyms,
+            exclude_check=_exclude,
+        )
+
     total = sum(len(mutations) for mutations in mutations_by_file.values())
 
     print('2. Checking mutants')
@@ -401,34 +404,33 @@ Legend for output:
         print()  # make sure we end the output with a newline
 
 
-def get_mutations_by_file(paths_to_mutate, tests_dirs, paths_to_exclude,
-                          dict_synonyms, exclude_check=lambda x: False,
-                          mutation_pk=None):
+def get_mutations_by_file_from_cache(mutation_pk):
+    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+    return {filename: [mutation_id]}
+
+
+def gen_mutations_by_file(paths_to_mutate, tests_dirs, paths_to_exclude,
+                          dict_synonyms, exclude_check=lambda x: False):
     mutations_by_file = {}
-    if mutation_pk:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-        mutations_by_file[filename] = [mutation_id]
-    else:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                with open(filename) as f:
-                    source = f.read()
-                context = Context(
-                    source=source,
-                    filename=filename,
-                    exclude=exclude_check,
-                    dict_synonyms=dict_synonyms,
-                )
+    for path in paths_to_mutate:
+        for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+            update_line_numbers(filename)
+            with open(filename) as f:
+                source = f.read()
+            context = Context(
+                source=source,
+                filename=filename,
+                exclude=exclude_check,
+                dict_synonyms=dict_synonyms,
+            )
 
-                try:
-                    mutations_by_file[filename] = list_mutations(context)
-                    register_mutants(mutations_by_file)
-                except Exception as e:
-                    raise RuntimeError(
-                        'Failed while creating mutations for file {} on line "{}"'.format(
-                            context.filename, context.current_source_line)) from e
-
+            try:
+                mutations_by_file[filename] = list_mutations(context)
+                register_mutants(mutations_by_file)
+            except Exception as e:
+                raise RuntimeError(
+                    'Failed while creating mutations for file {} on line "{}"'.format(
+                        context.filename, context.current_source_line)) from e
     return mutations_by_file
 
 
