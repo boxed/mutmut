@@ -706,8 +706,8 @@ def python_source_files(path, tests_dirs, paths_to_exclude=None):
     if isdir(path):
         for root, dirs, files in os.walk(path, topdown=True):
             for exclude_pattern in paths_to_exclude:
-                dirs[:] = [dir for dir in dirs if not fnmatch.fnmatch(dir, exclude_pattern)]
-                files[:] = [file for file in files if not fnmatch.fnmatch(file, exclude_pattern)]
+                dirs[:] = [d for d in dirs if not fnmatch.fnmatch(d, exclude_pattern)]
+                files[:] = [f for f in files if not fnmatch.fnmatch(f, exclude_pattern)]
 
             dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
             for filename in files:
