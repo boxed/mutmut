@@ -138,13 +138,14 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback,
+    def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests, pre_mutation, post_mutation):
+                 tests_dirs, hash_of_tests, pre_mutation, post_mutation,
+                 coverage_data):
         self.swallow_output = swallow_output
         self.test_command = test_command
-        self.exclude_callback = exclude_callback
+        self.covered_lines_by_filename = covered_lines_by_filename
         self.baseline_time_elapsed = baseline_time_elapsed
         self.test_time_multipler = test_time_multiplier
         self.test_time_base = test_time_base
@@ -157,6 +158,7 @@ class Config(object):
         self.hash_of_tests = hash_of_tests
         self.post_mutation = post_mutation
         self.pre_mutation = pre_mutation
+        self.coverage_data = coverage_data
 
 
 class Progress(object):
@@ -335,6 +337,8 @@ Legend for output:
         copy('.testmondata', '.testmondata-initial')
 
     # if we're running in a mode with externally whitelisted lines
+    covered_lines_by_filename = None
+    coverage_data = None
     if use_coverage or use_patch_file:
         covered_lines_by_filename = {}
         if use_coverage:
@@ -342,28 +346,6 @@ Legend for output:
         else:
             assert use_patch_file
             covered_lines_by_filename = read_patch_data(use_patch_file)
-            coverage_data = None
-
-        def _exclude(context):
-            try:
-                covered_lines = covered_lines_by_filename[context.filename]
-            except KeyError:
-                if coverage_data is not None:
-                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
-                    covered_lines_by_filename[context.filename] = covered_lines
-                else:
-                    covered_lines = None
-
-            if covered_lines is None:
-                return True
-            current_line = context.current_line_index + 1
-            if current_line not in covered_lines:
-                return True
-            return False
-    else:
-        def _exclude(context):
-            del context
-            return False
 
     if command != 'run':
         raise click.BadArgumentUsage("Invalid command {}".format(command))
@@ -374,27 +356,16 @@ Legend for output:
     if paths_to_exclude:
         paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
 
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
-    total = sum(len(mutations) for mutations in mutations_by_file.values())
-
-    print()
-    print('2. Checking mutants')
     config = Config(
+        total=0,  # we'll fill this in later!
+
         swallow_output=not swallow_output,
         test_command=runner,
-        exclude_callback=_exclude,
+        covered_lines_by_filename=covered_lines_by_filename,
+        coverage_data=coverage_data,
         baseline_time_elapsed=baseline_time_elapsed,
         backup=backup,
         dict_synonyms=dict_synonyms,
-        total=total,
         using_testmon=using_testmon,
         cache_only=cache_only,
         tests_dirs=tests_dirs,
@@ -404,6 +375,20 @@ Legend for output:
         pre_mutation=pre_mutation,
         post_mutation=post_mutation,
     )
+
+    if argument is None:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                update_line_numbers(filename)
+                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+    else:
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        mutations_by_file[filename] = [mutation_id]
+
+    config.total = sum(len(mutations) for mutations in mutations_by_file.values())
+
+    print()
+    print('2. Checking mutants')
     progress = Progress()
 
     try:
@@ -518,7 +503,6 @@ def run_mutation(config: Config, progress: Progress, filename: str, mutation_id:
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
-        exclude=config.exclude_callback,
         dict_synonyms=config.dict_synonyms,
         config=config,
     )
@@ -542,7 +526,7 @@ def run_mutation(config: Config, progress: Progress, filename: str, mutation_id:
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
-        if result:
+        if result and not config.swallow_output:
             print(result)
 
     try:
@@ -573,7 +557,7 @@ def run_mutation(config: Config, progress: Progress, filename: str, mutation_id:
 
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
-            if result:
+            if result and not config.swallow_output:
                 print(result)
 
 
@@ -679,7 +663,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     return baseline_time_elapsed
 
 
-def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     """
     :type mutations_by_file: dict[str, list[MutationID]]
     :type filename: str
@@ -691,7 +675,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
     context = Context(
         source=source,
         filename=filename,
-        exclude=exclude,
+        config=config,
         dict_synonyms=dict_synonyms,
     )
 

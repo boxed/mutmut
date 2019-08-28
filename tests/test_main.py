@@ -367,6 +367,7 @@ def test_pre_and_post_mutation_hook(filesystem):
             'run',
             '--paths-to-mutate=foo.py',
             "--test-time-base=15.0",
+            "-s",
             "--pre-mutation=echo pre mutation stub",
             "--post-mutation=echo post mutation stub",
         ], catch_exceptions=False)
