@@ -595,7 +595,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
     :type progress: Progress
-    :type mutations_by_file: dict[str, list[tuple]]
+    :type mutations_by_file: dict[str, list[MutationID]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
         progress.print(total=config.total)
