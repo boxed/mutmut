@@ -11,11 +11,12 @@ import traceback
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from functools import wraps
 from io import open
+from multiprocessing.connection import Listener, Connection
 from os.path import isdir, exists
 from shutil import move, copy
 from threading import Timer
 from time import time
-from typing import List
+from typing import List, Dict
 
 import click
 from glob2 import glob
@@ -28,6 +29,13 @@ from mutmut.cache import register_mutants, update_mutant_status, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+
+MUTMUT_MASTER_PORT = 61234
+
+CMD_QUIT = 'quit'
+CMD_RUN_MUTATION = 'run mutation'
+CMD_FEEDBACK = 'feedback'
+CMD_MUTATION_DONE = 'mutation done'
 
 
 # decorator
@@ -221,11 +229,13 @@ commands:\n
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, argument2, paths_to_mutate, backup, runner,
-                  tests_dir, test_time_multiplier, test_time_base,
-                  swallow_output, use_coverage, dict_synonyms, cache_only,
-                  version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation, use_patch_file, paths_to_exclude))
+    exit(main(
+        command, argument, argument2, paths_to_mutate, backup, runner,
+        tests_dir, test_time_multiplier, test_time_base,
+        swallow_output, use_coverage, dict_synonyms, cache_only,
+        version, suspicious_policy, untested_policy, pre_mutation,
+        post_mutation, use_patch_file, paths_to_exclude,
+    ))
 
 
 def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
@@ -299,100 +309,109 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
 
-    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
+    # Start listening for worker connections
+    with Listener(('localhost', MUTMUT_MASTER_PORT)) as listener:
+        worker = subprocess.Popen([sys.executable, '-m', 'mutmut.workers.separate_process'])
 
-    using_testmon = '--testmon' in runner
+        os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
-    print("""
-- Mutation testing starting -
+        using_testmon = '--testmon' in runner
 
-These are the steps:
-1. A full test suite run will be made to make sure we
-   can run the tests successfully and we know how long
-   it takes (to detect infinite loops for example)
-2. Mutants will be generated and checked
+        print("""
+    - Mutation testing starting -
 
-Results are stored in .mutmut-cache.
-Print found mutants with `mutmut results`.
+    These are the steps:
+    1. A full test suite run will be made to make sure we
+       can run the tests successfully and we know how long
+       it takes (to detect infinite loops for example)
+    2. Mutants will be generated and checked
 
-Legend for output:
-🎉 Killed mutants.   The goal is for everything to end up in this bucket.
-⏰ Timeout.          Test suite took 10 times as long as the baseline so were killed.
-🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
-🙁 Survived.         This means your tests needs to be expanded.
-""")
-    baseline_time_elapsed = time_test_suite(
-        swallow_output=not swallow_output,
-        test_command=runner,
-        using_testmon=using_testmon
-    )
+    Results are stored in .mutmut-cache.
+    Print found mutants with `mutmut results`.
 
-    if using_testmon:
-        copy('.testmondata', '.testmondata-initial')
+    Legend for output:
+    🎉 Killed mutants.   The goal is for everything to end up in this bucket.
+    ⏰ Timeout.          Test suite took 10 times as long as the baseline so were killed.
+    🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
+    🙁 Survived.         This means your tests needs to be expanded.
+    """)
+        baseline_time_elapsed = time_test_suite(
+            swallow_output=not swallow_output,
+            test_command=runner,
+            using_testmon=using_testmon
+        )
 
-    # if we're running in a mode with externally whitelisted lines
-    covered_lines_by_filename = None
-    coverage_data = None
-    if use_coverage or use_patch_file:
-        covered_lines_by_filename = {}
-        if use_coverage:
-            coverage_data = read_coverage_data()
+        if using_testmon:
+            copy('.testmondata', '.testmondata-initial')
+
+        # if we're running in a mode with externally whitelisted lines
+        covered_lines_by_filename = None
+        coverage_data = None
+        if use_coverage or use_patch_file:
+            covered_lines_by_filename = {}
+            if use_coverage:
+                coverage_data = read_coverage_data()
+            else:
+                assert use_patch_file
+                covered_lines_by_filename = read_patch_data(use_patch_file)
+
+        if command != 'run':
+            raise click.BadArgumentUsage("Invalid command {}".format(command))
+
+        mutations_by_file = {}
+
+        paths_to_exclude = paths_to_exclude or ''
+        if paths_to_exclude:
+            paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+
+        config = Config(
+            total=0,  # we'll fill this in later!
+            swallow_output=not swallow_output,
+            test_command=runner,
+            covered_lines_by_filename=covered_lines_by_filename,
+            coverage_data=coverage_data,
+            baseline_time_elapsed=baseline_time_elapsed,
+            backup=backup,
+            dict_synonyms=dict_synonyms,
+            using_testmon=using_testmon,
+            cache_only=cache_only,
+            tests_dirs=tests_dirs,
+            hash_of_tests=hash_of_tests(tests_dirs),
+            test_time_multiplier=test_time_multiplier,
+            test_time_base=test_time_base,
+            pre_mutation=pre_mutation,
+            post_mutation=post_mutation,
+        )
+
+        if argument is None:
+            for path in paths_to_mutate:
+                for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                    update_line_numbers(filename)
+                    add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
         else:
-            assert use_patch_file
-            covered_lines_by_filename = read_patch_data(use_patch_file)
+            filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+            mutations_by_file[filename] = [mutation_id]
 
-    if command != 'run':
-        raise click.BadArgumentUsage("Invalid command {}".format(command))
+        config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-    mutations_by_file = {}
+        print()
+        print('2. Checking mutants')
+        progress = Progress()
 
-    paths_to_exclude = paths_to_exclude or ''
-    if paths_to_exclude:
-        paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+        # wait for child process to connect and send it the config
+        with listener.accept() as worker_connection:
+            worker_connection.send(config)
 
-    config = Config(
-        total=0,  # we'll fill this in later!
-        swallow_output=not swallow_output,
-        test_command=runner,
-        covered_lines_by_filename=covered_lines_by_filename,
-        coverage_data=coverage_data,
-        baseline_time_elapsed=baseline_time_elapsed,
-        backup=backup,
-        dict_synonyms=dict_synonyms,
-        using_testmon=using_testmon,
-        cache_only=cache_only,
-        tests_dirs=tests_dirs,
-        hash_of_tests=hash_of_tests(tests_dirs),
-        test_time_multiplier=test_time_multiplier,
-        test_time_base=test_time_base,
-        pre_mutation=pre_mutation,
-        post_mutation=post_mutation,
-    )
-
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
-    config.total = sum(len(mutations) for mutations in mutations_by_file.values())
-
-    print()
-    print('2. Checking mutants')
-    progress = Progress()
-
-    try:
-        run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
-    except Exception as e:
-        traceback.print_exc()
-        return compute_exit_code(progress, e)
-    else:
-        return compute_exit_code(progress)
-    finally:
-        print()  # make sure we end the output with a newline
+            try:
+                run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file, worker_connection=worker_connection)
+            except Exception as e:
+                traceback.print_exc()
+                return compute_exit_code(progress, e)
+            else:
+                return compute_exit_code(progress)
+            finally:
+                print()  # make sure we end the output with a newline
+                worker.kill()
 
 
 def get_mutations_by_file_from_cache(mutation_pk):
@@ -508,7 +527,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
-            print(result)
+            callback(result)
 
     try:
         mutate_file(
@@ -535,23 +554,29 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
             if result and not config.swallow_output:
-                print(result)
+                callback(result)
 
 
-def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID]) -> None:
-    """
-    :type config: Config
-    :type progress: Progress
-    :type file_to_mutate: str
-    :type mutations: list[MutationID]
-    """
+def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID], worker_connection: Connection) -> None:
     def feedback(line):
         if not config.swallow_output:
             print(line)
         progress.print(total=config.total)
 
     for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id, callback=feedback)
+        # TODO: this should be done in the client process
+
+        worker_connection.send((CMD_RUN_MUTATION, (file_to_mutate, mutation_id)))
+        while True:
+            cmd, params = worker_connection.recv()
+            if cmd == CMD_MUTATION_DONE:
+                break
+            assert cmd == CMD_FEEDBACK
+            feedback(params)
+
+        f, m, status = params
+        assert (f, m) == (file_to_mutate, mutation_id)
+
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
 
         if status == BAD_SURVIVED:
@@ -569,16 +594,13 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
         progress.print(total=config.total)
 
 
-def run_mutation_tests(config, progress, mutations_by_file):
-    """
-    :type config: Config
-    :type progress: Progress
-    :type mutations_by_file: dict[str, list[MutationID]]
-    """
+def run_mutation_tests(config: Config, progress: Progress, mutations_by_file: Dict[str, List[MutationID]], worker_connection: Connection):
     for file_to_mutate, mutations in mutations_by_file.items():
         progress.print(total=config.total)
 
-        run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
+        run_mutation_tests_for_file(config, progress, file_to_mutate, mutations, worker_connection)
+
+    worker_connection.send((CMD_QUIT,))
 
 
 def read_coverage_data():
