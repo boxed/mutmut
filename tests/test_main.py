@@ -10,8 +10,8 @@ from click.testing import CliRunner
 from coverage import CoverageData
 
 from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, Config, compute_exit_code, \
-    read_coverage_data
+    popen_streaming_output, compute_exit_code, \
+    read_coverage_data, Progress
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -67,49 +67,50 @@ def filesystem(tmpdir_factory):
 
 def test_compute_return_code():
     # mock of Config for ease of testing
-    class MockConfig(Config):
+    class MockProgress(Progress):
         def __init__(self, killed_mutants, surviving_mutants,
                      surviving_mutants_timeout, suspicious_mutants):
+            super(MockProgress, self).__init__()
             self.killed_mutants = killed_mutants
             self.surviving_mutants = surviving_mutants
             self.surviving_mutants_timeout = surviving_mutants_timeout
             self.suspicious_mutants = suspicious_mutants
 
-    assert compute_exit_code(MockConfig(0, 0, 0, 0)) == 0
-    assert compute_exit_code(MockConfig(0, 0, 0, 1)) == 8
-    assert compute_exit_code(MockConfig(0, 0, 1, 0)) == 4
-    assert compute_exit_code(MockConfig(0, 0, 1, 1)) == 12
-    assert compute_exit_code(MockConfig(0, 1, 0, 0)) == 2
-    assert compute_exit_code(MockConfig(0, 1, 0, 1)) == 10
-    assert compute_exit_code(MockConfig(0, 1, 1, 0)) == 6
-    assert compute_exit_code(MockConfig(0, 1, 1, 1)) == 14
+    assert compute_exit_code(MockProgress(0, 0, 0, 0)) == 0
+    assert compute_exit_code(MockProgress(0, 0, 0, 1)) == 8
+    assert compute_exit_code(MockProgress(0, 0, 1, 0)) == 4
+    assert compute_exit_code(MockProgress(0, 0, 1, 1)) == 12
+    assert compute_exit_code(MockProgress(0, 1, 0, 0)) == 2
+    assert compute_exit_code(MockProgress(0, 1, 0, 1)) == 10
+    assert compute_exit_code(MockProgress(0, 1, 1, 0)) == 6
+    assert compute_exit_code(MockProgress(0, 1, 1, 1)) == 14
 
-    assert compute_exit_code(MockConfig(1, 0, 0, 0)) == 0
-    assert compute_exit_code(MockConfig(1, 0, 0, 1)) == 8
-    assert compute_exit_code(MockConfig(1, 0, 1, 0)) == 4
-    assert compute_exit_code(MockConfig(1, 0, 1, 1)) == 12
-    assert compute_exit_code(MockConfig(1, 1, 0, 0)) == 2
-    assert compute_exit_code(MockConfig(1, 1, 0, 1)) == 10
-    assert compute_exit_code(MockConfig(1, 1, 1, 0)) == 6
-    assert compute_exit_code(MockConfig(1, 1, 1, 1)) == 14
+    assert compute_exit_code(MockProgress(1, 0, 0, 0)) == 0
+    assert compute_exit_code(MockProgress(1, 0, 0, 1)) == 8
+    assert compute_exit_code(MockProgress(1, 0, 1, 0)) == 4
+    assert compute_exit_code(MockProgress(1, 0, 1, 1)) == 12
+    assert compute_exit_code(MockProgress(1, 1, 0, 0)) == 2
+    assert compute_exit_code(MockProgress(1, 1, 0, 1)) == 10
+    assert compute_exit_code(MockProgress(1, 1, 1, 0)) == 6
+    assert compute_exit_code(MockProgress(1, 1, 1, 1)) == 14
 
-    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception()) == 15
+    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockProgress(0, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockProgress(0, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockProgress(0, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockProgress(0, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockProgress(0, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockProgress(0, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockProgress(0, 1, 1, 1), Exception()) == 15
 
-    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception()) == 15
+    assert compute_exit_code(MockProgress(1, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockProgress(1, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockProgress(1, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockProgress(1, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockProgress(1, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockProgress(1, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) == 15
 
 
 def test_read_coverage_data(filesystem):

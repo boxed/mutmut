@@ -15,12 +15,13 @@ from os.path import isdir, exists
 from shutil import move, copy
 from threading import Timer
 from time import time
+from typing import List
 
 import click
 from glob2 import glob
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
-    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, MutationID
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
@@ -151,20 +152,24 @@ class Config(object):
         self.dict_synonyms = dict_synonyms
         self.total = total
         self.using_testmon = using_testmon
-        self.progress = 0
-        self.skipped = 0
         self.cache_only = cache_only
         self.tests_dirs = tests_dirs
         self.hash_of_tests = hash_of_tests
+        self.post_mutation = post_mutation
+        self.pre_mutation = pre_mutation
+
+
+class Progress(object):
+    def __init__(self):
+        self.progress = 0
+        self.skipped = 0
         self.killed_mutants = 0
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
-        self.post_mutation = post_mutation
-        self.pre_mutation = pre_mutation
 
-    def print_progress(self):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+    def print(self, total):
+        print_status(f'{self.progress}/{total}  🎉 {self.killed_mutants}  ⏰ {self.surviving_mutants_timeout}  🤔 {self.suspicious_mutants}  🙁 {self.surviving_mutants}')
 
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
@@ -399,14 +404,15 @@ Legend for output:
         pre_mutation=pre_mutation,
         post_mutation=post_mutation,
     )
+    progress = Progress()
 
     try:
-        run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+        run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
     except Exception as e:
         traceback.print_exc()
-        return compute_exit_code(config, e)
+        return compute_exit_code(progress, e)
     else:
-        return compute_exit_code(config)
+        return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
 
@@ -489,11 +495,9 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config):
+def tests_pass(config: Config, progress: Progress) -> bool:
     """
-    :type config: Config
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
-    :rtype: bool
     """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
@@ -501,19 +505,15 @@ def tests_pass(config):
     def feedback(line):
         if not config.swallow_output:
             print(line)
-        config.print_progress()
+        progress.print(total=config.total)
 
     returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config, filename, mutation_id):
+def run_mutation(config: Config, progress: Progress, filename: str, mutation_id: MutationID) -> str:
     """
-    :type config: Config
-    :type filename: str
-    :type mutation_id: MutationID
-    :return: (computed or cached) status of the tested mutant
-    :rtype: str
+    :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
     context = Context(
         mutation_id=mutation_id,
@@ -525,17 +525,17 @@ def run_mutation(config, filename, mutation_id):
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
     if cached_status == BAD_SURVIVED:
-        config.surviving_mutants += 1
+        progress.surviving_mutants += 1
     elif cached_status == BAD_TIMEOUT:
-        config.surviving_mutants_timeout += 1
+        progress.surviving_mutants_timeout += 1
     elif cached_status == OK_KILLED:
-        config.killed_mutants += 1
+        progress.killed_mutants += 1
     elif cached_status == OK_SUSPICIOUS:
-        config.suspicious_mutants += 1
+        progress.suspicious_mutants += 1
     else:
         assert cached_status == UNTESTED, cached_status
 
-    config.print_progress()
+    progress.print(total=config.total)
 
     if cached_status != UNTESTED:
         return cached_status
@@ -552,21 +552,21 @@ def run_mutation(config, filename, mutation_id):
         )
         start = time()
         try:
-            survived = tests_pass(config)
+            survived = tests_pass(config=config, progress=progress)
         except TimeoutError:
-            context.config.surviving_mutants_timeout += 1
+            progress.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
         if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
-            config.suspicious_mutants += 1
+            progress.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
         if survived:
-            context.config.surviving_mutants += 1
+            progress.surviving_mutants += 1
             return BAD_SURVIVED
         else:
-            context.config.killed_mutants += 1
+            progress.killed_mutants += 1
             return OK_KILLED
     finally:
         move(filename + '.bak', filename)
@@ -577,28 +577,30 @@ def run_mutation(config, filename, mutation_id):
                 print(result)
 
 
-def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID]) -> None:
     """
     :type config: Config
+    :type progress: Progress
     :type file_to_mutate: str
     :type mutations: list[MutationID]
     """
     for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id)
+        status = run_mutation(config, progress, file_to_mutate, mutation_id)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
-        config.progress += 1
-        config.print_progress()
+        progress.progress += 1
+        progress.print(total=config.total)
 
 
-def run_mutation_tests(config, mutations_by_file):
+def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
+    :type progress: Progress
     :type mutations_by_file: dict[str, list[tuple]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
-        config.print_progress()
+        progress.print(total=config.total)
 
-        run_mutation_tests_for_file(config, file_to_mutate, mutations)
+        run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
 
 
 def read_coverage_data():
@@ -732,7 +734,7 @@ def python_source_files(path, tests_dirs, paths_to_exclude=None):
         yield path
 
 
-def compute_exit_code(config, exception=None):
+def compute_exit_code(progress, exception=None):
     """Compute an exit code for mutmut mutation testing
 
     The following exit codes are available for mutmut:
@@ -747,8 +749,8 @@ def compute_exit_code(config, exception=None):
 
     :param exception:
     :type exception: Exception
-    :param config:
-    :type config: Config
+    :param progress:
+    :type progress: Progress
 
     :return: integer noting the exit code of the mutation tests.
     :rtype: int
@@ -756,11 +758,11 @@ def compute_exit_code(config, exception=None):
     code = 0
     if exception is not None:
         code = code | 1
-    if config.surviving_mutants > 0:
+    if progress.surviving_mutants > 0:
         code = code | 2
-    if config.surviving_mutants_timeout > 0:
+    if progress.surviving_mutants_timeout > 0:
         code = code | 4
-    if config.suspicious_mutants > 0:
+    if progress.suspicious_mutants > 0:
         code = code | 8
     return code
 
