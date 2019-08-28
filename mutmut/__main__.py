@@ -480,23 +480,18 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config: Config, progress: Progress) -> bool:
+def tests_pass(config: Config, callback) -> bool:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
-    def feedback(line):
-        if not config.swallow_output:
-            print(line)
-        progress.print(total=config.total)
-
-    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
+    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config: Config, progress: Progress, filename: str, mutation_id: MutationID) -> str:
+def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
@@ -508,19 +503,6 @@ def run_mutation(config: Config, progress: Progress, filename: str, mutation_id:
     )
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
-    if cached_status == BAD_SURVIVED:
-        progress.surviving_mutants += 1
-    elif cached_status == BAD_TIMEOUT:
-        progress.surviving_mutants_timeout += 1
-    elif cached_status == OK_KILLED:
-        progress.killed_mutants += 1
-    elif cached_status == OK_SUSPICIOUS:
-        progress.suspicious_mutants += 1
-    else:
-        assert cached_status == UNTESTED, cached_status
-
-    progress.print(total=config.total)
-
     if cached_status != UNTESTED:
         return cached_status
 
@@ -536,21 +518,17 @@ def run_mutation(config: Config, progress: Progress, filename: str, mutation_id:
         )
         start = time()
         try:
-            survived = tests_pass(config=config, progress=progress)
+            survived = tests_pass(config=config, callback=callback)
         except TimeoutError:
-            progress.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
         if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
-            progress.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
         if survived:
-            progress.surviving_mutants += 1
             return BAD_SURVIVED
         else:
-            progress.killed_mutants += 1
             return OK_KILLED
     finally:
         move(filename + '.bak', filename)
@@ -568,9 +546,26 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
     :type file_to_mutate: str
     :type mutations: list[MutationID]
     """
+    def feedback(line):
+        if not config.swallow_output:
+            print(line)
+        progress.print(total=config.total)
+
     for mutation_id in mutations:
-        status = run_mutation(config, progress, file_to_mutate, mutation_id)
+        status = run_mutation(config, file_to_mutate, mutation_id, callback=feedback)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
+
+        if status == BAD_SURVIVED:
+            progress.surviving_mutants += 1
+        elif status == BAD_TIMEOUT:
+            progress.surviving_mutants_timeout += 1
+        elif status == OK_KILLED:
+            progress.killed_mutants += 1
+        elif status == OK_SUSPICIOUS:
+            progress.suspicious_mutants += 1
+        else:
+            assert False, f'Unknown status returned from run_mutation: {status}'
+
         progress.progress += 1
         progress.print(total=config.total)
 
