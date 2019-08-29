@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+2.0.0 (2019-08-29)
+~~~~~~~~~~~~~~~~~~
+
+* Removed support for testmon. This was an experimental feature that didn't give any significant speedups unfortunately.
+
+* New execution model. There are now two different workers: `mutmut.workers.separate_process` (similar to the old), and `mutmut.workers.same_process` which reuses one process. The latter is now the default. For small test suits this is much faster.
+
+
 1.5.0 (2019-04-10)
 ~~~~~~~~~~~~~~~~~~
 

@@ -13,7 +13,7 @@ from functools import wraps
 from io import open
 from multiprocessing.connection import Listener, Connection
 from os.path import isdir, exists
-from shutil import move, copy
+from shutil import move
 from threading import Timer
 from time import time
 from typing import List, Dict
@@ -36,6 +36,9 @@ CMD_QUIT = 'quit'
 CMD_RUN_MUTATION = 'run mutation'
 CMD_FEEDBACK = 'feedback'
 CMD_MUTATION_DONE = 'mutation done'
+CMD_RUN_TIMING_BASELINE = 'run timing baseline'
+CMD_SET_CONFIG = 'set config'
+CMD_TIMING_BASELINE_COMPLETE = 'timing baseline complete'
 
 
 # decorator
@@ -141,13 +144,12 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, covered_lines_by_filename,
+    def __init__(self, swallow_output, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
-                 backup, dict_synonyms, total, using_testmon, cache_only,
+                 backup, dict_synonyms, total, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
                  coverage_data):
         self.swallow_output = swallow_output
-        self.test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
         self.baseline_time_elapsed = baseline_time_elapsed
         self.test_time_multipler = test_time_multiplier
@@ -155,7 +157,6 @@ class Config(object):
         self.backup = backup
         self.dict_synonyms = dict_synonyms
         self.total = total
-        self.using_testmon = using_testmon
         self.cache_only = cache_only
         self.tests_dirs = tests_dirs
         self.hash_of_tests = hash_of_tests
@@ -198,20 +199,18 @@ class Progress(object):
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
+@click.option('--worker')
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
-    runner='python -m pytest -x',
+    runner=None,
     tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
     use_patch_file=None,
+    worker='mutmut.workers.same_process',
 )
-def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
-            test_time_multiplier, test_time_base,
-            swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy, pre_mutation, post_mutation,
-            use_patch_file, paths_to_exclude):
+def climain(test_time_multiplier, test_time_base, runner, **kwargs):
     """
 commands:\n
     run [mutation id]\n
@@ -225,24 +224,35 @@ commands:\n
     junitxml\n
         Show a mutation diff with junitxml format.
     """
+    if runner is not None:
+        print('''The runner parameter/configuration has been removed.
+
+Most uses of this parameter was just to hard code the default value
+in setup.cfg. If you did this, just remove it. You'll now get the new
+default same process worker that can be up to 2x faster!
+
+If you really wanted to use it you need to:
+    - set the "worker" parameter to "mutmut.workers.separate_process"
+    - set the "worker_command" parameter to what you had in "runner" before
+''')
+        exit(1)
+
     if test_time_base is None:  # click sets the default=0.0 to None
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
     exit(main(
-        command, argument, argument2, paths_to_mutate, backup, runner,
-        tests_dir, test_time_multiplier, test_time_base,
-        swallow_output, use_coverage, dict_synonyms, cache_only,
-        version, suspicious_policy, untested_policy, pre_mutation,
-        post_mutation, use_patch_file, paths_to_exclude,
+        test_time_multiplier=test_time_multiplier,
+        test_time_base=test_time_base,
+        **kwargs
     ))
 
 
-def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
+def main(command, argument, argument2, paths_to_mutate, backup, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
-         use_patch_file, paths_to_exclude):
+         use_patch_file, paths_to_exclude, worker):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -291,6 +301,9 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
         do_apply(argument, dict_synonyms, backup)
         return 0
 
+    if command != 'run':
+        raise click.BadArgumentUsage("Invalid command {}".format(command))
+
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
 
@@ -311,11 +324,9 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     # Start listening for worker connections
     with Listener(('localhost', MUTMUT_MASTER_PORT)) as listener:
-        worker = subprocess.Popen([sys.executable, '-m', 'mutmut.workers.separate_process'])
+        worker_process = subprocess.Popen([sys.executable, '-m', worker])
 
         os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
-
-        using_testmon = '--testmon' in runner
 
         print("""
     - Mutation testing starting -
@@ -335,14 +346,6 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
     🙁 Survived.         This means your tests needs to be expanded.
     """)
-        baseline_time_elapsed = time_test_suite(
-            swallow_output=not swallow_output,
-            test_command=runner,
-            using_testmon=using_testmon
-        )
-
-        if using_testmon:
-            copy('.testmondata', '.testmondata-initial')
 
         # if we're running in a mode with externally whitelisted lines
         covered_lines_by_filename = None
@@ -355,9 +358,6 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
                 assert use_patch_file
                 covered_lines_by_filename = read_patch_data(use_patch_file)
 
-        if command != 'run':
-            raise click.BadArgumentUsage("Invalid command {}".format(command))
-
         mutations_by_file = {}
 
         paths_to_exclude = paths_to_exclude or ''
@@ -367,13 +367,11 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
         config = Config(
             total=0,  # we'll fill this in later!
             swallow_output=not swallow_output,
-            test_command=runner,
             covered_lines_by_filename=covered_lines_by_filename,
             coverage_data=coverage_data,
-            baseline_time_elapsed=baseline_time_elapsed,
+            baseline_time_elapsed=0,  # we'll fill in this later!
             backup=backup,
             dict_synonyms=dict_synonyms,
-            using_testmon=using_testmon,
             cache_only=cache_only,
             tests_dirs=tests_dirs,
             hash_of_tests=hash_of_tests(tests_dirs),
@@ -394,13 +392,18 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
         config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
-        print()
-        print('2. Checking mutants')
         progress = Progress()
 
         # wait for child process to connect and send it the config
         with listener.accept() as worker_connection:
-            worker_connection.send(config)
+            worker_connection.send((CMD_SET_CONFIG, config))
+
+            config.baseline_time_elapsed = time_test_suite(worker_connection)
+
+            print()
+            print('2. Checking mutants')
+
+            worker_connection.send((CMD_SET_CONFIG, config))
 
             try:
                 run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file, worker_connection=worker_connection)
@@ -411,7 +414,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
                 return compute_exit_code(progress)
             finally:
                 print()  # make sure we end the output with a newline
-                worker.kill()
+                worker_process.kill()
 
 
 def get_mutations_by_file_from_cache(mutation_pk):
@@ -497,18 +500,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config: Config, callback) -> bool:
-    """
-    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
-    """
-    if config.using_testmon:
-        copy('.testmondata-initial', '.testmondata')
-
-    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
-
-
-def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback) -> str:
+def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback, tests_pass) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
@@ -536,7 +528,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         )
         start = time()
         try:
-            survived = tests_pass(config=config, callback=callback)
+            survived = tests_pass(config=config, callback=callback, timeout=config.baseline_time_elapsed * 10)
         except TimeoutError:
             return BAD_TIMEOUT
 
@@ -632,22 +624,10 @@ def read_patch_data(patch_file_path):
     }
 
 
-def time_test_suite(swallow_output, test_command, using_testmon):
-    """Execute a test suite specified by ``test_command`` and record
-    the time it took to execute the test suite as a floating point number
-
-    :param swallow_output: if :obj:`True` test stdout will be not be printed
-    :type swallow_output: bool
-
-    :param test_command: command to spawn the testing subprocess
-    :type test_command: str
-
-    :param using_testmon: if :obj:`True` the test return code evaluation will
-        accommodate for ``pytest-testmon``
-    :type using_testmon: bool
+def time_test_suite(worker_connection) -> float:
+    """Execute the test suite and return the time it took in seconds
 
     :return: execution time of the test suite
-    :rtype: float
     """
     cached_time = cached_test_time()
     if cached_time is not None:
@@ -655,28 +635,25 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         return cached_time
 
     print('1. Running tests without mutations')
-    start_time = time()
+
+    worker_connection.send((CMD_RUN_TIMING_BASELINE, tuple()))
 
     output = []
 
-    def feedback(line):
-        if not swallow_output:
-            print(line)
-        print_status('Running...')
-        output.append(line)
+    while True:
+        cmd, params = worker_connection.recv()
 
-    returncode = popen_streaming_output(test_command, feedback)
+        if cmd == CMD_FEEDBACK:
+            output.append(params)
+        elif cmd == CMD_TIMING_BASELINE_COMPLETE:
+            time_elapsed, succeeded = params
 
-    if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = time() - start_time
-    else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
+            if succeeded:
+                raise RuntimeError("Tests don't run cleanly without mutations.\n\nOutput:\n\n{}".format('\n'.join(output)))
 
-    print('Done')
-
-    set_cached_test_time(baseline_time_elapsed)
-
-    return baseline_time_elapsed
+            print('Done')
+            set_cached_test_time(time_elapsed)
+            return time_elapsed
 
 
 def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
