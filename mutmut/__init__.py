@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import os
 import re
 
 from parso import parse
@@ -404,8 +404,29 @@ mutations_by_type = {
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
 
 
+def should_exclude(context, config):
+    if config is None or config.covered_lines_by_filename is None:
+        return False
+
+    try:
+        covered_lines = config.covered_lines_by_filename[context.filename]
+    except KeyError:
+        if config.coverage_data is not None:
+            covered_lines = config.coverage_data.lines(os.path.abspath(context.filename))
+            config.covered_lines_by_filename[context.filename] = covered_lines
+        else:
+            covered_lines = None
+
+    if covered_lines is None:
+        return True
+    current_line = context.current_line_index + 1
+    if current_line not in covered_lines:
+        return True
+    return False
+
+
 class Context(object):
-    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
+    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None):
         self.index = 0
         self.remove_newline_at_end = False
         if source and source[-1] != '\n':
@@ -417,7 +438,6 @@ class Context(object):
         assert isinstance(mutation_id, MutationID)
         self.current_line_index = 0
         self.filename = filename
-        self.exclude = exclude
         self.stack = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
         self._source_by_line_number = None
@@ -426,7 +446,7 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
+        return self.current_line_index in self.pragma_no_mutate_lines or should_exclude(context=self, config=self.config)
 
     @property
     def source_by_line_number(self):
