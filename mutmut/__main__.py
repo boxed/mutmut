@@ -166,7 +166,7 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self, total):
-        print_status(f'{self.progress}/{total}  🎉 {self.killed_mutants}  ⏰ {self.surviving_mutants_timeout}  🤔 {self.suspicious_mutants}  🙁 {self.surviving_mutants}')
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
