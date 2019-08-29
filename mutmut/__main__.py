@@ -404,31 +404,6 @@ def get_mutations_by_file_from_cache(mutation_pk):
     return {filename: [mutation_id]}
 
 
-def gen_mutations_by_file(paths_to_mutate, tests_dirs, paths_to_exclude,
-                          dict_synonyms, exclude_check=lambda x: False):
-    mutations_by_file = {}
-    for path in paths_to_mutate:
-        for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-            update_line_numbers(filename)
-            with open(filename) as f:
-                source = f.read()
-            context = Context(
-                source=source,
-                filename=filename,
-                exclude=exclude_check,
-                dict_synonyms=dict_synonyms,
-            )
-
-            try:
-                mutations_by_file[filename] = list_mutations(context)
-                register_mutants(mutations_by_file)
-            except Exception as e:
-                raise RuntimeError(
-                    'Failed while creating mutations for file {} on line "{}"'.format(
-                        context.filename, context.current_source_line)) from e
-    return mutations_by_file
-
-
 def popen_streaming_output(cmd, callback, timeout=None):
     """Open a subprocess and stream its output without hard-blocking.
 
