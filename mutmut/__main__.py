@@ -567,7 +567,7 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
         elif status == OK_SUSPICIOUS:
             progress.suspicious_mutants += 1
         else:
-            assert False, f'Unknown status returned from run_mutation: {status}'
+            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
 
         progress.progress += 1
         progress.print(total=config.total)
