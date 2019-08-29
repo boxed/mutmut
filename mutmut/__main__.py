@@ -681,7 +681,7 @@ def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception as e:
-        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line), e)
+        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line)) from e
 
 
 def python_source_files(path, tests_dirs, paths_to_exclude=None):
