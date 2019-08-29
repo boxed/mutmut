@@ -75,35 +75,30 @@ def status_printer():
 print_status = status_printer()
 
 
-def get_or_guess_paths_to_mutate(paths_to_mutate):
-    """
-    :type paths_to_mutate: str or None
+def guess_paths_to_mutate():
+    """Guess the path to source code to mutate
+
     :rtype: str
     """
-    if paths_to_mutate is None:
-        # Guess path with code
-        this_dir = os.getcwd().split(os.sep)[-1]
-        if isdir('lib'):
-            return 'lib'
-        elif isdir('src'):
-            return 'src'
-        elif isdir(this_dir):
-            return this_dir
-        elif isdir(this_dir.replace('-', '_')):
-            return this_dir.replace('-', '_')
-        elif isdir(this_dir.replace(' ', '_')):
-            return this_dir.replace(' ', '_')
-        elif isdir(this_dir.replace('-', '')):
-            return this_dir.replace('-', '')
-        elif isdir(this_dir.replace(' ', '')):
-            return this_dir.replace(' ', '')
-        else:
-            raise FileNotFoundError(
-                'Could not figure out where the code to mutate is. '
-                'Please specify it on the command line using --paths-to-mutate, '
-                'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
-    else:
-        return paths_to_mutate
+    this_dir = os.getcwd().split(os.sep)[-1]
+    if isdir('lib'):
+        return 'lib'
+    elif isdir('src'):
+        return 'src'
+    elif isdir(this_dir):
+        return this_dir
+    elif isdir(this_dir.replace('-', '_')):
+        return this_dir.replace('-', '_')
+    elif isdir(this_dir.replace(' ', '_')):
+        return this_dir.replace(' ', '_')
+    elif isdir(this_dir.replace('-', '')):
+        return this_dir.replace('-', '')
+    elif isdir(this_dir.replace(' ', '')):
+        return this_dir.replace(' ', '')
+    raise FileNotFoundError(
+        'Could not figure out where the code to mutate is. '
+        'Please specify it on the command line using --paths-to-mutate, '
+        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
@@ -171,10 +166,7 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self, total):
-        print_status(f'{self.progress}/{total}  🎉 {self.killed_mutants}  ⏰ {self.surviving_mutants_timeout}  🤔 {self.suspicious_mutants}  🙁 {self.surviving_mutants}')
-
-
-DEFAULT_TESTS_DIR = 'tests/:test/'
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -200,8 +192,9 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
 @click.option('--post-mutation')
 @config_from_setup_cfg(
     dict_synonyms='',
+    paths_to_exclude='',
     runner='python -m pytest -x',
-    tests_dir=DEFAULT_TESTS_DIR,
+    tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
     use_patch_file=None,
@@ -288,7 +281,8 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
         do_apply(argument, dict_synonyms, backup)
         return 0
 
-    paths_to_mutate = get_or_guess_paths_to_mutate(paths_to_mutate)
+    if paths_to_mutate is None:
+        paths_to_mutate = guess_paths_to_mutate()
 
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
@@ -358,7 +352,6 @@ Legend for output:
 
     config = Config(
         total=0,  # we'll fill this in later!
-
         swallow_output=not swallow_output,
         test_command=runner,
         covered_lines_by_filename=covered_lines_by_filename,
@@ -400,6 +393,11 @@ Legend for output:
         return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
+
+
+def get_mutations_by_file_from_cache(mutation_pk):
+    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
+    return {filename: [mutation_id]}
 
 
 def popen_streaming_output(cmd, callback, timeout=None):
@@ -503,6 +501,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
     )
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+
     if cached_status != UNTESTED:
         return cached_status
 
@@ -564,7 +563,7 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
         elif status == OK_SUSPICIOUS:
             progress.suspicious_mutants += 1
         else:
-            assert False, f'Unknown status returned from run_mutation: {status}'
+            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
 
         progress.progress += 1
         progress.print(total=config.total)
@@ -586,22 +585,22 @@ def read_coverage_data():
     """
     :rtype: CoverageData or None
     """
-    print('Using coverage data from .coverage file')
-    # noinspection PyPackageRequirements,PyUnresolvedReferences
-    from coverage import Coverage
+    try:
+        # noinspection PyPackageRequirements,PyUnresolvedReferences
+        from coverage import Coverage
+    except ImportError as e:
+        raise ImportError('The --use-coverage feature requires the coverage library. Run "pip install coverage"') from e
     cov = Coverage('.coverage')
     cov.load()
     return cov.get_data()
 
 
 def read_patch_data(patch_file_path):
-    print('Using patch data from ' + patch_file_path)
     try:
         # noinspection PyPackageRequirements
         import whatthepatch
-    except ImportError:
-        print('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"', file=sys.stderr)
-        raise
+    except ImportError as e:
+        raise ImportError('The --use-patch feature requires the whatthepatch library. Run "pip install whatthepatch"') from e
     with open(patch_file_path) as f:
         diffs = whatthepatch.parse_patch(f.read())
 
@@ -651,7 +650,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     else:
         raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
 
-    print(' Done')
+    print('Done')
 
     set_cached_test_time(baseline_time_elapsed)
 
@@ -678,7 +677,7 @@ def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception as e:
-        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line), e)
+        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line)) from e
 
 
 def python_source_files(path, tests_dirs, paths_to_exclude=None):
@@ -702,8 +701,8 @@ def python_source_files(path, tests_dirs, paths_to_exclude=None):
     if isdir(path):
         for root, dirs, files in os.walk(path, topdown=True):
             for exclude_pattern in paths_to_exclude:
-                dirs[:] = [dir for dir in dirs if not fnmatch.fnmatch(dir, exclude_pattern)]
-                files[:] = [file for file in files if not fnmatch.fnmatch(file, exclude_pattern)]
+                dirs[:] = [d for d in dirs if not fnmatch.fnmatch(d, exclude_pattern)]
+                files[:] = [f for f in files if not fnmatch.fnmatch(f, exclude_pattern)]
 
             dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
             for filename in files:

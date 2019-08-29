@@ -2,6 +2,7 @@
 
 import os
 import xml.etree.ElementTree as ET
+import subprocess
 from time import time
 from unittest.mock import MagicMock, call
 
@@ -327,7 +328,7 @@ def test_use_coverage(capsys, filesystem):
     assert int(root.attrib['disabled']) == 0
 
     # generate a `.coverage` file by invoking pytest
-    pytest.main(["--cov=.", "foo.py"])
+    subprocess.run(["python", "-m", "pytest", "--cov=.", "foo.py"])
     assert os.path.isfile('.coverage')
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
