@@ -169,9 +169,6 @@ class Progress(object):
         print_status(f'{self.progress}/{total}  🎉 {self.killed_mutants}  ⏰ {self.surviving_mutants_timeout}  🤔 {self.suspicious_mutants}  🙁 {self.surviving_mutants}')
 
 
-DEFAULT_TESTS_DIR = 'tests/:test/'
-
-
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('command', nargs=1, required=False)
 @click.argument('argument', nargs=1, required=False)
@@ -197,7 +194,7 @@ DEFAULT_TESTS_DIR = 'tests/:test/'
     dict_synonyms='',
     paths_to_exclude='',
     runner='python -m pytest -x',
-    tests_dir=DEFAULT_TESTS_DIR,
+    tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
     use_patch_file=None,
