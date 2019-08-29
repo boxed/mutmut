@@ -6,6 +6,7 @@ from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
 from itertools import groupby, zip_longest
+from typing import Tuple
 
 from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
@@ -317,7 +318,7 @@ def mutation_id_from_pk(pk):
 
 @init_db
 @db_session
-def filename_and_mutation_id_from_pk(pk):
+def filename_and_mutation_id_from_pk(pk) -> Tuple[str, MutationID]:
     mutant = Mutant.get(id=pk)
     if mutant is None:
         raise ValueError("Obtained null mutant for pk: {}".format(pk))

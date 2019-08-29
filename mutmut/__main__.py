@@ -15,12 +15,13 @@ from io import open
 from os.path import isdir, exists
 from shutil import move, copy
 from time import time
+from typing import List
 
 import click
 from glob2 import glob
 
 from mutmut import mutate_file, Context, list_mutations, __version__, \
-    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED
+    BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, OK_KILLED, UNTESTED, MutationID
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
@@ -137,13 +138,14 @@ null_out = open(os.devnull, 'w')
 
 
 class Config(object):
-    def __init__(self, swallow_output, test_command, exclude_callback,
+    def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests, pre_mutation, post_mutation):
+                 tests_dirs, hash_of_tests, pre_mutation, post_mutation,
+                 coverage_data):
         self.swallow_output = swallow_output
         self.test_command = test_command
-        self.exclude_callback = exclude_callback
+        self.covered_lines_by_filename = covered_lines_by_filename
         self.baseline_time_elapsed = baseline_time_elapsed
         self.test_time_multipler = test_time_multiplier
         self.test_time_base = test_time_base
@@ -151,20 +153,25 @@ class Config(object):
         self.dict_synonyms = dict_synonyms
         self.total = total
         self.using_testmon = using_testmon
-        self.progress = 0
-        self.skipped = 0
         self.cache_only = cache_only
         self.tests_dirs = tests_dirs
         self.hash_of_tests = hash_of_tests
+        self.post_mutation = post_mutation
+        self.pre_mutation = pre_mutation
+        self.coverage_data = coverage_data
+
+
+class Progress(object):
+    def __init__(self):
+        self.progress = 0
+        self.skipped = 0
         self.killed_mutants = 0
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
-        self.post_mutation = post_mutation
-        self.pre_mutation = pre_mutation
 
-    def print_progress(self):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+    def print(self, total):
+        print_status(f'{self.progress}/{total}  🎉 {self.killed_mutants}  ⏰ {self.surviving_mutants_timeout}  🤔 {self.suspicious_mutants}  🙁 {self.surviving_mutants}')
 
 
 DEFAULT_TESTS_DIR = 'tests/:test/'
@@ -330,6 +337,8 @@ Legend for output:
         copy('.testmondata', '.testmondata-initial')
 
     # if we're running in a mode with externally whitelisted lines
+    covered_lines_by_filename = None
+    coverage_data = None
     if use_coverage or use_patch_file:
         covered_lines_by_filename = {}
         if use_coverage:
@@ -337,28 +346,6 @@ Legend for output:
         else:
             assert use_patch_file
             covered_lines_by_filename = read_patch_data(use_patch_file)
-            coverage_data = None
-
-        def _exclude(context):
-            try:
-                covered_lines = covered_lines_by_filename[context.filename]
-            except KeyError:
-                if coverage_data is not None:
-                    covered_lines = coverage_data.lines(os.path.abspath(context.filename))
-                    covered_lines_by_filename[context.filename] = covered_lines
-                else:
-                    covered_lines = None
-
-            if covered_lines is None:
-                return True
-            current_line = context.current_line_index + 1
-            if current_line not in covered_lines:
-                return True
-            return False
-    else:
-        def _exclude(context):
-            del context
-            return False
 
     if command != 'run':
         raise click.BadArgumentUsage("Invalid command {}".format(command))
@@ -369,27 +356,16 @@ Legend for output:
     if paths_to_exclude:
         paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
 
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, _exclude, dict_synonyms)
-    else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
-
-    total = sum(len(mutations) for mutations in mutations_by_file.values())
-
-    print()
-    print('2. Checking mutants')
     config = Config(
+        total=0,  # we'll fill this in later!
+
         swallow_output=not swallow_output,
         test_command=runner,
-        exclude_callback=_exclude,
+        covered_lines_by_filename=covered_lines_by_filename,
+        coverage_data=coverage_data,
         baseline_time_elapsed=baseline_time_elapsed,
         backup=backup,
         dict_synonyms=dict_synonyms,
-        total=total,
         using_testmon=using_testmon,
         cache_only=cache_only,
         tests_dirs=tests_dirs,
@@ -400,13 +376,28 @@ Legend for output:
         post_mutation=post_mutation,
     )
 
+    if argument is None:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                update_line_numbers(filename)
+                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+    else:
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        mutations_by_file[filename] = [mutation_id]
+
+    config.total = sum(len(mutations) for mutations in mutations_by_file.values())
+
+    print()
+    print('2. Checking mutants')
+    progress = Progress()
+
     try:
-        run_mutation_tests(config=config, mutations_by_file=mutations_by_file)
+        run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
     except Exception as e:
         traceback.print_exc()
-        return compute_exit_code(config, e)
+        return compute_exit_code(progress, e)
     else:
-        return compute_exit_code(config)
+        return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
 
@@ -448,59 +439,36 @@ def popen_streaming_output(cmd, callback, timeout=None):
         raise TimeoutError("command '{}' subprocess timed out after {} seconds".format(cmd, timeout)) from e
 
 
-def tests_pass(config):
+def tests_pass(config: Config, callback) -> bool:
     """
-    :type config: Config
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
-    :rtype: bool
     """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
-    def feedback(line):
-        if not config.swallow_output:
-            print(line)
-        config.print_progress()
-    returncode = popen_streaming_output(config.test_command, feedback, timeout=config.baseline_time_elapsed * 10)
+    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
+
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config, filename, mutation_id):
+def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback) -> str:
     """
-    :type config: Config
-    :type filename: str
-    :type mutation_id: MutationID
-    :return: (computed or cached) status of the tested mutant
-    :rtype: str
+    :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
     context = Context(
         mutation_id=mutation_id,
         filename=filename,
-        exclude=config.exclude_callback,
         dict_synonyms=config.dict_synonyms,
         config=config,
     )
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
-    if cached_status == BAD_SURVIVED:
-        config.surviving_mutants += 1
-    elif cached_status == BAD_TIMEOUT:
-        config.surviving_mutants_timeout += 1
-    elif cached_status == OK_KILLED:
-        config.killed_mutants += 1
-    elif cached_status == OK_SUSPICIOUS:
-        config.suspicious_mutants += 1
-    else:
-        assert cached_status == UNTESTED, cached_status
-
-    config.print_progress()
-
     if cached_status != UNTESTED:
         return cached_status
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
-        if result:
+        if result and not config.swallow_output:
             print(result)
 
     try:
@@ -510,53 +478,68 @@ def run_mutation(config, filename, mutation_id):
         )
         start = time()
         try:
-            survived = tests_pass(config)
+            survived = tests_pass(config=config, callback=callback)
         except TimeoutError:
-            context.config.surviving_mutants_timeout += 1
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
         if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
-            config.suspicious_mutants += 1
             return OK_SUSPICIOUS
 
         if survived:
-            context.config.surviving_mutants += 1
             return BAD_SURVIVED
         else:
-            context.config.killed_mutants += 1
             return OK_KILLED
     finally:
         move(filename + '.bak', filename)
 
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
-            if result:
+            if result and not config.swallow_output:
                 print(result)
 
 
-def run_mutation_tests_for_file(config, file_to_mutate, mutations):
+def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID]) -> None:
     """
     :type config: Config
+    :type progress: Progress
     :type file_to_mutate: str
     :type mutations: list[MutationID]
     """
+    def feedback(line):
+        if not config.swallow_output:
+            print(line)
+        progress.print(total=config.total)
+
     for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id)
+        status = run_mutation(config, file_to_mutate, mutation_id, callback=feedback)
         update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
-        config.progress += 1
-        config.print_progress()
+
+        if status == BAD_SURVIVED:
+            progress.surviving_mutants += 1
+        elif status == BAD_TIMEOUT:
+            progress.surviving_mutants_timeout += 1
+        elif status == OK_KILLED:
+            progress.killed_mutants += 1
+        elif status == OK_SUSPICIOUS:
+            progress.suspicious_mutants += 1
+        else:
+            assert False, f'Unknown status returned from run_mutation: {status}'
+
+        progress.progress += 1
+        progress.print(total=config.total)
 
 
-def run_mutation_tests(config, mutations_by_file):
+def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
-    :type mutations_by_file: dict[str, list[tuple]]
+    :type progress: Progress
+    :type mutations_by_file: dict[str, list[MutationID]]
     """
     for file_to_mutate, mutations in mutations_by_file.items():
-        config.print_progress()
+        progress.print(total=config.total)
 
-        run_mutation_tests_for_file(config, file_to_mutate, mutations)
+        run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
 
 
 def read_coverage_data():
@@ -583,7 +566,7 @@ def read_patch_data(patch_file_path):
         diffs = whatthepatch.parse_patch(f.read())
 
     return {
-        diff.header.new_path: {line_number for old_line_number, line_number, text, *_ in diff.changes if old_line_number is None}
+        diff.header.new_path: {change.new for change in diff.changes if change.old is None}
         for diff in diffs
     }
 
@@ -635,7 +618,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     return baseline_time_elapsed
 
 
-def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
+def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     """
     :type mutations_by_file: dict[str, list[MutationID]]
     :type filename: str
@@ -647,7 +630,7 @@ def add_mutations_by_file(mutations_by_file, filename, exclude, dict_synonyms):
     context = Context(
         source=source,
         filename=filename,
-        exclude=exclude,
+        config=config,
         dict_synonyms=dict_synonyms,
     )
 
@@ -690,7 +673,7 @@ def python_source_files(path, tests_dirs, paths_to_exclude=None):
         yield path
 
 
-def compute_exit_code(config, exception=None):
+def compute_exit_code(progress, exception=None):
     """Compute an exit code for mutmut mutation testing
 
     The following exit codes are available for mutmut:
@@ -705,8 +688,8 @@ def compute_exit_code(config, exception=None):
 
     :param exception:
     :type exception: Exception
-    :param config:
-    :type config: Config
+    :param progress:
+    :type progress: Progress
 
     :return: integer noting the exit code of the mutation tests.
     :rtype: int
@@ -714,11 +697,11 @@ def compute_exit_code(config, exception=None):
     code = 0
     if exception is not None:
         code = code | 1
-    if config.surviving_mutants > 0:
+    if progress.surviving_mutants > 0:
         code = code | 2
-    if config.surviving_mutants_timeout > 0:
+    if progress.surviving_mutants_timeout > 0:
         code = code | 4
-    if config.suspicious_mutants > 0:
+    if progress.suspicious_mutants > 0:
         code = code | 8
     return code
 
