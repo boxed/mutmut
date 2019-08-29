@@ -352,7 +352,6 @@ Legend for output:
 
     config = Config(
         total=0,  # we'll fill this in later!
-
         swallow_output=not swallow_output,
         test_command=runner,
         covered_lines_by_filename=covered_lines_by_filename,
