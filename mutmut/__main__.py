@@ -685,7 +685,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
     return baseline_time_elapsed
 
-  
+
 def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     """
     :type mutations_by_file: dict[str, list[MutationID]]
@@ -708,7 +708,7 @@ def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     except Exception as e:
         raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line), e)
 
-        
+
 def python_source_files(path, tests_dirs, paths_to_exclude=None):
     """Attempt to guess where the python source files to mutate are and yield
     their paths
