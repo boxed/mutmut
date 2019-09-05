@@ -340,7 +340,9 @@ def test_use_coverage(capsys, filesystem):
     # replace the .coverage file content with a non existent path to check if an exception is thrown
     with open('.coverage', 'r') as f:
         content = f.read()
-    new_content = re.sub(r'\"[\w/\-]*.py\"', '"/test_path/foo.py"', content)
+
+    # the new path is linux-based, but it just needs to be wrong
+    new_content = re.sub(r'\"[\w/\-\\]*.py\"', '"/test_path/foo.py"', content)
 
     with open('.coverage', 'w') as f:
         f.write(new_content)
