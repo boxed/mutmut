@@ -342,7 +342,7 @@ def test_use_coverage(capsys, filesystem):
         content = f.read()
 
     # the new path is linux-based, but it just needs to be wrong
-    new_content = re.sub(r'\"[\w/\-\\]*.py\"', '"/test_path/foo.py"', content)
+    new_content = re.sub(r'\"[\w\W][^{]*foo.py\"', '"/test_path/foo.py"', content)
 
     with open('.coverage', 'w') as f:
         f.write(new_content)
