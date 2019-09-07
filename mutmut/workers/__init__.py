@@ -25,7 +25,6 @@ def worker_main(tests_pass):
 
         while True:
             command, params = conn.recv()
-            feedback(f'!!{command}, {params}')
             if command == CMD_QUIT:
                 return
 
@@ -41,7 +40,6 @@ def worker_main(tests_pass):
 
             if command == CMD_RUN_MUTATION:
                 file_to_mutate, mutation_id = params
-                feedback('1111')
                 status = run_mutation(config, file_to_mutate, mutation_id, feedback=feedback, tests_pass=tests_pass)
                 conn.send((CMD_MUTATION_DONE, (file_to_mutate, mutation_id, status)))
 

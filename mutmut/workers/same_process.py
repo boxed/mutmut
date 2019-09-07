@@ -1,7 +1,6 @@
 import os
 import sys
 from configparser import ConfigParser
-from time import sleep
 
 from mutmut.__main__ import Config
 from mutmut.workers import worker_main
@@ -21,23 +20,16 @@ def tests_pass(config: Config, feedback, timeout) -> bool:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
-    feedback('1')
     del config
-    # del feedback  # own process stdio/stderr forwarding is handled in __init__.py
-    feedback('1')
-    sleep(1)
+    del feedback  # own process stdio/stderr forwarding is handled in __init__.py
     restore_imports_checkpoint()
-    feedback('2')
+
     try:
         exec(runner_setup)
-        feedback('3')
         returncode = eval(test_command)
-        feedback('4')
-    except:
+    except BaseException:
         # We can crash out from pytest at import time by mutants!
-        feedback('6')
         return False
-    feedback('5')
     return returncode == 0
 
 
@@ -62,11 +54,11 @@ def main():
     except SystemExit:
         # pytest.main calls sys.exit instead of exiting cleanly :(
         pass
-    try:
-        exec(startup_imports)
-    except SystemExit:
-        # pytest.main calls sys.exit instead of exiting cleanly :(
-        pass
+    # try:
+    #     exec(startup_imports)
+    # except SystemExit:
+    #     # pytest.main calls sys.exit instead of exiting cleanly :(
+    #     pass
 
     imports_checkpoint.update(set(sys.modules.keys()))
     assert imports_checkpoint

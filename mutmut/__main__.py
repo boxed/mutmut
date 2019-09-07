@@ -511,19 +511,16 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, feedbac
         config=config,
     )
 
+    # TODO: put this back! but we should always rerun a mutant if explicitly said to do so...
     # cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
     #
     # if cached_status != UNTESTED:
     #     return cached_status
 
-    feedback('222222')
-
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
             feedback(result)
-
-    feedback('333333')
 
     try:
         mutate_file(
@@ -532,12 +529,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, feedbac
         )
         start = time()
         try:
-            feedback('444444')
-
-            survived = tests_pass(config=config, callback=feedback, timeout=config.baseline_time_elapsed * 10)
-
-            feedback('55555')
-
+            survived = tests_pass(config=config, feedback=feedback, timeout=config.baseline_time_elapsed * 10)
         except TimeoutError:
             return BAD_TIMEOUT
 
@@ -549,8 +541,9 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, feedbac
             return BAD_SURVIVED
         else:
             return OK_KILLED
+    except Exception as e:
+        feedback('Unexpected exception: ', e)
     finally:
-        print('777777')
         move(filename + '.bak', filename)
 
         if config.post_mutation:
