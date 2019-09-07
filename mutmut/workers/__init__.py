@@ -16,7 +16,7 @@ def worker_main(tests_pass):
 
             def write(self, *args, **kwargs):
                 super(RealTimeStringIO, self).write(*args, **kwargs)
-                feedback(str(args))
+                feedback(' '.join(str(x) for x in args))
 
         sys.stdout = RealTimeStringIO()
         sys.stderr = RealTimeStringIO()
@@ -25,6 +25,7 @@ def worker_main(tests_pass):
 
         while True:
             command, params = conn.recv()
+            feedback(f'!!{command}, {params}')
             if command == CMD_QUIT:
                 return
 
@@ -40,7 +41,8 @@ def worker_main(tests_pass):
 
             if command == CMD_RUN_MUTATION:
                 file_to_mutate, mutation_id = params
-                status = run_mutation(config, file_to_mutate, mutation_id, callback=feedback, tests_pass=tests_pass)
+                feedback('1111')
+                status = run_mutation(config, file_to_mutate, mutation_id, feedback=feedback, tests_pass=tests_pass)
                 conn.send((CMD_MUTATION_DONE, (file_to_mutate, mutation_id, status)))
 
             elif command == CMD_RUN_TIMING_BASELINE:

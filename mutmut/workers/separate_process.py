@@ -11,11 +11,11 @@ config_parser.read('setup.cfg')
 test_command = config_parser.get('mutmut', 'test_command', fallback='python -m pytest -x')
 
 
-def tests_pass(config: Config, callback, timeout) -> bool:
+def tests_pass(config: Config, feedback, timeout) -> bool:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
-    returncode = popen_streaming_output(test_command, callback, timeout=timeout)
+    returncode = popen_streaming_output(test_command, feedback, timeout=timeout)
     return returncode == 0
 
 

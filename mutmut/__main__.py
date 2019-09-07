@@ -398,7 +398,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, tests_dir,
         with listener.accept() as worker_connection:
             worker_connection.send((CMD_SET_CONFIG, config))
 
-            config.baseline_time_elapsed = time_test_suite(worker_connection)
+            config.baseline_time_elapsed = time_test_suite(worker_connection, swallow_output)
 
             print()
             print('2. Checking mutants')
@@ -500,7 +500,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback, tests_pass) -> str:
+def run_mutation(config: Config, filename: str, mutation_id: MutationID, feedback, tests_pass) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
@@ -511,15 +511,19 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         config=config,
     )
 
-    cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    # cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    #
+    # if cached_status != UNTESTED:
+    #     return cached_status
 
-    if cached_status != UNTESTED:
-        return cached_status
+    feedback('222222')
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
-            callback(result)
+            feedback(result)
+
+    feedback('333333')
 
     try:
         mutate_file(
@@ -528,7 +532,12 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         )
         start = time()
         try:
-            survived = tests_pass(config=config, callback=callback, timeout=config.baseline_time_elapsed * 10)
+            feedback('444444')
+
+            survived = tests_pass(config=config, callback=feedback, timeout=config.baseline_time_elapsed * 10)
+
+            feedback('55555')
+
         except TimeoutError:
             return BAD_TIMEOUT
 
@@ -541,12 +550,13 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         else:
             return OK_KILLED
     finally:
+        print('777777')
         move(filename + '.bak', filename)
 
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
             if result and not config.swallow_output:
-                callback(result)
+                feedback(result)
 
 
 def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID], worker_connection: Connection) -> None:
@@ -556,7 +566,6 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
         progress.print(total=config.total)
 
     for mutation_id in mutations:
-        # TODO: this should be done in the client process
 
         worker_connection.send((CMD_RUN_MUTATION, (file_to_mutate, mutation_id)))
         while True:
@@ -624,7 +633,7 @@ def read_patch_data(patch_file_path):
     }
 
 
-def time_test_suite(worker_connection) -> float:
+def time_test_suite(worker_connection, swallow_output) -> float:
     """Execute the test suite and return the time it took in seconds
 
     :return: execution time of the test suite
@@ -645,11 +654,13 @@ def time_test_suite(worker_connection) -> float:
 
         if cmd == CMD_FEEDBACK:
             output.append(params)
+            if not swallow_output:
+                print(params, end='')
         elif cmd == CMD_TIMING_BASELINE_COMPLETE:
             time_elapsed, succeeded = params
 
-            if succeeded:
-                raise RuntimeError("Tests don't run cleanly without mutations.\n\nOutput:\n\n{}".format('\n'.join(output)))
+            if not succeeded:
+                raise RuntimeError("Tests don't run cleanly without mutations.\n\nOutput:\n\n{}".format(''.join(output)))
 
             print('Done')
             set_cached_test_time(time_elapsed)
