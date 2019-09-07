@@ -337,6 +337,7 @@ Legend for output:
         covered_lines_by_filename = {}
         if use_coverage:
             coverage_data = read_coverage_data()
+            check_coverage_data_filepaths(coverage_data)
         else:
             assert use_patch_file
             covered_lines_by_filename = read_patch_data(use_patch_file)
@@ -393,6 +394,12 @@ Legend for output:
         return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
+
+
+def check_coverage_data_filepaths(coverage_data):
+    for filepath in coverage_data._lines:
+        if not os.path.exists(filepath):
+            raise ValueError('Filepaths in .coverage not recognized, try recreating the .coverage file manually.')
 
 
 def get_mutations_by_file_from_cache(mutation_pk):

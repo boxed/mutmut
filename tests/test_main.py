@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
-import xml.etree.ElementTree as ET
 import subprocess
+import xml.etree.ElementTree as ET
 from time import time
 from unittest.mock import MagicMock, call
 
@@ -343,6 +344,21 @@ def test_use_coverage(capsys, filesystem):
     print(repr(result.output))
     assert result.exit_code == 0
     assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+
+    # replace the .coverage file content with a non existent path to check if an exception is thrown
+    with open('.coverage', 'r') as f:
+        content = f.read()
+
+    # the new path is linux-based, but it just needs to be wrong
+    new_content = re.sub(r'\"[\w\W][^{]*foo.py\"', '"/test_path/foo.py"', content)
+
+    with open('.coverage', 'w') as f:
+        f.write(new_content)
+
+    with pytest.raises(ValueError,
+                       match=r'^Filepaths in .coverage not recognized, try recreating the .coverage file manually.$'):
+        CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
+                           catch_exceptions=False)
 
 
 def test_use_patch_file(filesystem):
