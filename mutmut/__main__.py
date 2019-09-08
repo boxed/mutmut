@@ -3,7 +3,9 @@
 
 import fnmatch
 import itertools
+import multiprocessing
 import os
+import queue
 import shlex
 import subprocess
 import sys
@@ -26,6 +28,7 @@ from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
+from mutmut.pytest_wrapper import run_tests_return_failed_cases
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
@@ -50,6 +53,7 @@ def config_from_setup_cfg(**defaults):
             f(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
@@ -69,6 +73,7 @@ def status_printer():
         sys.stdout.write(output)
         sys.stdout.flush()
         last_len[0] = len_s
+
     return p
 
 
@@ -166,7 +171,9 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self, total):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, total, self.killed_mutants,
+                                                               self.surviving_mutants_timeout, self.suspicious_mutants,
+                                                               self.surviving_mutants))
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -247,7 +254,8 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
     if command not in valid_commands:
-        raise click.BadArgumentUsage('{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
+        raise click.BadArgumentUsage(
+            '{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
 
     if command == 'results' and argument:
         raise click.BadArgumentUsage('The {} command takes no arguments'.format(command))
@@ -288,7 +296,8 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
 
     if not paths_to_mutate:
-        raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise click.BadOptionUsage('--paths-to-mutate',
+                                   'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     tests_dirs = []
     for p in tests_dir.split(':'):
@@ -489,11 +498,68 @@ def tests_pass(config: Config, callback) -> bool:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
-    if config.using_testmon:
-        copy('.testmondata-initial', '.testmondata')
+    from multiprocessing import Process
 
-    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
+    def target(command, q):
+        # removes all before first "pytest"
+        correct_format = "pytest".join([""] + command.split('pytest')[1:])
+        failed_cases = run_tests_return_failed_cases(correct_format)
+        q.put(failed_cases)
+
+    result_queue = multiprocessing.Queue()
+    p = Progress()
+    p = Process(target=target, args=(config.test_command, result_queue))
+
+    # We start the process and we block for 5 seconds.
+    p.start()
+    p.join(timeout=config.baseline_time_elapsed * 10)
+    try:
+        failed_cases = result_queue.get()
+
+    except queue.Empty:
+        raise TimeoutError()
+
+    # We terminate the process.
+    # if config.using_testmon:
+    #     copy('.testmondata-initial', '.testmondata')
+
+    # returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
+    # return returncode == 0 or (config.using_testmon and returncode == 5)
+    return len(failed_cases) == 0
+
+
+def tests_pass_expanded(config: Config, callback) -> (List[str], int):
+    """
+    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
+    """
+    from multiprocessing import Process
+
+    def target(command, q):
+        # removes all before first "pytest"
+        correct_format = "pytest".join([""] + command.split('pytest')[1:])
+        failed_cases = run_tests_return_failed_cases(correct_format)
+        q.put(failed_cases)
+
+    result_queue = multiprocessing.Queue()
+    p = Progress()
+    p = Process(target=target, args=(config.test_command, result_queue))
+
+    # We start the process and we block for 5 seconds.
+    p.start()
+    p.join(timeout=config.baseline_time_elapsed * 10)
+    try:
+        failed_cases = result_queue.get()
+
+    except queue.Empty:
+        return None
+
+    # We terminate the process.
+    # if config.using_testmon:
+    #     copy('.testmondata-initial', '.testmondata')
+
+    # returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
+    # return returncode == 0 or (config.using_testmon and returncode == 5)
+    return failed_cases
 
 
 def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback) -> str:
@@ -507,10 +573,10 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         config=config,
     )
 
-    cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
-
-    if cached_status != UNTESTED:
-        return cached_status
+    # cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
+    #
+    # if cached_status != UNTESTED:
+    #     return cached_status
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
@@ -529,7 +595,8 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if not survived and time_elapsed > config.test_time_base + (
+                config.baseline_time_elapsed * config.test_time_multipler):
             return OK_SUSPICIOUS
 
         if survived:
@@ -545,13 +612,15 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
                 print(result)
 
 
-def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID]) -> None:
+def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str,
+                                mutations: List[MutationID]) -> None:
     """
     :type config: Config
     :type progress: Progress
     :type file_to_mutate: str
     :type mutations: list[MutationID]
     """
+
     def feedback(line):
         if not config.swallow_output:
             print(line)
@@ -596,7 +665,8 @@ def read_coverage_data():
         # noinspection PyPackageRequirements,PyUnresolvedReferences
         from coverage import Coverage
     except ImportError as e:
-        raise ImportError('The --use-coverage feature requires the coverage library. Run "pip install --force-reinstall mutmut[coverage]"') from e
+        raise ImportError(
+            'The --use-coverage feature requires the coverage library. Run "pip install --force-reinstall mutmut[coverage]"') from e
     cov = Coverage('.coverage')
     cov.load()
     return cov.get_data()
@@ -607,7 +677,8 @@ def read_patch_data(patch_file_path):
         # noinspection PyPackageRequirements
         import whatthepatch
     except ImportError as e:
-        raise ImportError('The --use-patch feature requires the whatthepatch library. Run "pip install --force-reinstall mutmut[patch]"') from e
+        raise ImportError(
+            'The --use-patch feature requires the whatthepatch library. Run "pip install --force-reinstall mutmut[patch]"') from e
     with open(patch_file_path) as f:
         diffs = whatthepatch.parse_patch(f.read())
 
@@ -655,7 +726,10 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time() - start_time
     else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
+        raise RuntimeError(
+            "Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command,
+                                                                                                      '\n'.join(
+                                                                                                          output)))
 
     print('Done')
 
@@ -684,7 +758,8 @@ def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
         mutations_by_file[filename] = list_mutations(context)
         register_mutants(mutations_by_file)
     except Exception as e:
-        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line)) from e
+        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename,
+                                                                                          context.current_source_line)) from e
 
 
 def python_source_files(path, tests_dirs, paths_to_exclude=None):
