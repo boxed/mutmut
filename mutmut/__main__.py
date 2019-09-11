@@ -494,71 +494,37 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config: Config, callback) -> bool:
-    """
-    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
-    """
-    from multiprocessing import Process
-
-    def target(command, q):
-        # removes all before first "pytest"
-        correct_format = "pytest".join([""] + command.split('pytest')[1:])
-        failed_cases = run_tests_return_failed_cases(correct_format)
-        q.put(failed_cases)
-
-    result_queue = multiprocessing.Queue()
-    p = Progress()
-    p = Process(target=target, args=(config.test_command, result_queue))
-
-    # We start the process and we block for 5 seconds.
-    p.start()
-    p.join(timeout=config.baseline_time_elapsed * 10)
-    try:
-        failed_cases = result_queue.get()
-
-    except queue.Empty:
+def tests_pass(config: Config, working_dir:str, callback) -> bool:
+    failed_cases = tests_pass_expanded(config,working_dir,callback)
+    if failed_cases == None:
         raise TimeoutError()
-
-    # We terminate the process.
-    # if config.using_testmon:
-    #     copy('.testmondata-initial', '.testmondata')
-
-    # returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    # return returncode == 0 or (config.using_testmon and returncode == 5)
     return len(failed_cases) == 0
 
 
-def tests_pass_expanded(config: Config, callback) -> (List[str], int):
+def target(working_dir, command, q):
+    
+    correct_format = "pytest" + command.split('pytest', 1)[1]
+
+    failed_cases = run_tests_return_failed_cases(working_dir, correct_format)
+    q.put(failed_cases)
+
+
+def tests_pass_expanded(config: Config, working_dir, callback) -> List[str]:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
-    from multiprocessing import Process
-
-    def target(command, q):
-        # removes all before first "pytest"
-        correct_format = "pytest".join([""] + command.split('pytest')[1:])
-        failed_cases = run_tests_return_failed_cases(correct_format)
-        q.put(failed_cases)
-
     result_queue = multiprocessing.Queue()
-    p = Progress()
-    p = Process(target=target, args=(config.test_command, result_queue))
+    p = multiprocessing.Process(target=target, args=(working_dir, config.test_command, result_queue))
 
-    # We start the process and we block for 5 seconds.
     p.start()
     p.join(timeout=config.baseline_time_elapsed * 10)
     try:
-        failed_cases = result_queue.get()
-
+        
+        failed_cases = result_queue.get(block=False)
+        p.terminate()
     except queue.Empty:
         return None
 
-    # We terminate the process.
-    # if config.using_testmon:
-    #     copy('.testmondata-initial', '.testmondata')
-
-    # returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    # return returncode == 0 or (config.using_testmon and returncode == 5)
     return failed_cases
 
 

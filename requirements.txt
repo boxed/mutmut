@@ -1,3 +1,4 @@
+pytest
 glob2
 parso
 click
