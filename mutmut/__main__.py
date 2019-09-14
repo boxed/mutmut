@@ -214,6 +214,8 @@ commands:\n
         Apply a mutation on disk.\n
     show [mutation id]\n
         Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
     junitxml\n
         Show a mutation diff with junitxml format.
     """
@@ -261,6 +263,10 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
         if argument == 'all':
             print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=argument2)
+            return 0
+
+        if os.path.isfile(argument):
+            print_result_cache(show_diffs=True, only_this_file=argument)
             return 0
 
         print(get_unified_diff(argument, dict_synonyms))
