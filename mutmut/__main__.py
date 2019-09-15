@@ -142,7 +142,7 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data):
+                 coverage_data, working_dir):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
@@ -159,6 +159,7 @@ class Config(object):
         self.post_mutation = post_mutation
         self.pre_mutation = pre_mutation
         self.coverage_data = coverage_data
+        self.working_dir = working_dir
 
 
 class Progress(object):
@@ -416,7 +417,7 @@ def get_mutations_by_file_from_cache(mutation_pk):
     return {filename: [mutation_id]}
 
 
-def popen_streaming_output(cmd, callback, timeout=None):
+def popen_streaming_output(cmd, callback, working_dir, timeout=None):
     """Open a subprocess and stream its output without hard-blocking.
 
     :param cmd: the command to execute within the subprocess
@@ -435,19 +436,24 @@ def popen_streaming_output(cmd, callback, timeout=None):
     :return: the return code of the executed subprocess
     :rtype: int
     """
+
+    if not isinstance(cmd, list):
+        cmd = shlex.split(cmd)
     if os.name == 'nt':  # pragma: no cover
         process = subprocess.Popen(
-            shlex.split(cmd),
+            cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            cwd=working_dir
         )
         stdout = process.stdout
     else:
         master, slave = os.openpty()
         process = subprocess.Popen(
-            shlex.split(cmd, posix=True),
+            cmd,  # posix true
             stdout=slave,
-            stderr=slave
+            stderr=slave,
+            cwd=working_dir
         )
         stdout = os.fdopen(master)
         os.close(slave)
@@ -494,37 +500,35 @@ def popen_streaming_output(cmd, callback, timeout=None):
     return process.returncode
 
 
-def tests_pass(config: Config, working_dir:str, callback) -> bool:
-    failed_cases = tests_pass_expanded(config,working_dir,callback)
-    if failed_cases == None:
-        raise TimeoutError()
-    return len(failed_cases) == 0
+def assemble_command_list(args: list):
+    parent = os.path.dirname(os.path.abspath(__file__))
+    pytest_wrapper = os.path.join(parent, "pytest_wrapper.py")
+    return ["python3", pytest_wrapper] + args
 
 
-def target(working_dir, command, q):
-    
-    correct_format = "pytest" + command.split('pytest', 1)[1]
-
-    failed_cases = run_tests_return_failed_cases(working_dir, correct_format)
-    q.put(failed_cases)
+def tests_pass(config: Config, callback) -> bool:
+    command = assemble_command_list(config.test_command)
+    returncode = popen_streaming_output(command, callback, config.working_dir,
+                                        timeout=config.baseline_time_elapsed * 10)
+    return returncode == 0
 
 
 def tests_pass_expanded(config: Config, working_dir, callback) -> List[str]:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
-    result_queue = multiprocessing.Queue()
-    p = multiprocessing.Process(target=target, args=(working_dir, config.test_command, result_queue))
+    failed_cases = []
 
-    p.start()
-    p.join(timeout=config.baseline_time_elapsed * 10)
-    try:
-        
-        failed_cases = result_queue.get(block=False)
-        p.terminate()
-    except queue.Empty:
-        return None
+    def callback_wrapper(line):
+        # callback(line)
+        if line:
+            failed_cases.append(line)
 
+    command = assemble_command_list(config.test_command)
+    returncode = popen_streaming_output(command,
+                                        callback_wrapper,
+                                        config.working_dir,
+                                        timeout=config.baseline_time_elapsed * 10)
     return failed_cases
 
 
@@ -654,7 +658,7 @@ def read_patch_data(patch_file_path):
     }
 
 
-def time_test_suite(swallow_output, test_command, using_testmon):
+def time_test_suite(swallow_output, test_command, using_testmon, working_dir):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
 
@@ -662,7 +666,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     :type swallow_output: bool
 
     :param test_command: command to spawn the testing subprocess
-    :type test_command: str
+    :type test_command: list
 
     :param using_testmon: if :obj:`True` the test return code evaluation will
         accommodate for ``pytest-testmon``
@@ -687,7 +691,8 @@ def time_test_suite(swallow_output, test_command, using_testmon):
         print_status('Running...')
         output.append(line)
 
-    returncode = popen_streaming_output(test_command, feedback)
+    command = assemble_command_list(test_command)
+    returncode = popen_streaming_output(command, feedback, working_dir)
 
     if returncode == 0 or (using_testmon and returncode == 5):
         baseline_time_elapsed = time() - start_time

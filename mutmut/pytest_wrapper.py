@@ -5,7 +5,7 @@ import shlex
 import pytest
 
 
-class MyPlugin:
+class FailedTestCasesPlugin:
     def __init__(self):
         self.failed_test_cases = []
 
@@ -15,22 +15,21 @@ class MyPlugin:
             self.failed_test_cases.append(nodeid)
 
 
-def run_tests_return_failed_cases(working_dir, args):
-    print("pytest ags:",shlex.split(args)[1:])
+def run_tests_return_failed_cases(args):
     with open(os.devnull, 'w') as devnull:
         with contextlib.redirect_stdout(devnull):
-            my_plugin = MyPlugin()
-            os.chdir(working_dir)
-        
-            pytest.main(
-                # [str(working_dir)],
-                shlex.split(args)[1:],
-                plugins=[my_plugin],
-            )
+            with contextlib.redirect_stderr(devnull):
+                plugin = FailedTestCasesPlugin()
+                exit_code = pytest.main(
+                    args,
+                    plugins=[plugin],
+                )
 
-    return my_plugin.failed_test_cases
+    return exit_code, plugin.failed_test_cases
 
 
 if __name__ == "__main__":
-    failed = run_tests_return_failed_cases("".join(sys.argv))
-    print(failed)
+    exit_code, failed_cases = run_tests_return_failed_cases(sys.argv[1:])
+    print("\n".join(failed_cases))
+    print()
+    exit(exit_code)
