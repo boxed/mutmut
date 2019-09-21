@@ -1,6 +1,24 @@
 Changelog
 ---------
 
+1.6.0 (2019-09-21)
+~~~~~~~~~~~~~~~~~~
+
+* Add `mutmut show [path to file]` command that shows all mutants for a given file
+
+* Better error messages if .coverage file isn't usable
+
+* Added support for windows paths in tests
+
+* Use the same python executable as mutmut is started as if possible
+
+* Dropped python 2 support
+
+* Added more assignment operator mutations
+
+* Bugfixes
+
+
 1.5.0 (2019-04-10)
 ~~~~~~~~~~~~~~~~~~
 
