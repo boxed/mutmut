@@ -12,3 +12,9 @@ Credits
 * Hristo Georgiev
 * Savo Kovačević <savo.s.kovacevic@gmail.com>
 * Nathan Klapstein <nklapste@ualberta.ca>
+* Brian Skinn <brian.skinn@gmail.com>
+* Jim Jazwiecki <jim.jazwiecki@gmail.com>
+* neroks <gneroks@gmail.com>
+* John Vandenberg <jayvdb@gmail.com>
+* Luca Simonetto <luca.simonetto.94@gmail.com>
+* Emil Stenström <emil@emilstenstrom.se>
