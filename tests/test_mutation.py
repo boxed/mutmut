@@ -93,6 +93,7 @@ for x in y:
         ('a or b', 'a and b'),
         ('a and b', 'a or b'),
         ('a = b', 'a = None'),
+        ('a = b = c = x', 'a = b = c = None'),
         ('s[0]', 's[1]'),
         ('s[0] = a', 's[1] = None'),
         ('s[x]', 's[None]'),
