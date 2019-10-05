@@ -333,12 +333,13 @@ def and_or_test_mutation(children, node, **_):
 
 def expression_mutation(children, **_):
     def handle_assignment(children):
-        if getattr(children[2], 'value', '---') != 'None':
+        mutation_index = -1  # we mutate the last value to handle multiple assignement
+        if getattr(children[mutation_index], 'value', '---') != 'None':
             x = ' None'
         else:
             x = ' ""'
         children = children[:]
-        children[2] = Name(value=x, start_pos=children[2].start_pos)
+        children[mutation_index] = Name(value=x, start_pos=children[mutation_index].start_pos)
 
         return children
 
