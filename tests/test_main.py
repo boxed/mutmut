@@ -337,7 +337,7 @@ def test_use_coverage(capsys, filesystem):
     assert int(root.attrib['disabled']) == 0
 
     # generate a `.coverage` file by invoking pytest
-    subprocess.run(["python", "-m", "pytest", "--cov=.", "foo.py"])
+    subprocess.run([sys.executable, "-m", "pytest", "--cov=.", "foo.py"])
     assert os.path.isfile('.coverage')
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
