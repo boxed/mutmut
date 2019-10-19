@@ -169,6 +169,7 @@ def test_basic_mutations_python36(original, expected):
         'foo(a, *args, **kwargs)',
         "'''foo'''",  # don't mutate things we assume to be docstrings
         "r'''foo'''",  # don't mutate things we assume to be docstrings
+        '(x for x in [])',  # don't mutate 'in' in generators
         "NotADictSynonym(a=b)",
         'from foo import *',
         'from .foo import *',
