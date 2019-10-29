@@ -344,6 +344,7 @@ def expression_mutation(children, **_):
 
     if children[0].type == 'operator' and children[0].value == ':':
         if len(children) > 2 and children[2].value == '=':
+            children = children[:]  # we need to copy the list here, to not get in place mutation on the next line!
             children[1:] = handle_assignment(children[1:])
     elif children[1].type == 'operator' and children[1].value == '=':
         children = handle_assignment(children)

@@ -27,7 +27,7 @@ file_to_mutate_lines = [
     "g: int = 2",
 ]
 
-EXPECTED_MUTANTS = 13
+EXPECTED_MUTANTS = 14
 
 PYTHON = '"{}"'.format(sys.executable)
 
@@ -180,8 +180,7 @@ def test_popen_streaming_output_stream():
 
     mock = MagicMock()
     popen_streaming_output(
-        PYTHON +
-        ' -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
+        PYTHON + ' -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
         callback=mock
     )
     mock.assert_has_calls([call('first'), call('second'), call('third')])
@@ -296,12 +295,12 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (13)
+Suspicious 🤔 ({EXPECTED_MUTANTS})
 
----- foo.py (13) ----
+---- foo.py ({EXPECTED_MUTANTS}) ----
 
-1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-""".strip()
+{ids}
+""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS, ids=', '.join(str(x + 1) for x in range(EXPECTED_MUTANTS))).strip()
 
 
 def test_full_run_all_suspicious_mutant_junit(filesystem):
@@ -343,7 +342,7 @@ def test_use_coverage(capsys, filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
     # replace the .coverage file content with a non existent path to check if an exception is thrown
     with open('.coverage', 'r') as f:
@@ -375,7 +374,7 @@ index b9a5fb4..c6a496c 100644
 -f = 3
 +f = 5
  d = dict(e=f)
-\ No newline at end of file
+\\ No newline at end of file
 """
     with open('patch', 'w') as f:
         f.write(patch_contents)

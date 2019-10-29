@@ -351,3 +351,11 @@ __all__ = [
 ]
 """
     assert mutate(Context(source=source)) == (source, 0)
+
+
+def test_bug_github_issue_162():
+    source = """
+primes: List[int] = []
+foo = 'bar'
+"""
+    assert mutate(Context(source=source, mutation_id=MutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
