@@ -61,14 +61,8 @@ You can stop the mutation run at any time and mutmut will restart where you
 left off. It's also smart enough to retest only the surviving mutants when the
 test suite changes.
 
-To print the results run `mutmut results`. It will give you output in the form
-of the commands to apply a mutation:
+To print the results run `mutmut results`. It will give you a list of the mutants grouped by bucket. You can now either show the diff of a mutant with `mutmut show 3` or write it to disk with `mutmut apply 3`.
 
-.. code-block:: console
-
-    mutmut apply 3
-
-You can just copy paste those lines and run and you'll get the mutant on disk.
 You should **REALLY** have the file you mutate under source code control and
 committed before you mutate it!
 
