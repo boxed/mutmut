@@ -1,6 +1,7 @@
 *.py[cod]
 examples/db.sqlite3
 venv
+.venv
 table.css.map
 .idea
 .vscode
@@ -23,6 +24,7 @@ parts
 sdist
 develop-eggs
 .installed.cfg
+.eggs
 
 # Installer logs
 pip-log.txt

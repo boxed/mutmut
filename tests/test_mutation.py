@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-import sys
 
+import pytest
 from parso import parse
 
-from mutmut import mutate, count_mutations, ALL, Context, list_mutations, MutationID, array_subscript_pattern, function_call_pattern, ASTPattern
-import pytest
+from mutmut import mutate, ALL, Context, list_mutations, MutationID, \
+    array_subscript_pattern, function_call_pattern, ASTPattern
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_matches_py3():
     node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
     assert not array_subscript_pattern.matches(node=node)
@@ -50,13 +48,13 @@ for x in y:
 
     n = parse("""for a in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
     n = parse("""for a, b in [1, 2, 3]:
     if foo:
-        continue 
+        continue
 """).children[0].children[3]
     assert p.matches(node=n)
 
@@ -64,7 +62,6 @@ for x in y:
 @pytest.mark.parametrize(
     'original, expected', [
         ('lambda: 0', 'lambda: None'),
-        ('lambda: None', 'lambda: 0'),
         ('a(b)', 'a(None)'),
         ('a[b]', 'a[None]'),
         ("1 in (1, 2)", "2 not in (2, 3)"),
@@ -96,6 +93,7 @@ for x in y:
         ('a or b', 'a and b'),
         ('a and b', 'a or b'),
         ('a = b', 'a = None'),
+        ('a = b = c = x', 'a = b = c = None'),
         ('s[0]', 's[1]'),
         ('s[0] = a', 's[1] = None'),
         ('s[x]', 's[None]'),
@@ -108,23 +106,46 @@ for x in y:
         ("Struct(a=b)", "Struct(aXX=b)"),
         ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
-        ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('a = {x for x in y}', 'a = None'),
-        ('a = None', 'a = 7'),
         ('break', 'continue'),
     ]
 )
 def test_basic_mutations(original, expected):
     actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed %s mutations for original "%s"' % (number_of_performed_mutations, original)
+    assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
+@pytest.mark.parametrize(
+    'original, expected', [
+        ('x+=1', ['x=1', 'x-=1']),
+        ('x-=1', ['x=1', 'x+=1']),
+        ('x*=1', ['x=1', 'x/=1']),
+        ('x/=1', ['x=1', 'x*=1']),
+        ('x//=1', ['x=1', 'x/=1']),
+        ('x%=1', ['x=1', 'x/=1']),
+        ('x<<=1', ['x=1', 'x>>=1']),
+        ('x>>=1', ['x=1', 'x<<=1']),
+        ('x&=1', ['x=1', 'x|=1']),
+        ('x|=1', ['x=1', 'x&=1']),
+        ('x^=1', ['x=1', 'x&=1']),
+        ('x**=1', ['x=1', 'x*=1']),
+    ]
+)
+def test_multiple_mutations(original, expected):
+    mutations = list_mutations(Context(source=original))
+    assert len(mutations) == 3
+    assert mutate(Context(source=original, mutation_id=mutations[0])) == (expected[0], 1)
+    assert mutate(Context(source=original, mutation_id=mutations[1])) == (expected[1], 1)
+
+
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
+        ('a = None', 'a = ""'),
+        ('lambda **kwargs: None', 'lambda **kwargs: 0'),
+        ('lambda: None', 'lambda: 0'),
     ]
 )
 def test_basic_mutations_python3(original, expected):
@@ -132,11 +153,10 @@ def test_basic_mutations_python3(original, expected):
     assert actual == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
 @pytest.mark.parametrize(
     'original, expected', [
         ('a: int = 1', 'a: int = None'),
-        ('a: Optional[int] = None', 'a: Optional[int] = 7'),
+        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
     ]
 )
 def test_basic_mutations_python36(original, expected):
@@ -146,16 +166,19 @@ def test_basic_mutations_python36(original, expected):
 
 @pytest.mark.parametrize(
     'source', [
+        'foo(a, *args, **kwargs)',
         "'''foo'''",  # don't mutate things we assume to be docstrings
+        "r'''foo'''",  # don't mutate things we assume to be docstrings
+        '(x for x in [])',  # don't mutate 'in' in generators
         "NotADictSynonym(a=b)",
         'from foo import *',
+        'from .foo import *',
         'import foo',
         'import foo as bar',
         'foo.bar',
         'for x in y: pass',
-        'a[None]',
-        'a(None)',
         'def foo(a, *args, **kwargs): pass',
+        'import foo',
     ]
 )
 def test_do_not_mutate(source):
@@ -163,16 +186,26 @@ def test_do_not_mutate(source):
     assert actual == source
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 @pytest.mark.parametrize(
     'source', [
         'def foo(s: str): pass',
         'def foo(a, *, b): pass',
+        'a[None]',
+        'a(None)',
     ]
 )
 def test_do_not_mutate_python3(source):
     actual = mutate(Context(source=source, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
     assert actual == source
+
+
+def test_mutate_body_of_function_with_return_type_annotation():
+    source = """
+def foo() -> int:
+    return 0
+    """
+
+    assert mutate(Context(source=source, mutation_id=ALL))[0] == source.replace('0', '1')
 
 
 def test_mutate_all():
@@ -185,10 +218,6 @@ def test_mutate_both():
     assert len(mutations) == 2
     assert mutate(Context(source=source, mutation_id=mutations[0])) == ('a = b - c', 1)
     assert mutate(Context(source=source, mutation_id=mutations[1])) == ('a = None', 1)
-
-
-def test_count_available_mutations():
-    assert count_mutations(Context(source='def foo():\n    return 1+1')) == 3
 
 
 def test_perform_one_indexed_mutation():
@@ -207,7 +236,6 @@ def test_function():
     assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 2, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
     assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
@@ -253,7 +281,7 @@ def test_performed_mutation_ids():
 
 
 def test_syntax_error():
-    with pytest.raises(Exception) as e:
+    with pytest.raises(Exception):
         mutate(Context(source=':!'))
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
@@ -287,12 +315,11 @@ def icon(name):
 
 
 def test_bug_github_issue_19():
-    source = """key = lambda a: "foo"  
+    source = """key = lambda a: "foo"
 filters = dict((key(field), False) for field in fields)"""
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Don't check Python 3.6+ syntax in Python < 3.6")
 def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
@@ -301,10 +328,34 @@ class ConfigurationOptions(Protocol):
     mutate(Context(source=source))
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="Don't check Python 3 syntax in Python 2")
 def test_bug_github_issue_30():
     source = """
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
     pass
 """
     assert mutate(Context(source=source)) == (source, 0)
+
+
+def test_bug_github_issue_77():
+    # Don't crash on this
+    Context(source='')
+
+
+def test_multiline_dunder_whitelist():
+    source = """
+__all__ = [
+    1,
+    2,
+    'foo',
+    'bar',
+]
+"""
+    assert mutate(Context(source=source)) == (source, 0)
+
+
+def test_bug_github_issue_162():
+    source = """
+primes: List[int] = []
+foo = 'bar'
+"""
+    assert mutate(Context(source=source, mutation_id=MutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)

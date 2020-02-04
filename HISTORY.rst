@@ -1,6 +1,85 @@
 Changelog
 ---------
 
+1.6.0 (2019-09-21)
+~~~~~~~~~~~~~~~~~~
+
+* Add `mutmut show [path to file]` command that shows all mutants for a given file
+
+* Better error messages if .coverage file isn't usable
+
+* Added support for windows paths in tests
+
+* Use the same python executable as mutmut is started as if possible
+
+* Dropped python 2 support
+
+* Added more assignment operator mutations
+
+* Bugfixes
+
+
+1.5.0 (2019-04-10)
+~~~~~~~~~~~~~~~~~~
+
+* New mutation: None -> ''
+
+* Display all diffs for surviving mutants for a specific file with `mutmut show all path/to/file.py`
+
+* Display all diffs for surviving mutants with `mutmut show all`
+
+* Fixed a bug with grouping of the results for `mutmut results`
+
+* Fixed bug where `mutmut show X` sometimes showed no diff
+
+* Fixed bug where `mutmut apply X` sometimes didn't apply a mutation
+
+* Improved error message when trying to find the code
+
+* Fixed incorrect help message
+
+1.4.0 (2019-03-26)
+~~~~~~~~~~~~~~~~~~
+
+* New setting: `--test-time-base=15.0`. This flag can be used to avoid issues with timing.
+
+* Post and pre hooks for the mutation step: `--pre-mutation=command` and `--post-mutation=command` if you want to run some command before and after a mutation testing round.
+
+* Fixed a bug with mutation of imports.
+
+* Fixed missing newline at end of the output of mutmut.
+
+* Support for mutating only lines specified by a patch file: `--use-patch-file=foo.patch`.
+
+* Fixed mutation of arguments in function call.
+
+* Looser heuristics for finding the source to mutate. This should mean more projects will just work out of the box.
+
+* Fixed mutation of arguments in function call for python 2.7.
+
+* Fixed a bug where if mutmut couldn't find the test code it thought the tests hadn't changed. Now mutmut treats this situation as the tests always being changed.
+
+* Fixed bug where the function body was skipped for mutation if a return type annotation existed.
+
+*
+
+
+1.3.1 (2019-01-30)
+~~~~~~~~~~~~~~~~~~
+
+* Fixed a bug where mutmut crashed if a file contained exactly zero bytes.
+
+
+1.3.0 (2019-01-23)
+~~~~~~~~~~~~~~~~~~
+
+* Fixed incorrect loading of coverage data when using the `--use-coverage` flag.
+
+* Fixed a bug when updating the cache.
+
+* Fixed incorrect handling of source files that didn't end with a newline.
+
+
 1.2.0 (2019-01-10)
 ~~~~~~~~~~~~~~~~~~
 

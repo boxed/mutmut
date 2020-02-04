@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
+import os
 import re
-import sys
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
-from tri.declarative import evaluate
 
-__version__ = '1.2.0'
+__version__ = '1.6.0'
 
 
 class MutationID(object):
@@ -17,7 +15,7 @@ class MutationID(object):
         self.line_number = line_number
 
     def __repr__(self):
-        return 'MutationID(line="%s", index=%s, line_number=%s)' % (self.line, self.index, self.line_number)
+        return 'MutationID(line="{}", index={}, line_number={})'.format(self.line, self.index, self.line_number)
 
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
@@ -84,11 +82,13 @@ class ASTPattern(object):
         check_value = True
         check_children = True
 
-        # Match type based on the name, so _keyword matches all keywords. Special case for _all that matches everything
+        # Match type based on the name, so _keyword matches all keywords.
+        # Special case for _all that matches everything
         if pattern.type == 'name' and pattern.value.startswith('_') and pattern.value[1:] in ('any', node.type):
             check_value = False
 
-        # The advanced case where we've explicitly marked up a node with the accepted types
+        # The advanced case where we've explicitly marked up a node with
+        # the accepted types
         elif id(pattern) in self.marker_type_by_id:
             if self.marker_type_by_id[id(pattern)] in (pattern.type, 'any'):
                 check_value = False
@@ -137,13 +137,6 @@ dunder_whitelist = [
     'license',
     'copyright',
 ]
-
-
-if sys.version_info < (3, 0):   # pragma: no cover (python 2 specific)
-    # noinspection PyUnresolvedReferences
-    text_types = (str, unicode)
-else:
-    text_types = (str,)
 
 
 UNTESTED = 'untested'
@@ -206,14 +199,14 @@ def string_mutation(value, **_):
     if value.startswith('"""') or value.startswith("'''"):
         # We assume here that triple-quoted stuff are docs or other things
         # that mutation is meaningless for
-        return value
+        return prefix + value
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
 def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
-            return nodes[:i], n, nodes[i+1:]
+            return nodes[:i], n, nodes[i + 1:]
 
     assert False, "didn't find node to split on"
 
@@ -252,8 +245,7 @@ def argument_mutation(children, context, **_):
 
 
 def keyword_mutation(value, context, **_):
-
-    if len(context.stack) > 2 and context.stack[-2].type == 'comp_op' and value in ('in', 'is'):
+    if len(context.stack) > 2 and context.stack[-2].type in ('comp_op', 'sync_comp_for') and value in ('in', 'is'):
         return
 
     if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
@@ -281,10 +273,13 @@ def operator_mutation(value, node, **_):
     if import_from_star_pattern.matches(node=node):
         return
 
-    if value in ('**', '*') and node.parent.type == 'param':
+    if value in ('*', '**') and node.parent.type == 'param':
         return
 
     if value == '*' and node.parent.type == 'parameters':
+        return
+
+    if value in ('*', '**') and node.parent.type in ('argument', 'arglist'):
         return
 
     return {
@@ -302,18 +297,18 @@ def operator_mutation(value, node, **_):
         '**': '*',
         '~': '',
 
-        '+=': '-=',
-        '-=': '+=',
-        '*=': '/=',
-        '/=': '*=',
-        '//=': '/=',
-        '%=': '/=',
-        '<<=': '>>=',
-        '>>=': '<<=',
-        '&=': '|=',
-        '|=': '&=',
-        '^=': '&=',
-        '**=': '*=',
+        '+=': ['-=', '='],
+        '-=': ['+=', '='],
+        '*=': ['/=', '='],
+        '/=': ['*=', '='],
+        '//=': ['/=', '='],
+        '%=': ['/=', '='],
+        '<<=': ['>>=', '='],
+        '>>=': ['<<=', '='],
+        '&=': ['|=', '='],
+        '|=': ['&=', '='],
+        '^=': ['&=', '='],
+        '**=': ['*=', '='],
         '~=': '=',
 
         '<': '<=',
@@ -337,17 +332,19 @@ def and_or_test_mutation(children, node, **_):
 
 def expression_mutation(children, **_):
     def handle_assignment(children):
-        if getattr(children[2], 'value', '---') != 'None':
+        mutation_index = -1  # we mutate the last value to handle multiple assignement
+        if getattr(children[mutation_index], 'value', '---') != 'None':
             x = ' None'
         else:
-            x = ' 7'
+            x = ' ""'
         children = children[:]
-        children[2] = Name(value=x, start_pos=children[2].start_pos)
+        children[mutation_index] = Name(value=x, start_pos=children[mutation_index].start_pos)
 
         return children
 
     if children[0].type == 'operator' and children[0].value == ':':
         if len(children) > 2 and children[2].value == '=':
+            children = children[:]  # we need to copy the list here, to not get in place mutation on the next line!
             children[1:] = handle_assignment(children[1:])
     elif children[1].type == 'operator' and children[1].value == '=':
         children = handle_assignment(children)
@@ -377,7 +374,7 @@ def name_mutation(node, value, **_):
         'True': 'False',
         'False': 'True',
         'deepcopy': 'copy',
-        # TODO: This breaks some tests, so should figure out why first: 'None': '0',
+        'None': '""',
         # TODO: probably need to add a lot of things here... some builtins maybe, what more?
     }
     if value in simple_mutants:
@@ -408,21 +405,40 @@ mutations_by_type = {
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
 
 
+def should_exclude(context, config):
+    if config is None or config.covered_lines_by_filename is None:
+        return False
+
+    try:
+        covered_lines = config.covered_lines_by_filename[context.filename]
+    except KeyError:
+        if config.coverage_data is not None:
+            covered_lines = config.coverage_data.lines(os.path.abspath(context.filename))
+            config.covered_lines_by_filename[context.filename] = covered_lines
+        else:
+            covered_lines = None
+
+    if covered_lines is None:
+        return True
+    current_line = context.current_line_index + 1
+    if current_line not in covered_lines:
+        return True
+    return False
+
+
 class Context(object):
-    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, exclude=lambda context: False, config=None):
+    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None):
         self.index = 0
         self.remove_newline_at_end = False
-        if source is not None and source[-1] != '\n':
+        if source and source[-1] != '\n':
             source += '\n'
             self.remove_newline_at_end = True
         self.source = source
         self.mutation_id = mutation_id
-        self.number_of_performed_mutations = 0
         self.performed_mutation_ids = []
         assert isinstance(mutation_id, MutationID)
         self.current_line_index = 0
         self.filename = filename
-        self.exclude = exclude
         self.stack = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
         self._source_by_line_number = None
@@ -431,16 +447,7 @@ class Context(object):
         self.config = config
 
     def exclude_line(self):
-        current_line = self.source_by_line_number[self.current_line_index]
-        if current_line.startswith('__'):
-            word, _, rest = current_line[2:].partition('__')
-            if word in dunder_whitelist and rest.strip()[0] == '=':
-                return True
-
-        if current_line.strip() == "__import__('pkg_resources').declare_namespace(__name__)":
-            return True
-
-        return self.current_line_index in self.pragma_no_mutate_lines or self.exclude(context=self)
+        return self.current_line_index in self.pragma_no_mutate_lines or should_exclude(context=self, config=self.config)
 
     @property
     def source_by_line_number(self):
@@ -469,19 +476,19 @@ class Context(object):
     def should_mutate(self):
         if self.mutation_id == ALL:
             return True
-
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
 
 
 def mutate(context):
     """
     :type context: Context
-    :return: tuple: mutated source code, number of mutations performed
+    :return: tuple of mutated source code and number of mutations performed
+    :rtype: Tuple[str, int]
     """
     try:
         result = parse(context.source, error_recovery=False)
     except Exception:
-        print('Failed to parse %s. Internal error from parso follows.' % context.filename)
+        print('Failed to parse {}. Internal error from parso follows.'.format(context.filename))
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)
@@ -489,91 +496,107 @@ def mutate(context):
     if context.remove_newline_at_end:
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
-    if context.number_of_performed_mutations:
-        # If we said we mutated the code, check that it has actually changed
-        assert context.source != mutated_source
+
+    # If we said we mutated the code, check that it has actually changed
+    if context.performed_mutation_ids:
+        if context.source == mutated_source:
+            raise RuntimeError(
+                "Mutation context states that a mutation occurred but the "
+                "mutated source remains the same as original")
     context.mutated_source = mutated_source
-    return mutated_source, context.number_of_performed_mutations
+    return mutated_source, len(context.performed_mutation_ids)
 
 
-def mutate_node(i, context):
+def mutate_node(node, context):
     """
     :type context: Context
     """
-    context.stack.append(i)
+    context.stack.append(node)
     try:
-
-        t = i.type
-
-        if i.type == 'tfpdef':
+        if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
-        if i.start_pos[0] - 1 != context.current_line_index:
-            context.current_line_index = i.start_pos[0] - 1
+        if node.type == 'atom_expr' and node.children and node.children[0].type == 'name' and node.children[0].value == '__import__':
+            return
+
+        if node.start_pos[0] - 1 != context.current_line_index:
+            context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        if hasattr(i, 'children'):
-            mutate_list_of_nodes(i, context=context)
+        if node.type == 'expr_stmt':
+            if node.children[0].type == 'name' and node.children[0].value.startswith('__') and node.children[0].value.endswith('__'):
+                if node.children[0].value[2:-2] in dunder_whitelist:
+                    return
+
+        if hasattr(node, 'children'):
+            mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
+            if context.performed_mutation_ids and context.mutation_id != ALL:
                 return
 
-        m = mutations_by_type.get(t)
+        mutation = mutations_by_type.get(node.type)
 
-        if m is None:
+        if mutation is None:
             return
 
-        for key, value in sorted(m.items()):
-            old = getattr(i, key)
+        for key, value in sorted(mutation.items()):
+            old = getattr(node, key)
             if context.exclude_line():
                 continue
 
-            new = evaluate(
-                value,
+            new = value(
                 context=context,
-                node=i,
-                value=getattr(i, 'value', None),
-                children=getattr(i, 'children', None),
+                node=node,
+                value=getattr(node, 'value', None),
+                children=getattr(node, 'children', None),
             )
-            assert not callable(new)
-            if new is not None and new != old:
-                if context.should_mutate():
-                    context.number_of_performed_mutations += 1
-                    context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                    setattr(i, key, new)
-                context.index += 1
 
-            # this is just an optimization to stop early
-            if context.number_of_performed_mutations and context.mutation_id != ALL:
-                return
+            if isinstance(new, list) and not isinstance(old, list):
+                # multiple mutations
+                new_list = new
+            else:
+                # one mutation
+                new_list = [new]
+
+            # go through the alternate mutations in reverse as they may have
+            # adverse effects on subsequent mutations, this ensures the last
+            # mutation applied is the original/default/legacy mutmut mutation
+            for new in reversed(new_list):
+                assert not callable(new)
+                if new is not None and new != old:
+                    if context.should_mutate():
+                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+                        setattr(node, key, new)
+                    context.index += 1
+                # this is just an optimization to stop early
+                if context.performed_mutation_ids and context.mutation_id != ALL:
+                    return
     finally:
         context.stack.pop()
 
 
-def mutate_list_of_nodes(result, context):
+def mutate_list_of_nodes(node, context):
     """
     :type context: Context
     """
-    for i in result.children:
+    return_annotation_started = False
 
-        if i.type == 'operator' and i.value == '->':
-            return
+    for child_node in node.children:
+        if child_node.type == 'operator' and child_node.value == '->':
+            return_annotation_started = True
 
-        mutate_node(i, context=context)
+        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
+            return_annotation_started = False
+
+        if return_annotation_started:
+            continue
+
+        mutate_node(child_node, context=context)
 
         # this is just an optimization to stop early
-        if context.number_of_performed_mutations and context.mutation_id != ALL:
+        if context.performed_mutation_ids and context.mutation_id != ALL:
             return
-
-
-def count_mutations(context):
-    """
-    :type context: Context
-    """
-    assert context.mutation_id == ALL
-    mutate(context)
-    return context.number_of_performed_mutations
 
 
 def list_mutations(context):
@@ -587,17 +610,18 @@ def list_mutations(context):
 
 def mutate_file(backup, context):
     """
-
     :type backup: bool
     :type context: Context
+
+    :return: Tuple[str, str]
     """
     with open(context.filename) as f:
-        code = f.read()
-    context.source = code
+        original = f.read()
+    context.source = original
     if backup:
         with open(context.filename + '.bak', 'w') as f:
-            f.write(code)
-    result, number_of_mutations_performed = mutate(context)
+            f.write(original)
+    mutated, _ = mutate(context)
     with open(context.filename, 'w') as f:
-        f.write(result)
-    return number_of_mutations_performed
+        f.write(mutated)
+    return original, mutated

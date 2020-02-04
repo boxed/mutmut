@@ -1,43 +1,35 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import os
+import re
 import sys
+import subprocess
 import xml.etree.ElementTree as ET
 from time import time
+from unittest.mock import MagicMock, call
 
 import pytest
 from click.testing import CliRunner
 from coverage import CoverageData
 
 from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, TimeoutError, Config, compute_exit_code, \
-    read_coverage_data
-
-try:
-    from unittest.mock import MagicMock, call
-except ImportError:
-    from mock import MagicMock, call
-
+    popen_streaming_output, compute_exit_code, \
+    read_coverage_data, Progress
 
 file_to_mutate_lines = [
     "def foo(a, b):",
     "    return a < b",
+    "c = 1",
+    "c += 1",
     "e = 1",
     "f = 3",
     "d = dict(e=f)",
+    "g: int = 2",
 ]
 
-if sys.version_info >= (3, 6):   # pragma: no cover (python 2 specific)
-    file_to_mutate_lines.append("g: int = 2")
-    EXPECTED_MUTANTS = 8
-else:
-    # python2 is given a more primitive mutation base
-    # thus can obtain 1 more mutant
-    file_to_mutate_lines.append("g = 2")
-    EXPECTED_MUTANTS = 9
+EXPECTED_MUTANTS = 14
 
+PYTHON = '"{}"'.format(sys.executable)
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
@@ -47,7 +39,8 @@ from foo import *
 def test_foo():
    assert foo(1, 2) is True
    assert foo(2, 2) is False
-   
+
+   assert c == 2
    assert e == 1
    assert f == 3
    assert d == dict(e=f)
@@ -78,54 +71,54 @@ def filesystem(tmpdir_factory):
 
 def test_compute_return_code():
     # mock of Config for ease of testing
-    class MockConfig(Config):
+    class MockProgress(Progress):
         def __init__(self, killed_mutants, surviving_mutants,
                      surviving_mutants_timeout, suspicious_mutants):
+            super(MockProgress, self).__init__()
             self.killed_mutants = killed_mutants
             self.surviving_mutants = surviving_mutants
             self.surviving_mutants_timeout = surviving_mutants_timeout
             self.suspicious_mutants = suspicious_mutants
 
-    assert compute_exit_code(MockConfig(0, 0, 0, 0)) == 0
-    assert compute_exit_code(MockConfig(0, 0, 0, 1)) == 8
-    assert compute_exit_code(MockConfig(0, 0, 1, 0)) == 4
-    assert compute_exit_code(MockConfig(0, 0, 1, 1)) == 12
-    assert compute_exit_code(MockConfig(0, 1, 0, 0)) == 2
-    assert compute_exit_code(MockConfig(0, 1, 0, 1)) == 10
-    assert compute_exit_code(MockConfig(0, 1, 1, 0)) == 6
-    assert compute_exit_code(MockConfig(0, 1, 1, 1)) == 14
+    assert compute_exit_code(MockProgress(0, 0, 0, 0)) == 0
+    assert compute_exit_code(MockProgress(0, 0, 0, 1)) == 8
+    assert compute_exit_code(MockProgress(0, 0, 1, 0)) == 4
+    assert compute_exit_code(MockProgress(0, 0, 1, 1)) == 12
+    assert compute_exit_code(MockProgress(0, 1, 0, 0)) == 2
+    assert compute_exit_code(MockProgress(0, 1, 0, 1)) == 10
+    assert compute_exit_code(MockProgress(0, 1, 1, 0)) == 6
+    assert compute_exit_code(MockProgress(0, 1, 1, 1)) == 14
 
-    assert compute_exit_code(MockConfig(1, 0, 0, 0)) == 0
-    assert compute_exit_code(MockConfig(1, 0, 0, 1)) == 8
-    assert compute_exit_code(MockConfig(1, 0, 1, 0)) == 4
-    assert compute_exit_code(MockConfig(1, 0, 1, 1)) == 12
-    assert compute_exit_code(MockConfig(1, 1, 0, 0)) == 2
-    assert compute_exit_code(MockConfig(1, 1, 0, 1)) == 10
-    assert compute_exit_code(MockConfig(1, 1, 1, 0)) == 6
-    assert compute_exit_code(MockConfig(1, 1, 1, 1)) == 14
+    assert compute_exit_code(MockProgress(1, 0, 0, 0)) == 0
+    assert compute_exit_code(MockProgress(1, 0, 0, 1)) == 8
+    assert compute_exit_code(MockProgress(1, 0, 1, 0)) == 4
+    assert compute_exit_code(MockProgress(1, 0, 1, 1)) == 12
+    assert compute_exit_code(MockProgress(1, 1, 0, 0)) == 2
+    assert compute_exit_code(MockProgress(1, 1, 0, 1)) == 10
+    assert compute_exit_code(MockProgress(1, 1, 1, 0)) == 6
+    assert compute_exit_code(MockProgress(1, 1, 1, 1)) == 14
 
-    assert compute_exit_code(MockConfig(0, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockConfig(0, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockConfig(0, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockConfig(0, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockConfig(0, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockConfig(0, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockConfig(0, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockConfig(0, 1, 1, 1), Exception()) == 15
+    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockProgress(0, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockProgress(0, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockProgress(0, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockProgress(0, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockProgress(0, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockProgress(0, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockProgress(0, 1, 1, 1), Exception()) == 15
 
-    assert compute_exit_code(MockConfig(1, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockConfig(1, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockConfig(1, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockConfig(1, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockConfig(1, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockConfig(1, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockConfig(1, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockConfig(1, 1, 1, 1), Exception()) == 15
+    assert compute_exit_code(MockProgress(1, 0, 0, 0), Exception()) == 1
+    assert compute_exit_code(MockProgress(1, 0, 0, 1), Exception()) == 9
+    assert compute_exit_code(MockProgress(1, 0, 1, 0), Exception()) == 5
+    assert compute_exit_code(MockProgress(1, 0, 1, 1), Exception()) == 13
+    assert compute_exit_code(MockProgress(1, 1, 0, 0), Exception()) == 3
+    assert compute_exit_code(MockProgress(1, 1, 0, 1), Exception()) == 11
+    assert compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) == 7
+    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) == 15
 
 
 def test_read_coverage_data(filesystem):
-    assert read_coverage_data(False) is None
-    assert isinstance(read_coverage_data(True), CoverageData)
+    assert isinstance(read_coverage_data(), CoverageData)
 
 
 @pytest.mark.parametrize(
@@ -141,10 +134,38 @@ def test_python_source_files(expected, source_path, tests_dirs, filesystem):
     assert list(python_source_files(source_path, tests_dirs)) == expected
 
 
+def test_python_source_files__with_paths_to_exclude(tmpdir):
+    # arrange
+    paths_to_exclude = ['entities*']
+
+    project_dir = tmpdir.mkdir('project')
+    service_dir = project_dir.mkdir('services')
+
+    f = service_dir.join('entities.py')
+    f.write('')
+    f = service_dir.join('main.py')
+    f.write('')
+    f = service_dir.join('utils.py')
+    f.write('')
+
+    entities_dir = project_dir.mkdir('entities')
+    f = entities_dir.join('user.py')
+    f.write('')
+
+    # act, assert
+    assert set(python_source_files(project_dir.strpath, [], paths_to_exclude)) == {
+        os.path.join(project_dir.strpath, 'services', 'main.py'),
+        os.path.join(project_dir.strpath, 'services', 'utils.py'),
+    }
+
+
 def test_popen_streaming_output_timeout():
     start = time()
     with pytest.raises(TimeoutError):
-        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+        popen_streaming_output(
+            PYTHON + ' -c "import time; time.sleep(4)"',
+            lambda line: line, timeout=0.1,
+        )
 
     assert (time() - start) < 3
 
@@ -152,25 +173,27 @@ def test_popen_streaming_output_timeout():
 def test_popen_streaming_output_stream():
     mock = MagicMock()
     popen_streaming_output(
-        'python -c "print(\'first\'); print(\'second\')"',
+        PYTHON + ' -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
     mock.assert_has_calls([call('first'), call('second')])
 
     mock = MagicMock()
     popen_streaming_output(
-        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
+        PYTHON + ' -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
         callback=mock
     )
     mock.assert_has_calls([call('first'), call('second'), call('third')])
 
     mock = MagicMock()
-    popen_streaming_output('python -c "exit(0);"', callback=mock)
+    popen_streaming_output(
+        PYTHON + ' -c "exit(0);"',
+        callback=mock)
     mock.assert_not_called()
 
 
 def test_simple_apply(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
 
@@ -182,7 +205,7 @@ def test_simple_apply(filesystem):
 
 
 def test_full_run_no_surviving_mutants(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
@@ -198,7 +221,7 @@ To show a mutant:
 
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
 
@@ -214,9 +237,9 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
 
 def test_full_run_one_surviving_mutant(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
-        f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
+        f.write(test_file_contents.replace('assert foo(2, 2) is False', ''))
 
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 2
 
@@ -243,7 +266,7 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 2
 
@@ -264,8 +287,7 @@ def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
-        assert result.output.strip() == u"""
+    assert result.output.strip() == u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -273,27 +295,12 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (8)
+Suspicious 🤔 ({EXPECTED_MUTANTS})
 
----- foo.py (8) ----
+---- foo.py ({EXPECTED_MUTANTS}) ----
 
-1, 2, 3, 4, 5, 6, 7, 8
-""".strip()
-    else:  # python2
-        assert result.output.strip() == u"""
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
-
-
-Suspicious 🤔 (9)
-
----- foo.py (9) ----
-
-1, 2, 3, 4, 5, 6, 7, 8, 9
-""".strip()
+{ids}
+""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS, ids=', '.join(str(x + 1) for x in range(EXPECTED_MUTANTS))).strip()
 
 
 def test_full_run_all_suspicious_mutant_junit(filesystem):
@@ -315,7 +322,7 @@ def test_use_coverage(capsys, filesystem):
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
     # first validate that mutmut without coverage detects a surviving mutant
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 2
 
@@ -329,13 +336,67 @@ def test_use_coverage(capsys, filesystem):
     assert int(root.attrib['disabled']) == 0
 
     # generate a `.coverage` file by invoking pytest
-    pytest.main(["--cov=.", "foo.py"])
+    subprocess.run([sys.executable, "-m", "pytest", "--cov=.", "foo.py"])
     assert os.path.isfile('.coverage')
 
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=5.0", "--use-coverage"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    if EXPECTED_MUTANTS == 8:  # python3
-        assert '7/7  🎉 7  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
-    else:  # python2
-        assert '8/8  \\U0001f389 8  \\u23f0 0  \\U0001f914 0  \\U0001f641 0' in repr(result.output)
+    assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+
+    # replace the .coverage file content with a non existent path to check if an exception is thrown
+    with open('.coverage', 'r') as f:
+        content = f.read()
+
+    # the new path is linux-based, but it just needs to be wrong
+    new_content = re.sub(r'\"[\w\W][^{]*foo.py\"', '"/test_path/foo.py"', content)
+
+    with open('.coverage', 'w') as f:
+        f.write(new_content)
+
+    with pytest.raises(ValueError,
+                       match=r'^Filepaths in .coverage not recognized, try recreating the .coverage file manually.$'):
+        CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
+                           catch_exceptions=False)
+
+
+def test_use_patch_file(filesystem):
+    patch_contents = """diff --git a/foo.py b/foo.py
+index b9a5fb4..c6a496c 100644
+--- a/foo.py
++++ b/foo.py
+@@ -1,7 +1,7 @@
+ def foo(a, b):
+     return a < b
+ c = 1
+ c += 1
+ e = 1
+-f = 3
++f = 5
+ d = dict(e=f)
+\\ No newline at end of file
+"""
+    with open('patch', 'w') as f:
+        f.write(patch_contents)
+
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+
+
+def test_pre_and_post_mutation_hook(filesystem):
+    result = CliRunner().invoke(
+        climain, [
+            'run',
+            '--paths-to-mutate=foo.py',
+            "--test-time-base=15.0",
+            "-s",
+            "--pre-mutation=echo pre mutation stub",
+            "--post-mutation=echo post mutation stub",
+        ], catch_exceptions=False)
+    print(result.output)
+    assert result.exit_code == 0
+    assert "pre mutation stub" in result.output
+    assert "post mutation stub" in result.output
+    assert result.output.index("pre mutation stub") < result.output.index("post mutation stub")

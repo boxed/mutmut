@@ -1,10 +1,11 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import os
 import re
 import sys
 import io
+import inspect
 
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
@@ -38,9 +39,9 @@ class Tag(Command):
     def run(self):
         from subprocess import call
         version = read_version()
-        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version %s' % version])
+        errno = call(['git', 'tag', '--annotate', version, '--message', 'Version {}'.format(version)])
         if errno == 0:
-            print("Added tag for version %s" % version)
+            print("Added tag for version {}".format(version))
         raise SystemExit(errno)
 
 
@@ -58,7 +59,7 @@ class ReleaseCheck(Command):
         tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
         version = read_version()
         if tag != version:
-            print('Missing %s tag on release' % version)
+            print('Missing {} tag on release'.format(version))
             raise SystemExit(1)
 
         current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
@@ -84,7 +85,16 @@ class PyTest(test):
         sys.exit(errno)
 
 
-import inspect
+test_reqs = read_reqs('test_requirements.txt')
+extras_reqs = {
+    'pytest': [
+        item for item in test_reqs if item.startswith('pytest')],
+    'coverage': [
+        item for item in test_reqs if item.startswith('coverage')],
+    'patch': [
+        item for item in test_reqs if item.startswith('whatthepatch')],
+}
+
 running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 
 # NB: _don't_ add namespace_packages to setup(), it'll break
@@ -92,7 +102,7 @@ running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
 setup(
     name='mutmut',
     version=read_version(),
-    description='',
+    description='mutation testing for Python 3',
     long_description=readme,
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
@@ -102,16 +112,15 @@ setup(
     include_package_data=True,
     license="BSD",
     zip_safe=False,
-    keywords='',
+    keywords='mutmut mutant mutation test testing',
     install_requires=read_reqs('requirements.txt'),
-    tests_require=read_reqs('test_requirements.txt'),
+    extras_require=extras_reqs,
+    tests_require=test_reqs,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
@@ -130,7 +139,8 @@ setup(
     entry_points={
         'pytest11': [
             'mutmut = mutmut.pytestplugin',
-        ]
-    } if running_inside_tests else {},
-    scripts=['bin/mutmut'],
+        ],
+    } if running_inside_tests else {
+        'console_scripts': ["mutmut = mutmut.__main__:climain"],
+    },
 )
