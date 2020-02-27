@@ -17,7 +17,7 @@ from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
 
 db = Database()
 
-current_db_version = 2
+current_db_version = 3
 
 
 NO_TESTS_FOUND = 'NO TESTS FOUND'
@@ -30,6 +30,7 @@ class MiscData(db.Entity):
 
 class SourceFile(db.Entity):
     filename = Required(str, autostrip=False)
+    hash = Optional(str)
     lines = Set('Line')
 
 
@@ -232,8 +233,10 @@ def sequence_ops(a, b):
 @init_db
 @db_session
 def update_line_numbers(filename):
+    hash = hash_of(filename)
     sourcefile = get_or_create(SourceFile, filename=filename)
-
+    if hash == sourcefile.hash:
+        return
     cached_line_objects = list(sourcefile.lines.order_by(Line.line_number))
 
     cached_lines = [x.line for x in cached_line_objects]
@@ -269,18 +272,25 @@ def update_line_numbers(filename):
         else:
             raise ValueError('Unknown opcode from SequenceMatcher: {}'.format(command))
 
+    sourcefile.hash = hash
+
 
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
     for filename, mutation_ids in mutations_by_file.items():
+        hash = hash_of(filename)
         sourcefile = get_or_create(SourceFile, filename=filename)
+        if hash == sourcefile.hash:
+            continue
 
         for mutation_id in mutation_ids:
             line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
             if line is None:
                 raise ValueError("Obtained null line for mutation_id: {}".format(mutation_id))
             get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
+
+        sourcefile.hash = hash
 
 
 @init_db
@@ -297,7 +307,9 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
+    assert sourcefile
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    assert line
     mutant = Mutant.get(line=line, index=mutation_id.index)
 
     if mutant.status == OK_KILLED:

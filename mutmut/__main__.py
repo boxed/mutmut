@@ -16,6 +16,7 @@ from shutil import move, copy
 from threading import Timer
 from time import time
 from typing import List
+from copy import copy as copy_obj
 
 import click
 from glob2 import glob
@@ -28,6 +29,14 @@ from mutmut.cache import register_mutants, update_mutant_status, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+
+if os.getcwd() not in sys.path:
+    sys.path.insert(0, os.getcwd())
+
+try:
+    import mutmut_config
+except ImportError:
+    mutmut_config = None
 
 
 # decorator
@@ -193,7 +202,7 @@ class Progress(object):
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
-    runner='python -m pytest -x',
+    runner='python -m pytest -x --assert=plain',
     tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
@@ -332,6 +341,9 @@ Legend for output:
         test_command=runner,
         using_testmon=using_testmon
     )
+
+    if hasattr(mutmut_config, 'init'):
+        mutmut_config.init()
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
@@ -510,13 +522,17 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         mutation_id=mutation_id,
         filename=filename,
         dict_synonyms=config.dict_synonyms,
-        config=config,
+        config=copy_obj(config),
     )
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
 
     if cached_status != UNTESTED:
         return cached_status
+
+    if hasattr(mutmut_config, 'pre_mutation'):
+        mutmut_config.pre_mutation(context=context)
+        config = context.config
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
