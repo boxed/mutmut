@@ -175,7 +175,7 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self, total):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants))
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -335,6 +335,7 @@ Legend for output:
 ⏰ Timeout.          Test suite took 10 times as long as the baseline so were killed.
 🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
 🙁 Survived.         This means your tests needs to be expanded.
+🔇 Skipped.          Skipped.
 """)
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,
@@ -533,6 +534,8 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
     if hasattr(mutmut_config, 'pre_mutation'):
         mutmut_config.pre_mutation(context=context)
         config = context.config
+        if context.skip:
+            return SKIPPED
 
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
@@ -591,6 +594,8 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
             progress.killed_mutants += 1
         elif status == OK_SUSPICIOUS:
             progress.suspicious_mutants += 1
+        elif status == SKIPPED:
+            progress.skipped += 1
         else:
             raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
 

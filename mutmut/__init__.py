@@ -144,6 +144,7 @@ OK_KILLED = 'ok_killed'
 OK_SUSPICIOUS = 'ok_suspicious'
 BAD_TIMEOUT = 'bad_timeout'
 BAD_SURVIVED = 'bad_survived'
+SKIPPED = 'skipped'
 
 
 mutant_statuses = [
@@ -152,6 +153,7 @@ mutant_statuses = [
     OK_SUSPICIOUS,
     BAD_TIMEOUT,
     BAD_SURVIVED,
+    SKIPPED,
 ]
 
 
@@ -445,6 +447,7 @@ class Context(object):
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
         self.config = config
+        self.skip = False
 
     def exclude_line(self):
         return self.current_line_index in self.pragma_no_mutate_lines or should_exclude(context=self, config=self.config)
