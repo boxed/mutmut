@@ -18,3 +18,5 @@ Credits
 * John Vandenberg <jayvdb@gmail.com>
 * Luca Simonetto <luca.simonetto.94@gmail.com>
 * Emil Stenström <emil@emilstenstrom.se>
+* Roxane Bellott <roxane.bellot@gmail.com>
+* Tomáš Chvátal <tchvatal@suse.com>

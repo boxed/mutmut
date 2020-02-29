@@ -311,6 +311,8 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
     assert line
     mutant = Mutant.get(line=line, index=mutation_id.index)
+    if mutant is None:
+        mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test

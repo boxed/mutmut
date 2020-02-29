@@ -1,6 +1,20 @@
 Changelog
 ---------
 
+1.7.0 (2020-02-29)
+~~~~~~~~~~~~~~~~~~
+
+* Bugfix for multiple assignment. Mutmut used to not handle `foo = bar = baz` correctly (Thanks Roxane Bellot!)
+
+* Bugfix for incorrect mutation of "in" operator (Thanks Roxane Bellot!)
+
+* Fixed bug where a mutant survived in the internal AST too long. This could cause mutmut to apply more than one mutant at a time.
+
+* Vastly improved startup performance when resuming a mutation run.
+
+* Added new experimental feature for advanced config at runtime of mutations
+
+
 1.6.0 (2019-09-21)
 ~~~~~~~~~~~~~~~~~~
 
