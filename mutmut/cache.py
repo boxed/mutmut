@@ -2,11 +2,15 @@
 
 import hashlib
 import os
+import sys
+from collections import defaultdict
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
 from itertools import groupby, zip_longest
+from os.path import join, dirname
 from typing import Tuple
+
 
 from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
@@ -156,6 +160,14 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
 
 def get_unified_diff(argument, dict_synonyms, update_cache=True, source=None):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+    if source is None:
+        with open(filename) as f:
+            source = f.read()
+
+    return _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache)
+
+
+def _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache):
 
     if update_cache:
         update_line_numbers(filename)
@@ -204,6 +216,77 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
 
     ts = TestSuite("mutmut", test_cases)
     print(TestSuite.to_xml_string([ts]))
+
+
+@init_db
+@db_session
+def create_html_report(dict_synonyms):
+    l = list(select(x for x in Mutant))
+
+    os.makedirs('html', exist_ok=True)
+
+    with open('html/index.html', 'w') as index_file:
+        index_file.write('<h1>Mutation testing report</h1>')
+
+        index_file.write('Killed %s out of %s mutants' % (len([x for x in l if x.status == OK_KILLED]), len(l)))
+
+        index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
+
+        for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+            report_filename = join('html', filename)
+
+            mutants = list(mutants)
+
+            with open(filename) as f:
+                source = f.read()
+
+            os.makedirs(dirname(report_filename), exist_ok=True)
+            with open(join(report_filename + '.html'), 'w') as f:
+                mutants_by_status = defaultdict(list)
+                for mutant in mutants:
+                    mutants_by_status[mutant.status].append(mutant)
+
+                f.write('<html><body>')
+
+                f.write('<h1>%s</h1>' % filename)
+
+                killed = len(mutants_by_status[OK_KILLED])
+                f.write('Killed %s out of %s mutants' % (killed, len(mutants)))
+
+                index_file.write('<tr><td><a href="%s.html">%s</a></td><td>%s</td><td>%s</td><td>%.2f</td><td>%s</td>' % (
+                    filename,
+                    filename,
+                    killed,
+                    len(mutants),
+                    (killed / len(mutants) * 100),
+                    len(mutants_by_status[BAD_SURVIVED]),
+                ))
+
+                def print_diffs(status):
+                    mutants = mutants_by_status[status]
+                    for mutant in sorted(mutants, key=lambda m: m.id):
+                        diff = _get_unified_diff(source, filename, MutationID(mutant.line.line, mutant.index, mutant.line.line_number), dict_synonyms, update_cache=False)
+                        f.write('<h3>Mutant %s</h3>' % mutant.id)
+                        f.write('<pre>%s</pre>' % diff)
+
+                if mutants_by_status[BAD_TIMEOUT]:
+                    f.write('<h2>Timeouts</h2>')
+                    f.write('Mutants that made the test suite take a lot longer so the tests were killed.')
+                    print_diffs(BAD_TIMEOUT)
+
+                if mutants_by_status[BAD_SURVIVED]:
+                    f.write('<h2>Survived</h2>')
+                    f.write('Survived mutation testing. These mutants show holes in your test suite.')
+                    print_diffs(BAD_SURVIVED)
+
+                if mutants_by_status[OK_SUSPICIOUS]:
+                    f.write('<h2>Suspicious</h2>')
+                    f.write('Mutants that made the test suite take longer, but otherwise seemed ok')
+                    print_diffs(OK_SUSPICIOUS)
+
+                f.write('</body></html>')
+
+        index_file.write('</table></body></html>')
 
 
 def get_or_create(model, defaults=None, **params):

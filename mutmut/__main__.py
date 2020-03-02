@@ -34,6 +34,7 @@ from mutmut import (
     MutationID,
     SKIPPED,
 )
+from mutmut.cache import create_html_report
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
@@ -267,7 +268,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     if use_coverage and use_patch_file:
         raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
-    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml']
+    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml', 'html']
     if command not in valid_commands:
         raise click.BadArgumentUsage('{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
 
@@ -301,6 +302,10 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     if command == 'junitxml':
         print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
+        return 0
+
+    if command == 'html':
+        create_html_report(dict_synonyms)
         return 0
 
     if command == 'apply':
