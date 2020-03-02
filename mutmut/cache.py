@@ -2,7 +2,6 @@
 
 import hashlib
 import os
-import sys
 from collections import defaultdict
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
@@ -221,18 +220,18 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
 @init_db
 @db_session
 def create_html_report(dict_synonyms):
-    l = list(select(x for x in Mutant))
+    mutants = list(select(x for x in Mutant))
 
     os.makedirs('html', exist_ok=True)
 
     with open('html/index.html', 'w') as index_file:
         index_file.write('<h1>Mutation testing report</h1>')
 
-        index_file.write('Killed %s out of %s mutants' % (len([x for x in l if x.status == OK_KILLED]), len(l)))
+        index_file.write('Killed %s out of %s mutants' % (len([x for x in mutants if x.status == OK_KILLED]), len(mutants)))
 
         index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
 
-        for filename, mutants in groupby(l, key=lambda x: x.line.sourcefile.filename):
+        for filename, mutants in groupby(mutants, key=lambda x: x.line.sourcefile.filename):
             report_filename = join('html', filename)
 
             mutants = list(mutants)
