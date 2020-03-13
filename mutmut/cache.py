@@ -115,6 +115,34 @@ def get_apply_line(mutant):
     return apply_line
 
 
+def ranges(numbers):
+    if not numbers:
+        return []
+
+    result = []
+    start_range = numbers[0]
+    end_range = numbers[0]
+
+    def add_result():
+        if start_range == end_range:
+            result.append(str(start_range))
+        else:
+            result.append(f'{start_range}-{end_range}')
+
+    for x in numbers[1:]:
+        if end_range + 1 == x:
+            end_range = x
+        else:
+            add_result()
+
+            start_range = x
+            end_range = x
+
+    add_result()
+
+    return ', '.join(result)
+
+
 @init_db
 @db_session
 def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None, only_this_file=None):
@@ -149,7 +177,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
                         print('# mutant {}'.format(x.id))
                         print(get_unified_diff(x.id, dict_synonyms, update_cache=False, source=source))
                 else:
-                    print(', '.join([str(x.id) for x in mutants]))
+                    print(ranges([x.id for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
