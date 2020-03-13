@@ -432,10 +432,8 @@ class Context(object):
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None):
         self.index = 0
         self.remove_newline_at_end = False
-        if source and source[-1] != '\n':
-            source += '\n'
-            self.remove_newline_at_end = True
-        self.source = source
+        self._source = None
+        self._set_source(source)
         self.mutation_id = mutation_id
         self.performed_mutation_ids = []
         assert isinstance(mutation_id, MutationID)
@@ -451,6 +449,19 @@ class Context(object):
 
     def exclude_line(self):
         return self.current_line_index in self.pragma_no_mutate_lines or should_exclude(context=self, config=self.config)
+
+    @property
+    def source(self):
+        if self._source is None:
+            with open(self.filename) as f:
+                self._set_source(f.read())
+        return self._source
+
+    def _set_source(self, source):
+        if source and source[-1] != '\n':
+            source += '\n'
+            self.remove_newline_at_end = True
+        self._source = source
 
     @property
     def source_by_line_number(self):
@@ -624,7 +635,6 @@ def mutate_file(backup, context):
     """
     with open(context.filename) as f:
         original = f.read()
-    context.source = original
     if backup:
         with open(context.filename + '.bak', 'w') as f:
             f.write(original)
