@@ -34,7 +34,10 @@ from mutmut import (
     MutationID,
     SKIPPED,
 )
-from mutmut.cache import create_html_report
+from mutmut.cache import (
+    create_html_report,
+    cached_hash_of_tests,
+)
 from mutmut.cache import register_mutants, update_mutant_status, \
     print_result_cache, cached_mutation_status, hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
@@ -329,6 +332,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
         for pt in tests_dir.split(':'):
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
+    current_hash_of_tests = hash_of_tests(tests_dirs)
 
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
@@ -356,7 +360,8 @@ Legend for output:
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,
         test_command=runner,
-        using_testmon=using_testmon
+        using_testmon=using_testmon,
+        current_hash_of_tests=current_hash_of_tests,
     )
 
     if hasattr(mutmut_config, 'init'):
@@ -398,7 +403,7 @@ Legend for output:
         using_testmon=using_testmon,
         cache_only=cache_only,
         tests_dirs=tests_dirs,
-        hash_of_tests=hash_of_tests(tests_dirs),
+        hash_of_tests=current_hash_of_tests,
         test_time_multiplier=test_time_multiplier,
         test_time_base=test_time_base,
         pre_mutation=pre_mutation,
@@ -660,7 +665,7 @@ def read_patch_data(patch_file_path):
     }
 
 
-def time_test_suite(swallow_output, test_command, using_testmon):
+def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
 
@@ -678,7 +683,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
     :rtype: float
     """
     cached_time = cached_test_time()
-    if cached_time is not None:
+    if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
         print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
         return cached_time
 
@@ -702,7 +707,7 @@ def time_test_suite(swallow_output, test_command, using_testmon):
 
     print('Done')
 
-    set_cached_test_time(baseline_time_elapsed)
+    set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
 
     return baseline_time_elapsed
 

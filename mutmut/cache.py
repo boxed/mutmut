@@ -20,7 +20,7 @@ from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
 
 db = Database()
 
-current_db_version = 3
+current_db_version = 4
 
 
 NO_TESTS_FOUND = 'NO TESTS FOUND'
@@ -434,5 +434,13 @@ def cached_test_time():
 
 @init_db
 @db_session
-def set_cached_test_time(baseline_time_elapsed):
+def set_cached_test_time(baseline_time_elapsed, current_hash_of_tests):
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
+    get_or_create(MiscData, key='hash_of_tests').value = current_hash_of_tests
+
+
+@init_db
+@db_session
+def cached_hash_of_tests():
+    d = MiscData.get(key='hash_of_tests')
+    return d.value if d else None
