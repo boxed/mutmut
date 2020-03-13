@@ -5,7 +5,7 @@ import re
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
 
-__version__ = '1.8.0'
+__version__ = '1.8.1'
 
 
 class MutationID(object):

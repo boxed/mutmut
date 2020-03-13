@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+1.8.1
+~~~~~
+
+* mutmut now will rerun tests without mutation when tests have changed. This avoids a common pitfall of introducing a failing test and then having all mutants killed incorrectly
+
+
 1.8.0 (2020-03-02)
 ~~~~~~~~~~~~~~~~~~
 
