@@ -121,6 +121,33 @@ You can also tell mutmut to just check a single mutant:
     mutmut run 3
 
 
+Advanced whitelisting and configuration
+---------------------------------------
+
+mutmut has an advanced configuration system. You create a file called
+`mutmut_config.py`. You can define two functions there: `init()` and
+`pre_mutation(context)`. `init` gets called when mutmut starts and
+`pre_mutation` gets called before each mutant is applied and tested. You can
+mutate the `context` object as you need. You can modify the test command like
+this:
+
+.. code-block:: python
+
+    def pre_mutation(context):
+        context.config.test_command = 'python -m pytest -x ' + something_else
+
+or skip a mutant:
+
+.. code-block:: python
+
+    def pre_mutation(context):
+        if context.filename == 'foo.py':
+            context.skip = True
+
+look at the code for the `Context` class for what you can modify. Please
+open a github issue if you need help.
+
+
 JUnit XML support
 -----------------
 
