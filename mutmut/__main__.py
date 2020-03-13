@@ -560,6 +560,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         return cached_status
 
     if hasattr(mutmut_config, 'pre_mutation'):
+        context.current_line_index = context.mutation_id.line_number
         mutmut_config.pre_mutation(context=context)
         config = context.config
         if context.skip:
