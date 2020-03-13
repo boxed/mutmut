@@ -531,6 +531,10 @@ def mutate_node(node, context):
                 if node.children[0].value[2:-2] in dunder_whitelist:
                     return
 
+        # Avoid mutating pure annotations
+        if node.type == 'annassign' and len(node.children) == 2:
+            return
+
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
 

@@ -359,3 +359,10 @@ primes: List[int] = []
 foo = 'bar'
 """
     assert mutate(Context(source=source, mutation_id=MutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
+
+
+def test_bad_mutation_str_type_definition():
+    source = """
+foo: 'SomeType'    
+    """
+    assert mutate(Context(source=source)) == (source, 0)
