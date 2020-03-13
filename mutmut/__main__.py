@@ -416,8 +416,15 @@ Legend for output:
                 update_line_numbers(filename)
                 add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
     else:
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        mutations_by_file[filename] = [mutation_id]
+        try:
+            filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+            mutations_by_file[filename] = [mutation_id]
+        except ValueError:
+            filename = argument
+            if not os.path.exists(filename):
+                raise click.BadArgumentUsage('The run command takes either an integer that is the mutation id or a path to a file to mutate')
+            update_line_numbers(filename)
+            add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
 
     config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
