@@ -299,8 +299,8 @@ Suspicious 🤔 ({EXPECTED_MUTANTS})
 
 ---- foo.py ({EXPECTED_MUTANTS}) ----
 
-{ids}
-""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS, ids=', '.join(str(x + 1) for x in range(EXPECTED_MUTANTS))).strip()
+1-{EXPECTED_MUTANTS}
+""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS).strip()
 
 
 def test_full_run_all_suspicious_mutant_junit(filesystem):
