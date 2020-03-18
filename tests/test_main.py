@@ -4,6 +4,9 @@ import os
 import re
 import sys
 import subprocess
+from os import mkdir
+from os.path import join
+
 import xml.etree.ElementTree as ET
 from time import time
 from unittest.mock import MagicMock, call
@@ -49,18 +52,17 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem(tmpdir_factory):
-    test_fs = tmpdir_factory.mktemp("test_fs")
-    os.chdir(str(test_fs))
-    assert os.getcwd() == str(test_fs)
+def filesystem(tmpdir):
+    test_dir = str(tmpdir)
+    os.chdir(test_dir)
 
     # using `with` pattern to satisfy the pypy gods
-    with open(str(test_fs.join("foo.py")), 'w') as f:
+    with open(join(test_dir, "foo.py"), 'w') as f:
         f.write(file_to_mutate_contents)
-    os.mkdir(str(test_fs.join("tests")))
-    with open(str(test_fs.join("tests", "test_foo.py")), 'w') as f:
+    os.mkdir(join(test_dir, "tests"))
+    with open(join(test_dir, "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents)
-    yield test_fs
+    yield tmpdir
 
     # This is a hack to get pony to forget about the old db file
     # otherwise Pony thinks we've already created the tables
@@ -135,27 +137,34 @@ def test_python_source_files(expected, source_path, tests_dirs, filesystem):
 
 
 def test_python_source_files__with_paths_to_exclude(tmpdir):
+    tmpdir = str(tmpdir)
     # arrange
     paths_to_exclude = ['entities*']
 
-    project_dir = tmpdir.mkdir('project')
-    service_dir = project_dir.mkdir('services')
+    project_dir = join(tmpdir, 'project')
+    service_dir = join(project_dir, 'services')
+    entities_dir = join(project_dir, 'entities')
+    mkdir(project_dir)
+    mkdir(service_dir)
+    mkdir(entities_dir)
 
-    f = service_dir.join('entities.py')
-    f.write('')
-    f = service_dir.join('main.py')
-    f.write('')
-    f = service_dir.join('utils.py')
-    f.write('')
 
-    entities_dir = project_dir.mkdir('entities')
-    f = entities_dir.join('user.py')
-    f.write('')
+    with open(join(service_dir, 'entities.py'), 'w'):
+        pass
+
+    with open(join(service_dir, 'main.py'), 'w'):
+        pass
+
+    with open(join(service_dir, 'utils.py'), 'w'):
+        pass
+
+    with open(join(entities_dir, 'user.py'), 'w'):
+        pass
 
     # act, assert
-    assert set(python_source_files(project_dir.strpath, [], paths_to_exclude)) == {
-        os.path.join(project_dir.strpath, 'services', 'main.py'),
-        os.path.join(project_dir.strpath, 'services', 'utils.py'),
+    assert set(python_source_files(project_dir, [], paths_to_exclude)) == {
+        os.path.join(project_dir, 'services', 'main.py'),
+        os.path.join(project_dir, 'services', 'utils.py'),
     }
 
 
