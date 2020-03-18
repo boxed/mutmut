@@ -1,5 +1,6 @@
 pytest
 pytest-cov
+hammett
 mock>=2.0.0
 coverage
 whatthepatch==0.0.6

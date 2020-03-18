@@ -56,12 +56,21 @@ def filesystem(tmpdir):
     test_dir = str(tmpdir)
     os.chdir(test_dir)
 
-    # using `with` pattern to satisfy the pypy gods
+    # hammett is almost 5x faster than pytest. Let's use that instead.
+    with open(join(test_dir, 'setup.cfg'), 'w') as f:
+        f.write("""
+[mutmut]
+runner=python -m hammett -x
+""")
+
     with open(join(test_dir, "foo.py"), 'w') as f:
         f.write(file_to_mutate_contents)
+
     os.mkdir(join(test_dir, "tests"))
+
     with open(join(test_dir, "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents)
+
     yield tmpdir
 
     # This is a hack to get pony to forget about the old db file

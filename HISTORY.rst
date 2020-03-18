@@ -1,6 +1,23 @@
 Changelog
 ---------
 
+1.9.0
+~~~~~
+
+* `mutmut run 7` will always rerun the mutant `7`
+
+* `mutmut show <filename>` to show all mutants for that file
+
+* `mutmut run <filename>` to run mutation testing on that file
+
+* New experimental plugin system: create a file `mutmut_config.py` in your base directory. In it you can have an `init()` function, and a `pre_mutation(context)` function. You can set `context.skip = True` to skip a mutant, and you can modify `context.config.runner`, this is useful to limit the tests. Check out the `Context` class for what information you get.
+
+* Better display of `mutmut show`/`mutmut result`
+
+* Fixed a spurious mutant on assigning a local variable with type annotations
+
+
+
 1.8.1
 ~~~~~
 

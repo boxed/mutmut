@@ -161,7 +161,7 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data):
+                 coverage_data, paths_to_mutate):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
@@ -178,6 +178,7 @@ class Config(object):
         self.post_mutation = post_mutation
         self.pre_mutation = pre_mutation
         self.coverage_data = coverage_data
+        self.paths_to_mutate = paths_to_mutate
 
 
 class Progress(object):
@@ -408,6 +409,7 @@ Legend for output:
         test_time_base=test_time_base,
         pre_mutation=pre_mutation,
         post_mutation=post_mutation,
+        paths_to_mutate=paths_to_mutate,
     )
 
     if argument is None:
@@ -539,6 +541,54 @@ def tests_pass(config: Config, callback) -> bool:
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
+    use_special_case = False
+
+    # Special case for hammett! We can do in-process test running which is much faster
+    hammett_prefix = 'python -m hammett '
+    if use_special_case and config.test_command.startswith(hammett_prefix):
+        # noinspection PyUnresolvedReferences
+        from hammett import main_cli
+        modules_before = set(sys.modules.keys())
+
+        # set up timeout
+        import _thread
+        from threading import (
+            Timer,
+            current_thread,
+            main_thread,
+        )
+
+        timed_out = False
+
+        def timeout():
+            _thread.interrupt_main()
+            nonlocal timed_out
+            timed_out = True
+
+        assert current_thread() is main_thread()
+        timer = Timer(config.baseline_time_elapsed * 10, timeout)
+        timer.daemon = True
+        timer.start()
+
+        # Run tests
+        try:
+            returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
+            timer.cancel()
+        except KeyboardInterrupt:
+            timer.cancel()
+            if timed_out:
+                raise TimeoutError('In process tests timed out')
+            raise
+
+        modules_to_force_unload = {x.partition(os.sep)[0] for x in config.paths_to_mutate}
+
+        for module_name in list(sorted(sys.modules.keys(), reverse=True)):
+            if module_name not in modules_before:
+                if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith('tests') or module_name.startswith('django'):
+                    del sys.modules[module_name]
+
+        return returncode == 0
+
     returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
@@ -556,7 +606,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
 
     cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
 
-    if cached_status != UNTESTED:
+    if cached_status != UNTESTED and config.total != 1:
         return cached_status
 
     if hasattr(mutmut_config, 'pre_mutation'):
