@@ -3,6 +3,7 @@
 
 import fnmatch
 import itertools
+import multiprocessing
 import os
 import shlex
 import subprocess
@@ -11,7 +12,10 @@ import traceback
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from functools import wraps
 from io import open
-from multiprocessing import Queue
+from multiprocessing import (
+    Queue,
+    set_start_method,
+)
 from multiprocessing.context import Process
 from os.path import isdir, exists
 from shutil import move, copy
@@ -546,7 +550,7 @@ def tests_pass(config: Config, callback) -> bool:
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
 
-    use_special_case = False
+    use_special_case = True
 
     # Special case for hammett! We can do in-process test running which is much faster
     hammett_prefix = 'python -m hammett '
@@ -680,6 +684,40 @@ def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_muta
         progress.print(total=config.total)
 
 
+def queue_mutants(config, mutants_queue, mutations_by_file):
+    index = 0
+    for filename, mutations in mutations_by_file.items():
+        with open(filename) as f:
+            source = f.read()
+        for mutation_id in mutations:
+            context = Context(
+                mutation_id=mutation_id,
+                filename=filename,
+                dict_synonyms=config.dict_synonyms,
+                config=copy_obj(config),
+                source=source,
+                index=index,
+            )
+            mutants_queue.put(('mutant', context))
+            index += 1
+    mutants_queue.put(('end', None))
+
+
+def check_mutants(mutants_queue, results_queue):
+    # TODO: need to fix this for non-hammett special case
+    feedback = None
+
+    while True:
+        command, context = mutants_queue.get()
+        if command == 'end':
+            results_queue.put(('end', None, None))
+            break
+
+        status = run_mutation(context, feedback)
+
+        results_queue.put((status, context.filename, context.mutation_id))
+
+
 def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
@@ -691,26 +729,20 @@ def run_mutation_tests(config, progress, mutations_by_file):
     #
     #     run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
 
-    def queue_mutants(mutants_queue):
-        index = 0
-        for filename, mutations in mutations_by_file.items():
-            with open(filename) as f:
-                source = f.read()
-            for mutation_id in mutations:
-                context = Context(
-                    mutation_id=mutation_id,
-                    filename=filename,
-                    dict_synonyms=config.dict_synonyms,
-                    config=copy_obj(config),
-                    source=source,
-                    index=index,
-                )
-                mutants_queue.put(('mutant', context))
-                index += 1
-        mutants_queue.put(('end', None))
+    # Need to explicitly use the spawn method for python < 3.8 on macOS
+    mp_ctx = multiprocessing.get_context('spawn')
 
-    mutants_queue = Queue(maxsize=10)
-    t = Process(target=queue_mutants, name='queue_mutants', daemon=True, kwargs=dict(mutants_queue=mutants_queue))
+    mutants_queue = mp_ctx.Queue(maxsize=10)
+    t = Thread(
+        target=queue_mutants,
+        name='queue_mutants',
+        daemon=True,
+        kwargs=dict(
+            config=config,
+            mutants_queue=mutants_queue,
+            mutations_by_file=mutations_by_file,
+        )
+    )
     t.start()
 
     def feedback(line):
@@ -718,26 +750,24 @@ def run_mutation_tests(config, progress, mutations_by_file):
             print(line)
         progress.print(total=config.total)
 
-    def check_mutants(mutants_queue, results_queue):
-        while True:
-            command, context = mutants_queue.get()
-            if command == 'end':
-                results_queue.put(('end', None))
-
-            status = run_mutation(context, feedback)
-
-            results_queue.put((status, context.mutation_id))
-
-    results_queue = Queue(maxsize=10)
-    t = Process(target=check_mutants, name='check_mutants', daemon=True, kwargs=dict(mutants_queue=mutants_queue, results_queue=results_queue))
+    results_queue = mp_ctx.Queue(maxsize=10)
+    t = mp_ctx.Process(
+        target=check_mutants,
+        name='check_mutants',
+        daemon=True,
+        kwargs=dict(
+            mutants_queue=mutants_queue,
+            results_queue=results_queue,
+        )
+    )
     t.start()
 
     while t.is_alive():
-        status, mutation_id = results_queue.get()
+        status, filename, mutation_id = results_queue.get()
         if status == 'end':
             break
 
-        update_mutant_status(mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
+        update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
 
 
 def read_coverage_data():
