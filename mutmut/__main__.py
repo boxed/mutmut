@@ -705,17 +705,18 @@ def queue_mutants(config, mutants_queue, mutations_by_file):
 
 def check_mutants(mutants_queue, results_queue):
     # TODO: need to fix this for non-hammett special case
-    feedback = None
+    def feedback(line):
+        results_queue.put(('progress', line, None, None))
 
     while True:
         command, context = mutants_queue.get()
         if command == 'end':
-            results_queue.put(('end', None, None))
+            results_queue.put(('end', None, None, None))
             break
 
         status = run_mutation(context, feedback)
 
-        results_queue.put((status, context.filename, context.mutation_id))
+        results_queue.put(('status', status, context.filename, context.mutation_id))
 
 
 def run_mutation_tests(config, progress, mutations_by_file):
@@ -724,10 +725,6 @@ def run_mutation_tests(config, progress, mutations_by_file):
     :type progress: Progress
     :type mutations_by_file: dict[str, list[RelativeMutationID]]
     """
-    # for file_to_mutate, mutations in mutations_by_file.items():
-    #     progress.print(total=config.total)
-    #
-    #     run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
 
     # Need to explicitly use the spawn method for python < 3.8 on macOS
     mp_ctx = multiprocessing.get_context('spawn')
@@ -745,11 +742,6 @@ def run_mutation_tests(config, progress, mutations_by_file):
     )
     t.start()
 
-    def feedback(line):
-        if not config.swallow_output:
-            print(line)
-        progress.print(total=config.total)
-
     results_queue = mp_ctx.Queue(maxsize=10)
     t = mp_ctx.Process(
         target=check_mutants,
@@ -763,9 +755,17 @@ def run_mutation_tests(config, progress, mutations_by_file):
     t.start()
 
     while t.is_alive():
-        status, filename, mutation_id = results_queue.get()
-        if status == 'end':
+        command, status, filename, mutation_id = results_queue.get()
+        if command == 'end':
             break
+
+        if command == 'progress':
+            if not config.swallow_output:
+                print(status)
+            progress.print(total=config.total)
+            continue
+
+        assert command == 'status'
 
         update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
 
