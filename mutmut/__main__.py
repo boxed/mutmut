@@ -767,7 +767,24 @@ def run_mutation_tests(config, progress, mutations_by_file):
 
         assert command == 'status'
 
+        if status == BAD_SURVIVED:
+            progress.surviving_mutants += 1
+        elif status == BAD_TIMEOUT:
+            progress.surviving_mutants_timeout += 1
+        elif status == OK_KILLED:
+            progress.killed_mutants += 1
+        elif status == OK_SUSPICIOUS:
+            progress.suspicious_mutants += 1
+        elif status == SKIPPED:
+            progress.skipped += 1
+        else:
+            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
+
+        progress.progress += 1
+
         update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
+
+        progress.print(total=config.total)
 
 
 def read_coverage_data():
