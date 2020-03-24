@@ -8,8 +8,9 @@ from parso.python.tree import Name, Number, Keyword
 __version__ = '1.9.0'
 
 
-class MutationID(object):
-    def __init__(self, line, index, line_number):
+class RelativeMutationID(object):
+    def __init__(self, filename, line, index, line_number):
+        self.filename = filename
         self.line = line
         self.index = index
         self.line_number = line_number
@@ -21,7 +22,7 @@ class MutationID(object):
         return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
 
 
-ALL = MutationID(line='%all%', index=-1, line_number=-1)
+ALL = RelativeMutationID(filename='%all%', line='%all%', index=-1, line_number=-1)
 
 
 class InvalidASTPatternException(Exception):
@@ -429,14 +430,14 @@ def should_exclude(context, config):
 
 
 class Context(object):
-    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None):
-        self.index = 0
+    def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None, index=0):
+        self.index = index
         self.remove_newline_at_end = False
         self._source = None
         self._set_source(source)
         self.mutation_id = mutation_id
         self.performed_mutation_ids = []
-        assert isinstance(mutation_id, MutationID)
+        assert isinstance(mutation_id, RelativeMutationID)
         self.current_line_index = 0
         self.filename = filename
         self.stack = []
@@ -475,7 +476,7 @@ class Context(object):
 
     @property
     def mutation_id_of_current_index(self):
-        return MutationID(line=self.current_source_line, index=self.index, line_number=self.current_line_index)
+        return RelativeMutationID(filename=self.filename, line=self.current_source_line, index=self.index, line_number=self.current_line_index)
 
     @property
     def pragma_no_mutate_lines(self):

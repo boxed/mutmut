@@ -11,9 +11,14 @@ import traceback
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from functools import wraps
 from io import open
+from multiprocessing import Queue
+from multiprocessing.context import Process
 from os.path import isdir, exists
 from shutil import move, copy
-from threading import Timer
+from threading import (
+    Timer,
+    Thread,
+)
 from time import time
 from typing import List
 from copy import copy as copy_obj
@@ -31,7 +36,7 @@ from mutmut import (
     BAD_SURVIVED,
     OK_KILLED,
     UNTESTED,
-    MutationID,
+    RelativeMutationID,
     SKIPPED,
 )
 from mutmut.cache import (
@@ -593,20 +598,13 @@ def tests_pass(config: Config, callback) -> bool:
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
-def run_mutation(config: Config, filename: str, mutation_id: MutationID, callback) -> str:
+def run_mutation(context: Context, callback) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
-    context = Context(
-        mutation_id=mutation_id,
-        filename=filename,
-        dict_synonyms=config.dict_synonyms,
-        config=copy_obj(config),
-    )
+    cached_status = cached_mutation_status(context.filename, context.mutation_id, context.config.hash_of_tests)
 
-    cached_status = cached_mutation_status(filename, mutation_id, config.hash_of_tests)
-
-    if cached_status != UNTESTED and config.total != 1:
+    if cached_status != UNTESTED and context.config.total != 1:
         return cached_status
 
     if hasattr(mutmut_config, 'pre_mutation'):
@@ -641,7 +639,7 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
         else:
             return OK_KILLED
     finally:
-        move(filename + '.bak', filename)
+        move(context.filename + '.bak', context.filename)
 
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
@@ -649,12 +647,12 @@ def run_mutation(config: Config, filename: str, mutation_id: MutationID, callbac
                 print(result)
 
 
-def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[MutationID]) -> None:
+def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[RelativeMutationID]) -> None:
     """
     :type config: Config
     :type progress: Progress
     :type file_to_mutate: str
-    :type mutations: list[MutationID]
+    :type mutations: list[RelativeMutationID]
     """
     def feedback(line):
         if not config.swallow_output:
@@ -686,12 +684,60 @@ def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
     :type progress: Progress
-    :type mutations_by_file: dict[str, list[MutationID]]
+    :type mutations_by_file: dict[str, list[RelativeMutationID]]
     """
-    for file_to_mutate, mutations in mutations_by_file.items():
+    # for file_to_mutate, mutations in mutations_by_file.items():
+    #     progress.print(total=config.total)
+    #
+    #     run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
+
+    def queue_mutants(mutants_queue):
+        index = 0
+        for filename, mutations in mutations_by_file.items():
+            with open(filename) as f:
+                source = f.read()
+            for mutation_id in mutations:
+                context = Context(
+                    mutation_id=mutation_id,
+                    filename=filename,
+                    dict_synonyms=config.dict_synonyms,
+                    config=copy_obj(config),
+                    source=source,
+                    index=index,
+                )
+                mutants_queue.put(('mutant', context))
+                index += 1
+        mutants_queue.put(('end', None))
+
+    mutants_queue = Queue(maxsize=10)
+    t = Process(target=queue_mutants, name='queue_mutants', daemon=True, kwargs=dict(mutants_queue=mutants_queue))
+    t.start()
+
+    def feedback(line):
+        if not config.swallow_output:
+            print(line)
         progress.print(total=config.total)
 
-        run_mutation_tests_for_file(config, progress, file_to_mutate, mutations)
+    def check_mutants(mutants_queue, results_queue):
+        while True:
+            command, context = mutants_queue.get()
+            if command == 'end':
+                results_queue.put(('end', None))
+
+            status = run_mutation(context, feedback)
+
+            results_queue.put((status, context.mutation_id))
+
+    results_queue = Queue(maxsize=10)
+    t = Process(target=check_mutants, name='check_mutants', daemon=True, kwargs=dict(mutants_queue=mutants_queue, results_queue=results_queue))
+    t.start()
+
+    while t.is_alive():
+        status, mutation_id = results_queue.get()
+        if status == 'end':
+            break
+
+        update_mutant_status(mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
 
 
 def read_coverage_data():
@@ -772,9 +818,8 @@ def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of
 
 def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     """
-    :type mutations_by_file: dict[str, list[MutationID]]
+    :type mutations_by_file: dict[str, list[RelativeMutationID]]
     :type filename: str
-    :type exclude: Callable[[Context], bool]
     :type dict_synonyms: list[str]
     """
     with open(filename) as f:
