@@ -15,12 +15,12 @@ history = io.open('HISTORY.rst', encoding='utf8').read().replace('.. :changelog:
 
 
 def read_reqs(name):
-    with open(os.path.join(os.path.dirname(__file__), name)) as f:
+    with open(os.path.join(os.path.dirname(__file__), name), encoding='utf8') as f:
         return [line for line in f.read().split('\n') if line and not line.strip().startswith('#')]
 
 
 def read_version():
-    with open(os.path.join('mutmut', '__init__.py')) as f:
+    with open(os.path.join('mutmut', '__init__.py'), encoding='utf8') as f:
         m = re.search(r'''__version__\s*=\s*['"]([^'"]*)['"]''', f.read())
         if m:
             return m.group(1)

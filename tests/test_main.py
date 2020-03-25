@@ -182,7 +182,6 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
     mkdir(service_dir)
     mkdir(entities_dir)
 
-
     with open(join(service_dir, 'entities.py'), 'w'):
         pass
 
