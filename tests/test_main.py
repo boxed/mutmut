@@ -220,9 +220,9 @@ def test_popen_streaming_output_stream():
         callback=mock
     )
     if os.name == 'nt':
-        mock.assert_has_calls([call('first\n'), call('second\n')])
-    else:
         mock.assert_has_calls([call('first\r\n'), call('second\r\n')])
+    else:
+        mock.assert_has_calls([call('first\n'), call('second\n')])
 
     mock = MagicMock()
     popen_streaming_output(
