@@ -10,8 +10,10 @@ import inspect
 from setuptools import setup, find_packages, Command
 from setuptools.command.test import test
 
-readme = io.open('README.rst', encoding='utf8').read()
-history = io.open('HISTORY.rst', encoding='utf8').read().replace('.. :changelog:', '')
+
+def read_readme():
+    with io.open('README.rst', encoding='utf8') as f:
+        return f.read()
 
 
 def read_reqs(name):
@@ -95,7 +97,7 @@ extras_reqs = {
         item for item in test_reqs if item.startswith('whatthepatch')],
 }
 
-running_inside_tests = any(['pytest' in x[1] for x in inspect.stack()])
+running_inside_tests = any('pytest' in x[1] or 'hammett' in x[1] for x in inspect.stack())
 
 # NB: _don't_ add namespace_packages to setup(), it'll break
 #     everything using imp.find_module
@@ -103,7 +105,7 @@ setup(
     name='mutmut',
     version=read_version(),
     description='mutation testing for Python 3',
-    long_description=readme,
+    long_description='' if running_inside_tests else read_readme(),
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
     url='https://github.com/boxed/mutmut',
