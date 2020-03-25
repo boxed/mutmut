@@ -75,7 +75,7 @@ class PyTest(test):
 
     def initialize_options(self):
         test.initialize_options(self)
-        self.pytest_args = "-v --cov={}".format("mutmut")
+        self.pytest_args = "-v -s --cov={}".format("mutmut")
 
     def run_tests(self):
         import shlex

@@ -236,7 +236,7 @@ def test_popen_streaming_output_stream():
 
 
 def test_simple_apply(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '-s', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
 
