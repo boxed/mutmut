@@ -363,6 +363,6 @@ foo = 'bar'
 
 def test_bad_mutation_str_type_definition():
     source = """
-foo: 'SomeType'    
+foo: 'SomeType'
     """
     assert mutate(Context(source=source)) == (source, 0)

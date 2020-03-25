@@ -2,30 +2,31 @@
 
 import os
 import re
-import sys
 import subprocess
+import sys
+import xml.etree.ElementTree as ET
 from os import (
     mkdir,
-    getcwd,
 )
 from os.path import join
-
-import xml.etree.ElementTree as ET
 from time import time
-from unittest.mock import MagicMock, call
+from unittest.mock import (
+    call,
+    MagicMock,
+)
 
 import pytest
 from click.testing import CliRunner
 from coverage import CoverageData
 
-from mutmut.__main__ import climain
 from mutmut import (
-    Progress,
-    popen_streaming_output,
-    read_coverage_data,
-    python_source_files,
     compute_exit_code,
+    popen_streaming_output,
+    Progress,
+    python_source_files,
+    read_coverage_data,
 )
+from mutmut.__main__ import climain
 
 file_to_mutate_lines = [
     "def foo(a, b):",
