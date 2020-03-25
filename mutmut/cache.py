@@ -127,7 +127,7 @@ def ranges(numbers):
         if start_range == end_range:
             result.append(str(start_range))
         else:
-            result.append(f'{start_range}-{end_range}')
+            result.append('{}-{}'.format(start_range, end_range))
 
     for x in numbers[1:]:
         if end_range + 1 == x:

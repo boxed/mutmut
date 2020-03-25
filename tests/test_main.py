@@ -4,7 +4,10 @@ import os
 import re
 import sys
 import subprocess
-from os import mkdir
+from os import (
+    mkdir,
+    getcwd,
+)
 from os.path import join
 
 import xml.etree.ElementTree as ET
@@ -15,9 +18,14 @@ import pytest
 from click.testing import CliRunner
 from coverage import CoverageData
 
-from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, compute_exit_code, \
-    read_coverage_data, Progress
+from mutmut.__main__ import climain
+from mutmut import (
+    Progress,
+    popen_streaming_output,
+    read_coverage_data,
+    python_source_files,
+    compute_exit_code,
+)
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -53,6 +61,31 @@ def test_foo():
 
 @pytest.fixture
 def filesystem(tmpdir):
+    create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents)
+
+    yield tmpdir
+
+    # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
+    import mutmut.cache
+    mutmut.cache.db.provider = None
+    mutmut.cache.db.schema = None
+
+
+@pytest.fixture
+def single_mutant_filesystem(tmpdir):
+    create_filesystem(tmpdir, "def foo():\n    return 1\n", "from foo import *\ndef test_foo():\n    assert foo() == 1")
+
+    yield tmpdir
+
+    # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
+    import mutmut.cache
+    mutmut.cache.db.provider = None
+    mutmut.cache.db.schema = None
+
+
+def create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents):
     test_dir = str(tmpdir)
     os.chdir(test_dir)
 
@@ -70,14 +103,6 @@ runner=python -m hammett -x
 
     with open(join(test_dir, "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents)
-
-    yield tmpdir
-
-    # This is a hack to get pony to forget about the old db file
-    # otherwise Pony thinks we've already created the tables
-    import mutmut.cache
-    mutmut.cache.db.provider = None
-    mutmut.cache.db.schema = None
 
 
 def test_compute_return_code():
@@ -194,14 +219,14 @@ def test_popen_streaming_output_stream():
         PYTHON + ' -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first'), call('second')])
+    mock.assert_has_calls([call('first\n'), call('second\n')])
 
     mock = MagicMock()
     popen_streaming_output(
-        PYTHON + ' -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
+        PYTHON + ' -c "import time; print(\'first\'); print(\'second\'); print(\'third\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first'), call('second'), call('third')])
+    mock.assert_has_calls([call('first\n'), call('second\n'), call('third\n')])
 
     mock = MagicMock()
     popen_streaming_output(
@@ -404,7 +429,9 @@ index b9a5fb4..c6a496c 100644
     assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
 
-def test_pre_and_post_mutation_hook(filesystem):
+def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
+    test_dir = str(tmpdir)
+    os.chdir(test_dir)
     result = CliRunner().invoke(
         climain, [
             'run',

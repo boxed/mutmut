@@ -1,31 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import fnmatch
-import itertools
-import multiprocessing
 import os
-import shlex
-import subprocess
 import sys
 import traceback
-from configparser import ConfigParser, NoOptionError, NoSectionError
-from functools import wraps
-from io import open
-from multiprocessing import (
-    Queue,
-    set_start_method,
+from io import (
+    open,
 )
-from multiprocessing.context import Process
-from os.path import isdir, exists
-from shutil import move, copy
-from threading import (
-    Timer,
-    Thread,
-)
+from os.path import exists
+from shutil import copy
 from time import time
-from typing import List
-from copy import copy as copy_obj
 
 import click
 from glob2 import glob
@@ -33,105 +17,33 @@ from glob2 import glob
 from mutmut import (
     mutate_file,
     Context,
-    list_mutations,
     __version__,
-    BAD_TIMEOUT,
-    OK_SUSPICIOUS,
-    BAD_SURVIVED,
-    OK_KILLED,
-    UNTESTED,
-    RelativeMutationID,
-    SKIPPED,
+    mutmut_config,
+    config_from_setup_cfg,
+    guess_paths_to_mutate,
+    Config,
+    Progress,
+    check_coverage_data_filepaths,
+    popen_streaming_output,
+    run_mutation_tests,
+    read_coverage_data,
+    read_patch_data,
+    add_mutations_by_file,
+    python_source_files,
+    compute_exit_code,
+    print_status,
 )
 from mutmut.cache import (
     create_html_report,
     cached_hash_of_tests,
 )
-from mutmut.cache import register_mutants, update_mutant_status, \
-    print_result_cache, cached_mutation_status, hash_of_tests, \
+from mutmut.cache import print_result_cache, \
+    hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
-spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
-
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
-
-try:
-    import mutmut_config
-except ImportError:
-    mutmut_config = None
-
-
-# decorator
-def config_from_setup_cfg(**defaults):
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            config_parser = ConfigParser()
-            config_parser.read('setup.cfg')
-
-            def s(key, default):
-                try:
-                    return config_parser.get('mutmut', key)
-                except (NoOptionError, NoSectionError):
-                    return default
-
-            for k in list(kwargs.keys()):
-                if not kwargs[k]:
-                    kwargs[k] = s(k, defaults.get(k))
-            f(*args, **kwargs)
-
-        return wrapper
-    return decorator
-
-
-def status_printer():
-    """Manage the printing and in-place updating of a line of characters
-
-    .. note::
-        If the string is longer than a line, then in-place updating may not
-        work (it will print a new line at each refresh).
-    """
-    last_len = [0]
-
-    def p(s):
-        s = next(spinner) + ' ' + s
-        len_s = len(s)
-        output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
-        sys.stdout.write(output)
-        sys.stdout.flush()
-        last_len[0] = len_s
-    return p
-
-
-print_status = status_printer()
-
-
-def guess_paths_to_mutate():
-    """Guess the path to source code to mutate
-
-    :rtype: str
-    """
-    this_dir = os.getcwd().split(os.sep)[-1]
-    if isdir('lib'):
-        return 'lib'
-    elif isdir('src'):
-        return 'src'
-    elif isdir(this_dir):
-        return this_dir
-    elif isdir(this_dir.replace('-', '_')):
-        return this_dir.replace('-', '_')
-    elif isdir(this_dir.replace(' ', '_')):
-        return this_dir.replace(' ', '_')
-    elif isdir(this_dir.replace('-', '')):
-        return this_dir.replace('-', '')
-    elif isdir(this_dir.replace(' ', '')):
-        return this_dir.replace(' ', '')
-    raise FileNotFoundError(
-        'Could not figure out where the code to mutate is. '
-        'Please specify it on the command line using --paths-to-mutate, '
-        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
@@ -163,44 +75,6 @@ def do_apply(mutation_pk, dict_synonyms, backup):
 
 
 null_out = open(os.devnull, 'w')
-
-
-class Config(object):
-    def __init__(self, swallow_output, test_command, covered_lines_by_filename,
-                 baseline_time_elapsed, test_time_multiplier, test_time_base,
-                 backup, dict_synonyms, total, using_testmon, cache_only,
-                 tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate):
-        self.swallow_output = swallow_output
-        self.test_command = test_command
-        self.covered_lines_by_filename = covered_lines_by_filename
-        self.baseline_time_elapsed = baseline_time_elapsed
-        self.test_time_multipler = test_time_multiplier
-        self.test_time_base = test_time_base
-        self.backup = backup
-        self.dict_synonyms = dict_synonyms
-        self.total = total
-        self.using_testmon = using_testmon
-        self.cache_only = cache_only
-        self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
-        self.post_mutation = post_mutation
-        self.pre_mutation = pre_mutation
-        self.coverage_data = coverage_data
-        self.paths_to_mutate = paths_to_mutate
-
-
-class Progress(object):
-    def __init__(self):
-        self.progress = 0
-        self.skipped = 0
-        self.killed_mutants = 0
-        self.surviving_mutants = 0
-        self.surviving_mutants_timeout = 0
-        self.suspicious_mutants = 0
-
-    def print(self, total):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -421,21 +295,7 @@ Legend for output:
         paths_to_mutate=paths_to_mutate,
     )
 
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-    else:
-        try:
-            filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-            mutations_by_file[filename] = [mutation_id]
-        except ValueError:
-            filename = argument
-            if not os.path.exists(filename):
-                raise click.BadArgumentUsage('The run command takes either an integer that is the mutation id or a path to a file to mutate')
-            update_line_numbers(filename)
-            add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+    parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs)
 
     config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
@@ -454,366 +314,25 @@ Legend for output:
         print()  # make sure we end the output with a newline
 
 
-def check_coverage_data_filepaths(coverage_data):
-    for filepath in coverage_data._lines:
-        if not os.path.exists(filepath):
-            raise ValueError('Filepaths in .coverage not recognized, try recreating the .coverage file manually.')
-
-
-def get_mutations_by_file_from_cache(mutation_pk):
-    filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
-    return {filename: [mutation_id]}
-
-
-def popen_streaming_output(cmd, callback, timeout=None):
-    """Open a subprocess and stream its output without hard-blocking.
-
-    :param cmd: the command to execute within the subprocess
-    :type cmd: str
-
-    :param callback: function that intakes the subprocess' stdout line by line.
-        It is called for each line received from the subprocess' stdout stream.
-    :type callback: Callable[[Context], bool]
-
-    :param timeout: the timeout time of the subprocess
-    :type timeout: float
-
-    :raises TimeoutError: if the subprocess' execution time exceeds
-        the timeout time
-
-    :return: the return code of the executed subprocess
-    :rtype: int
-    """
-    if os.name == 'nt':  # pragma: no cover
-        process = subprocess.Popen(
-            shlex.split(cmd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        stdout = process.stdout
+def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs):
+    if argument is None:
+        for path in paths_to_mutate:
+            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                update_line_numbers(filename)
+                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
     else:
-        master, slave = os.openpty()
-        process = subprocess.Popen(
-            shlex.split(cmd, posix=True),
-            stdout=slave,
-            stderr=slave
-        )
-        stdout = os.fdopen(master)
-        os.close(slave)
-
-    def kill(process_):
-        """Kill the specified process on Timer completion"""
         try:
-            process_.kill()
-        except OSError:
-            pass
+            int(argument)
+        except ValueError:
+            filename = argument
+            if not os.path.exists(filename):
+                raise click.BadArgumentUsage('The run command takes either an integer that is the mutation id or a path to a file to mutate')
+            update_line_numbers(filename)
+            add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+            return
 
-    # python 2-3 agnostic process timer
-    timer = Timer(timeout, kill, [process])
-    timer.setDaemon(True)
-    timer.start()
-
-    while process.returncode is None:
-        try:
-            if os.name == 'nt':  # pragma: no cover
-                line = stdout.readline()
-                # windows gives readline() raw stdout as a b''
-                # need to decode it
-                line = line.decode("utf-8")
-                if line:  # ignore empty strings and None
-                    callback(line.rstrip())
-            else:
-                while True:
-                    line = stdout.readline()
-                    if not line:
-                        break
-                    callback(line.rstrip())
-        except (IOError, OSError):
-            # This seems to happen on some platforms, including TravisCI.
-            # It seems like it's ok to just let this pass here, you just
-            # won't get as nice feedback.
-            pass
-        if not timer.is_alive():
-            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
-        process.poll()
-
-    # we have returned from the subprocess cancel the timer if it is running
-    timer.cancel()
-
-    return process.returncode
-
-
-def tests_pass(config: Config, callback) -> bool:
-    """
-    :return: :obj:`True` if the tests pass, otherwise :obj:`False`
-    """
-    if config.using_testmon:
-        copy('.testmondata-initial', '.testmondata')
-
-    use_special_case = True
-
-    # Special case for hammett! We can do in-process test running which is much faster
-    hammett_prefix = 'python -m hammett '
-    if use_special_case and config.test_command.startswith(hammett_prefix):
-        # noinspection PyUnresolvedReferences
-        from hammett import main_cli
-        modules_before = set(sys.modules.keys())
-
-        # set up timeout
-        import _thread
-        from threading import (
-            Timer,
-            current_thread,
-            main_thread,
-        )
-
-        timed_out = False
-
-        def timeout():
-            _thread.interrupt_main()
-            nonlocal timed_out
-            timed_out = True
-
-        assert current_thread() is main_thread()
-        timer = Timer(config.baseline_time_elapsed * 10, timeout)
-        timer.daemon = True
-        timer.start()
-
-        # Run tests
-        try:
-            returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
-            timer.cancel()
-        except KeyboardInterrupt:
-            timer.cancel()
-            if timed_out:
-                raise TimeoutError('In process tests timed out')
-            raise
-
-        modules_to_force_unload = {x.partition(os.sep)[0] for x in config.paths_to_mutate}
-
-        for module_name in list(sorted(sys.modules.keys(), reverse=True)):
-            if module_name not in modules_before:
-                if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith('tests') or module_name.startswith('django'):
-                    del sys.modules[module_name]
-
-        return returncode == 0
-
-    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
-
-
-def run_mutation(context: Context, callback) -> str:
-    """
-    :return: (computed or cached) status of the tested mutant, one of mutant_statuses
-    """
-    cached_status = cached_mutation_status(context.filename, context.mutation_id, context.config.hash_of_tests)
-
-    if cached_status != UNTESTED and context.config.total != 1:
-        return cached_status
-
-    if hasattr(mutmut_config, 'pre_mutation'):
-        context.current_line_index = context.mutation_id.line_number
-        mutmut_config.pre_mutation(context=context)
-        config = context.config
-        if context.skip:
-            return SKIPPED
-
-    if config.pre_mutation:
-        result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
-        if result and not config.swallow_output:
-            print(result)
-
-    try:
-        mutate_file(
-            backup=True,
-            context=context
-        )
-        start = time()
-        try:
-            survived = tests_pass(config=config, callback=callback)
-        except TimeoutError:
-            return BAD_TIMEOUT
-
-        time_elapsed = time() - start
-        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
-            return OK_SUSPICIOUS
-
-        if survived:
-            return BAD_SURVIVED
-        else:
-            return OK_KILLED
-    finally:
-        move(context.filename + '.bak', context.filename)
-
-        if config.post_mutation:
-            result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
-            if result and not config.swallow_output:
-                print(result)
-
-
-def run_mutation_tests_for_file(config: Config, progress: Progress, file_to_mutate: str, mutations: List[RelativeMutationID]) -> None:
-    """
-    :type config: Config
-    :type progress: Progress
-    :type file_to_mutate: str
-    :type mutations: list[RelativeMutationID]
-    """
-    def feedback(line):
-        if not config.swallow_output:
-            print(line)
-        progress.print(total=config.total)
-
-    for mutation_id in mutations:
-        status = run_mutation(config, file_to_mutate, mutation_id, callback=feedback)
-        update_mutant_status(file_to_mutate, mutation_id, status, config.hash_of_tests)
-
-        if status == BAD_SURVIVED:
-            progress.surviving_mutants += 1
-        elif status == BAD_TIMEOUT:
-            progress.surviving_mutants_timeout += 1
-        elif status == OK_KILLED:
-            progress.killed_mutants += 1
-        elif status == OK_SUSPICIOUS:
-            progress.suspicious_mutants += 1
-        elif status == SKIPPED:
-            progress.skipped += 1
-        else:
-            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
-
-        progress.progress += 1
-        progress.print(total=config.total)
-
-
-def queue_mutants(config, mutants_queue, mutations_by_file):
-    index = 0
-    for filename, mutations in mutations_by_file.items():
-        with open(filename) as f:
-            source = f.read()
-        for mutation_id in mutations:
-            context = Context(
-                mutation_id=mutation_id,
-                filename=filename,
-                dict_synonyms=config.dict_synonyms,
-                config=copy_obj(config),
-                source=source,
-                index=index,
-            )
-            mutants_queue.put(('mutant', context))
-            index += 1
-    mutants_queue.put(('end', None))
-
-
-def check_mutants(mutants_queue, results_queue):
-    # TODO: need to fix this for non-hammett special case
-    def feedback(line):
-        results_queue.put(('progress', line, None, None))
-
-    while True:
-        command, context = mutants_queue.get()
-        if command == 'end':
-            results_queue.put(('end', None, None, None))
-            break
-
-        status = run_mutation(context, feedback)
-
-        results_queue.put(('status', status, context.filename, context.mutation_id))
-
-
-def run_mutation_tests(config, progress, mutations_by_file):
-    """
-    :type config: Config
-    :type progress: Progress
-    :type mutations_by_file: dict[str, list[RelativeMutationID]]
-    """
-
-    # Need to explicitly use the spawn method for python < 3.8 on macOS
-    mp_ctx = multiprocessing.get_context('spawn')
-
-    mutants_queue = mp_ctx.Queue(maxsize=10)
-    t = Thread(
-        target=queue_mutants,
-        name='queue_mutants',
-        daemon=True,
-        kwargs=dict(
-            config=config,
-            mutants_queue=mutants_queue,
-            mutations_by_file=mutations_by_file,
-        )
-    )
-    t.start()
-
-    results_queue = mp_ctx.Queue(maxsize=10)
-    t = mp_ctx.Process(
-        target=check_mutants,
-        name='check_mutants',
-        daemon=True,
-        kwargs=dict(
-            mutants_queue=mutants_queue,
-            results_queue=results_queue,
-        )
-    )
-    t.start()
-
-    while t.is_alive():
-        command, status, filename, mutation_id = results_queue.get()
-        if command == 'end':
-            break
-
-        if command == 'progress':
-            if not config.swallow_output:
-                print(status)
-            progress.print(total=config.total)
-            continue
-
-        assert command == 'status'
-
-        if status == BAD_SURVIVED:
-            progress.surviving_mutants += 1
-        elif status == BAD_TIMEOUT:
-            progress.surviving_mutants_timeout += 1
-        elif status == OK_KILLED:
-            progress.killed_mutants += 1
-        elif status == OK_SUSPICIOUS:
-            progress.suspicious_mutants += 1
-        elif status == SKIPPED:
-            progress.skipped += 1
-        else:
-            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
-
-        progress.progress += 1
-
-        update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
-
-        progress.print(total=config.total)
-
-
-def read_coverage_data():
-    """
-    :rtype: CoverageData or None
-    """
-    try:
-        # noinspection PyPackageRequirements,PyUnresolvedReferences
-        from coverage import Coverage
-    except ImportError as e:
-        raise ImportError('The --use-coverage feature requires the coverage library. Run "pip install --force-reinstall mutmut[coverage]"') from e
-    cov = Coverage('.coverage')
-    cov.load()
-    return cov.get_data()
-
-
-def read_patch_data(patch_file_path):
-    try:
-        # noinspection PyPackageRequirements
-        import whatthepatch
-    except ImportError as e:
-        raise ImportError('The --use-patch feature requires the whatthepatch library. Run "pip install --force-reinstall mutmut[patch]"') from e
-    with open(patch_file_path) as f:
-        diffs = whatthepatch.parse_patch(f.read())
-
-    return {
-        diff.header.new_path: {change.new for change in diff.changes if change.old is None}
-        for diff in diffs
-    }
+        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+        mutations_by_file[filename] = [mutation_id]
 
 
 def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests):
@@ -861,93 +380,6 @@ def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of
     set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
 
     return baseline_time_elapsed
-
-
-def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
-    """
-    :type mutations_by_file: dict[str, list[RelativeMutationID]]
-    :type filename: str
-    :type dict_synonyms: list[str]
-    """
-    with open(filename) as f:
-        source = f.read()
-    context = Context(
-        source=source,
-        filename=filename,
-        config=config,
-        dict_synonyms=dict_synonyms,
-    )
-
-    try:
-        mutations_by_file[filename] = list_mutations(context)
-        register_mutants(mutations_by_file)
-    except Exception as e:
-        raise RuntimeError('Failed while creating mutations for {}, for line "{}"'.format(context.filename, context.current_source_line)) from e
-
-
-def python_source_files(path, tests_dirs, paths_to_exclude=None):
-    """Attempt to guess where the python source files to mutate are and yield
-    their paths
-
-    :param path: path to a python source file or package directory
-    :type path: str
-
-    :param tests_dirs: list of directory paths containing test files
-        (we do not want to mutate these!)
-    :type tests_dirs: list[str]
-
-    :param paths_to_exclude: list of UNIX filename patterns to exclude
-    :type paths_to_exclude: list[str]
-
-    :return: generator listing the paths to the python source files to mutate
-    :rtype: Generator[str, None, None]
-    """
-    paths_to_exclude = paths_to_exclude or []
-    if isdir(path):
-        for root, dirs, files in os.walk(path, topdown=True):
-            for exclude_pattern in paths_to_exclude:
-                dirs[:] = [d for d in dirs if not fnmatch.fnmatch(d, exclude_pattern)]
-                files[:] = [f for f in files if not fnmatch.fnmatch(f, exclude_pattern)]
-
-            dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
-            for filename in files:
-                if filename.endswith('.py'):
-                    yield os.path.join(root, filename)
-    else:
-        yield path
-
-
-def compute_exit_code(progress, exception=None):
-    """Compute an exit code for mutmut mutation testing
-
-    The following exit codes are available for mutmut:
-     * 0 if all mutants were killed (OK_KILLED)
-     * 1 if a fatal error occurred
-     * 2 if one or more mutants survived (BAD_SURVIVED)
-     * 4 if one or more mutants timed out (BAD_TIMEOUT)
-     * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
-
-     Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
-     different mutant statuses occurred during mutation testing.
-
-    :param exception:
-    :type exception: Exception
-    :param progress:
-    :type progress: Progress
-
-    :return: integer noting the exit code of the mutation tests.
-    :rtype: int
-    """
-    code = 0
-    if exception is not None:
-        code = code | 1
-    if progress.surviving_mutants > 0:
-        code = code | 2
-    if progress.surviving_mutants_timeout > 0:
-        code = code | 4
-    if progress.suspicious_mutants > 0:
-        code = code | 8
-    return code
 
 
 if __name__ == '__main__':
