@@ -1,32 +1,28 @@
-﻿#!/usr/bin/env python
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
 import re
-import sys
 import io
 import inspect
 
 from setuptools import setup, find_packages, Command
-from setuptools.command.test import test
 
 
-def read_readme():
-    with io.open('README.rst', encoding='utf8') as f:
+def read_file(name):
+    with io.open(os.path.join(os.path.dirname(__file__), name), encoding='utf8') as f:
         return f.read()
 
 
 def read_reqs(name):
-    with open(os.path.join(os.path.dirname(__file__), name), encoding='utf8') as f:
-        return [line for line in f.read().split('\n') if line and not line.strip().startswith('#')]
+    return [line for line in read_file(name).split('\n') if line and not line.strip().startswith('#')]
 
 
 def read_version():
-    with open(os.path.join('mutmut', '__init__.py'), encoding='utf8') as f:
-        m = re.search(r'''__version__\s*=\s*['"]([^'"]*)['"]''', f.read())
-        if m:
-            return m.group(1)
-        raise ValueError("couldn't find version")
+    m = re.search(r'''__version__\s*=\s*['"]([^'"]*)['"]''', read_file('mutmut/__init__.py'))
+    if m:
+        return m.group(1)
+    raise ValueError("couldn't find version")
 
 
 class Tag(Command):
@@ -72,21 +68,6 @@ class ReleaseCheck(Command):
         print("Ok to distribute files")
 
 
-class PyTest(test):
-    user_options = [('pytest-args=', 'a', "Arguments to pass to pytest")]
-
-    def initialize_options(self):
-        test.initialize_options(self)
-        self.pytest_args = "-v -s --cov={}".format("mutmut")
-
-    def run_tests(self):
-        import shlex
-        # import here, cause outside the eggs aren't loaded
-        import pytest
-        errno = pytest.main(shlex.split(self.pytest_args))
-        sys.exit(errno)
-
-
 test_reqs = read_reqs('test_requirements.txt')
 extras_reqs = {
     'pytest': [
@@ -105,7 +86,7 @@ setup(
     name='mutmut',
     version=read_version(),
     description='mutation testing for Python 3',
-    long_description='' if running_inside_tests else read_readme(),
+    long_description='' if running_inside_tests else read_file('README.rst'),
     author='Anders Hovmöller',
     author_email='boxed@killingar.net',
     url='https://github.com/boxed/mutmut',
@@ -124,18 +105,9 @@ setup(
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
-        'Framework :: Pytest',
     ],
     test_suite='tests',
-    cmdclass={
-        'tag': Tag,
-        'release_check': ReleaseCheck,
-        'test': PyTest,
-    },
     # if I add entry_points while pytest runs,
     # it imports before the coverage collecting starts
     entry_points={

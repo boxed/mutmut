@@ -9,18 +9,26 @@ stages:
 before_install:
   - pip install codecov
 install:
+  - pip install -r test_requirements.txt
   - pip install .
 script:
-  - python setup.py test
+  - python -m hammett
 after_success:
   - codecov
 
 jobs:
   include:
     - stage: test
-      python: "3.6"
-    - python: "3.7"
+      python: "3.7"
+      before_install: pip install tox
+      script: tox -e $(tox -l | grep py37 | xargs | tr ' ' ',')
       dist: xenial
+
+    - python: pypy3
+      before_install: pip install tox
+      script: tox -e $(tox -l | grep pypy3 | xargs | tr ' ' ',')
+      dist: xenial
+
     - os: windows
       language: sh
       python: "3.7"
@@ -29,10 +37,11 @@ jobs:
         - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
         - python -m pip install --upgrade pip wheel
         - python -m pip install codecov
+        - python -m pip install tox
       after_success:
         - python -m codecov
     - stage: deploy
-      python: "3.6"
+      python: "3.7"
       before_script: skip
       after_script: skip
       script:
