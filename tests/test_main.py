@@ -219,14 +219,20 @@ def test_popen_streaming_output_stream():
         PYTHON + ' -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first\n'), call('second\n')])
+    if os.name == 'nt':
+        mock.assert_has_calls([call('first\n'), call('second\n')])
+    else:
+        mock.assert_has_calls([call('first\r\n'), call('second\r\n')])
 
     mock = MagicMock()
     popen_streaming_output(
         PYTHON + ' -c "import time; print(\'first\'); print(\'second\'); print(\'third\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first\n'), call('second\n'), call('third\n')])
+    if os.name == 'nt':
+        mock.assert_has_calls([call('first\r\n'), call('second\r\n'), call('third\r\n')])
+    else:
+        mock.assert_has_calls([call('first\n'), call('second\n'), call('third\n')])
 
     mock = MagicMock()
     popen_streaming_output(

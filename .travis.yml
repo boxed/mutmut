@@ -24,11 +24,6 @@ jobs:
       script: tox -e $(tox -l | grep py37 | xargs | tr ' ' ',')
       dist: xenial
 
-    - python: pypy3
-      before_install: pip install tox
-      script: tox -e $(tox -l | grep pypy3 | xargs | tr ' ' ',')
-      dist: xenial
-
     - os: windows
       language: sh
       python: "3.7"
