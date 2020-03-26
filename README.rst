@@ -30,7 +30,7 @@ Some highlight features:
 
 
 If you need to run mutmut on a python 2 code base use mutmut `1.5.0`. Mutmut
-`1.9.0` is the last version to support python 3.3, 3.4, 3.5 and 3.6.
+`1.9.0` is the last version to support python 3.4, 3.5 and 3.6.
 
 
 Install and run
