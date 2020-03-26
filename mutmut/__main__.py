@@ -36,6 +36,7 @@ from mutmut import (
 from mutmut.cache import (
     create_html_report,
     cached_hash_of_tests,
+    db,
 )
 from mutmut.cache import print_result_cache, \
     hash_of_tests, \
@@ -138,11 +139,17 @@ commands:\n
                   post_mutation, use_patch_file, paths_to_exclude))
 
 
-def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
-         test_time_multiplier, test_time_base,
-         swallow_output, use_coverage, dict_synonyms, cache_only, version,
-         suspicious_policy, untested_policy, pre_mutation, post_mutation,
-         use_patch_file, paths_to_exclude):
+def main(*args, **kwargs):
+    r = _main(*args, **kwargs)
+    db.disconnect()
+    return r
+
+
+def _main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
+          test_time_multiplier, test_time_base,
+          swallow_output, use_coverage, dict_synonyms, cache_only, version,
+          suspicious_policy, untested_policy, pre_mutation, post_mutation,
+          use_patch_file, paths_to_exclude):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
