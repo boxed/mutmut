@@ -679,42 +679,48 @@ def mutate_file(backup, context):
 
 
 def queue_mutants(config, mutants_queue, mutations_by_file):
-    index = 0
-    for filename, mutations in mutations_by_file.items():
-        with open(filename) as f:
-            source = f.read()
-        for mutation_id in mutations:
-            context = Context(
-                mutation_id=mutation_id,
-                filename=filename,
-                dict_synonyms=config.dict_synonyms,
-                config=copy_obj(config),
-                source=source,
-                index=index,
-            )
-            mutants_queue.put(('mutant', context))
-            index += 1
-    mutants_queue.put(('end', None))
+    from mutmut.cache import update_line_numbers
+
+    try:
+        index = 0
+        for filename, mutations in mutations_by_file.items():
+            with open(filename) as f:
+                source = f.read()
+            for mutation_id in mutations:
+                context = Context(
+                    mutation_id=mutation_id,
+                    filename=filename,
+                    dict_synonyms=config.dict_synonyms,
+                    config=copy_obj(config),
+                    source=source,
+                    index=index,
+                )
+                mutants_queue.put(('mutant', context))
+                index += 1
+    finally:
+        mutants_queue.put(('end', None))
 
 
 def check_mutants(mutants_queue, results_queue, cycle_process_after):
     def feedback(line):
         results_queue.put(('progress', line, None, None))
 
-    count = 0
-    while True:
-        command, context = mutants_queue.get()
-        if command == 'end':
-            results_queue.put(('end', None, None, None))
-            break
+    try:
+        count = 0
+        while True:
+            command, context = mutants_queue.get()
+            if command == 'end':
+                break
 
-        status = run_mutation(context, feedback)
+            status = run_mutation(context, feedback)
 
-        results_queue.put(('status', status, context.filename, context.mutation_id))
-        count += 1
-        if count == cycle_process_after:
-            results_queue.put(('cycle', None, None, None))
-            break
+            results_queue.put(('status', status, context.filename, context.mutation_id))
+            count += 1
+            if count == cycle_process_after:
+                results_queue.put(('cycle', None, None, None))
+                break
+    finally:
+        results_queue.put(('end', None, None, None))
 
 
 def run_mutation(context: Context, callback) -> str:
