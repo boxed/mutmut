@@ -54,6 +54,9 @@ class RelativeMutationID(object):
     def __eq__(self, other):
         return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
 
+    def __hash__(self):
+        return hash((self.line, self.index, self.line_number))
+
 
 ALL = RelativeMutationID(filename='%all%', line='%all%', index=-1, line_number=-1)
 
@@ -678,15 +681,21 @@ def mutate_file(backup, context):
     return original, mutated
 
 
-def queue_mutants(config, mutants_queue, mutations_by_file):
+def queue_mutants(*, progress, config, mutants_queue, mutations_by_file):
     from mutmut.cache import update_line_numbers
+    from mutmut.cache import get_cached_mutation_statuses
 
     try:
         index = 0
         for filename, mutations in mutations_by_file.items():
+            cached_mutation_statuses = get_cached_mutation_statuses(filename, mutations, config.hash_of_tests)
             with open(filename) as f:
                 source = f.read()
             for mutation_id in mutations:
+                cached_status = cached_mutation_statuses.get(mutation_id)
+                if cached_status != UNTESTED:
+                    progress.register(cached_status)
+                    continue
                 context = Context(
                     mutation_id=mutation_id,
                     filename=filename,
@@ -887,7 +896,8 @@ def guess_paths_to_mutate():
 
 
 class Progress(object):
-    def __init__(self):
+    def __init__(self, total):
+        self.total = total
         self.progress = 0
         self.skipped = 0
         self.killed_mutants = 0
@@ -895,8 +905,24 @@ class Progress(object):
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
 
-    def print(self, total):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
+    def print(self):
+        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
+
+    def register(self, status):
+        if status == BAD_SURVIVED:
+            self.surviving_mutants += 1
+        elif status == BAD_TIMEOUT:
+            self.surviving_mutants_timeout += 1
+        elif status == OK_KILLED:
+            self.killed_mutants += 1
+        elif status == OK_SUSPICIOUS:
+            self.suspicious_mutants += 1
+        elif status == SKIPPED:
+            self.skipped += 1
+        else:
+            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
+        self.progress += 1
+        self.print()
 
 
 def check_coverage_data_filepaths(coverage_data):
@@ -1060,6 +1086,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
         name='queue_mutants',
         daemon=True,
         kwargs=dict(
+            progress=progress,
             config=config,
             mutants_queue=mutants_queue,
             mutations_by_file=mutations_by_file,
@@ -1098,29 +1125,16 @@ def run_mutation_tests(config, progress, mutations_by_file):
             if not config.swallow_output:
                 print(status, end='', flush=True)
             else:
-                progress.print(total=config.total)
+                progress.print()
 
         else:
             assert command == 'status'
 
-            if status == BAD_SURVIVED:
-                progress.surviving_mutants += 1
-            elif status == BAD_TIMEOUT:
-                progress.surviving_mutants_timeout += 1
-            elif status == OK_KILLED:
-                progress.killed_mutants += 1
-            elif status == OK_SUSPICIOUS:
-                progress.suspicious_mutants += 1
-            elif status == SKIPPED:
-                progress.skipped += 1
-            else:
-                raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
-
-            progress.progress += 1
+            progress.register(status)
 
             update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
 
-            progress.print(total=config.total)
+            progress.print()
 
 
 def read_coverage_data():

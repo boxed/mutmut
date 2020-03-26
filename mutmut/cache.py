@@ -415,6 +415,41 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
+def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
+    sourcefile = SourceFile.get(filename=filename)
+    assert sourcefile
+
+    line_obj_by_line = {}
+
+    result = {}
+
+    for mutation_id in mutations:
+        if mutation_id.line not in line_obj_by_line:
+            line_obj_by_line[mutation_id.line] = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+        line = line_obj_by_line[mutation_id.line]
+        assert line
+        mutant = Mutant.get(line=line, index=mutation_id.index)
+        if mutant is None:
+            mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
+
+        result[mutation_id] = mutant.status
+        if mutant.status == OK_KILLED:
+            # We assume that if a mutant was killed, a change to the test
+            # suite will mean it's still killed
+            result[mutation_id] = mutant.status
+        else:
+            if mutant.tested_against_hash != hash_of_tests or \
+                    mutant.tested_against_hash == NO_TESTS_FOUND or \
+                    hash_of_tests == NO_TESTS_FOUND:
+                result[mutation_id] = UNTESTED
+            else:
+                result[mutation_id] = mutant.status
+
+    return result
+
+
+@init_db
+@db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
     assert sourcefile

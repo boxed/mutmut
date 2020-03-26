@@ -301,7 +301,7 @@ Legend for output:
 
     print()
     print('2. Checking mutants')
-    progress = Progress()
+    progress = Progress(total=config.total)
 
     try:
         run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
