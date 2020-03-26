@@ -1045,7 +1045,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     mp_ctx = multiprocessing.get_context('spawn')
 
     mutants_queue = mp_ctx.Queue(maxsize=100)
-    t = Thread(
+    queue_mutants_thread = Thread(
         target=queue_mutants,
         name='queue_mutants',
         daemon=True,
@@ -1055,7 +1055,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
             mutations_by_file=mutations_by_file,
         )
     )
-    t.start()
+    queue_mutants_thread.start()
 
     results_queue = mp_ctx.Queue(maxsize=100)
 
@@ -1078,6 +1078,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     while t.is_alive():
         command, status, filename, mutation_id = results_queue.get()
         if command == 'end':
+            t.join()
             break
 
         elif command == 'cycle':
