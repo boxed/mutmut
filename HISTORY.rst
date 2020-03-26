@@ -1,6 +1,18 @@
 Changelog
 ---------
 
+2.0.0
+~~~~~
+
+* New execution model. This should result in some modest speed improvements when using pytest.
+
+* A special execution mode when using the hammett test runner. This is MUCH MUCH faster. Please try it!
+
+* Dropped support for python < 3.7. If you need to use mutmut on older versions of python, please use mutmut 1.9.0
+
+* Some other speed improvements.
+
+
 1.9.0
 ~~~~~
 

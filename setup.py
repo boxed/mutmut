@@ -108,6 +108,10 @@ setup(
         'Programming Language :: Python :: 3.7',
     ],
     test_suite='tests',
+    cmdclass={
+        'tag': Tag,
+        'release_check': ReleaseCheck,
+    },
     # if I add entry_points while pytest runs,
     # it imports before the coverage collecting starts
     entry_points={
