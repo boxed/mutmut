@@ -705,6 +705,8 @@ def check_mutants(mutants_queue, results_queue, cycle_process_after):
     def feedback(line):
         results_queue.put(('progress', line, None, None))
 
+    did_cycle = False
+
     try:
         count = 0
         while True:
@@ -718,9 +720,11 @@ def check_mutants(mutants_queue, results_queue, cycle_process_after):
             count += 1
             if count == cycle_process_after:
                 results_queue.put(('cycle', None, None, None))
+                did_cycle = True
                 break
     finally:
-        results_queue.put(('end', None, None, None))
+        if not did_cycle:
+            results_queue.put(('end', None, None, None))
 
 
 def run_mutation(context: Context, callback) -> str:
