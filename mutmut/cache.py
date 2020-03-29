@@ -182,7 +182,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
+    print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED))
 
 
 def get_unified_diff(argument, dict_synonyms, update_cache=True, source=None):
