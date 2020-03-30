@@ -176,6 +176,10 @@ dunder_whitelist = [
 ]
 
 
+class SkipException(Exception):
+    pass
+
+
 UNTESTED = 'untested'
 OK_KILLED = 'ok_killed'
 OK_SUSPICIOUS = 'ok_suspicious'
@@ -620,6 +624,8 @@ def mutate_node(node, context):
             for new in reversed(new_list):
                 assert not callable(new)
                 if new is not None and new != old:
+                    if hasattr(mutmut_config, 'pre_mutation_ast'):
+                        mutmut_config.pre_mutation_ast(context=context)
                     if context.should_mutate():
                         context.performed_mutation_ids.append(context.mutation_id_of_current_index)
                         setattr(node, key, new)
@@ -749,7 +755,10 @@ def run_mutation(context: Context, callback) -> str:
     config = context.config
     if hasattr(mutmut_config, 'pre_mutation'):
         context.current_line_index = context.mutation_id.line_number
-        mutmut_config.pre_mutation(context=context)
+        try:
+            mutmut_config.pre_mutation(context=context)
+        except SkipException:
+            return SKIPPED
         if context.skip:
             return SKIPPED
 
@@ -777,6 +786,9 @@ def run_mutation(context: Context, callback) -> str:
             return BAD_SURVIVED
         else:
             return OK_KILLED
+    except SkipException:
+        return SKIPPED
+
     finally:
         move(context.filename + '.bak', context.filename)
 
