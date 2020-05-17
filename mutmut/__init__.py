@@ -456,7 +456,7 @@ def should_exclude(context, config):
         covered_lines = config.covered_lines_by_filename[context.filename]
     except KeyError:
         if config.coverage_data is not None:
-            covered_lines = config.coverage_data.lines(os.path.abspath(context.filename))
+            covered_lines = config.coverage_data.get(os.path.abspath(context.filename))
             config.covered_lines_by_filename[context.filename] = covered_lines
         else:
             covered_lines = None
@@ -688,7 +688,6 @@ def mutate_file(backup, context):
 
 
 def queue_mutants(*, progress, config, mutants_queue, mutations_by_file):
-    from mutmut.cache import update_line_numbers
     from mutmut.cache import get_cached_mutation_statuses
 
     try:
@@ -938,7 +937,7 @@ class Progress(object):
 
 
 def check_coverage_data_filepaths(coverage_data):
-    for filepath in coverage_data._lines:
+    for filepath in coverage_data:
         if not os.path.exists(filepath):
             raise ValueError('Filepaths in .coverage not recognized, try recreating the .coverage file manually.')
 
@@ -1160,7 +1159,8 @@ def read_coverage_data():
         raise ImportError('The --use-coverage feature requires the coverage library. Run "pip install --force-reinstall mutmut[coverage]"') from e
     cov = Coverage('.coverage')
     cov.load()
-    return cov.get_data()
+    data = cov.get_data()
+    return {filepath: data.lines(filepath) for filepath in data.measured_files()}
 
 
 def read_patch_data(patch_file_path):

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -155,7 +154,7 @@ def test_compute_return_code():
 
 
 def test_read_coverage_data(filesystem):
-    assert isinstance(read_coverage_data(), CoverageData)
+    assert read_coverage_data() == {}
 
 
 @pytest.mark.parametrize(
@@ -366,8 +365,7 @@ def test_full_run_all_suspicious_mutant_junit(filesystem):
     assert int(root.attrib['disabled']) == 0
 
 
-@pytest.mark.skip("TODO: fix support for coverage 5")
-def test_use_coverage(capsys, filesystem):
+def test_use_coverage(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
@@ -394,16 +392,8 @@ def test_use_coverage(capsys, filesystem):
     assert result.exit_code == 0
     assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
-    # replace the .coverage file content with a non existent path to check if an exception is thrown
-    with open('.coverage', 'r') as f:
-        content = f.read()
-
-    # the new path is linux-based, but it just needs to be wrong
-    new_content = re.sub(r'\"[\w\W][^{]*foo.py\"', '"/test_path/foo.py"', content)
-
-    with open('.coverage', 'w') as f:
-        f.write(new_content)
-
+    # remove existent path to check if an exception is thrown
+    os.unlink(os.path.join(str(filesystem), 'foo.py'))
     with pytest.raises(ValueError,
                        match=r'^Filepaths in .coverage not recognized, try recreating the .coverage file manually.$'):
         CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
