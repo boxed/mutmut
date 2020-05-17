@@ -318,6 +318,8 @@ def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths
     if argument is None:
         for path in paths_to_mutate:
             for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+                if filename.startswith('test_') or filename.endswith('__tests.py'):
+                    continue
                 update_line_numbers(filename)
                 add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
     else:
