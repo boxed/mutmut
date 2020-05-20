@@ -32,6 +32,7 @@ from mutmut import (
     python_source_files,
     compute_exit_code,
     print_status,
+    close_active_queues,
 )
 from mutmut.cache import (
     create_html_report,
@@ -312,6 +313,8 @@ Legend for output:
         return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
+        # Close all active multiprocessing queues to avoid hanging up the main process
+        close_active_queues()
 
 
 def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs):

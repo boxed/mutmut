@@ -1092,6 +1092,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     mp_ctx = multiprocessing.get_context('spawn')
 
     mutants_queue = mp_ctx.Queue(maxsize=100)
+    add_to_active_queues(mutants_queue)
     queue_mutants_thread = Thread(
         target=queue_mutants,
         name='queue_mutants',
@@ -1106,6 +1107,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     queue_mutants_thread.start()
 
     results_queue = mp_ctx.Queue(maxsize=100)
+    add_to_active_queues(results_queue)
 
     def create_worker():
         t = mp_ctx.Process(
@@ -1269,3 +1271,15 @@ def compute_exit_code(progress, exception=None):
 hammett_prefix = 'python -m hammett '
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 print_status = status_printer()
+
+# List of active multiprocessing queues
+_active_queues = []
+
+
+def add_to_active_queues(queue):
+    _active_queues.append(queue)
+
+
+def close_active_queues():
+    for queue in _active_queues:
+        queue.close()
