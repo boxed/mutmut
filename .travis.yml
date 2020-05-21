@@ -1,28 +1,37 @@
 language: python
+python:
+  - 3.6
+  - 3.7
+  - 3.8
+  - 3.9-dev
+
+env:
+  - TOXENV=coverage
 
 stages:
   - lint
   - test
-  - build
-  - deploy
+  - name: deploy
+    if: repo = boxed/mutmut AND tag IS present
 
-before_install:
-  - pip install codecov
 install:
-  - pip install -r test_requirements.txt
-  - pip install .
+  - travis_retry pip install tox-travis
 script:
-  - python -m hammett
+  - tox
 after_success:
+  - travis_retry pip install codecov
   - codecov
 
 jobs:
+  allow_failures:
+    - python: 3.9-dev
+    - env: TOXENV=lint
+
   include:
     - stage: test
-      python: "3.7"
-      before_install: pip install tox
-      script: tox -e $(tox -l | grep py37 | xargs | tr ' ' ',')
-      dist: xenial
+      env: TOXENV=lint
+      python: 3.8
+      after_success: skip
 
 #    - os: windows
 #      language: sh
@@ -39,6 +48,7 @@ jobs:
       python: "3.7"
       before_script: skip
       after_script: skip
+      after_success: skip
       script:
         - python setup.py sdist
       deploy:
