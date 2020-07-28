@@ -158,6 +158,16 @@ or skip a mutant:
         if context.filename == 'foo.py':
             context.skip = True
 
+or skip logging:
+
+
+.. code-block:: python
+
+    def pre_mutation(context):
+        line = context.current_source_line.strip()
+        if line.startswith('log.'):
+            context.skip = True
+
 look at the code for the `Context` class for what you can modify. Please
 open a github issue if you need help.
 
