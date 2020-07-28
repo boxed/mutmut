@@ -77,6 +77,7 @@ def do_apply(mutation_pk, dict_synonyms, backup):
 
 null_out = open(os.devnull, 'w')
 
+DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('command', nargs=1, required=False)
@@ -102,7 +103,7 @@ null_out = open(os.devnull, 'w')
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
-    runner='python -m pytest -x --assert=plain',
+    runner=DEFAULT_RUNNER,
     tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
@@ -242,6 +243,12 @@ Legend for output:
 🙁 Survived.         This means your tests needs to be expanded.
 🔇 Skipped.          Skipped.
 """)
+    if runner is DEFAULT_RUNNER:
+        try:
+            import pytest
+        except ImportError:
+            runner = 'python -m unittest'
+
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,
         test_command=runner,
