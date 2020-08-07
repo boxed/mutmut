@@ -43,7 +43,8 @@ You can get started with a simple:
     pip install mutmut
     mutmut run
 
-This will by default run pytest on tests in the "tests" or "test" folder and
+This will by default run pytest (or unittest if pytest is unavailable)
+on tests in the "tests" or "test" folder and
 it will try to figure out where the code to mutate lies. Run
 
 .. code-block:: console

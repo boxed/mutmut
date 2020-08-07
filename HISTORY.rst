@@ -1,6 +1,19 @@
 Changelog
 ---------
 
+2.1.0
+~~~~~
+
+* Support unittest, so you don't need pytest anymore
+
+* Fixed a bug where Ctrl+C wouldn't exit mutmut
+
+* Support for Coverage 5
+
+* Skip mutating test files if they are in the same source tree as the main code
+
+* Advanced whitelisting: More advanced AST level callback
+
 2.0.0
 ~~~~~
 

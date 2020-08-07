@@ -16,7 +16,6 @@ from unittest.mock import (
 
 import pytest
 from click.testing import CliRunner
-from coverage import CoverageData
 
 from mutmut import (
     compute_exit_code,

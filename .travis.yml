@@ -1,15 +1,12 @@
 language: python
 python:
-  - 3.6
   - 3.7
   - 3.8
-  - 3.9-dev
 
 env:
   - TOXENV=coverage
 
 stages:
-  - lint
   - test
   - name: deploy
     if: repo = boxed/mutmut AND tag IS present
@@ -23,13 +20,8 @@ after_success:
   - codecov
 
 jobs:
-  allow_failures:
-    - python: 3.9-dev
-    - env: TOXENV=lint
-
   include:
     - stage: test
-      env: TOXENV=lint
       python: 3.8
       after_success: skip
 
