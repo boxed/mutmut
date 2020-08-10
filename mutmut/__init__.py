@@ -267,7 +267,10 @@ NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 
 def argument_mutation(children, context, **_):
-    """
+    """Mutate the arguments one by one from dict(a=b) to dict(aXXX=b).
+
+    This is similar to the mutation of dict literals in the form {'a': b}.
+
     :type context: Context
     """
     if len(context.stack) >= 3 and context.stack[-3].type in ('power', 'atom_expr'):
