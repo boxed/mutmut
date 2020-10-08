@@ -283,8 +283,8 @@ def create_html_report(dict_synonyms):
                 index_file.write('<tr><td><a href="%s.html">%s</a></td><td>%s</td><td>%s</td><td>%.2f</td><td>%s</td>' % (
                     filename,
                     filename,
-                    killed,
                     len(mutants),
+                    killed,
                     (killed / len(mutants) * 100),
                     len(mutants_by_status[BAD_SURVIVED]),
                 ))
