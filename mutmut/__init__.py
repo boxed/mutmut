@@ -1140,7 +1140,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
             t.join()
             break
 
-        elif command == 'cycle':
+        if command == 'cycle':
             t = create_worker()
 
         elif command == 'progress':
