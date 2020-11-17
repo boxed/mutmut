@@ -115,45 +115,78 @@ def test_compute_return_code():
             self.surviving_mutants_timeout = surviving_mutants_timeout
             self.suspicious_mutants = suspicious_mutants
 
-    assert compute_exit_code(MockProgress(0, 0, 0, 0)) == 0
-    assert compute_exit_code(MockProgress(0, 0, 0, 1)) == 8
-    assert compute_exit_code(MockProgress(0, 0, 1, 0)) == 4
-    assert compute_exit_code(MockProgress(0, 0, 1, 1)) == 12
-    assert compute_exit_code(MockProgress(0, 1, 0, 0)) == 2
-    assert compute_exit_code(MockProgress(0, 1, 0, 1)) == 10
-    assert compute_exit_code(MockProgress(0, 1, 1, 0)) == 6
-    assert compute_exit_code(MockProgress(0, 1, 1, 1)) == 14
+    if compute_exit_code(MockProgress(0, 0, 0, 0)) != 0:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 0, 1)) != 8:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 1, 0)) != 4:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 1, 1)) != 12:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 0, 0)) != 2:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 0, 1)) != 10:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 1, 0)) != 6:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 1, 1)) != 14:
+        raise AssertionError
 
-    assert compute_exit_code(MockProgress(1, 0, 0, 0)) == 0
-    assert compute_exit_code(MockProgress(1, 0, 0, 1)) == 8
-    assert compute_exit_code(MockProgress(1, 0, 1, 0)) == 4
-    assert compute_exit_code(MockProgress(1, 0, 1, 1)) == 12
-    assert compute_exit_code(MockProgress(1, 1, 0, 0)) == 2
-    assert compute_exit_code(MockProgress(1, 1, 0, 1)) == 10
-    assert compute_exit_code(MockProgress(1, 1, 1, 0)) == 6
-    assert compute_exit_code(MockProgress(1, 1, 1, 1)) == 14
+    if compute_exit_code(MockProgress(1, 0, 0, 0)) != 0:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 0, 1)) != 8:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 1, 0)) != 4:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 1, 1)) != 12:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 0, 0)) != 2:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 0, 1)) != 10:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 1, 0)) != 6:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 1, 1)) != 14:
+        raise AssertionError
 
-    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockProgress(0, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockProgress(0, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockProgress(0, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockProgress(0, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockProgress(0, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockProgress(0, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockProgress(0, 1, 1, 1), Exception()) == 15
+    if compute_exit_code(MockProgress(0, 0, 0, 0), Exception()) != 1:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 0, 1), Exception()) != 9:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 1, 0), Exception()) != 5:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 0, 1, 1), Exception()) != 13:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 0, 0), Exception()) != 3:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 0, 1), Exception()) != 11:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 1, 0), Exception()) != 7:
+        raise AssertionError
+    if compute_exit_code(MockProgress(0, 1, 1, 1), Exception()) != 15:
+        raise AssertionError
 
-    assert compute_exit_code(MockProgress(1, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockProgress(1, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockProgress(1, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockProgress(1, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockProgress(1, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockProgress(1, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) == 15
+    if compute_exit_code(MockProgress(1, 0, 0, 0), Exception()) != 1:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 0, 1), Exception()) != 9:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 1, 0), Exception()) != 5:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 0, 1, 1), Exception()) != 13:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 0, 0), Exception()) != 3:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 0, 1), Exception()) != 11:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) != 7:
+        raise AssertionError
+    if compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) != 15:
+        raise AssertionError
 
 
 def test_read_coverage_data(filesystem):
-    assert read_coverage_data() == {}
+    if read_coverage_data() != {}:
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -166,7 +199,8 @@ def test_read_coverage_data(filesystem):
     ]
 )
 def test_python_source_files(expected, source_path, tests_dirs, filesystem):
-    assert list(python_source_files(source_path, tests_dirs)) == expected
+    if list(python_source_files(source_path, tests_dirs)) != expected:
+        raise AssertionError
 
 
 def test_python_source_files__with_paths_to_exclude(tmpdir):
@@ -194,10 +228,11 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
         pass
 
     # act, assert
-    assert set(python_source_files(project_dir, [], paths_to_exclude)) == {
+    if set(python_source_files(project_dir, [], paths_to_exclude)) != {
         os.path.join(project_dir, 'services', 'main.py'),
         os.path.join(project_dir, 'services', 'utils.py'),
-    }
+    }:
+        raise AssertionError
 
 
 def test_popen_streaming_output_timeout():
@@ -208,7 +243,8 @@ def test_popen_streaming_output_timeout():
             lambda line: line, timeout=0.1,
         )
 
-    assert (time() - start) < 3
+    if (time() - start) >= 3:
+        raise AssertionError
 
 
 def test_popen_streaming_output_stream():
@@ -242,44 +278,56 @@ def test_popen_streaming_output_stream():
 def test_simple_apply(filesystem):
     result = CliRunner().invoke(climain, ['run', '-s', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['apply', '1'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     with open(os.path.join(str(filesystem), 'foo.py')) as f:
-        assert f.read() != file_to_mutate_contents
+        if f.read() == file_to_mutate_contents:
+            raise AssertionError
 
 
 def test_full_run_no_surviving_mutants(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
-    assert result.output.strip() == u"""
+    if result.exit_code != 0:
+        raise AssertionError
+    if result.output.strip() != u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
 To show a mutant:
     mutmut show <id>
-""".strip()
+""".strip():
+        raise AssertionError
 
 
 def test_full_run_no_surviving_mutants_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     root = ET.fromstring(result.output.strip())
-    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
-    assert int(root.attrib['failures']) == 0
-    assert int(root.attrib['errors']) == 0
-    assert int(root.attrib['disabled']) == 0
+    if int(root.attrib['tests']) != EXPECTED_MUTANTS:
+        raise AssertionError
+    if int(root.attrib['failures']) != 0:
+        raise AssertionError
+    if int(root.attrib['errors']) != 0:
+        raise AssertionError
+    if int(root.attrib['disabled']) != 0:
+        raise AssertionError
 
 
 def test_full_run_one_surviving_mutant(filesystem):
@@ -288,12 +336,14 @@ def test_full_run_one_surviving_mutant(filesystem):
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 2
+    if result.exit_code != 2:
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
-    assert result.output.strip() == u"""
+    if result.exit_code != 0:
+        raise AssertionError
+    if result.output.strip() != u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -306,7 +356,8 @@ Survived 🙁 (1)
 ---- foo.py (1) ----
 
 1
-""".strip()
+""".strip():
+        raise AssertionError
 
 
 def test_full_run_one_surviving_mutant_junit(filesystem):
@@ -315,26 +366,34 @@ def test_full_run_one_surviving_mutant_junit(filesystem):
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 2
+    if result.exit_code != 2:
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     root = ET.fromstring(result.output.strip())
-    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
-    assert int(root.attrib['failures']) == 1
-    assert int(root.attrib['errors']) == 0
-    assert int(root.attrib['disabled']) == 0
+    if int(root.attrib['tests']) != EXPECTED_MUTANTS:
+        raise AssertionError
+    if int(root.attrib['failures']) != 1:
+        raise AssertionError
+    if int(root.attrib['errors']) != 0:
+        raise AssertionError
+    if int(root.attrib['disabled']) != 0:
+        raise AssertionError
 
 
 def test_full_run_all_suspicious_mutant(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 8
+    if result.exit_code != 8:
+        raise AssertionError
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
-    assert result.output.strip() == u"""
+    if result.exit_code != 0:
+        raise AssertionError
+    if result.output.strip() != u"""
 To apply a mutant on disk:
     mutmut apply <id>
 
@@ -347,21 +406,28 @@ Suspicious 🤔 ({EXPECTED_MUTANTS})
 ---- foo.py ({EXPECTED_MUTANTS}) ----
 
 1-{EXPECTED_MUTANTS}
-""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS).strip()
+""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS).strip():
+        raise AssertionError
 
 
 def test_full_run_all_suspicious_mutant_junit(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-multiplier=0.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 8
+    if result.exit_code != 8:
+        raise AssertionError
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     root = ET.fromstring(result.output.strip())
-    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
-    assert int(root.attrib['failures']) == 0
-    assert int(root.attrib['errors']) == 0
-    assert int(root.attrib['disabled']) == 0
+    if int(root.attrib['tests']) != EXPECTED_MUTANTS:
+        raise AssertionError
+    if int(root.attrib['failures']) != 0:
+        raise AssertionError
+    if int(root.attrib['errors']) != 0:
+        raise AssertionError
+    if int(root.attrib['disabled']) != 0:
+        raise AssertionError
 
 
 def test_use_coverage(filesystem):
@@ -371,25 +437,34 @@ def test_use_coverage(filesystem):
     # first validate that mutmut without coverage detects a surviving mutant
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 2
+    if result.exit_code != 2:
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['junitxml'], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError
     root = ET.fromstring(result.output.strip())
-    assert int(root.attrib['tests']) == EXPECTED_MUTANTS
-    assert int(root.attrib['failures']) == 1
-    assert int(root.attrib['errors']) == 0
-    assert int(root.attrib['disabled']) == 0
+    if int(root.attrib['tests']) != EXPECTED_MUTANTS:
+        raise AssertionError
+    if int(root.attrib['failures']) != 1:
+        raise AssertionError
+    if int(root.attrib['errors']) != 0:
+        raise AssertionError
+    if int(root.attrib['disabled']) != 0:
+        raise AssertionError
 
     # generate a `.coverage` file by invoking pytest
     subprocess.run([sys.executable, "-m", "pytest", "--cov=.", "foo.py"])
-    assert os.path.isfile('.coverage')
+    if not os.path.isfile('.coverage'):
+        raise AssertionError
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
-    assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    if result.exit_code != 0:
+        raise AssertionError
+    if '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' not in repr(result.output):
+        raise AssertionError
 
     # remove existent path to check if an exception is thrown
     os.unlink(os.path.join(str(filesystem), 'foo.py'))
@@ -420,8 +495,10 @@ index b9a5fb4..c6a496c 100644
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-patch-file=patch"], catch_exceptions=False)
     print(repr(result.output))
-    assert result.exit_code == 0
-    assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    if result.exit_code != 0:
+        raise AssertionError
+    if '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' not in repr(result.output):
+        raise AssertionError
 
 
 def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
@@ -437,7 +514,11 @@ def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
             "--post-mutation=echo post mutation stub",
         ], catch_exceptions=False)
     print(result.output)
-    assert result.exit_code == 0
-    assert "pre mutation stub" in result.output
-    assert "post mutation stub" in result.output
-    assert result.output.index("pre mutation stub") < result.output.index("post mutation stub")
+    if result.exit_code != 0:
+        raise AssertionError
+    if "pre mutation stub" not in result.output:
+        raise AssertionError
+    if "post mutation stub" not in result.output:
+        raise AssertionError
+    if result.output.index("pre mutation stub") >= result.output.index("post mutation stub"):
+        raise AssertionError

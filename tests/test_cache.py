@@ -13,7 +13,7 @@ def test_sequence_ops():
     ]
     b = a[:]
 
-    assert list(sequence_ops(a, b)) == [
+    if list(sequence_ops(a, b)) != [
         ('equal', 'a', 0, 'a', 0),
         ('equal', 'b', 1, 'b', 1),
         ('equal', 'c', 2, 'c', 2),
@@ -21,14 +21,15 @@ def test_sequence_ops():
         ('equal', 'e', 4, 'e', 4),
         ('equal', 'f', 5, 'f', 5),
         ('equal', 'g', 6, 'g', 6),
-    ]
+    ]:
+        raise AssertionError
 
     # now modify
     b[1] = 'replaced'
     b.insert(3, 'inserted')
     del b[-1]
 
-    assert list(sequence_ops(a, b)) == [
+    if list(sequence_ops(a, b)) != [
         ('equal', 'a', 0, 'a', 0),
         ('replace', 'b', 1, 'replaced', 1),
         ('equal', 'c', 2, 'c', 2),
@@ -37,4 +38,5 @@ def test_sequence_ops():
         ('equal', 'e', 4, 'e', 5),
         ('equal', 'f', 5, 'f', 6),
         ('delete', 'g', 6, None, None),
-    ]
+    ]:
+        raise AssertionError

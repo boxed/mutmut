@@ -362,7 +362,8 @@ def update_line_numbers(filename):
         if command == 'equal':
             if a_index != b_index:
                 cached_obj = cached_line_objects[a_index]
-                assert cached_obj.line == existing_lines[b_index]
+                if cached_obj.line != existing_lines[b_index]:
+                    raise AssertionError
                 cached_obj.line_number = b_index
 
         elif command == 'delete':
@@ -416,7 +417,8 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 @db_session
 def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
-    assert sourcefile
+    if not sourcefile:
+        raise AssertionError
 
     line_obj_by_line = {}
 
@@ -426,7 +428,8 @@ def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
         if mutation_id.line not in line_obj_by_line:
             line_obj_by_line[mutation_id.line] = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
         line = line_obj_by_line[mutation_id.line]
-        assert line
+        if not line:
+            raise AssertionError
         mutant = Mutant.get(line=line, index=mutation_id.index)
         if mutant is None:
             mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
@@ -451,9 +454,11 @@ def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
 @db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
-    assert sourcefile
+    if not sourcefile:
+        raise AssertionError
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
-    assert line
+    if not line:
+        raise AssertionError
     mutant = Mutant.get(line=line, index=mutation_id.index)
     if mutant is None:
         mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))

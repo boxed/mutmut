@@ -97,7 +97,8 @@ class ASTPattern(object):
                 for match in re.finditer(r'\^(?P<value>[^\^]*)', node.value):
                     name = match.groupdict()['value'].strip()
                     d = definitions.get(name, {})
-                    assert set(d.keys()) | {'of_type', 'marker_type'} == {'of_type', 'marker_type'}
+                    if set(d.keys()) | {'of_type', 'marker_type'} != {'of_type', 'marker_type'}:
+                        raise AssertionError
                     self.markers.append(dict(
                         node=get_leaf(line - 1, column + match.start(), of_type=d.get('of_type')),
                         marker_type=d.get('marker_type'),
@@ -251,7 +252,8 @@ def partition_node_list(nodes, value):
         if hasattr(n, 'value') and n.value == value:
             return nodes[:i], n, nodes[i + 1:]
 
-    assert False, "didn't find node to split on"
+    if not False:
+        raise AssertionError("didn't find node to split on")
 
 
 def lambda_mutation(children, **_):
@@ -398,7 +400,8 @@ def expression_mutation(children, **_):
 
 
 def decorator_mutation(children, **_):
-    assert children[-1].type == 'newline'
+    if children[-1].type != 'newline':
+        raise AssertionError
     return children[-1:]
 
 
@@ -479,7 +482,8 @@ class Context(object):
         self._set_source(source)
         self.mutation_id = mutation_id
         self.performed_mutation_ids = []
-        assert isinstance(mutation_id, RelativeMutationID)
+        if not isinstance(mutation_id, RelativeMutationID):
+            raise AssertionError
         self.current_line_index = 0
         self.filename = filename
         self.stack = []
@@ -551,7 +555,8 @@ def mutate(context):
     mutate_list_of_nodes(result, context=context)
     mutated_source = result.get_code().replace(' not not ', ' ')
     if context.remove_newline_at_end:
-        assert mutated_source[-1] == '\n'
+        if mutated_source[-1] != '\n':
+            raise AssertionError
         mutated_source = mutated_source[:-1]
 
     # If we said we mutated the code, check that it has actually changed
@@ -624,7 +629,8 @@ def mutate_node(node, context):
             # adverse effects on subsequent mutations, this ensures the last
             # mutation applied is the original/default/legacy mutmut mutation
             for new in reversed(new_list):
-                assert not callable(new)
+                if callable(new):
+                    raise AssertionError
                 if new is not None and new != old:
                     if hasattr(mutmut_config, 'pre_mutation_ast'):
                         mutmut_config.pre_mutation_ast(context=context)
@@ -666,7 +672,8 @@ def list_mutations(context):
     """
     :type context: Context
     """
-    assert context.mutation_id == ALL
+    if context.mutation_id != ALL:
+        raise AssertionError
     mutate(context)
     return context.performed_mutation_ids
 
@@ -1047,7 +1054,8 @@ def hammett_tests_pass(config, callback):
         nonlocal timed_out
         timed_out = True
 
-    assert current_thread() is main_thread()
+    if current_thread() is not main_thread():
+        raise AssertionError
     timer = Timer(config.baseline_time_elapsed * 10, timeout)
     timer.daemon = True
     timer.start()
@@ -1142,7 +1150,8 @@ def run_mutation_tests(config, progress, mutations_by_file):
                 progress.print()
 
         else:
-            assert command == 'status'
+            if command != 'status':
+                raise AssertionError
 
             progress.register(status)
 

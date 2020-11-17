@@ -14,12 +14,15 @@ def test_partition_node_list_no_nodes():
 
 
 def test_name_mutation_simple_mutants():
-    assert name_mutation(None, 'True') == 'False'
+    if name_mutation(None, 'True') != 'False':
+        raise AssertionError
 
 
 def test_context_exclude_line():
     source = "__import__('pkg_resources').declare_namespace(__name__)\n"
-    assert mutate(Context(source=source)) == (source, 0)
+    if mutate(Context(source=source)) != (source, 0):
+        raise AssertionError
 
     source = "__all__ = ['hi']\n"
-    assert mutate(Context(source=source)) == (source, 0)
+    if mutate(Context(source=source)) != (source, 0):
+        raise AssertionError

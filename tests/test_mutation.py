@@ -9,21 +9,28 @@ from mutmut import mutate, ALL, Context, list_mutations, RelativeMutationID, \
 
 def test_matches_py3():
     node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
-    assert not array_subscript_pattern.matches(node=node)
+    if array_subscript_pattern.matches(node=node):
+        raise AssertionError
 
 
 def test_matches():
     node = parse('from foo import bar').children[0]
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
+    if array_subscript_pattern.matches(node=node):
+        raise AssertionError
+    if function_call_pattern.matches(node=node):
+        raise AssertionError
+    if array_subscript_pattern.matches(node=node):
+        raise AssertionError
+    if function_call_pattern.matches(node=node):
+        raise AssertionError
 
     node = parse('foo[bar]\n').children[0].children[0].children[1].children[1]
-    assert array_subscript_pattern.matches(node=node)
+    if not array_subscript_pattern.matches(node=node):
+        raise AssertionError
 
     node = parse('foo(bar)\n').children[0].children[0].children[1].children[1]
-    assert function_call_pattern.matches(node=node)
+    if not function_call_pattern.matches(node=node):
+        raise AssertionError
 
 
 def test_ast_pattern_for_loop():
@@ -50,13 +57,15 @@ for x in y:
     if foo:
         continue
 """).children[0].children[3]
-    assert p.matches(node=n)
+    if not p.matches(node=n):
+        raise AssertionError
 
     n = parse("""for a, b in [1, 2, 3]:
     if foo:
         continue
 """).children[0].children[3]
-    assert p.matches(node=n)
+    if not p.matches(node=n):
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -112,7 +121,8 @@ for x in y:
 )
 def test_basic_mutations(original, expected):
     actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
+    if actual != expected:
+        raise AssertionError('Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original))
 
 
 @pytest.mark.parametrize(
@@ -133,9 +143,12 @@ def test_basic_mutations(original, expected):
 )
 def test_multiple_mutations(original, expected):
     mutations = list_mutations(Context(source=original))
-    assert len(mutations) == 3
-    assert mutate(Context(source=original, mutation_id=mutations[0])) == (expected[0], 1)
-    assert mutate(Context(source=original, mutation_id=mutations[1])) == (expected[1], 1)
+    if len(mutations) != 3:
+        raise AssertionError
+    if mutate(Context(source=original, mutation_id=mutations[0])) != (expected[0], 1):
+        raise AssertionError
+    if mutate(Context(source=original, mutation_id=mutations[1])) != (expected[1], 1):
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -150,7 +163,8 @@ def test_multiple_mutations(original, expected):
 )
 def test_basic_mutations_python3(original, expected):
     actual = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == expected
+    if actual != expected:
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -161,7 +175,8 @@ def test_basic_mutations_python3(original, expected):
 )
 def test_basic_mutations_python36(original, expected):
     actual = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == expected
+    if actual != expected:
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -183,7 +198,8 @@ def test_basic_mutations_python36(original, expected):
 )
 def test_do_not_mutate(source):
     actual = mutate(Context(source=source, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == source
+    if actual != source:
+        raise AssertionError
 
 
 @pytest.mark.parametrize(
@@ -196,7 +212,8 @@ def test_do_not_mutate(source):
 )
 def test_do_not_mutate_python3(source):
     actual = mutate(Context(source=source, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))[0]
-    assert actual == source
+    if actual != source:
+        raise AssertionError
 
 
 def test_mutate_body_of_function_with_return_type_annotation():
@@ -205,25 +222,33 @@ def foo() -> int:
     return 0
     """
 
-    assert mutate(Context(source=source, mutation_id=ALL))[0] == source.replace('0', '1')
+    if mutate(Context(source=source, mutation_id=ALL))[0] != source.replace('0', '1'):
+        raise AssertionError
 
 
 def test_mutate_all():
-    assert mutate(Context(source='def foo():\n    return 1+1', mutation_id=ALL)) == ('def foo():\n    return 2-2', 3)
+    if mutate(Context(source='def foo():\n    return 1+1', mutation_id=ALL)) != ('def foo():\n    return 2-2', 3):
+        raise AssertionError
 
 
 def test_mutate_both():
     source = 'a = b + c'
     mutations = list_mutations(Context(source=source))
-    assert len(mutations) == 2
-    assert mutate(Context(source=source, mutation_id=mutations[0])) == ('a = b - c', 1)
-    assert mutate(Context(source=source, mutation_id=mutations[1])) == ('a = None', 1)
+    if len(mutations) != 2:
+        raise AssertionError
+    if mutate(Context(source=source, mutation_id=mutations[0])) != ('a = b - c', 1):
+        raise AssertionError
+    if mutate(Context(source=source, mutation_id=mutations[1])) != ('a = None', 1):
+        raise AssertionError
 
 
 def test_perform_one_indexed_mutation():
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID(line='1+1', index=0, line_number=0))) == ('2+1', 1)
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 1, line_number=0))) == ('1-1', 1)
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 2, line_number=0))) == ('1+2', 1)
+    if mutate(Context(source='1+1', mutation_id=RelativeMutationID(line='1+1', index=0, line_number=0))) != ('2+1', 1):
+        raise AssertionError
+    if mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 1, line_number=0))) != ('1-1', 1):
+        raise AssertionError
+    if mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 2, line_number=0))) != ('1+2', 1):
+        raise AssertionError
 
     # TODO: should this case raise an exception?
     # assert mutate(Context(source='def foo():\n    return 1', mutation_id=2)) == ('def foo():\n    return 1\n', 0)
@@ -231,29 +256,36 @@ def test_perform_one_indexed_mutation():
 
 def test_function():
     source = "def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1)
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 1, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s\n", 1)
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 2, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) != ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1):
+        raise AssertionError
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 1, line_number=1))) != ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s\n", 1):
+        raise AssertionError
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 2, line_number=1))) != ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1):
+        raise AssertionError
 
 
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) != ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1):
+        raise AssertionError
 
 
 def test_pragma_no_mutate():
     source = """def foo():\n    return 1+1  # pragma: no mutate\n"""
-    assert mutate(Context(source=source, mutation_id=ALL)) == (source, 0)
+    if mutate(Context(source=source, mutation_id=ALL)) != (source, 0):
+        raise AssertionError
 
 
 def test_pragma_no_mutate_and_no_cover():
     source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n"""
-    assert mutate(Context(source=source, mutation_id=ALL)) == (source, 0)
+    if mutate(Context(source=source, mutation_id=ALL)) != (source, 0):
+        raise AssertionError
 
 
 def test_mutate_decorator():
     source = """@foo\ndef foo():\n    pass\n"""
-    assert mutate(Context(source=source, mutation_id=ALL)) == (source.replace('@foo', ''), 1)
+    if mutate(Context(source=source, mutation_id=ALL)) != (source.replace('@foo', ''), 1):
+        raise AssertionError
 
 
 # TODO: getting this test and the above to both pass is tricky
@@ -264,12 +296,14 @@ def test_mutate_decorator():
 
 def test_mutate_dict():
     source = "dict(a=b, c=d)"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source, 1, line_number=0))) == ("dict(a=b, cXX=d)", 1)
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source, 1, line_number=0))) != ("dict(a=b, cXX=d)", 1):
+        raise AssertionError
 
 
 def test_mutate_dict2():
     source = "dict(a=b, c=d, e=f, g=h)"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source, 3, line_number=0))) == ("dict(a=b, c=d, e=f, gXX=h)", 1)
+    if mutate(Context(source=source, mutation_id=RelativeMutationID(source, 3, line_number=0))) != ("dict(a=b, c=d, e=f, gXX=h)", 1):
+        raise AssertionError
 
 
 def test_performed_mutation_ids():
@@ -277,7 +311,8 @@ def test_performed_mutation_ids():
     context = Context(source=source)
     mutate(context)
     # we found two mutation points: mutate "a" and "c"
-    assert context.performed_mutation_ids == [RelativeMutationID(source, 0, 0), RelativeMutationID(source, 1, 0)]
+    if context.performed_mutation_ids != [RelativeMutationID(source, 0, 0), RelativeMutationID(source, 1, 0)]:
+        raise AssertionError
 
 
 def test_syntax_error():
@@ -333,7 +368,8 @@ def test_bug_github_issue_30():
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
     pass
 """
-    assert mutate(Context(source=source)) == (source, 0)
+    if mutate(Context(source=source)) != (source, 0):
+        raise AssertionError
 
 
 def test_bug_github_issue_77():
@@ -350,7 +386,8 @@ __all__ = [
     'bar',
 ]
 """
-    assert mutate(Context(source=source)) == (source, 0)
+    if mutate(Context(source=source)) != (source, 0):
+        raise AssertionError
 
 
 def test_bug_github_issue_162():
@@ -358,11 +395,13 @@ def test_bug_github_issue_162():
 primes: List[int] = []
 foo = 'bar'
 """
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
+    if mutate(Context(source=source, mutation_id=RelativeMutationID("foo = 'bar'", 0, 2))) != (source.replace("'bar'", "'XXbarXX'"), 1):
+        raise AssertionError
 
 
 def test_bad_mutation_str_type_definition():
     source = """
 foo: 'SomeType'
     """
-    assert mutate(Context(source=source)) == (source, 0)
+    if mutate(Context(source=source)) != (source, 0):
+        raise AssertionError
