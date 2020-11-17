@@ -10,6 +10,9 @@ mutmut - python mutation tester
     
 .. image:: https://codecov.io/gh/boxed/mutmut/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/boxed/mutmut
+  
+.. image:: https://img.shields.io/discord/767914934016802818.svg
+  :target: https://discord.gg/cwb9uNt
 
 Mutmut is a mutation testing system for Python, with a strong focus on ease
 of use. If you don't know what mutation testing is try starting with
