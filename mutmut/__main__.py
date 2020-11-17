@@ -271,7 +271,8 @@ Legend for output:
             coverage_data = read_coverage_data()
             check_coverage_data_filepaths(coverage_data)
         else:
-            assert use_patch_file
+            if not use_patch_file:
+                raise AssertionError
             covered_lines_by_filename = read_patch_data(use_patch_file)
 
     if command != 'run':
