@@ -259,8 +259,7 @@ def lambda_mutation(children, **_):
 
     if len(post) == 1 and getattr(post[0], 'value', None) == 'None':
         return pre + [op] + [Number(value=' 0', start_pos=post[0].start_pos)]
-    else:
-        return pre + [op] + [Keyword(value=' None', start_pos=post[0].start_pos)]
+    return pre + [op] + [Keyword(value=' None', start_pos=post[0].start_pos)]
 
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
@@ -786,8 +785,7 @@ def run_mutation(context: Context, callback) -> str:
 
         if survived:
             return BAD_SURVIVED
-        else:
-            return OK_KILLED
+        return OK_KILLED
     except SkipException:
         return SKIPPED
 
@@ -891,17 +889,17 @@ def guess_paths_to_mutate():
     this_dir = os.getcwd().split(os.sep)[-1]
     if isdir('lib'):
         return 'lib'
-    elif isdir('src'):
+    if isdir('src'):
         return 'src'
-    elif isdir(this_dir):
+    if isdir(this_dir):
         return this_dir
-    elif isdir(this_dir.replace('-', '_')):
+    if isdir(this_dir.replace('-', '_')):
         return this_dir.replace('-', '_')
-    elif isdir(this_dir.replace(' ', '_')):
+    if isdir(this_dir.replace(' ', '_')):
         return this_dir.replace(' ', '_')
-    elif isdir(this_dir.replace('-', '')):
+    if isdir(this_dir.replace('-', '')):
         return this_dir.replace('-', '')
-    elif isdir(this_dir.replace(' ', '')):
+    if isdir(this_dir.replace(' ', '')):
         return this_dir.replace(' ', '')
     raise FileNotFoundError(
         'Could not figure out where the code to mutate is. '
