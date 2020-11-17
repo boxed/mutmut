@@ -41,7 +41,7 @@ except ImportError:
     mutmut_config = None
 
 
-class RelativeMutationID(object):
+class RelativeMutationID():
     def __init__(self, line, index, line_number, filename=None):
         self.line = line
         self.index = index
@@ -65,7 +65,7 @@ class InvalidASTPatternException(Exception):
     pass
 
 
-class ASTPattern(object):
+class ASTPattern():
     def __init__(self, source, **definitions):
         if definitions is None:
             definitions = {}
@@ -474,7 +474,7 @@ def should_exclude(context, config):
     return False
 
 
-class Context(object):
+class Context():
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None, index=0):
         self.index = index
         self.remove_newline_at_end = False
@@ -805,7 +805,7 @@ def run_mutation(context: Context, callback) -> str:
                 callback(result)
 
 
-class Config(object):
+class Config():
     def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
@@ -914,7 +914,7 @@ def guess_paths_to_mutate():
         'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
-class Progress(object):
+class Progress():
     def __init__(self, total):
         self.total = total
         self.progress = 0
