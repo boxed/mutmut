@@ -471,22 +471,43 @@ def should_exclude(context, config):
 
 class Context(object):
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None, index=0):
-        self.index = index
-        self.remove_newline_at_end = False
-        self._source = None
         self._set_source(source)
+        self.index = index
         self.mutation_id = mutation_id
-        self.performed_mutation_ids = []
         assert isinstance(mutation_id, RelativeMutationID)
-        self.current_line_index = 0
         self.filename = filename
-        self.stack = []
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
+        self.config = config
+        self.undo_stack = []
+        self._ast = None
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
-        self.config = config
+        self.reset()
+
+    # noinspection PyAttributeOutsideInit
+    def reset(self):
+        for undo in self.undo_stack:
+            undo()
+        self.undo_stack = []
+
+        self.remove_newline_at_end = False
+        self._source = None
+        self.performed_mutation_ids = []
+        self.current_line_index = 0
+        self.stack = []
         self.skip = False
+
+    @property
+    def ast(self):
+        if self._ast is None:
+            try:
+                self._ast = parse(self.source, error_recovery=False)
+            except Exception:
+                print('Failed to parse {}. Internal error from parso follows.'.format(self.filename))
+                print('----------------------------------')
+                raise
+        return self._ast
 
     def exclude_line(self):
         return self.current_line_index in self.pragma_no_mutate_lines or should_exclude(context=self, config=self.config)
@@ -533,6 +554,13 @@ class Context(object):
             return True
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
 
+    def get_code(self):
+        mutated_source = self._ast.get_code().replace(' not not ', ' ')
+        if self.remove_newline_at_end:
+            assert mutated_source[-1] == '\n'
+            mutated_source = mutated_source[:-1]
+        return mutated_source
+
 
 def mutate(context):
     """
@@ -540,17 +568,9 @@ def mutate(context):
     :return: tuple of mutated source code and number of mutations performed
     :rtype: Tuple[str, int]
     """
-    try:
-        result = parse(context.source, error_recovery=False)
-    except Exception:
-        print('Failed to parse {}. Internal error from parso follows.'.format(context.filename))
-        print('----------------------------------')
-        raise
-    mutate_list_of_nodes(result, context=context)
-    mutated_source = result.get_code().replace(' not not ', ' ')
-    if context.remove_newline_at_end:
-        assert mutated_source[-1] == '\n'
-        mutated_source = mutated_source[:-1]
+    context.reset()
+    mutate_list_of_nodes(context.ast, context=context)
+    mutated_source = context.get_code()
 
     # If we said we mutated the code, check that it has actually changed
     if context.performed_mutation_ids:
@@ -558,7 +578,6 @@ def mutate(context):
             raise RuntimeError(
                 "Mutation context states that a mutation occurred but the "
                 "mutated source remains the same as original")
-    context.mutated_source = mutated_source
     return mutated_source, len(context.performed_mutation_ids)
 
 
@@ -628,6 +647,11 @@ def mutate_node(node, context):
                         mutmut_config.pre_mutation_ast(context=context)
                     if context.should_mutate():
                         context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+
+                        def undo_mutation():
+                            setattr(node, key, old)
+
+                        context.undo_stack.append(undo_mutation)
                         setattr(node, key, new)
                     context.index += 1
                 # this is just an optimization to stop early
