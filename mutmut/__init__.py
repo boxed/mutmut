@@ -484,6 +484,7 @@ class Context(object):
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
         self.reset()
+        self.subject_stack = []
 
     # noinspection PyAttributeOutsideInit
     def reset(self):
@@ -535,7 +536,6 @@ class Context(object):
     def current_source_line(self):
         return self.source_by_line_number[self.current_line_index]
 
-    @property
     def mutation_id_of_current_index(self):
         return RelativeMutationID(filename=self.filename, line=self.current_source_line, index=self.index, line_number=self.current_line_index)
 
@@ -552,7 +552,7 @@ class Context(object):
     def should_mutate(self):
         if self.mutation_id == ALL:
             return True
-        return self.mutation_id in (ALL, self.mutation_id_of_current_index)
+        return self.mutation_id in (ALL, self.mutation_id_of_current_index())
 
     def get_code(self):
         mutated_source = self._ast.get_code().replace(' not not ', ' ')
@@ -560,6 +560,38 @@ class Context(object):
             assert mutated_source[-1] == '\n'
             mutated_source = mutated_source[:-1]
         return mutated_source
+
+    def add_performed_mutation_id(self, node):
+        m = self.mutation_id_of_current_index()
+        m.node = node
+        m.subject_stack = self.subject_stack[:]
+        self.performed_mutation_ids.append(m)
+
+    def push_stack(self, node):
+        if is_pushable_subject(self.subject_stack, node):
+            self.subject_stack.append(node)
+            assert len(self.subject_stack) <= 2
+        self.stack.append(node)
+
+    def pop_stack(self):
+        node = self.stack[-1]
+        if is_pushable_subject(self.subject_stack, node):
+            self.subject_stack.pop()
+        self.stack.pop()
+
+
+def is_pushable_subject(subject_stack, node):
+    if len(subject_stack) == 2:
+        return False
+
+    if node.type in ('funcdef', 'classdef'):
+        # We don't consider nested functions as subjects
+        if subject_stack and subject_stack[0].type == 'funcdef':
+            return False
+        else:
+            return True
+    else:
+        return False
 
 
 def mutate(context):
@@ -581,11 +613,12 @@ def mutate(context):
     return mutated_source, len(context.performed_mutation_ids)
 
 
-def mutate_node(node, context):
+def mutate_node(node, context: Context):
     """
     :type context: Context
     """
-    context.stack.append(node)
+    context.push_stack(node)
+
     try:
         if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
@@ -646,7 +679,7 @@ def mutate_node(node, context):
                     if hasattr(mutmut_config, 'pre_mutation_ast'):
                         mutmut_config.pre_mutation_ast(context=context)
                     if context.should_mutate():
-                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+                        context.add_performed_mutation_id(node)
 
                         def undo_mutation():
                             setattr(node, key, old)
@@ -658,7 +691,7 @@ def mutate_node(node, context):
                 if context.performed_mutation_ids and context.mutation_id != ALL:
                     return
     finally:
-        context.stack.pop()
+        context.pop_stack()
 
 
 def mutate_list_of_nodes(node, context):
