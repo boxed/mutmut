@@ -100,7 +100,7 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
-@click.option('--simple-output', is_flag=True, default=False)
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
