@@ -442,3 +442,8 @@ def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
     assert "post mutation stub" in result.output
     assert result.output.index("pre mutation stub") < result.output.index("post mutation stub")
 
+
+def test_simple_output(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--simple-output"], catch_exceptions=False)
+    print(repr(result.output))
+    assert '14/14  KILLED 14  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
