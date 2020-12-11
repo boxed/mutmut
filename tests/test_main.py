@@ -109,7 +109,7 @@ def test_compute_return_code():
     class MockProgress(Progress):
         def __init__(self, killed_mutants, surviving_mutants,
                      surviving_mutants_timeout, suspicious_mutants):
-            super(MockProgress, self).__init__(total=0)
+            super(MockProgress, self).__init__(total=0, output_legend={})
             self.killed_mutants = killed_mutants
             self.surviving_mutants = surviving_mutants
             self.surviving_mutants_timeout = surviving_mutants_timeout
@@ -441,3 +441,4 @@ def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
     assert "pre mutation stub" in result.output
     assert "post mutation stub" in result.output
     assert result.output.index("pre mutation stub") < result.output.index("post mutation stub")
+
