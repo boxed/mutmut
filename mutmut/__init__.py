@@ -910,8 +910,9 @@ def guess_paths_to_mutate():
 
 
 class Progress(object):
-    def __init__(self, total):
+    def __init__(self, total, output_legend):
         self.total = total
+        self.output_legend = output_legend
         self.progress = 0
         self.skipped = 0
         self.killed_mutants = 0
@@ -920,7 +921,20 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
+        print_status('{}/{}  {}:{}  {}:{}  {}:{}  {}:{}  {}:{}'.format(
+            self.progress,
+            self.total,
+            self.output_legend["killed"],
+            self.killed_mutants,
+            self.output_legend["timeout"],
+            self.surviving_mutants_timeout,
+            self.output_legend["suspicious"],
+            self.suspicious_mutants,
+            self.output_legend["survived"],
+            self.surviving_mutants,
+            self.output_legend["skipped"],
+            self.skipped)
+        )
 
     def register(self, status):
         if status == BAD_SURVIVED:
