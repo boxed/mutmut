@@ -921,7 +921,7 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self):
-        print_status('{}/{}  {}:{}  {}:{}  {}:{}  {}:{}  {}:{}'.format(
+        print_status('{}/{}  {} {}  {} {}  {} {}  {} {}  {} {}'.format(
             self.progress,
             self.total,
             self.output_legend["killed"],
