@@ -1,6 +1,91 @@
 Changelog
 ---------
 
+2.1.0
+~~~~~
+
+* Support unittest, so you don't need pytest anymore
+
+* Fixed a bug where Ctrl+C wouldn't exit mutmut
+
+* Support for Coverage 5
+
+* Skip mutating test files if they are in the same source tree as the main code
+
+* Advanced whitelisting: More advanced AST level callback
+
+2.0.0
+~~~~~
+
+* New execution model. This should result in some modest speed improvements when using pytest.
+
+* A special execution mode when using the hammett test runner. This is MUCH MUCH faster. Please try it!
+
+* Dropped support for python < 3.7. If you need to use mutmut on older versions of python, please use mutmut 1.9.0
+
+* Some other speed improvements.
+
+
+1.9.0
+~~~~~
+
+* `mutmut run 7` will always rerun the mutant `7`
+
+* `mutmut show <filename>` to show all mutants for that file
+
+* `mutmut run <filename>` to run mutation testing on that file
+
+* New experimental plugin system: create a file `mutmut_config.py` in your base directory. In it you can have an `init()` function, and a `pre_mutation(context)` function. You can set `context.skip = True` to skip a mutant, and you can modify `context.config.runner`, this is useful to limit the tests. Check out the `Context` class for what information you get.
+
+* Better display of `mutmut show`/`mutmut result`
+
+* Fixed a spurious mutant on assigning a local variable with type annotations
+
+
+
+1.8.1
+~~~~~
+
+* mutmut now will rerun tests without mutation when tests have changed. This avoids a common pitfall of introducing a failing test and then having all mutants killed incorrectly
+
+
+1.8.0 (2020-03-02)
+~~~~~~~~~~~~~~~~~~
+
+* Added `mutmut html` report generation.
+
+1.7.0 (2020-02-29)
+~~~~~~~~~~~~~~~~~~
+
+* Bugfix for multiple assignment. Mutmut used to not handle `foo = bar = baz` correctly (Thanks Roxane Bellot!)
+
+* Bugfix for incorrect mutation of "in" operator (Thanks Roxane Bellot!)
+
+* Fixed bug where a mutant survived in the internal AST too long. This could cause mutmut to apply more than one mutant at a time.
+
+* Vastly improved startup performance when resuming a mutation run.
+
+* Added new experimental feature for advanced config at runtime of mutations
+
+
+1.6.0 (2019-09-21)
+~~~~~~~~~~~~~~~~~~
+
+* Add `mutmut show [path to file]` command that shows all mutants for a given file
+
+* Better error messages if .coverage file isn't usable
+
+* Added support for windows paths in tests
+
+* Use the same python executable as mutmut is started as if possible
+
+* Dropped python 2 support
+
+* Added more assignment operator mutations
+
+* Bugfixes
+
+
 1.5.0 (2019-04-10)
 ~~~~~~~~~~~~~~~~~~
 

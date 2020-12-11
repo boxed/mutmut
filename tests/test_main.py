@@ -1,17 +1,30 @@
 # -*- coding: utf-8 -*-
 
 import os
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
+from os import (
+    mkdir,
+)
+from os.path import join
 from time import time
-from unittest.mock import MagicMock, call
+from unittest.mock import (
+    call,
+    MagicMock,
+)
 
 import pytest
 from click.testing import CliRunner
-from coverage import CoverageData
 
-from mutmut.__main__ import climain, python_source_files, \
-    popen_streaming_output, compute_exit_code, \
-    read_coverage_data, Progress
+from mutmut import (
+    compute_exit_code,
+    popen_streaming_output,
+    Progress,
+    python_source_files,
+    read_coverage_data,
+)
+from mutmut.__main__ import climain
 
 file_to_mutate_lines = [
     "def foo(a, b):",
@@ -24,8 +37,9 @@ file_to_mutate_lines = [
     "g: int = 2",
 ]
 
-EXPECTED_MUTANTS = 13
+EXPECTED_MUTANTS = 14
 
+PYTHON = '"{}"'.format(sys.executable)
 
 file_to_mutate_contents = '\n'.join(file_to_mutate_lines) + '\n'
 
@@ -45,18 +59,10 @@ def test_foo():
 
 
 @pytest.fixture
-def filesystem(tmpdir_factory):
-    test_fs = tmpdir_factory.mktemp("test_fs")
-    os.chdir(str(test_fs))
-    assert os.getcwd() == str(test_fs)
+def filesystem(tmpdir):
+    create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents)
 
-    # using `with` pattern to satisfy the pypy gods
-    with open(str(test_fs.join("foo.py")), 'w') as f:
-        f.write(file_to_mutate_contents)
-    os.mkdir(str(test_fs.join("tests")))
-    with open(str(test_fs.join("tests", "test_foo.py")), 'w') as f:
-        f.write(test_file_contents)
-    yield test_fs
+    yield tmpdir
 
     # This is a hack to get pony to forget about the old db file
     # otherwise Pony thinks we've already created the tables
@@ -65,12 +71,45 @@ def filesystem(tmpdir_factory):
     mutmut.cache.db.schema = None
 
 
+@pytest.fixture
+def single_mutant_filesystem(tmpdir):
+    create_filesystem(tmpdir, "def foo():\n    return 1\n", "from foo import *\ndef test_foo():\n    assert foo() == 1")
+
+    yield tmpdir
+
+    # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
+    import mutmut.cache
+    mutmut.cache.db.provider = None
+    mutmut.cache.db.schema = None
+
+
+def create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents):
+    test_dir = str(tmpdir)
+    os.chdir(test_dir)
+
+    # hammett is almost 5x faster than pytest. Let's use that instead.
+    with open(join(test_dir, 'setup.cfg'), 'w') as f:
+        f.write("""
+[mutmut]
+runner=python -m hammett -x
+""")
+
+    with open(join(test_dir, "foo.py"), 'w') as f:
+        f.write(file_to_mutate_contents)
+
+    os.mkdir(join(test_dir, "tests"))
+
+    with open(join(test_dir, "tests", "test_foo.py"), 'w') as f:
+        f.write(test_file_contents)
+
+
 def test_compute_return_code():
     # mock of Config for ease of testing
     class MockProgress(Progress):
         def __init__(self, killed_mutants, surviving_mutants,
                      surviving_mutants_timeout, suspicious_mutants):
-            super(MockProgress, self).__init__()
+            super(MockProgress, self).__init__(total=0)
             self.killed_mutants = killed_mutants
             self.surviving_mutants = surviving_mutants
             self.surviving_mutants_timeout = surviving_mutants_timeout
@@ -114,7 +153,7 @@ def test_compute_return_code():
 
 
 def test_read_coverage_data(filesystem):
-    assert isinstance(read_coverage_data(), CoverageData)
+    assert read_coverage_data() == {}
 
 
 @pytest.mark.parametrize(
@@ -131,34 +170,43 @@ def test_python_source_files(expected, source_path, tests_dirs, filesystem):
 
 
 def test_python_source_files__with_paths_to_exclude(tmpdir):
+    tmpdir = str(tmpdir)
     # arrange
     paths_to_exclude = ['entities*']
 
-    project_dir = tmpdir.mkdir('project')
-    service_dir = project_dir.mkdir('services')
+    project_dir = join(tmpdir, 'project')
+    service_dir = join(project_dir, 'services')
+    entities_dir = join(project_dir, 'entities')
+    mkdir(project_dir)
+    mkdir(service_dir)
+    mkdir(entities_dir)
 
-    f = service_dir.join('entities.py')
-    f.write('')
-    f = service_dir.join('main.py')
-    f.write('')
-    f = service_dir.join('utils.py')
-    f.write('')
+    with open(join(service_dir, 'entities.py'), 'w'):
+        pass
 
-    entities_dir = project_dir.mkdir('entities')
-    f = entities_dir.join('user.py')
-    f.write('')
+    with open(join(service_dir, 'main.py'), 'w'):
+        pass
+
+    with open(join(service_dir, 'utils.py'), 'w'):
+        pass
+
+    with open(join(entities_dir, 'user.py'), 'w'):
+        pass
 
     # act, assert
-    assert set(python_source_files(project_dir.strpath, [], paths_to_exclude)) == {
-        os.path.join(project_dir.strpath, 'services', 'main.py'),
-        os.path.join(project_dir.strpath, 'services', 'utils.py'),
+    assert set(python_source_files(project_dir, [], paths_to_exclude)) == {
+        os.path.join(project_dir, 'services', 'main.py'),
+        os.path.join(project_dir, 'services', 'utils.py'),
     }
 
 
 def test_popen_streaming_output_timeout():
     start = time()
     with pytest.raises(TimeoutError):
-        popen_streaming_output('python -c "import time; time.sleep(4)"', lambda line: line, timeout=0.1)
+        popen_streaming_output(
+            PYTHON + ' -c "import time; time.sleep(4)"',
+            lambda line: line, timeout=0.1,
+        )
 
     assert (time() - start) < 3
 
@@ -166,25 +214,33 @@ def test_popen_streaming_output_timeout():
 def test_popen_streaming_output_stream():
     mock = MagicMock()
     popen_streaming_output(
-        'python -c "print(\'first\'); print(\'second\')"',
+        PYTHON + ' -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first'), call('second')])
+    if os.name == 'nt':
+        mock.assert_has_calls([call('first\r\n'), call('second\r\n')])
+    else:
+        mock.assert_has_calls([call('first\n'), call('second\n')])
 
     mock = MagicMock()
     popen_streaming_output(
-        'python -c "import time; print(\'first\'); time.sleep(1); print(\'second\'); print(\'third\')"',
+        PYTHON + ' -c "import time; print(\'first\'); print(\'second\'); print(\'third\')"',
         callback=mock
     )
-    mock.assert_has_calls([call('first'), call('second'), call('third')])
+    if os.name == 'nt':
+        mock.assert_has_calls([call('first\r\n'), call('second\r\n'), call('third\r\n')])
+    else:
+        mock.assert_has_calls([call('first\n'), call('second\n'), call('third\n')])
 
     mock = MagicMock()
-    popen_streaming_output('python -c "exit(0);"', callback=mock)
+    popen_streaming_output(
+        PYTHON + ' -c "exit(0);"',
+        callback=mock)
     mock.assert_not_called()
 
 
 def test_simple_apply(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '-s', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
 
@@ -286,12 +342,12 @@ To show a mutant:
     mutmut show <id>
 
 
-Suspicious 🤔 (13)
+Suspicious 🤔 ({EXPECTED_MUTANTS})
 
----- foo.py (13) ----
+---- foo.py ({EXPECTED_MUTANTS}) ----
 
-1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-""".strip()
+1-{EXPECTED_MUTANTS}
+""".format(EXPECTED_MUTANTS=EXPECTED_MUTANTS).strip()
 
 
 def test_full_run_all_suspicious_mutant_junit(filesystem):
@@ -308,7 +364,7 @@ def test_full_run_all_suspicious_mutant_junit(filesystem):
     assert int(root.attrib['disabled']) == 0
 
 
-def test_use_coverage(capsys, filesystem):
+def test_use_coverage(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False\n', ''))
 
@@ -327,13 +383,20 @@ def test_use_coverage(capsys, filesystem):
     assert int(root.attrib['disabled']) == 0
 
     # generate a `.coverage` file by invoking pytest
-    pytest.main(["--cov=.", "foo.py"])
+    subprocess.run([sys.executable, "-m", "pytest", "--cov=.", "foo.py"])
     assert os.path.isfile('.coverage')
 
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"], catch_exceptions=False)
     print(repr(result.output))
     assert result.exit_code == 0
-    assert '12/12  🎉 12  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+    assert '13/13  🎉 13  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
+
+    # remove existent path to check if an exception is thrown
+    os.unlink(os.path.join(str(filesystem), 'foo.py'))
+    with pytest.raises(ValueError,
+                       match=r'^Filepaths in .coverage not recognized, try recreating the .coverage file manually.$'):
+        CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
+                           catch_exceptions=False)
 
 
 def test_use_patch_file(filesystem):
@@ -350,7 +413,7 @@ index b9a5fb4..c6a496c 100644
 -f = 3
 +f = 5
  d = dict(e=f)
-\ No newline at end of file
+\\ No newline at end of file
 """
     with open('patch', 'w') as f:
         f.write(patch_contents)
@@ -361,7 +424,9 @@ index b9a5fb4..c6a496c 100644
     assert '2/2  🎉 2  ⏰ 0  🤔 0  🙁 0' in repr(result.output)
 
 
-def test_pre_and_post_mutation_hook(filesystem):
+def test_pre_and_post_mutation_hook(single_mutant_filesystem, tmpdir):
+    test_dir = str(tmpdir)
+    os.chdir(test_dir)
     result = CliRunner().invoke(
         climain, [
             'run',

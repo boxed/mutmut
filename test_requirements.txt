@@ -1,5 +1,6 @@
-pytest>=2.8.7,<4.0.0
-pytest-cov<=2.6.0
-mock==2.0.0
+pytest
+pytest-cov
+hammett
+mock>=2.0.0
 coverage
-whatthepatch>=0.0.5,<1.0.0
+whatthepatch==0.0.6

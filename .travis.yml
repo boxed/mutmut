@@ -1,48 +1,46 @@
 language: python
+python:
+  - 3.7
+  - 3.8
+
+env:
+  - TOXENV=coverage
 
 stages:
-  - lint
   - test
-  - build
-  - deploy
+  - name: deploy
+    if: repo = boxed/mutmut AND tag IS present
 
-before_install:
-  - pip install codecov
 install:
-  - pip install .
+  - travis_retry pip install tox-travis
 script:
-  - python setup.py test
+  - tox
 after_success:
+  - travis_retry pip install codecov
   - codecov
 
 jobs:
   include:
-    - stage: lint
-      python: "3.6"
-      before_install:
-        - pip install flake8
-      before_script: skip
-      after_script: skip
-      script:
-        - flake8 mutmut
     - stage: test
-      python: "3.6"
-    - python: "3.7"
-      dist: xenial
-    - os: windows
-      language: sh
-      python: "3.7"
-      before_install:
-        - choco install python --version 3.7.2
-        - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
-        - python -m pip install --upgrade pip wheel
-        - python -m pip install codecov
-      after_success:
-        - python -m codecov
+      python: 3.8
+      after_success: skip
+
+#    - os: windows
+#      language: sh
+#      python: "3.7"
+#      before_install:
+#        - choco install python --version 3.7.2
+#        - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
+#        - python -m pip install --upgrade pip wheel
+#        - python -m pip install codecov
+#        - python -m pip install tox
+#      after_success:
+#        - python -m codecov
     - stage: deploy
-      python: "3.6"
+      python: "3.7"
       before_script: skip
       after_script: skip
+      after_success: skip
       script:
         - python setup.py sdist
       deploy:

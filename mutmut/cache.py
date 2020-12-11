@@ -2,22 +2,25 @@
 
 import hashlib
 import os
+from collections import defaultdict
 from difflib import SequenceMatcher, unified_diff
 from functools import wraps
 from io import open
 from itertools import groupby, zip_longest
+from os.path import join, dirname
 from typing import Tuple
+
 
 from junit_xml import TestSuite, TestCase
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
-    OK_KILLED, MutationID, Context, mutate
+    OK_KILLED, RelativeMutationID, Context, mutate
 
 db = Database()
 
-current_db_version = 2
+current_db_version = 4
 
 
 NO_TESTS_FOUND = 'NO TESTS FOUND'
@@ -30,6 +33,7 @@ class MiscData(db.Entity):
 
 class SourceFile(db.Entity):
     filename = Required(str, autostrip=False)
+    hash = Optional(str)
     lines = Set('Line')
 
 
@@ -111,9 +115,37 @@ def get_apply_line(mutant):
     return apply_line
 
 
+def ranges(numbers):
+    if not numbers:
+        return []
+
+    result = []
+    start_range = numbers[0]
+    end_range = numbers[0]
+
+    def add_result():
+        if start_range == end_range:
+            result.append(str(start_range))
+        else:
+            result.append('{}-{}'.format(start_range, end_range))
+
+    for x in numbers[1:]:
+        if end_range + 1 == x:
+            end_range = x
+        else:
+            add_result()
+
+            start_range = x
+            end_range = x
+
+    add_result()
+
+    return ', '.join(result)
+
+
 @init_db
 @db_session
-def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None):
+def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None, only_this_file=None):
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -129,6 +161,10 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
             for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
                 if print_only_filename is not None and print_only_filename != filename:
                     continue
+
+                if only_this_file and filename != only_this_file:
+                    continue
+
                 mutants = list(mutants)
                 print('')
                 print("---- {} ({}) ----".format(filename, len(mutants)))
@@ -141,16 +177,24 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
                         print('# mutant {}'.format(x.id))
                         print(get_unified_diff(x.id, dict_synonyms, update_cache=False, source=source))
                 else:
-                    print(', '.join([str(x.id) for x in mutants]))
+                    print(ranges([x.id for x in mutants]))
 
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    print_stuff('Untested', select(x for x in Mutant if x.status == UNTESTED))
+    print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED))
 
 
 def get_unified_diff(argument, dict_synonyms, update_cache=True, source=None):
     filename, mutation_id = filename_and_mutation_id_from_pk(argument)
+    if source is None:
+        with open(filename) as f:
+            source = f.read()
+
+    return _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache)
+
+
+def _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache):
 
     if update_cache:
         update_line_numbers(filename)
@@ -201,6 +245,77 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
     print(TestSuite.to_xml_string([ts]))
 
 
+@init_db
+@db_session
+def create_html_report(dict_synonyms):
+    mutants = list(select(x for x in Mutant))
+
+    os.makedirs('html', exist_ok=True)
+
+    with open('html/index.html', 'w') as index_file:
+        index_file.write('<h1>Mutation testing report</h1>')
+
+        index_file.write('Killed %s out of %s mutants' % (len([x for x in mutants if x.status == OK_KILLED]), len(mutants)))
+
+        index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
+
+        for filename, mutants in groupby(mutants, key=lambda x: x.line.sourcefile.filename):
+            report_filename = join('html', filename)
+
+            mutants = list(mutants)
+
+            with open(filename) as f:
+                source = f.read()
+
+            os.makedirs(dirname(report_filename), exist_ok=True)
+            with open(join(report_filename + '.html'), 'w') as f:
+                mutants_by_status = defaultdict(list)
+                for mutant in mutants:
+                    mutants_by_status[mutant.status].append(mutant)
+
+                f.write('<html><body>')
+
+                f.write('<h1>%s</h1>' % filename)
+
+                killed = len(mutants_by_status[OK_KILLED])
+                f.write('Killed %s out of %s mutants' % (killed, len(mutants)))
+
+                index_file.write('<tr><td><a href="%s.html">%s</a></td><td>%s</td><td>%s</td><td>%.2f</td><td>%s</td>' % (
+                    filename,
+                    filename,
+                    len(mutants),
+                    killed,
+                    (killed / len(mutants) * 100),
+                    len(mutants_by_status[BAD_SURVIVED]),
+                ))
+
+                def print_diffs(status):
+                    mutants = mutants_by_status[status]
+                    for mutant in sorted(mutants, key=lambda m: m.id):
+                        diff = _get_unified_diff(source, filename, RelativeMutationID(mutant.line.line, mutant.index, mutant.line.line_number), dict_synonyms, update_cache=False)
+                        f.write('<h3>Mutant %s</h3>' % mutant.id)
+                        f.write('<pre>%s</pre>' % diff)
+
+                if mutants_by_status[BAD_TIMEOUT]:
+                    f.write('<h2>Timeouts</h2>')
+                    f.write('Mutants that made the test suite take a lot longer so the tests were killed.')
+                    print_diffs(BAD_TIMEOUT)
+
+                if mutants_by_status[BAD_SURVIVED]:
+                    f.write('<h2>Survived</h2>')
+                    f.write('Survived mutation testing. These mutants show holes in your test suite.')
+                    print_diffs(BAD_SURVIVED)
+
+                if mutants_by_status[OK_SUSPICIOUS]:
+                    f.write('<h2>Suspicious</h2>')
+                    f.write('Mutants that made the test suite take longer, but otherwise seemed ok')
+                    print_diffs(OK_SUSPICIOUS)
+
+                f.write('</body></html>')
+
+        index_file.write('</table></body></html>')
+
+
 def get_or_create(model, defaults=None, **params):
     if defaults is None:
         defaults = {}
@@ -228,8 +343,10 @@ def sequence_ops(a, b):
 @init_db
 @db_session
 def update_line_numbers(filename):
+    hash = hash_of(filename)
     sourcefile = get_or_create(SourceFile, filename=filename)
-
+    if hash == sourcefile.hash:
+        return
     cached_line_objects = list(sourcefile.lines.order_by(Line.line_number))
 
     cached_lines = [x.line for x in cached_line_objects]
@@ -265,18 +382,25 @@ def update_line_numbers(filename):
         else:
             raise ValueError('Unknown opcode from SequenceMatcher: {}'.format(command))
 
+    sourcefile.hash = hash
+
 
 @init_db
 @db_session
 def register_mutants(mutations_by_file):
     for filename, mutation_ids in mutations_by_file.items():
+        hash = hash_of(filename)
         sourcefile = get_or_create(SourceFile, filename=filename)
+        if hash == sourcefile.hash:
+            continue
 
         for mutation_id in mutation_ids:
             line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
             if line is None:
                 raise ValueError("Obtained null line for mutation_id: {}".format(mutation_id))
             get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
+
+        sourcefile.hash = hash
 
 
 @init_db
@@ -291,10 +415,49 @@ def update_mutant_status(file_to_mutate, mutation_id, status, tests_hash):
 
 @init_db
 @db_session
+def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
+    sourcefile = SourceFile.get(filename=filename)
+    assert sourcefile
+
+    line_obj_by_line = {}
+
+    result = {}
+
+    for mutation_id in mutations:
+        if mutation_id.line not in line_obj_by_line:
+            line_obj_by_line[mutation_id.line] = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+        line = line_obj_by_line[mutation_id.line]
+        assert line
+        mutant = Mutant.get(line=line, index=mutation_id.index)
+        if mutant is None:
+            mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
+
+        result[mutation_id] = mutant.status
+        if mutant.status == OK_KILLED:
+            # We assume that if a mutant was killed, a change to the test
+            # suite will mean it's still killed
+            result[mutation_id] = mutant.status
+        else:
+            if mutant.tested_against_hash != hash_of_tests or \
+                    mutant.tested_against_hash == NO_TESTS_FOUND or \
+                    hash_of_tests == NO_TESTS_FOUND:
+                result[mutation_id] = UNTESTED
+            else:
+                result[mutation_id] = mutant.status
+
+    return result
+
+
+@init_db
+@db_session
 def cached_mutation_status(filename, mutation_id, hash_of_tests):
     sourcefile = SourceFile.get(filename=filename)
+    assert sourcefile
     line = Line.get(sourcefile=sourcefile, line=mutation_id.line, line_number=mutation_id.line_number)
+    assert line
     mutant = Mutant.get(line=line, index=mutation_id.index)
+    if mutant is None:
+        mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
     if mutant.status == OK_KILLED:
         # We assume that if a mutant was killed, a change to the test
@@ -313,12 +476,12 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @db_session
 def mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
+    return RelativeMutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
 
 
 @init_db
 @db_session
-def filename_and_mutation_id_from_pk(pk) -> Tuple[str, MutationID]:
+def filename_and_mutation_id_from_pk(pk) -> Tuple[str, RelativeMutationID]:
     mutant = Mutant.get(id=pk)
     if mutant is None:
         raise ValueError("Obtained null mutant for pk: {}".format(pk))
@@ -334,5 +497,13 @@ def cached_test_time():
 
 @init_db
 @db_session
-def set_cached_test_time(baseline_time_elapsed):
+def set_cached_test_time(baseline_time_elapsed, current_hash_of_tests):
     get_or_create(MiscData, key='baseline_time_elapsed').value = str(baseline_time_elapsed)
+    get_or_create(MiscData, key='hash_of_tests').value = current_hash_of_tests
+
+
+@init_db
+@db_session
+def cached_hash_of_tests():
+    d = MiscData.get(key='hash_of_tests')
+    return d.value if d else None
