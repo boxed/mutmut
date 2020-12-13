@@ -1,3 +1,5 @@
+.mutmut*
+
 *.py[cod]
 examples/db.sqlite3
 venv
