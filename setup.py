@@ -116,9 +116,8 @@ setup(
     # it imports before the coverage collecting starts
     entry_points={
         'pytest11': [
-            'mutmut = mutmut.pytestplugin',
+            'mutmut = mutmut.plugin',
         ],
-    } if running_inside_tests else {
         'console_scripts': ["mutmut = mutmut.__main__:climain"],
     },
 )

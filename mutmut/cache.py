@@ -102,6 +102,8 @@ def hash_of_tests(tests_dirs):
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
             for filename in files:
+                if not filename.endswith(".py"):
+                    continue
                 with open(os.path.join(root, filename), 'rb') as f:
                     m.update(f.read())
                     found_something = True

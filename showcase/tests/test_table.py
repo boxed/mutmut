@@ -1,0 +1,142 @@
+# encoding=utf-8
+
+import io
+from rich import color
+
+import pytest
+
+from rich import errors
+from rich.console import Console
+from rich.measure import Measurement
+from rich.table import Table, Column
+from rich.text import Text
+
+
+def render_tables():
+    console = Console(
+        width=60,
+        force_terminal=True,
+        file=io.StringIO(),
+        legacy_windows=False,
+        color_system=None,
+    )
+
+    table = Table(title="test table", caption="table caption", expand=True)
+    table.add_column("foo", footer=Text("total"), no_wrap=True, overflow="ellipsis")
+    table.add_column("bar", justify="center")
+    table.add_column("baz", justify="right")
+
+    table.add_row("Averlongwordgoeshere", "banana pancakes", None)
+
+    assert Measurement.get(console, table, 80) == Measurement(41, 48)
+
+    for width in range(10, 60, 5):
+        console.print(table, width=width)
+
+    table.expand = False
+    console.print(table, justify="left")
+    console.print(table, justify="center")
+    console.print(table, justify="right")
+
+    assert table.row_count == 1
+
+    table.row_styles = ["red", "yellow"]
+    table.add_row("Coffee")
+    table.add_row("Coffee", "Chocolate", None, "cinnamon")
+
+    assert table.row_count == 3
+
+    console.print(table)
+
+    table.show_lines = True
+    console.print(table)
+
+    table.show_footer = True
+    console.print(table)
+
+    table.show_edge = False
+
+    console.print(table)
+
+    table.padding = 1
+    console.print(table)
+
+    table.width = 20
+    assert Measurement.get(console, table, 80) == Measurement(20, 20)
+    console.print(table)
+
+    table.columns[0].no_wrap = True
+    table.columns[1].no_wrap = True
+    table.columns[2].no_wrap = True
+
+    console.print(table)
+
+    table.padding = 0
+    table.width = 60
+    table.leading = 1
+    console.print(table)
+
+    return console.file.getvalue()
+
+
+def test_render_table():
+    expected = " test table \n┏━━━━━━┳━┳━┓\n┃ foo  ┃ ┃ ┃\n┡━━━━━━╇━╇━┩\n│ Ave… │ │ │\n└──────┴─┴─┘\n   table    \n  caption   \n   test table    \n┏━━━━━━━━━━━┳━┳━┓\n┃ foo       ┃ ┃ ┃\n┡━━━━━━━━━━━╇━╇━┩\n│ Averlong… │ │ │\n└───────────┴─┴─┘\n  table caption  \n      test table      \n┏━━━━━━━━━━━━━━━━┳━┳━┓\n┃ foo            ┃ ┃ ┃\n┡━━━━━━━━━━━━━━━━╇━╇━┩\n│ Averlongwordg… │ │ │\n└────────────────┴─┴─┘\n    table caption     \n        test table         \n┏━━━━━━━━━━━━━━━━━━━━━┳━┳━┓\n┃ foo                 ┃ ┃ ┃\n┡━━━━━━━━━━━━━━━━━━━━━╇━╇━┩\n│ Averlongwordgoeshe… │ │ │\n└─────────────────────┴─┴─┘\n       table caption       \n          test table          \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━┳━━┓\n┃ foo                  ┃  ┃  ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━╇━━┩\n│ Averlongwordgoeshere │  │  │\n└──────────────────────┴──┴──┘\n        table caption         \n            test table             \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━┓\n┃ foo                  ┃ bar ┃ b… ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━┩\n│ Averlongwordgoeshere │ ba… │    │\n│                      │ pa… │    │\n└──────────────────────┴─────┴────┘\n           table caption           \n               test table               \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━┓\n┃ foo                  ┃   bar   ┃ baz ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━┩\n│ Averlongwordgoeshere │ banana  │     │\n│                      │ pancak… │     │\n└──────────────────────┴─────────┴─────┘\n             table caption              \n                 test table                  \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┓\n┃ foo                  ┃     bar      ┃ baz ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━┩\n│ Averlongwordgoeshere │    banana    │     │\n│                      │   pancakes   │     │\n└──────────────────────┴──────────────┴─────┘\n                table caption                \n                    test table                    \n┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━┓\n┃ foo                   ┃       bar        ┃ baz ┃\n┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━┩\n│ Averlongwordgoeshere  │ banana pancakes  │     │\n└───────────────────────┴──────────────────┴─────┘\n                  table caption                   \n                      test table                       \n┏━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━┓\n┃ foo                      ┃        bar         ┃ baz ┃\n┡━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━┩\n│ Averlongwordgoeshere     │  banana pancakes   │     │\n└──────────────────────────┴────────────────────┴─────┘\n                     table caption                     \n                   test table                               \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┓            \n┃ foo                  ┃       bar       ┃ baz ┃            \n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━┩            \n│ Averlongwordgoeshere │ banana pancakes │     │            \n└──────────────────────┴─────────────────┴─────┘            \n                 table caption                              \n                         test table                         \n      ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┓      \n      ┃ foo                  ┃       bar       ┃ baz ┃      \n      ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━┩      \n      │ Averlongwordgoeshere │ banana pancakes │     │      \n      └──────────────────────┴─────────────────┴─────┘      \n                       table caption                        \n                               test table                   \n            ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┓\n            ┃ foo                  ┃       bar       ┃ baz ┃\n            ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━┩\n            │ Averlongwordgoeshere │ banana pancakes │     │\n            └──────────────────────┴─────────────────┴─────┘\n                             table caption                  \n                        test table                         \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━┓\n┃ foo                  ┃       bar       ┃ baz ┃          ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━┩\n│ Averlongwordgoeshere │ banana pancakes │     │          │\n│ Coffee               │                 │     │          │\n│ Coffee               │    Chocolate    │     │ cinnamon │\n└──────────────────────┴─────────────────┴─────┴──────────┘\n                       table caption                       \n                        test table                         \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━┓\n┃ foo                  ┃       bar       ┃ baz ┃          ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━┩\n│ Averlongwordgoeshere │ banana pancakes │     │          │\n├──────────────────────┼─────────────────┼─────┼──────────┤\n│ Coffee               │                 │     │          │\n├──────────────────────┼─────────────────┼─────┼──────────┤\n│ Coffee               │    Chocolate    │     │ cinnamon │\n└──────────────────────┴─────────────────┴─────┴──────────┘\n                       table caption                       \n                        test table                         \n┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━┓\n┃ foo                  ┃       bar       ┃ baz ┃          ┃\n┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━┩\n│ Averlongwordgoeshere │ banana pancakes │     │          │\n├──────────────────────┼─────────────────┼─────┼──────────┤\n│ Coffee               │                 │     │          │\n├──────────────────────┼─────────────────┼─────┼──────────┤\n│ Coffee               │    Chocolate    │     │ cinnamon │\n├──────────────────────┼─────────────────┼─────┼──────────┤\n│ total                │                 │     │          │\n└──────────────────────┴─────────────────┴─────┴──────────┘\n                       table caption                       \n                       test table                        \n foo                  ┃       bar       ┃ baz ┃          \n━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━\n Averlongwordgoeshere │ banana pancakes │     │          \n──────────────────────┼─────────────────┼─────┼──────────\n Coffee               │                 │     │          \n──────────────────────┼─────────────────┼─────┼──────────\n Coffee               │    Chocolate    │     │ cinnamon \n──────────────────────┼─────────────────┼─────┼──────────\n total                │                 │     │          \n                      table caption                      \n                       test table                        \n                      ┃                 ┃     ┃          \n foo                  ┃       bar       ┃ baz ┃          \n                      ┃                 ┃     ┃          \n━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━\n                      │                 │     │          \n Averlongwordgoeshere │ banana pancakes │     │          \n                      │                 │     │          \n──────────────────────┼─────────────────┼─────┼──────────\n                      │                 │     │          \n Coffee               │                 │     │          \n                      │                 │     │          \n──────────────────────┼─────────────────┼─────┼──────────\n                      │                 │     │          \n Coffee               │    Chocolate    │     │ cinnamon \n                      │                 │     │          \n──────────────────────┼─────────────────┼─────┼──────────\n                      │                 │     │          \n total                │                 │     │          \n                      │                 │     │          \n                      table caption                      \n      test table       \n                 ┃ ┃ ┃ \n foo             ┃ ┃ ┃ \n                 ┃ ┃ ┃ \n━━━━━━━━━━━━━━━━━╇━╇━╇━\n                 │ │ │ \n Averlongwordgo… │ │ │ \n                 │ │ │ \n─────────────────┼─┼─┼─\n                 │ │ │ \n Coffee          │ │ │ \n                 │ │ │ \n─────────────────┼─┼─┼─\n                 │ │ │ \n Coffee          │ │ │ \n                 │ │ │ \n─────────────────┼─┼─┼─\n                 │ │ │ \n total           │ │ │ \n                 │ │ │ \n     table caption     \n       test table       \n          ┃         ┃ ┃ \n foo      ┃   bar   ┃ ┃ \n          ┃         ┃ ┃ \n━━━━━━━━━━╇━━━━━━━━━╇━╇━\n          │         │ │ \n Averlon… │ banana… │ │ \n          │         │ │ \n──────────┼─────────┼─┼─\n          │         │ │ \n Coffee   │         │ │ \n          │         │ │ \n──────────┼─────────┼─┼─\n          │         │ │ \n Coffee   │ Chocol… │ │ \n          │         │ │ \n──────────┼─────────┼─┼─\n          │         │ │ \n total    │         │ │ \n          │         │ │ \n     table caption      \n                         test table                         \nfoo                      ┃        bar        ┃ baz┃         \n━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━╇━━━━━━━━━\nAverlongwordgoeshere     │  banana pancakes  │    │         \n                         │                   │    │         \nCoffee                   │                   │    │         \n                         │                   │    │         \nCoffee                   │     Chocolate     │    │cinnamon \n─────────────────────────┼───────────────────┼────┼─────────\ntotal                    │                   │    │         \n                       table caption                        \n"
+    assert render_tables() == expected
+
+
+def test_not_renderable():
+    class Foo:
+        pass
+
+    table = Table()
+    with pytest.raises(errors.NotRenderableError):
+        table.add_row(Foo())
+
+
+def test_init_append_column():
+    header_names = ["header1", "header2", "header3"]
+    test_columns = [
+        Column(_index=index, header=header) for index, header in enumerate(header_names)
+    ]
+
+    # Test appending of strings for header names
+    assert Table(*header_names).columns == test_columns
+    # Test directly passing a Table Column objects
+    assert Table(*test_columns).columns == test_columns
+
+
+def test_rich_measure():
+    # Check __rich_measure__() for a negative width passed as an argument
+    assert Table("test_header", width=None).__rich_measure__(
+        Console(), -1
+    ) == Measurement(0, 0)
+    # Check __rich_measure__() for a negative Table.width attribute
+    assert Table("test_header", width=-1).__rich_measure__(Console(), 1) == Measurement(
+        0, 0
+    )
+    # Check __rich_measure__() for a positive width passed as an argument
+    assert Table("test_header", width=None).__rich_measure__(
+        Console(), 10
+    ) == Measurement(10, 10)
+    # Check __rich_measure__() for a positive Table.width attribute
+    assert Table("test_header", width=10).__rich_measure__(
+        Console(), -1
+    ) == Measurement(10, 10)
+
+
+def test_min_width():
+    table = Table("foo", min_width=30)
+    table.add_row("bar")
+    assert table.__rich_measure__(Console(), 100) == Measurement(30, 30)
+    console = Console(color_system=None)
+    console.begin_capture()
+    console.print(table)
+    output = console.end_capture()
+    print(output)
+    assert all(len(line) == 30 for line in output.splitlines())
+
+
+if __name__ == "__main__":
+    render = render_tables()
+    print(render)
+    print(repr(render))

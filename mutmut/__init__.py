@@ -7,12 +7,13 @@ import re
 import shlex
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from configparser import (
     ConfigParser,
     NoOptionError,
     NoSectionError,
 )
-from copy import copy as copy_obj
+from copy import copy as copy_obj, deepcopy
 from functools import wraps
 from io import (
     open,
@@ -26,6 +27,7 @@ from shutil import (
 from threading import (
     Timer,
     Thread,
+    RLock
 )
 from time import time
 
@@ -690,61 +692,24 @@ def mutate_file(backup, context):
     return original, mutated
 
 
-def queue_mutants(*, progress, config, mutants_queue, mutations_by_file):
-    from mutmut.cache import get_cached_mutation_statuses
 
-    try:
-        index = 0
-        for filename, mutations in mutations_by_file.items():
-            cached_mutation_statuses = get_cached_mutation_statuses(filename, mutations, config.hash_of_tests)
-            with open(filename) as f:
-                source = f.read()
-            for mutation_id in mutations:
-                cached_status = cached_mutation_statuses.get(mutation_id)
-                if cached_status != UNTESTED:
-                    progress.register(cached_status)
-                    continue
-                context = Context(
-                    mutation_id=mutation_id,
-                    filename=filename,
-                    dict_synonyms=config.dict_synonyms,
-                    config=copy_obj(config),
-                    source=source,
-                    index=index,
-                )
-                mutants_queue.put(('mutant', context))
-                index += 1
-    finally:
-        mutants_queue.put(('end', None))
+def run_mutation_procedure(context: Context, progress) -> str:
+    from mutmut.cache import update_mutant_status
 
+    config: Config = context.config
 
-def check_mutants(mutants_queue, results_queue, cycle_process_after):
-    def feedback(line):
-        results_queue.put(('progress', line, None, None))
+    status = run_mutation(context)
+    progress.register(status)
+    update_mutant_status(
+        file_to_mutate=context.filename,
+        mutation_id=context.mutation_id,
+        status=status,
+        tests_hash=config.hash_of_tests,
+    )
+    progress.print()
+    return status
 
-    did_cycle = False
-
-    try:
-        count = 0
-        while True:
-            command, context = mutants_queue.get()
-            if command == 'end':
-                break
-
-            status = run_mutation(context, feedback)
-
-            results_queue.put(('status', status, context.filename, context.mutation_id))
-            count += 1
-            if count == cycle_process_after:
-                results_queue.put(('cycle', None, None, None))
-                did_cycle = True
-                break
-    finally:
-        if not did_cycle:
-            results_queue.put(('end', None, None, None))
-
-
-def run_mutation(context: Context, callback) -> str:
+def run_mutation(context: Context) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
@@ -754,8 +719,8 @@ def run_mutation(context: Context, callback) -> str:
     if cached_status != UNTESTED and context.config.total != 1:
         return cached_status
 
-    config = context.config
-    if hasattr(mutmut_config, 'pre_mutation'):
+    config: Config = context.config
+    if hasattr(mutmut_config, "pre_mutation"):
         context.current_line_index = context.mutation_id.line_number
         try:
             mutmut_config.pre_mutation(context=context)
@@ -767,21 +732,19 @@ def run_mutation(context: Context, callback) -> str:
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
-            callback(result)
+            return result
 
     try:
-        mutate_file(
-            backup=True,
-            context=context
-        )
         start = time()
         try:
-            survived = tests_pass(config=config, callback=callback)
+            survived = tests_pass(context)
         except TimeoutError:
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if not survived and time_elapsed > config.test_time_base + (
+            config.baseline_time_elapsed * config.test_time_multipler
+        ):
             return OK_SUSPICIOUS
 
         if survived:
@@ -792,12 +755,8 @@ def run_mutation(context: Context, callback) -> str:
         return SKIPPED
 
     finally:
-        move(context.filename + '.bak', context.filename)
-
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
-            if result and not config.swallow_output:
-                callback(result)
 
 
 class Config(object):
@@ -825,20 +784,23 @@ class Config(object):
         self.paths_to_mutate = paths_to_mutate
 
 
-def tests_pass(config: Config, callback) -> bool:
+def tests_pass(context: Context) -> bool:
     """
     :return: :obj:`True` if the tests pass, otherwise :obj:`False`
     """
+    config = context.config
     if config.using_testmon:
-        copy('.testmondata-initial', '.testmondata')
+        copy(".testmondata-initial", ".testmondata")
 
-    use_special_case = True
-
-    # Special case for hammett! We can do in-process test running which is much faster
-    if use_special_case and config.test_command.startswith(hammett_prefix):
-        return hammett_tests_pass(config, callback)
-
-    returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
+    try:
+        returncode = subprocess.call(
+            config.test_command.split(" ") + ["--mutant-id", str(context.index)],
+            timeout=config.baseline_time_elapsed * 10,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise TimeoutError() from err
     return returncode == 0 or (config.using_testmon and returncode == 5)
 
 
@@ -911,6 +873,7 @@ def guess_paths_to_mutate():
 
 class Progress(object):
     def __init__(self, total, output_legend):
+        self._lock = RLock()
         self.total = total
         self.output_legend = output_legend
         self.progress = 0
@@ -921,36 +884,38 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self):
-        print_status('{}/{}  {} {}  {} {}  {} {}  {} {}  {} {}'.format(
-            self.progress,
-            self.total,
-            self.output_legend["killed"],
-            self.killed_mutants,
-            self.output_legend["timeout"],
-            self.surviving_mutants_timeout,
-            self.output_legend["suspicious"],
-            self.suspicious_mutants,
-            self.output_legend["survived"],
-            self.surviving_mutants,
-            self.output_legend["skipped"],
-            self.skipped)
-        )
+        with self._lock:
+            print_status('{}/{}  {} {}  {} {}  {} {}  {} {}  {} {}'.format(
+                self.progress,
+                self.total,
+                self.output_legend["killed"],
+                self.killed_mutants,
+                self.output_legend["timeout"],
+                self.surviving_mutants_timeout,
+                self.output_legend["suspicious"],
+                self.suspicious_mutants,
+                self.output_legend["survived"],
+                self.surviving_mutants,
+                self.output_legend["skipped"],
+                self.skipped)
+            )
 
     def register(self, status):
-        if status == BAD_SURVIVED:
-            self.surviving_mutants += 1
-        elif status == BAD_TIMEOUT:
-            self.surviving_mutants_timeout += 1
-        elif status == OK_KILLED:
-            self.killed_mutants += 1
-        elif status == OK_SUSPICIOUS:
-            self.suspicious_mutants += 1
-        elif status == SKIPPED:
-            self.skipped += 1
-        else:
-            raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
-        self.progress += 1
-        self.print()
+        with self._lock:
+            if status == BAD_SURVIVED:
+                self.surviving_mutants += 1
+            elif status == BAD_TIMEOUT:
+                self.surviving_mutants_timeout += 1
+            elif status == OK_KILLED:
+                self.killed_mutants += 1
+            elif status == OK_SUSPICIOUS:
+                self.suspicious_mutants += 1
+            elif status == SKIPPED:
+                self.skipped += 1
+            else:
+                raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
+            self.progress += 1
+            self.print()
 
 
 def check_coverage_data_filepaths(coverage_data):
@@ -1103,68 +1068,32 @@ def run_mutation_tests(config, progress, mutations_by_file):
     :type progress: Progress
     :type mutations_by_file: dict[str, list[RelativeMutationID]]
     """
-    from mutmut.cache import update_mutant_status
 
-    # Need to explicitly use the spawn method for python < 3.8 on macOS
-    mp_ctx = multiprocessing.get_context('spawn')
+    from mutmut.cache import get_cached_mutation_statuses
 
-    mutants_queue = mp_ctx.Queue(maxsize=100)
-    add_to_active_queues(mutants_queue)
-    queue_mutants_thread = Thread(
-        target=queue_mutants,
-        name='queue_mutants',
-        daemon=True,
-        kwargs=dict(
-            progress=progress,
-            config=config,
-            mutants_queue=mutants_queue,
-            mutations_by_file=mutations_by_file,
-        )
-    )
-    queue_mutants_thread.start()
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        index = 0
+        mutation_futures = []
+        for filename, mutations in mutations_by_file.items():
+            cached_mutation_statuses = get_cached_mutation_statuses(filename, mutations, config.hash_of_tests)
 
-    results_queue = mp_ctx.Queue(maxsize=100)
-    add_to_active_queues(results_queue)
+            for mutation_id in mutations:
+                cached_status = cached_mutation_statuses.get(mutation_id)
+                if cached_status != UNTESTED:
+                    progress.register(cached_status)
+                    continue
 
-    def create_worker():
-        t = mp_ctx.Process(
-            target=check_mutants,
-            name='check_mutants',
-            daemon=True,
-            kwargs=dict(
-                mutants_queue=mutants_queue,
-                results_queue=results_queue,
-                cycle_process_after=100,
-            )
-        )
-        t.start()
-        return t
+                context = Context(
+                    mutation_id=mutation_id,
+                    filename=filename,
+                    dict_synonyms=config.dict_synonyms,
+                    config=copy_obj(config),
+                    source="",
+                    index=index,
+                )
+                index += 1
 
-    t = create_worker()
-
-    while t.is_alive():
-        command, status, filename, mutation_id = results_queue.get()
-        if command == 'end':
-            t.join()
-            break
-
-        elif command == 'cycle':
-            t = create_worker()
-
-        elif command == 'progress':
-            if not config.swallow_output:
-                print(status, end='', flush=True)
-            else:
-                progress.print()
-
-        else:
-            assert command == 'status'
-
-            progress.register(status)
-
-            update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
-
-            progress.print()
+                mutation_futures.append(pool.submit(run_mutation_procedure, context, progress))
 
 
 def read_coverage_data():
