@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pytest_mutator import Config, Context
+    from mutmut import Config, Context
 
 
 def pre_mutation(context: "Context"):
