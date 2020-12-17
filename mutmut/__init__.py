@@ -132,7 +132,7 @@ class ASTPattern(object):
                 check_children = False  # TODO: really? or just do this for 'any'?
 
         # Check node type strictly
-        if pattern.type != node.type:
+        elif pattern.type != node.type:
             return False
 
         # Match children
