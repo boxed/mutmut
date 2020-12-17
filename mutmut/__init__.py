@@ -839,7 +839,7 @@ def tests_pass(config: Config, callback) -> bool:
         return hammett_tests_pass(config, callback)
 
     returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
+    return returncode != 1
 
 
 def config_from_setup_cfg(**defaults):
