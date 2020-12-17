@@ -291,7 +291,8 @@ Legend for output:
 
     paths_to_exclude = paths_to_exclude or ''
     if paths_to_exclude:
-        paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+        paths_to_exclude = [path.strip() for path in paths_to_exclude.replace(',', '\n').split('\n')]
+        paths_to_exclude = [x for x in paths_to_exclude if x]
 
     config = Config(
         total=0,  # we'll fill this in later!
