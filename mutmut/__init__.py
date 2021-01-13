@@ -236,7 +236,7 @@ def number_mutation(value, **_):
 
 
 def string_mutation(value, **_):
-    prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
+    prefix = value[:min(x for x in [value.find('"'), value.find("'")] if x != -1)]
     value = value[len(prefix):]
 
     if value.startswith('"""') or value.startswith("'''"):
@@ -1028,7 +1028,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
                     if not line:
                         break
                     callback(line)
-        except (IOError, OSError):
+        except OSError:
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
@@ -1090,7 +1090,7 @@ def hammett_tests_pass(config, callback):
 
     modules_to_force_unload = {x.partition(os.sep)[0].replace('.py', '') for x in config.paths_to_mutate}
 
-    for module_name in list(sorted(set(sys.modules.keys()) - set(modules_before), reverse=True)):
+    for module_name in sorted(set(sys.modules.keys()) - set(modules_before), reverse=True):
         if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith('tests') or module_name.startswith('django'):
             del sys.modules[module_name]
 
