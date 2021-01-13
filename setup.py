@@ -96,6 +96,7 @@ setup(
     license="BSD",
     zip_safe=False,
     keywords='mutmut mutant mutation test testing',
+    python_requires='>=3.7',
     install_requires=read_reqs('requirements.txt'),
     extras_require=extras_reqs,
     tests_require=test_reqs,
