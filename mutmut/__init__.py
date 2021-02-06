@@ -236,7 +236,7 @@ def number_mutation(value, **_):
 
 
 def string_mutation(value, **_):
-    prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
+    prefix = value[:min(x for x in [value.find('"'), value.find("'")] if x != -1)]
     value = value[len(prefix):]
 
     if value.startswith('"""') or value.startswith("'''"):
@@ -839,7 +839,7 @@ def tests_pass(config: Config, callback) -> bool:
         return hammett_tests_pass(config, callback)
 
     returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
-    return returncode == 0 or (config.using_testmon and returncode == 5)
+    return returncode != 1
 
 
 def config_from_setup_cfg(**defaults):
@@ -910,8 +910,9 @@ def guess_paths_to_mutate():
 
 
 class Progress(object):
-    def __init__(self, total):
+    def __init__(self, total, output_legend):
         self.total = total
+        self.output_legend = output_legend
         self.progress = 0
         self.skipped = 0
         self.killed_mutants = 0
@@ -920,7 +921,20 @@ class Progress(object):
         self.suspicious_mutants = 0
 
     def print(self):
-        print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format(self.progress, self.total, self.killed_mutants, self.surviving_mutants_timeout, self.suspicious_mutants, self.surviving_mutants, self.skipped))
+        print_status('{}/{}  {} {}  {} {}  {} {}  {} {}  {} {}'.format(
+            self.progress,
+            self.total,
+            self.output_legend["killed"],
+            self.killed_mutants,
+            self.output_legend["timeout"],
+            self.surviving_mutants_timeout,
+            self.output_legend["suspicious"],
+            self.suspicious_mutants,
+            self.output_legend["survived"],
+            self.surviving_mutants,
+            self.output_legend["skipped"],
+            self.skipped)
+        )
 
     def register(self, status):
         if status == BAD_SURVIVED:
@@ -1014,7 +1028,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
                     if not line:
                         break
                     callback(line)
-        except (IOError, OSError):
+        except OSError:
             # This seems to happen on some platforms, including TravisCI.
             # It seems like it's ok to just let this pass here, you just
             # won't get as nice feedback.
@@ -1076,7 +1090,7 @@ def hammett_tests_pass(config, callback):
 
     modules_to_force_unload = {x.partition(os.sep)[0].replace('.py', '') for x in config.paths_to_mutate}
 
-    for module_name in list(sorted(set(sys.modules.keys()) - set(modules_before), reverse=True)):
+    for module_name in sorted(set(sys.modules.keys()) - set(modules_before), reverse=True):
         if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith('tests') or module_name.startswith('django'):
             del sys.modules[module_name]
 

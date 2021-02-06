@@ -102,6 +102,10 @@ def hash_of_tests(tests_dirs):
     for tests_dir in tests_dirs:
         for root, dirs, files in os.walk(tests_dir):
             for filename in files:
+                if not filename.endswith('.py'):
+                    continue
+                if not filename.startswith('test') and not filename.endswith('_tests.py') and 'test' not in root:
+                    continue
                 with open(os.path.join(root, filename), 'rb') as f:
                     m.update(f.read())
                     found_something = True
@@ -154,7 +158,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
     print('')
 
     def print_stuff(title, mutant_query):
-        mutant_list = list(sorted(mutant_query, key=lambda x: x.line.sourcefile.filename))
+        mutant_list = sorted(mutant_query, key=lambda x: x.line.sourcefile.filename)
         if mutant_list:
             print('')
             print("{} ({})".format(title, len(mutant_list)))

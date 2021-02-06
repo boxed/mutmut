@@ -100,6 +100,7 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
@@ -113,7 +114,7 @@ def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy, pre_mutation, post_mutation,
-            use_patch_file, paths_to_exclude):
+            use_patch_file, paths_to_exclude, simple_output):
     """
 commands:\n
     run [mutation id]\n
@@ -137,14 +138,14 @@ commands:\n
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation, use_patch_file, paths_to_exclude))
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output))
 
 
 def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
-         use_patch_file, paths_to_exclude):
+         use_patch_file, paths_to_exclude, simple_output):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -223,6 +224,15 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # stop python from creating .pyc files
 
     using_testmon = '--testmon' in runner
+    output_legend = {
+        "killed": "🎉",
+        "timeout": "⏰",
+        "suspicious": "🤔",
+        "survived": "🙁",
+        "skipped": "🔇",
+    }
+    if simple_output:
+        output_legend = {key: key.upper() for (key, value) in output_legend.items()}
 
     print("""
 - Mutation testing starting -
@@ -237,12 +247,12 @@ Results are stored in .mutmut-cache.
 Print found mutants with `mutmut results`.
 
 Legend for output:
-🎉 Killed mutants.   The goal is for everything to end up in this bucket.
-⏰ Timeout.          Test suite took 10 times as long as the baseline so were killed.
-🤔 Suspicious.       Tests took a long time, but not long enough to be fatal.
-🙁 Survived.         This means your tests need to be expanded.
-🔇 Skipped.          Skipped.
-""")
+{killed} Killed mutants.   The goal is for everything to end up in this bucket.
+{timeout} Timeout.          Test suite took 10 times as long as the baseline so were killed.
+{suspicious} Suspicious.       Tests took a long time, but not long enough to be fatal.
+{survived} Survived.         This means your tests need to be expanded.
+{skipped} Skipped.          Skipped.
+""".format(**output_legend))
     if runner is DEFAULT_RUNNER:
         try:
             import pytest
@@ -281,7 +291,8 @@ Legend for output:
 
     paths_to_exclude = paths_to_exclude or ''
     if paths_to_exclude:
-        paths_to_exclude = [path.strip() for path in paths_to_exclude.split(',')]
+        paths_to_exclude = [path.strip() for path in paths_to_exclude.replace(',', '\n').split('\n')]
+        paths_to_exclude = [x for x in paths_to_exclude if x]
 
     config = Config(
         total=0,  # we'll fill this in later!
@@ -309,7 +320,7 @@ Legend for output:
 
     print()
     print('2. Checking mutants')
-    progress = Progress(total=config.total)
+    progress = Progress(total=config.total, output_legend=output_legend)
 
     try:
         run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
