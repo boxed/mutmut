@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import fnmatch
 import itertools
 import multiprocessing
@@ -7,6 +8,7 @@ import re
 import shlex
 import subprocess
 import sys
+from asyncio.subprocess import PIPE, STDOUT
 from configparser import (
     ConfigParser,
     NoOptionError,
@@ -965,82 +967,42 @@ def get_mutations_by_file_from_cache(mutation_pk):
     return {filename: [mutation_id]}
 
 
-def popen_streaming_output(cmd, callback, timeout=None):
-    """Open a subprocess and stream its output without hard-blocking.
-
-    :param cmd: the command to execute within the subprocess
-    :type cmd: str
-
-    :param callback: function that intakes the subprocess' stdout line by line.
-        It is called for each line received from the subprocess' stdout stream.
-    :type callback: Callable[[Context], bool]
-
-    :param timeout: the timeout time of the subprocess
-    :type timeout: float
-
-    :raises TimeoutError: if the subprocess' execution time exceeds
-        the timeout time
-
-    :return: the return code of the executed subprocess
-    :rtype: int
-    """
-    if os.name == 'nt':  # pragma: no cover
-        process = subprocess.Popen(
-            shlex.split(cmd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        stdout = process.stdout
-    else:
-        master, slave = os.openpty()
-        process = subprocess.Popen(
-            shlex.split(cmd, posix=True),
-            stdout=slave,
-            stderr=slave
-        )
-        stdout = os.fdopen(master)
-        os.close(slave)
-
-    def kill(process_):
-        """Kill the specified process on Timer completion"""
-        try:
-            process_.kill()
-        except OSError:
-            pass
-
-    # python 2-3 agnostic process timer
-    timer = Timer(timeout, kill, [process])
-    timer.setDaemon(True)
-    timer.start()
-
-    while process.returncode is None:
-        try:
-            if os.name == 'nt':  # pragma: no cover
-                line = stdout.readline()
-                # windows gives readline() raw stdout as a b''
-                # need to decode it
-                line = line.decode("utf-8")
-                if line:  # ignore empty strings and None
-                    callback(line)
+async def popen_streaming_output_coro(cmd, callback, timeout):
+    process = await asyncio.create_subprocess_shell(cmd, stdout=PIPE, stderr=STDOUT)
+    try:
+        while True:
+            byte = await asyncio.wait_for(process.stdout.readline(), timeout)
+            if not byte:  # EOF
+                break
             else:
-                while True:
-                    line = stdout.readline()
-                    if not line:
-                        break
-                    callback(line)
-        except OSError:
-            # This seems to happen on some platforms, including TravisCI.
-            # It seems like it's ok to just let this pass here, you just
-            # won't get as nice feedback.
+                # TODO: see if decoding this is really needed
+                callback(byte.decode("utf-8"))
+                continue
+    except asyncio.TimeoutError:
+        pass
+    finally:
+        try:
+            process.kill()
+        except ProcessLookupError:
             pass
-        if not timer.is_alive():
-            raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
-        process.poll()
+        return await process.wait()
 
-    # we have returned from the subprocess cancel the timer if it is running
-    timer.cancel()
 
-    return process.returncode
+def get_event_loop():
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.get_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop
+
+
+def popen_streaming_output(cmd, callback, timeout=None):
+    loop = get_event_loop()
+    try:
+        return loop.run_until_complete(asyncio.wait_for(popen_streaming_output_coro(cmd, callback, timeout), timeout=timeout))
+    except asyncio.TimeoutError as e:
+        raise TimeoutError("command '{}' subprocess timed out after {} seconds".format(cmd, timeout)) from e
 
 
 def hammett_tests_pass(config, callback):
