@@ -42,6 +42,9 @@ from mutmut.cache import print_result_cache, \
     hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
+    
+from collections import namedtuple
+import re
 
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
