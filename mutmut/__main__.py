@@ -224,12 +224,6 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     mut_paths_sep = get_separation_char(paths_to_mutate, patterns)
     tests_dir_sep = get_separation_char(tests_dir, patterns)
 
-    if not mut_paths_sep:
-        raise click.BadOptionUsage('--paths-to-mutate', 'Path string must be either commma or colon separated.')
-
-    if not tests_dir_sep:
-       raise click.BadOptionUsage('--tests-dir', 'Path string must be either commma or colon separated.')
-
     if not isinstance(paths_to_mutate, (list, tuple)):
         paths_to_mutate = [x.strip() for x in paths_to_mutate.split(mut_paths_sep)]
 
