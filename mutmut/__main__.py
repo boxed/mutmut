@@ -205,18 +205,40 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
 
+    Pattern = namedtuple('Pattern', 'char pattern')
+
+    def get_pattern(char):
+        return re.compile(fr"^(\w+)({char}\s*\w+)*$")
+
+    def get_separation_char(input_string, patterns):
+        for p in patterns:
+            if p.pattern.match(input_string):
+                return p.char
+
+    patterns = [Pattern(',', get_pattern(',')),
+                Pattern(':', get_pattern(':'))]
+
+    mut_paths_sep = get_separation_char(paths_to_mutate, patterns)
+    tests_dir_sep = get_separation_char(tests_dir, patterns)
+
+    if not mut_paths_sep:
+        raise click.BadOptionUsage('--paths-to-mutate', 'Path string must be either commma or colon separated.')
+
+    if not tests_dir_sep:
+       raise click.BadOptionUsage('--tests-dir', 'Path string must be either commma or colon separated.')
+
     if not isinstance(paths_to_mutate, (list, tuple)):
-        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(',')]
+        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(mut_paths_sep)]
 
     if not paths_to_mutate:
         raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     tests_dirs = []
-    for p in tests_dir.split(':'):
+    for p in tests_dir.split(tests_dir_sep):
         tests_dirs.extend(glob(p, recursive=True))
 
     for p in paths_to_mutate:
-        for pt in tests_dir.split(':'):
+        for pt in tests_dir.split(tests_dir_sep):
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
     current_hash_of_tests = hash_of_tests(tests_dirs)
