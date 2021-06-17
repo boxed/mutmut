@@ -104,6 +104,7 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
 @click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
 @config_from_setup_cfg(
     dict_synonyms='',
     paths_to_exclude='',
@@ -117,7 +118,7 @@ def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests
             test_time_multiplier, test_time_base,
             swallow_output, use_coverage, dict_synonyms, cache_only, version,
             suspicious_policy, untested_policy, pre_mutation, post_mutation,
-            use_patch_file, paths_to_exclude, simple_output):
+            use_patch_file, paths_to_exclude, simple_output, no_progress):
     """
 commands:\n
     run [mutation id]\n
@@ -141,14 +142,15 @@ commands:\n
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation, use_patch_file, paths_to_exclude, simple_output))
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
 
 
 def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
          test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
-         use_patch_file, paths_to_exclude, simple_output):
+         use_patch_file, paths_to_exclude, simple_output, no_progress):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -331,6 +333,7 @@ Legend for output:
         pre_mutation=pre_mutation,
         post_mutation=post_mutation,
         paths_to_mutate=paths_to_mutate,
+        no_progress=no_progress
     )
 
     parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs)
