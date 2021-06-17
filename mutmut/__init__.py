@@ -805,7 +805,7 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate):
+                 coverage_data, paths_to_mutate, no_progress):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
@@ -823,6 +823,7 @@ class Config(object):
         self.pre_mutation = pre_mutation
         self.coverage_data = coverage_data
         self.paths_to_mutate = paths_to_mutate
+        self.no_progress = no_progress
 
 
 def tests_pass(config: Config, callback) -> bool:
@@ -1154,7 +1155,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
         elif command == 'progress':
             if not config.swallow_output:
                 print(status, end='', flush=True)
-            else:
+            elif not config.no_progress:
                 progress.print()
 
         else:
@@ -1163,8 +1164,6 @@ def run_mutation_tests(config, progress, mutations_by_file):
             progress.register(status)
 
             update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status, tests_hash=config.hash_of_tests)
-
-            progress.print()
 
 
 def read_coverage_data():
