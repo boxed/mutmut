@@ -1,6 +1,21 @@
 Changelog
 ---------
 
+2.2.0
+~~~~~
+
+* Add ability to update progress output only after test passes (`--no-progress`)
+
+* Added option `--simple-output` to disable usage of emojis in output
+
+* Fixed the total mutants and killed column in html report (#184)
+
+* Fixed paths_to_exclude config parsing
+
+* Stricter error code check for test runners. The previous check sometimes counted no tests as a killed mutant
+
+* Misc fixes
+
 2.1.0
 ~~~~~
 

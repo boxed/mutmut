@@ -32,7 +32,7 @@ from time import time
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
 
-__version__ = '2.1.0'
+__version__ = '2.2.0'
 
 
 try:
