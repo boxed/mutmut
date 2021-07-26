@@ -447,3 +447,10 @@ def test_simple_output(filesystem):
     result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--simple-output"], catch_exceptions=False)
     print(repr(result.output))
     assert '14/14  KILLED 14  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
+
+
+def test_simple_output(filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--simple-output"], catch_exceptions=False)
+    print(repr(result.output))
+    assert CliRunner().invoke(climain, ['result-ids', "survived"], catch_exceptions=False).output.strip() == "1"
+    assert CliRunner().invoke(climain, ['result-ids', "killed"], catch_exceptions=False).output.strip() == ""
