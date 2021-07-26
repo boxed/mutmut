@@ -126,7 +126,7 @@ commands:\n
         Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
     results\n
         Print the results.\n
-    results-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
         Print the IDs of the specified mutant classes (separated by spaces).\n
     apply [mutation id]\n
         Apply a mutation on disk.\n
