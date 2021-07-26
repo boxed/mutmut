@@ -132,6 +132,9 @@ This section describes how to work with mutmut to enhance your test suite.
 Mutmut keeps a result cache in ``.mutmut-cache`` so if you want to make sure you
 run a full mutmut run just delete this file.
 
+If you want to re-run all survivors after changing a lot of code or even the configuration,
+you can use `for ID in $(mutmut result-ids survived); do mutmut run $ID; done` (for bash).
+
 You can also tell mutmut to just check a single mutant:
 
 .. code-block:: console

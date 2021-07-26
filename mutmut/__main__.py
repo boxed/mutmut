@@ -16,6 +16,7 @@ from glob2 import glob
 
 from mutmut import (
     mutate_file,
+    MUTANT_STATUSES,
     Context,
     __version__,
     mutmut_config,
@@ -38,11 +39,11 @@ from mutmut.cache import (
     create_html_report,
     cached_hash_of_tests,
 )
-from mutmut.cache import print_result_cache, \
+from mutmut.cache import print_result_cache, print_result_ids_cache, \
     hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
-    
+
 from collections import namedtuple
 import re
 
@@ -87,7 +88,7 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.argument('argument', nargs=1, required=False)
 @click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
-@click.option('--paths-to-exclude', type=click.STRING, required=False)
+@click.option('--paths-to-exclude', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
@@ -125,6 +126,8 @@ commands:\n
         Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
     results\n
         Print the results.\n
+    results-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
     apply [mutation id]\n
         Apply a mutation on disk.\n
     show [mutation id]\n
@@ -163,7 +166,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
     if use_coverage and use_patch_file:
         raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
-    valid_commands = ['run', 'results', 'apply', 'show', 'junitxml', 'html']
+    valid_commands = ['run', 'results', 'result-ids', 'apply', 'show', 'junitxml', 'html']
     if command not in valid_commands:
         raise click.BadArgumentUsage('{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
 
@@ -193,6 +196,13 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     if command == 'results':
         print_result_cache()
+        return 0
+
+    if command == 'result-ids':
+        if not argument or argument not in MUTANT_STATUSES:
+            raise click.BadArgumentUsage(f'The {command} command needs a status class of mutants '
+                                         f'(one of : {set(MUTANT_STATUSES.keys())}) but was {argument}')
+        print_result_ids_cache(argument)
         return 0
 
     if command == 'junitxml':
