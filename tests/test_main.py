@@ -23,6 +23,7 @@ from mutmut import (
     Progress,
     python_source_files,
     read_coverage_data,
+    MUTANT_STATUSES,
 )
 from mutmut.__main__ import climain
 
@@ -449,8 +450,12 @@ def test_simple_output(filesystem):
     assert '14/14  KILLED 14  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
 
 
-def test_simple_output(filesystem):
-    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--simple-output"], catch_exceptions=False)
-    print(repr(result.output))
-    assert CliRunner().invoke(climain, ['result-ids', "survived"], catch_exceptions=False).output.strip() == "1"
-    assert CliRunner().invoke(climain, ['result-ids', "killed"], catch_exceptions=False).output.strip() == ""
+def test_output_result_ids(filesystem):
+    # Generate the results
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--simple-output"], catch_exceptions=False)
+    # Check the output for the parts that are zero
+    for attribute in set(MUTANT_STATUSES.keys()) - {"killed"}:
+        assert CliRunner().invoke(climain, ['result-ids', attribute], catch_exceptions=False).output.strip() == ""
+    # Check that "killed" contains all IDs
+    killed_list = " ".join(str(num) for num in range(1, 15))
+    assert CliRunner().invoke(climain, ['result-ids', "killed"], catch_exceptions=False).output.strip() == killed_list
