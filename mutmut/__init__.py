@@ -188,14 +188,14 @@ BAD_SURVIVED = 'bad_survived'
 SKIPPED = 'skipped'
 
 
-mutant_statuses = [
-    UNTESTED,
-    OK_KILLED,
-    OK_SUSPICIOUS,
-    BAD_TIMEOUT,
-    BAD_SURVIVED,
-    SKIPPED,
-]
+MUTANT_STATUSES = {
+    "killed": OK_KILLED,
+    "timeout": BAD_TIMEOUT,
+    "suspicious": OK_SUSPICIOUS,
+    "survived": BAD_SURVIVED,
+    "skipped": SKIPPED,
+    "untested": UNTESTED,
+}
 
 
 def number_mutation(value, **_):
