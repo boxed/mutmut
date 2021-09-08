@@ -987,9 +987,10 @@ def popen_streaming_output(cmd, callback, timeout=None):
     """
     if os.name == 'nt':  # pragma: no cover
         process = subprocess.Popen(
-            shlex.split(cmd),
+            cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.STDOUT,
+            shell=True,
         )
         stdout = process.stdout
     else:
