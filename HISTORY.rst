@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+2.3.0
+~~~~~
+
+* Add `--disable-mutation-types` and `--enable-mutation-types` to control what types of mutations are performed
+
 2.2.0
 ~~~~~
 
