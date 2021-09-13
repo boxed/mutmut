@@ -178,6 +178,18 @@ or skip logging:
 look at the code for the ``Context`` class for what you can modify. Please
 open a github issue if you need help.
 
+It is also possible to disable mutation of specific node types by passing the
+``--disable-mutation-types`` option. Multiple types can be specified by separating them
+by comma:
+
+.. code-block:: console
+
+    mutmut run --disable-mutation-types=string,decorator
+
+Inversly, you can also only specify to only run specific mutations with ``--enable-mutation-types``.
+Note that ``--disable-mutation-types`` and ``--enable-mutation-types`` are exclusive and cannot
+be combined.
+
 
 JUnit XML support
 -----------------

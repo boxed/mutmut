@@ -19,6 +19,7 @@ from mutmut import (
     MUTANT_STATUSES,
     Context,
     __version__,
+    mutations_by_type,
     mutmut_config,
     config_from_setup_cfg,
     guess_paths_to_mutate,
@@ -88,6 +89,8 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.argument('argument', nargs=1, required=False)
 @click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
 @click.option('--paths-to-exclude', type=click.STRING)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
@@ -115,11 +118,10 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
     post_mutation=None,
     use_patch_file=None,
 )
-def climain(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
-            test_time_multiplier, test_time_base,
-            swallow_output, use_coverage, dict_synonyms, cache_only, version,
-            suspicious_policy, untested_policy, pre_mutation, post_mutation,
-            use_patch_file, paths_to_exclude, simple_output, no_progress):
+def climain(command, argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+            backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+            dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+            post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
     """
 commands:\n
     run [mutation id]\n
@@ -141,7 +143,8 @@ commands:\n
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, argument2, paths_to_mutate, backup, runner,
+    sys.exit(main(command, argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
                   version, suspicious_policy, untested_policy, pre_mutation,
@@ -149,8 +152,8 @@ commands:\n
                   no_progress))
 
 
-def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_dir,
-         test_time_multiplier, test_time_base,
+def main(command, argument, argument2, paths_to_mutate, disable_mutation_types, 
+         enable_mutation_types, backup, runner, tests_dir, test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
          use_patch_file, paths_to_exclude, simple_output, no_progress):
@@ -165,6 +168,20 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
 
     if use_coverage and use_patch_file:
         raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
+
+    if disable_mutation_types and enable_mutation_types:
+        raise click.BadArgumentUsage("You can't combine --disable-mutation-types and --enable-mutation-types")
+    if enable_mutation_types:
+        mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
+        invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
+    elif disable_mutation_types:
+        mutation_types_to_apply = set(mutations_by_type.keys()) - set(mtype.strip() for mtype in disable_mutation_types.split(","))
+        invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
+    else:
+        mutation_types_to_apply = set(mutations_by_type.keys())
+        invalid_types = None
+    if invalid_types:
+        raise click.BadArgumentUsage(f"The following are not valid mutation types: {', '.join(invalid_types)}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
 
     valid_commands = ['run', 'results', 'result-ids', 'apply', 'show', 'junitxml', 'html']
     if command not in valid_commands:
@@ -343,6 +360,7 @@ Legend for output:
         pre_mutation=pre_mutation,
         post_mutation=post_mutation,
         paths_to_mutate=paths_to_mutate,
+        mutation_types_to_apply=mutation_types_to_apply,
         no_progress=no_progress
     )
 

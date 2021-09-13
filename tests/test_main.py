@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from mutmut import (
     compute_exit_code,
+    mutations_by_type,
     popen_streaming_output,
     Progress,
     python_source_files,
@@ -459,3 +460,63 @@ def test_output_result_ids(filesystem):
     # Check that "killed" contains all IDs
     killed_list = " ".join(str(num) for num in range(1, 15))
     assert CliRunner().invoke(climain, ['result-ids', "killed"], catch_exceptions=False).output.strip() == killed_list
+
+
+def test_enable_single_mutation_type(filesystem):
+    result = CliRunner().invoke(climain, [
+        'run', '--paths-to-mutate=foo.py', "--simple-output", "--enable-mutation-types=operator"
+        ], catch_exceptions=False)
+    print(repr(result.output))
+    assert '3/3  KILLED 3  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
+
+
+def test_enable_multiple_mutation_types(filesystem):
+    result = CliRunner().invoke(climain, [
+        'run', '--paths-to-mutate=foo.py', "--simple-output", "--enable-mutation-types=operator,number"
+        ], catch_exceptions=False)
+    print(repr(result.output))
+    assert '8/8  KILLED 8  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
+
+
+def test_disable_single_mutation_type(filesystem):
+    result = CliRunner().invoke(climain, [
+        'run', '--paths-to-mutate=foo.py', "--simple-output", "--disable-mutation-types=number"
+        ], catch_exceptions=False)
+    print(repr(result.output))
+    assert '9/9  KILLED 9  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
+
+
+def test_disable_multiple_mutation_types(filesystem):
+    result = CliRunner().invoke(climain, [
+        'run', '--paths-to-mutate=foo.py', "--simple-output", "--disable-mutation-types=operator,number"
+        ], catch_exceptions=False)
+    print(repr(result.output))
+    assert '6/6  KILLED 6  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
+
+
+@pytest.mark.parametrize(
+    "option", ["--enable-mutation-types", "--disable-mutation-types"] 
+)
+def test_select_unknown_mutation_type(option):
+    result = CliRunner().invoke(
+        climain, 
+        [
+            "run", 
+            f"{option}=foo,bar",
+        ]
+    )
+    assert result.exception.code == 2
+    assert f"The following are not valid mutation types: foo, bar. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output
+
+
+def test_enable_and_disable_mutation_type_are_exclusive():
+    result = CliRunner().invoke(
+        climain, 
+        [
+            "run", 
+            "--enable-mutation-types=operator", 
+            "--disable-mutation-types=string",
+        ]
+    )
+    assert result.exception.code == 2
+    assert "You can't combine --disable-mutation-types and --enable-mutation-types" in result.output

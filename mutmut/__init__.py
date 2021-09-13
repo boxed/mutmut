@@ -32,7 +32,7 @@ from time import time
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
 
-__version__ = '2.2.0'
+__version__ = '2.3.0'
 
 
 try:
@@ -597,6 +597,9 @@ def mutate_node(node, context):
             if context.performed_mutation_ids and context.mutation_id != ALL:
                 return
 
+        if context.config and node.type not in context.config.mutation_types_to_apply:
+            return
+
         mutation = mutations_by_type.get(node.type)
 
         if mutation is None:
@@ -805,7 +808,7 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate, no_progress):
+                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress):
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
@@ -823,6 +826,7 @@ class Config(object):
         self.pre_mutation = pre_mutation
         self.coverage_data = coverage_data
         self.paths_to_mutate = paths_to_mutate
+        self.mutation_types_to_apply = mutation_types_to_apply
         self.no_progress = no_progress
 
 
