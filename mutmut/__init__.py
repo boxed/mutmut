@@ -35,6 +35,8 @@ from parso.python.tree import Name, Number, Keyword
 __version__ = '2.3.0'
 
 
+if os.getcwd() not in sys.path:
+    sys.path.insert(0, os.getcwd())
 try:
     import mutmut_config
 except ImportError:
