@@ -6,6 +6,8 @@ Changelog
 
 * Add `--disable-mutation-types` and `--enable-mutation-types` to control what types of mutations are performed
 
+* Fixed error where ``mutmut_config.init()`` was not called when running without explicitly having set ``PYTHONPATH``
+
 2.2.0
 ~~~~~
 
