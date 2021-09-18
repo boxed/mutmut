@@ -86,6 +86,21 @@ def single_mutant_filesystem(tmpdir):
     mutmut.cache.db.schema = None
 
 
+@pytest.fixture
+def surviving_mutants_filesystem(tmpdir):
+    foo_py = """
+def foo(a, b):
+    result = a + b
+    return result
+"""
+
+    test_py = """
+def test_nothing(): assert True
+"""
+
+    create_filesystem(tmpdir, foo_py, test_py)
+
+
 def create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents):
     test_dir = str(tmpdir)
     os.chdir(test_dir)
@@ -251,6 +266,20 @@ def test_simple_apply(filesystem):
     assert result.exit_code == 0
     with open(os.path.join(str(filesystem), 'foo.py')) as f:
         assert f.read() != file_to_mutate_contents
+
+
+def test_simply_apply_with_backup(filesystem):
+    result = CliRunner().invoke(climain, ['run', '-s', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+
+    result = CliRunner().invoke(climain, ['apply', '--backup', '1'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    with open(os.path.join(str(filesystem), 'foo.py')) as f:
+        assert f.read() != file_to_mutate_contents
+    with open(os.path.join(str(filesystem), 'foo.py.bak')) as f:
+        assert f.read() == file_to_mutate_contents
 
 
 def test_full_run_no_surviving_mutants(filesystem):
@@ -506,7 +535,7 @@ def test_select_unknown_mutation_type(option):
         ]
     )
     assert result.exception.code == 2
-    assert f"The following are not valid mutation types: foo, bar. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output
+    assert f"The following are not valid mutation types: foo, bar. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output, result.output
 
 
 def test_enable_and_disable_mutation_type_are_exclusive():
@@ -520,3 +549,126 @@ def test_enable_and_disable_mutation_type_are_exclusive():
     )
     assert result.exception.code == 2
     assert "You can't combine --disable-mutation-types and --enable-mutation-types" in result.output
+
+
+def test_show(surviving_mutants_filesystem):
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show'])
+    assert result.output.strip() == """
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (2)
+
+---- foo.py (2) ----
+
+1-2
+""".strip()
+
+
+def test_show_single_id(surviving_mutants_filesystem):
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', '1'])
+    assert result.output.strip() == """
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = a - b
+     return result
+""".strip()
+
+
+def test_show_all(surviving_mutants_filesystem):
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', 'all'])
+    assert result.output.strip() == """
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (2)
+
+---- foo.py (2) ----
+
+# mutant 1
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = a - b
+     return result
+ 
+
+# mutant 2
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = None
+     return result
+""".strip()
+
+
+def test_show_for_file(surviving_mutants_filesystem):
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', 'foo.py'])
+    assert result.output.strip() == """
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (2)
+
+---- foo.py (2) ----
+
+# mutant 1
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = a - b
+     return result
+ 
+
+# mutant 2
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = None
+     return result
+""".strip()
+
+
+def test_html_output(filesystem):
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['html'])
+    assert os.path.isfile("html/index.html")
+    with open("html/index.html") as f:
+        assert f.read() == (
+            '<h1>Mutation testing report</h1>'
+            'Killed 14 out of 14 mutants'
+            '<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
+            '<tr><td><a href="foo.py.html">foo.py</a></td><td>14</td><td>14</td><td>100.00</td><td>0</td>'
+            '</table></body></html>')
