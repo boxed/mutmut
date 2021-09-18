@@ -48,9 +48,6 @@ from mutmut.cache import print_result_cache, print_result_ids_cache, \
 from collections import namedtuple
 import re
 
-if os.getcwd() not in sys.path:
-    sys.path.insert(0, os.getcwd())
-
 
 def do_apply(mutation_pk, dict_synonyms, backup):
     """Apply a specified mutant to the source code
@@ -181,7 +178,7 @@ def main(command, argument, argument2, paths_to_mutate, disable_mutation_types,
         mutation_types_to_apply = set(mutations_by_type.keys())
         invalid_types = None
     if invalid_types:
-        raise click.BadArgumentUsage(f"The following are not valid mutation types: {', '.join(invalid_types)}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
+        raise click.BadArgumentUsage(f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
 
     valid_commands = ['run', 'results', 'result-ids', 'apply', 'show', 'junitxml', 'html']
     if command not in valid_commands:

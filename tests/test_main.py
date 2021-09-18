@@ -535,7 +535,7 @@ def test_select_unknown_mutation_type(option):
         ]
     )
     assert result.exception.code == 2
-    assert f"The following are not valid mutation types: foo, bar. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output, result.output
+    assert f"The following are not valid mutation types: bar, foo. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output, result.output
 
 
 def test_enable_and_disable_mutation_type_are_exclusive():
