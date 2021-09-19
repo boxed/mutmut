@@ -82,31 +82,16 @@ null_out = open(os.devnull, 'w')
 DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
 @click.group(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option('--version', is_flag=True, default=False)
-def climain(version):
+def climain():
     """
-commands:\n
-    run [mutation id]\n
-        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
-    results\n
-        Print the results.\n
-    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
-        Print the IDs of the specified mutant classes (separated by spaces).\n
-    apply [mutation id]\n
-        Apply a mutation on disk.\n
-    show [mutation id]\n
-        Show a mutation diff.\n
-    show [path to file]\n
-        Show all mutation diffs for this file.\n
-    junitxml\n
-        Show a mutation diff with junitxml format.
+    Mutation testing system for Python.
     """
     pass
 
 
 @climain.command()
 def version():
-    """Show the version and exit"""
+    """Show the version and exit."""
     print("mutmut version {}".format(__version__))
     sys.exit(0)
 
@@ -168,16 +153,16 @@ def results():
 
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('argument', nargs=1, required=False)
-def result_ids(argument):
+@click.argument('status', nargs=1, required=True)
+def result_ids(status):
     """
     Print the IDs of the specified mutant classes (separated by spaces).\n
     result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
     """
-    if not argument or argument not in MUTANT_STATUSES:
+    if not status or status not in MUTANT_STATUSES:
         raise click.BadArgumentUsage(f'The result-ids command needs a status class of mutants '
-                                     f'(one of : {set(MUTANT_STATUSES.keys())}) but was {argument}')
-    print_result_ids_cache(argument)
+                                     f'(one of : {set(MUTANT_STATUSES.keys())}) but was {status}')
+    print_result_ids_cache(status)
     sys.exit(0)
 
 
@@ -190,8 +175,7 @@ def result_ids(argument):
 )
 def apply(mutation_id, backup, dict_synonyms):
     """
-    apply [mutation id]\n
-        Apply a mutation on disk.\n
+    Apply a mutation on disk.
     """
     do_apply(mutation_id, dict_synonyms, backup)
     sys.exit(0)
@@ -206,8 +190,7 @@ def apply(mutation_id, backup, dict_synonyms):
 )
 def show(id_or_file, only_filenames, dict_synonyms):
     """
-    show [mutation id or filename]\n
-        Show a mutation diff.\n
+    Show a mutation diff.
     """
     if not id_or_file:
         print_result_cache()
@@ -234,8 +217,7 @@ def show(id_or_file, only_filenames, dict_synonyms):
 )
 def junitxml(dict_synonyms, suspicious_policy, untested_policy):
     """
-    junitxml\n
-        Show a mutation diff with junitxml format.
+    Show a mutation diff with junitxml format.
     """
     print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
     sys.exit(0)
