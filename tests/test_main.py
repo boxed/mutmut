@@ -25,6 +25,7 @@ from mutmut import (
     python_source_files,
     read_coverage_data,
     MUTANT_STATUSES,
+    __version__,
 )
 from mutmut.__main__ import climain
 
@@ -119,6 +120,10 @@ runner=python -m hammett -x
 
     with open(join(test_dir, "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents)
+
+
+def test_print_version():
+    assert CliRunner().invoke(climain, ['--version']).output.strip() == f'mutmut version {__version__}'
 
 
 def test_compute_return_code():
