@@ -123,7 +123,7 @@ runner=python -m hammett -x
 
 
 def test_print_version():
-    assert CliRunner().invoke(climain, ['--version']).output.strip() == f'mutmut version {__version__}'
+    assert CliRunner().invoke(climain, ['version']).output.strip() == f'mutmut version {__version__}'
 
 
 def test_compute_return_code():
