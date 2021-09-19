@@ -81,8 +81,37 @@ null_out = open(os.devnull, 'w')
 
 DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('command', nargs=1, required=False)
+@click.group(context_settings=dict(help_option_names=['-h', '--help']))
+@click.option('--version', is_flag=True, default=False)
+def climain(version):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    pass
+
+
+@climain.command()
+def version():
+    """Show the version and exit"""
+    print("mutmut version {}".format(__version__))
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('argument', nargs=1, required=False)
 @click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
@@ -115,7 +144,74 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
     post_mutation=None,
     use_patch_file=None,
 )
-def climain(command, argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+def run(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+        backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+        post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("run", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def results(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
             backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
             dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
             post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
@@ -140,7 +236,342 @@ commands:\n
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, argument2, paths_to_mutate, disable_mutation_types, 
+    sys.exit(main("results", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def result_ids(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+        backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+        post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("result-ids", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def apply(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+        backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+        post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("apply", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def show(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+        backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+        post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("show", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def junitxml(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+            backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+            dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+            post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("junitxml", argument, argument2, paths_to_mutate, disable_mutation_types, 
+                  enable_mutation_types, backup, runner,
+                  tests_dir, test_time_multiplier, test_time_base,
+                  swallow_output, use_coverage, dict_synonyms, cache_only,
+                  version, suspicious_policy, untested_policy, pre_mutation,
+                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
+                  no_progress))
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('argument', nargs=1, required=False)
+@click.argument('argument2', nargs=1, required=False)
+@click.option('--paths-to-mutate', type=click.STRING)
+@click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
+@click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
+@click.option('--paths-to-exclude', type=click.STRING)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--runner')
+@click.option('--use-coverage', is_flag=True, default=False)
+@click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--tests-dir')
+@click.option('-m', '--test-time-multiplier', default=2.0, type=float)
+@click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
+@click.option('--dict-synonyms')
+@click.option('--cache-only', is_flag=True, default=False)
+@click.option('--version', is_flag=True, default=False)
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--pre-mutation')
+@click.option('--post-mutation')
+@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@config_from_setup_cfg(
+    dict_synonyms='',
+    paths_to_exclude='',
+    runner=DEFAULT_RUNNER,
+    tests_dir='tests/:test/',
+    pre_mutation=None,
+    post_mutation=None,
+    use_patch_file=None,
+)
+def html(argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
+        backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
+        post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+    """
+commands:\n
+    run [mutation id]\n
+        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
+    results\n
+        Print the results.\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+        Print the IDs of the specified mutant classes (separated by spaces).\n
+    apply [mutation id]\n
+        Apply a mutation on disk.\n
+    show [mutation id]\n
+        Show a mutation diff.\n
+    show [path to file]\n
+        Show all mutation diffs for this file.\n
+    junitxml\n
+        Show a mutation diff with junitxml format.
+    """
+    if test_time_base is None:  # click sets the default=0.0 to None
+        test_time_base = 0.0
+    if test_time_multiplier is None:  # click sets the default=0.0 to None
+        test_time_multiplier = 0.0
+    sys.exit(main("html", argument, argument2, paths_to_mutate, disable_mutation_types, 
                   enable_mutation_types, backup, runner,
                   tests_dir, test_time_multiplier, test_time_base,
                   swallow_output, use_coverage, dict_synonyms, cache_only,
