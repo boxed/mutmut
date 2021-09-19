@@ -661,14 +661,15 @@ Survived 🙁 (2)
 """.strip()
 
 
-def test_html_output(filesystem):
-    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+def test_html_output(surviving_mutants_filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    print(repr(result.output))
     result = CliRunner().invoke(climain, ['html'])
     assert os.path.isfile("html/index.html")
     with open("html/index.html") as f:
         assert f.read() == (
             '<h1>Mutation testing report</h1>'
-            'Killed 14 out of 14 mutants'
+            'Killed 0 out of 2 mutants'
             '<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
-            '<tr><td><a href="foo.py.html">foo.py</a></td><td>14</td><td>14</td><td>100.00</td><td>0</td>'
+            '<tr><td><a href="foo.py.html">foo.py</a></td><td>2</td><td>0</td><td>0.00</td><td>2</td>'
             '</table></body></html>')
