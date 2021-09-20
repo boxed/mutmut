@@ -499,7 +499,7 @@ def test_output_result_ids(filesystem):
 def test_enable_single_mutation_type(filesystem):
     result = CliRunner().invoke(climain, [
         'run', '--paths-to-mutate=foo.py', "--simple-output", "--enable-mutation-types=operator"
-        ], catch_exceptions=False)
+    ], catch_exceptions=False)
     print(repr(result.output))
     assert '3/3  KILLED 3  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
 
@@ -507,7 +507,7 @@ def test_enable_single_mutation_type(filesystem):
 def test_enable_multiple_mutation_types(filesystem):
     result = CliRunner().invoke(climain, [
         'run', '--paths-to-mutate=foo.py', "--simple-output", "--enable-mutation-types=operator,number"
-        ], catch_exceptions=False)
+    ], catch_exceptions=False)
     print(repr(result.output))
     assert '8/8  KILLED 8  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
 
@@ -515,7 +515,7 @@ def test_enable_multiple_mutation_types(filesystem):
 def test_disable_single_mutation_type(filesystem):
     result = CliRunner().invoke(climain, [
         'run', '--paths-to-mutate=foo.py', "--simple-output", "--disable-mutation-types=number"
-        ], catch_exceptions=False)
+    ], catch_exceptions=False)
     print(repr(result.output))
     assert '9/9  KILLED 9  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
 
@@ -523,19 +523,19 @@ def test_disable_single_mutation_type(filesystem):
 def test_disable_multiple_mutation_types(filesystem):
     result = CliRunner().invoke(climain, [
         'run', '--paths-to-mutate=foo.py', "--simple-output", "--disable-mutation-types=operator,number"
-        ], catch_exceptions=False)
+    ], catch_exceptions=False)
     print(repr(result.output))
     assert '6/6  KILLED 6  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 0  SKIPPED 0' in repr(result.output)
 
 
 @pytest.mark.parametrize(
-    "option", ["--enable-mutation-types", "--disable-mutation-types"] 
+    "option", ["--enable-mutation-types", "--disable-mutation-types"]
 )
 def test_select_unknown_mutation_type(option):
     result = CliRunner().invoke(
-        climain, 
+        climain,
         [
-            "run", 
+            "run",
             f"{option}=foo,bar",
         ]
     )
@@ -545,10 +545,10 @@ def test_select_unknown_mutation_type(option):
 
 def test_enable_and_disable_mutation_type_are_exclusive():
     result = CliRunner().invoke(
-        climain, 
+        climain,
         [
-            "run", 
-            "--enable-mutation-types=operator", 
+            "run",
+            "--enable-mutation-types=operator",
             "--disable-mutation-types=string",
         ]
     )
@@ -582,7 +582,7 @@ def test_show_single_id(surviving_mutants_filesystem):
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
- 
+
  def foo(a, b):
 -    result = a + b
 +    result = a - b
@@ -609,18 +609,18 @@ Survived 🙁 (2)
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
- 
+
  def foo(a, b):
 -    result = a + b
 +    result = a - b
      return result
- 
+
 
 # mutant 2
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
- 
+
  def foo(a, b):
 -    result = a + b
 +    result = None
@@ -647,18 +647,18 @@ Survived 🙁 (2)
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
- 
+
  def foo(a, b):
 -    result = a + b
 +    result = a - b
      return result
- 
+
 
 # mutant 2
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
- 
+
  def foo(a, b):
 -    result = a + b
 +    result = None

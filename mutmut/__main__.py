@@ -81,6 +81,7 @@ null_out = open(os.devnull, 'w')
 
 DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
+
 @click.group(context_settings=dict(help_option_names=['-h', '--help']))
 def climain():
     """
@@ -125,7 +126,7 @@ def version():
     use_patch_file=None,
 )
 def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
-        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
         dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
         simple_output, no_progress):
     """
@@ -137,9 +138,9 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
         test_time_multiplier = 0.0
 
     sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
-                  tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
-                  dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-                  simple_output, no_progress))
+                    tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
+                    dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+                    simple_output, no_progress))
 
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -235,10 +236,10 @@ def html(dict_synonyms):
     sys.exit(0)
 
 
-def do_run(argument, paths_to_mutate, disable_mutation_types, 
-         enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
-         swallow_output, use_coverage, dict_synonyms, cache_only, pre_mutation, post_mutation,
-         use_patch_file, paths_to_exclude, simple_output, no_progress):
+def do_run(argument, paths_to_mutate, disable_mutation_types,
+           enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
+           swallow_output, use_coverage, dict_synonyms, cache_only, pre_mutation, post_mutation,
+           use_patch_file, paths_to_exclude, simple_output, no_progress):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -335,7 +336,7 @@ Legend for output:
 """.format(**output_legend))
     if runner is DEFAULT_RUNNER:
         try:
-            import pytest
+            import pytest  # noqa
         except ImportError:
             runner = 'python -m unittest'
 
