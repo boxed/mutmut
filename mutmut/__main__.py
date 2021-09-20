@@ -102,7 +102,6 @@ def version():
 @click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
 @click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
 @click.option('--paths-to-exclude', type=click.STRING)
-@click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
@@ -125,7 +124,7 @@ def version():
     post_mutation=None,
     use_patch_file=None,
 )
-def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, backup, runner,
+def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
         tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
         dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
         simple_output, no_progress):
@@ -137,7 +136,7 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
 
-    sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, backup, runner,
+    sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
                   tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
                   dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
                   simple_output, no_progress))
@@ -237,7 +236,7 @@ def html(dict_synonyms):
 
 
 def do_run(argument, paths_to_mutate, disable_mutation_types, 
-         enable_mutation_types, backup, runner, tests_dir, test_time_multiplier, test_time_base,
+         enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
          swallow_output, use_coverage, dict_synonyms, cache_only, pre_mutation, post_mutation,
          use_patch_file, paths_to_exclude, simple_output, no_progress):
     """return exit code, after performing an mutation test run.
@@ -379,7 +378,6 @@ Legend for output:
         covered_lines_by_filename=covered_lines_by_filename,
         coverage_data=coverage_data,
         baseline_time_elapsed=baseline_time_elapsed,
-        backup=backup,
         dict_synonyms=dict_synonyms,
         using_testmon=using_testmon,
         cache_only=cache_only,
