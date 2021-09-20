@@ -15,14 +15,14 @@ def basic_filesystem(tmpdir):
     test_file.write("""
 from foo import add
 
-def test_add(): 
+def test_add():
     assert add(1, 1) == 2
 """)
     mutmut_config_py = tmpdir / "mutmut_config.py"
-    mutmut_config_py.write(f"""
+    mutmut_config_py.write("""
 from pathlib import Path
 
-def init(): 
+def init():
     Path("init_hook").touch()
 
 def pre_mutation(context):
@@ -42,7 +42,7 @@ def set_working_dir_and_path(basic_filesystem):
     os.chdir(basic_filesystem)
     if str(basic_filesystem) in sys.path:
         sys.path.remove(str(basic_filesystem))
-    
+
     yield basic_filesystem
 
     sys.path = original_path
@@ -51,7 +51,7 @@ def set_working_dir_and_path(basic_filesystem):
 
 @pytest.mark.usefixtures("set_working_dir_and_path")
 def test_hooks(basic_filesystem):
-    subprocess.check_output(["python",  "-m", "mutmut", "run", "--paths-to-mutate=foo.py"])
+    subprocess.check_output(["python", "-m", "mutmut", "run", "--paths-to-mutate=foo.py"])
     assert (basic_filesystem / "init_hook").exists(), "init was not called."
     assert (basic_filesystem / "pre_mutation_hook").exists(), "pre_mutation was not called."
     assert (basic_filesystem / "pre_mutation_ast_hook").exists(), "pre_mutation_ast was not called."
