@@ -8,6 +8,10 @@ Changelog
 
 * Fixed error where ``mutmut_config.init()`` was not called when running without explicitly having set ``PYTHONPATH``
 
+* Use ``Click``'s subcommand feature to refactor the command line interface. For the end user, this can now run ``mutmut [COMMAND] -h``
+  to check which parameters are relevant to this specific subcommand. The change is backwards compatible, and all existing commands
+  work the same as before, with the exception of ``mutmut --version``, which now has to be ``mutmut version``.
+
 2.2.0
 ~~~~~
 

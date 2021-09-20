@@ -808,7 +808,7 @@ def run_mutation(context: Context, callback) -> str:
 class Config(object):
     def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
-                 backup, dict_synonyms, total, using_testmon, cache_only,
+                 dict_synonyms, total, using_testmon, cache_only,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
                  coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress):
         self.swallow_output = swallow_output
@@ -817,7 +817,6 @@ class Config(object):
         self.baseline_time_elapsed = baseline_time_elapsed
         self.test_time_multipler = test_time_multiplier
         self.test_time_base = test_time_base
-        self.backup = backup
         self.dict_synonyms = dict_synonyms
         self.total = total
         self.using_testmon = using_testmon

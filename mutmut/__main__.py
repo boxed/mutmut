@@ -81,15 +81,27 @@ null_out = open(os.devnull, 'w')
 
 DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('command', nargs=1, required=False)
+@click.group(context_settings=dict(help_option_names=['-h', '--help']))
+def climain():
+    """
+    Mutation testing system for Python.
+    """
+    pass
+
+
+@climain.command()
+def version():
+    """Show the version and exit."""
+    print("mutmut version {}".format(__version__))
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('argument', nargs=1, required=False)
-@click.argument('argument2', nargs=1, required=False)
 @click.option('--paths-to-mutate', type=click.STRING)
 @click.option('--disable-mutation-types', type=click.STRING, help='Skip the given types of mutations.')
 @click.option('--enable-mutation-types', type=click.STRING, help='Only perform given types of mutations.')
 @click.option('--paths-to-exclude', type=click.STRING)
-@click.option('--backup/--no-backup', default=False)
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
@@ -99,9 +111,6 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 @click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--cache-only', is_flag=True, default=False)
-@click.option('--version', is_flag=True, default=False)
-@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
-@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
 @click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
@@ -115,54 +124,126 @@ DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
     post_mutation=None,
     use_patch_file=None,
 )
-def climain(command, argument, argument2, paths_to_mutate, disable_mutation_types, enable_mutation_types,
-            backup, runner, tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
-            dict_synonyms, cache_only, version, suspicious_policy, untested_policy, pre_mutation, 
-            post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress):
+def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
+        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+        dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+        simple_output, no_progress):
     """
-commands:\n
-    run [mutation id]\n
-        Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.\n
-    results\n
-        Print the results.\n
-    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
-        Print the IDs of the specified mutant classes (separated by spaces).\n
-    apply [mutation id]\n
-        Apply a mutation on disk.\n
-    show [mutation id]\n
-        Show a mutation diff.\n
-    show [path to file]\n
-        Show all mutation diffs for this file.\n
-    junitxml\n
-        Show a mutation diff with junitxml format.
+    Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.
     """
     if test_time_base is None:  # click sets the default=0.0 to None
         test_time_base = 0.0
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
-    sys.exit(main(command, argument, argument2, paths_to_mutate, disable_mutation_types, 
-                  enable_mutation_types, backup, runner,
-                  tests_dir, test_time_multiplier, test_time_base,
-                  swallow_output, use_coverage, dict_synonyms, cache_only,
-                  version, suspicious_policy, untested_policy, pre_mutation,
-                  post_mutation, use_patch_file, paths_to_exclude, simple_output,
-                  no_progress))
+
+    sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
+                  tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage, 
+                  dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+                  simple_output, no_progress))
 
 
-def main(command, argument, argument2, paths_to_mutate, disable_mutation_types, 
-         enable_mutation_types, backup, runner, tests_dir, test_time_multiplier, test_time_base,
-         swallow_output, use_coverage, dict_synonyms, cache_only, version,
-         suspicious_policy, untested_policy, pre_mutation, post_mutation,
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+def results():
+    """
+    Print the results.
+    """
+    print_result_cache()
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('status', nargs=1, required=True)
+def result_ids(status):
+    """
+    Print the IDs of the specified mutant classes (separated by spaces).\n
+    result-ids survived (or any other of: killed,timeout,suspicious,skipped,untested)\n
+    """
+    if not status or status not in MUTANT_STATUSES:
+        raise click.BadArgumentUsage(f'The result-ids command needs a status class of mutants '
+                                     f'(one of : {set(MUTANT_STATUSES.keys())}) but was {status}')
+    print_result_ids_cache(status)
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('mutation-id', nargs=1, required=True)
+@click.option('--backup/--no-backup', default=False)
+@click.option('--dict-synonyms')
+@config_from_setup_cfg(
+    dict_synonyms='',
+)
+def apply(mutation_id, backup, dict_synonyms):
+    """
+    Apply a mutation on disk.
+    """
+    do_apply(mutation_id, dict_synonyms, backup)
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('id-or-file', nargs=1, required=False)
+@click.argument('only-filenames', nargs=1, required=False)  # TODO: this could be changed to be an option, but this would be a not backwards compatible change to the CLI
+@click.option('--dict-synonyms')
+@config_from_setup_cfg(
+    dict_synonyms='',
+)
+def show(id_or_file, only_filenames, dict_synonyms):
+    """
+    Show a mutation diff.
+    """
+    if not id_or_file:
+        print_result_cache()
+        sys.exit(0)
+
+    if id_or_file == 'all':
+        print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=only_filenames)
+        sys.exit(0)
+
+    if os.path.isfile(id_or_file):
+        print_result_cache(show_diffs=True, only_this_file=id_or_file)
+        sys.exit(0)
+
+    print(get_unified_diff(id_or_file, dict_synonyms))
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.option('--dict-synonyms')
+@click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
+@config_from_setup_cfg(
+    dict_synonyms='',
+)
+def junitxml(dict_synonyms, suspicious_policy, untested_policy):
+    """
+    Show a mutation diff with junitxml format.
+    """
+    print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
+    sys.exit(0)
+
+
+@climain.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.option('--dict-synonyms')
+@config_from_setup_cfg(
+    dict_synonyms='',
+)
+def html(dict_synonyms):
+    """
+    Generate a HTML report of surviving mutants.
+    """
+    create_html_report(dict_synonyms)
+    sys.exit(0)
+
+
+def do_run(argument, paths_to_mutate, disable_mutation_types, 
+         enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
+         swallow_output, use_coverage, dict_synonyms, cache_only, pre_mutation, post_mutation,
          use_patch_file, paths_to_exclude, simple_output, no_progress):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
     :rtype: int
     """
-    if version:
-        print("mutmut version {}".format(__version__))
-        return 0
-
     if use_coverage and use_patch_file:
         raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
@@ -180,56 +261,10 @@ def main(command, argument, argument2, paths_to_mutate, disable_mutation_types,
     if invalid_types:
         raise click.BadArgumentUsage(f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
 
-    valid_commands = ['run', 'results', 'result-ids', 'apply', 'show', 'junitxml', 'html']
-    if command not in valid_commands:
-        raise click.BadArgumentUsage('{} is not a valid command, must be one of {}'.format(command, ', '.join(valid_commands)))
-
-    if command == 'results' and argument:
-        raise click.BadArgumentUsage('The {} command takes no arguments'.format(command))
-
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
-
-    if command in ('show', 'diff'):
-        if not argument:
-            print_result_cache()
-            return 0
-
-        if argument == 'all':
-            print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=argument2)
-            return 0
-
-        if os.path.isfile(argument):
-            print_result_cache(show_diffs=True, only_this_file=argument)
-            return 0
-
-        print(get_unified_diff(argument, dict_synonyms))
-        return 0
 
     if use_coverage and not exists('.coverage'):
         raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
-
-    if command == 'results':
-        print_result_cache()
-        return 0
-
-    if command == 'result-ids':
-        if not argument or argument not in MUTANT_STATUSES:
-            raise click.BadArgumentUsage(f'The {command} command needs a status class of mutants '
-                                         f'(one of : {set(MUTANT_STATUSES.keys())}) but was {argument}')
-        print_result_ids_cache(argument)
-        return 0
-
-    if command == 'junitxml':
-        print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy)
-        return 0
-
-    if command == 'html':
-        create_html_report(dict_synonyms)
-        return 0
-
-    if command == 'apply':
-        do_apply(argument, dict_synonyms, backup)
-        return 0
 
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
@@ -329,9 +364,6 @@ Legend for output:
             assert use_patch_file
             covered_lines_by_filename = read_patch_data(use_patch_file)
 
-    if command != 'run':
-        raise click.BadArgumentUsage("Invalid command {}".format(command))
-
     mutations_by_file = {}
 
     paths_to_exclude = paths_to_exclude or ''
@@ -346,7 +378,6 @@ Legend for output:
         covered_lines_by_filename=covered_lines_by_filename,
         coverage_data=coverage_data,
         baseline_time_elapsed=baseline_time_elapsed,
-        backup=backup,
         dict_synonyms=dict_synonyms,
         using_testmon=using_testmon,
         cache_only=cache_only,
