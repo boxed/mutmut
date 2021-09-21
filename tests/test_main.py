@@ -582,7 +582,7 @@ def test_show_single_id(surviving_mutants_filesystem):
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
-
+ 
  def foo(a, b):
 -    result = a + b
 +    result = a - b
@@ -609,18 +609,18 @@ Survived 🙁 (2)
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
-
+ 
  def foo(a, b):
 -    result = a + b
 +    result = a - b
      return result
-
+ 
 
 # mutant 2
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
-
+ 
  def foo(a, b):
 -    result = a + b
 +    result = None
@@ -647,18 +647,18 @@ Survived 🙁 (2)
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
-
+ 
  def foo(a, b):
 -    result = a + b
 +    result = a - b
      return result
-
+ 
 
 # mutant 2
 --- foo.py
 +++ foo.py
 @@ -1,5 +1,5 @@
-
+ 
  def foo(a, b):
 -    result = a + b
 +    result = None
