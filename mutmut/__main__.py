@@ -111,7 +111,6 @@ def version():
 @click.option('-b', '--test-time-base', default=0.0, type=float)
 @click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
-@click.option('--cache-only', is_flag=True, default=False)
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
 @click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
@@ -127,7 +126,7 @@ def version():
 )
 def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
         tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
-        dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+        dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
         simple_output, no_progress):
     """
     Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.
@@ -139,7 +138,7 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
 
     sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
                     tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
-                    dict_synonyms, cache_only, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+                    dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
                     simple_output, no_progress))
 
 
@@ -238,7 +237,7 @@ def html(dict_synonyms):
 
 def do_run(argument, paths_to_mutate, disable_mutation_types,
            enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
-           swallow_output, use_coverage, dict_synonyms, cache_only, pre_mutation, post_mutation,
+           swallow_output, use_coverage, dict_synonyms, pre_mutation, post_mutation,
            use_patch_file, paths_to_exclude, simple_output, no_progress):
     """return exit code, after performing an mutation test run.
 
@@ -381,7 +380,6 @@ Legend for output:
         baseline_time_elapsed=baseline_time_elapsed,
         dict_synonyms=dict_synonyms,
         using_testmon=using_testmon,
-        cache_only=cache_only,
         tests_dirs=tests_dirs,
         hash_of_tests=current_hash_of_tests,
         test_time_multiplier=test_time_multiplier,
