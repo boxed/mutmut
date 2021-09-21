@@ -182,12 +182,11 @@ def apply(mutation_id, backup, dict_synonyms):
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('id-or-file', nargs=1, required=False)
-@click.argument('only-filenames', nargs=1, required=False)  # TODO: this could be changed to be an option, but this would be a not backwards compatible change to the CLI
 @click.option('--dict-synonyms')
 @config_from_setup_cfg(
     dict_synonyms='',
 )
-def show(id_or_file, only_filenames, dict_synonyms):
+def show(id_or_file, dict_synonyms):
     """
     Show a mutation diff.
     """
@@ -196,7 +195,7 @@ def show(id_or_file, only_filenames, dict_synonyms):
         sys.exit(0)
 
     if id_or_file == 'all':
-        print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms, print_only_filename=only_filenames)
+        print_result_cache(show_diffs=True, dict_synonyms=dict_synonyms)
         sys.exit(0)
 
     if os.path.isfile(id_or_file):
