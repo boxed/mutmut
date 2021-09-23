@@ -575,95 +575,22 @@ Survived 🙁 (2)
 """.strip()
 
 
-def test_show_single_id(surviving_mutants_filesystem):
+def test_show_single_id(surviving_mutants_filesystem, testdata):
     CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     result = CliRunner().invoke(climain, ['show', '1'])
-    assert result.output.strip() == """
---- foo.py
-+++ foo.py
-@@ -1,5 +1,5 @@
-
- def foo(a, b):
--    result = a + b
-+    result = a - b
-     return result
-""".strip()
+    assert result.output.strip() == (testdata / "surviving_mutants_show_id_1.txt").read_text("utf8").strip()
 
 
-def test_show_all(surviving_mutants_filesystem):
+def test_show_all(surviving_mutants_filesystem, testdata):
     CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     result = CliRunner().invoke(climain, ['show', 'all'])
-    assert result.output.strip() == """
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
+    assert result.output.strip() == (testdata / "surviving_mutants_show_all.txt").read_text("utf8").strip()
 
 
-Survived 🙁 (2)
-
----- foo.py (2) ----
-
-# mutant 1
---- foo.py
-+++ foo.py
-@@ -1,5 +1,5 @@
-
- def foo(a, b):
--    result = a + b
-+    result = a - b
-     return result
-
-
-# mutant 2
---- foo.py
-+++ foo.py
-@@ -1,5 +1,5 @@
-
- def foo(a, b):
--    result = a + b
-+    result = None
-     return result
-""".strip()
-
-
-def test_show_for_file(surviving_mutants_filesystem):
+def test_show_for_file(surviving_mutants_filesystem, testdata):
     CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     result = CliRunner().invoke(climain, ['show', 'foo.py'])
-    assert result.output.strip() == """
-To apply a mutant on disk:
-    mutmut apply <id>
-
-To show a mutant:
-    mutmut show <id>
-
-
-Survived 🙁 (2)
-
----- foo.py (2) ----
-
-# mutant 1
---- foo.py
-+++ foo.py
-@@ -1,5 +1,5 @@
-
- def foo(a, b):
--    result = a + b
-+    result = a - b
-     return result
-
-
-# mutant 2
---- foo.py
-+++ foo.py
-@@ -1,5 +1,5 @@
-
- def foo(a, b):
--    result = a + b
-+    result = None
-     return result
-""".strip()
+    assert result.output.strip() == (testdata / "surviving_mutants_show_foo_py.txt").read_text("utf8").strip()
 
 
 def test_html_output(surviving_mutants_filesystem):

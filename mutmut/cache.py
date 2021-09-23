@@ -149,7 +149,7 @@ def ranges(numbers):
 
 @init_db
 @db_session
-def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename=None, only_this_file=None):
+def print_result_cache(show_diffs=False, dict_synonyms=None, only_this_file=None):
     print('To apply a mutant on disk:')
     print('    mutmut apply <id>')
     print('')
@@ -163,9 +163,6 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, print_only_filename
             print('')
             print("{} ({})".format(title, len(mutant_list)))
             for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
-                if print_only_filename is not None and print_only_filename != filename:
-                    continue
-
                 if only_this_file and filename != only_this_file:
                     continue
 
