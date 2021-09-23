@@ -1,0 +1,8 @@
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = a - b
+     return result

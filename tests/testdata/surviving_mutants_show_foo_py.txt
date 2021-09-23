@@ -1,0 +1,31 @@
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (2)
+
+---- foo.py (2) ----
+
+# mutant 1
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = a - b
+     return result
+ 
+
+# mutant 2
+--- foo.py
++++ foo.py
+@@ -1,5 +1,5 @@
+ 
+ def foo(a, b):
+-    result = a + b
++    result = None
+     return result
