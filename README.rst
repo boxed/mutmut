@@ -198,7 +198,7 @@ If you have a large test suite or long running tests, it can be beneficial to na
 run for each mutant down to the tests that have a chance of killing it.
 Determining the relevant subset of tests depends on your project, its structure, and the metadata that you
 know about your tests.
-``mutmut`` provides information like the file to mutate and [coverage contexts](https://coverage.readthedocs.io/en/coverage-5.5/contexts.html)
+``mutmut`` provides information like the file to mutate and `coverage contexts <https://coverage.readthedocs.io/en/coverage-5.5/contexts.html>`_
 (if used with the ``--use-coverage`` switch).
 You can set the ``context.config.test_command`` in the ``pre_mutation(context)`` hook of ``mutmut_config.py``.
 The ``test_command`` is reset after each mutant, so you don't have to explicitly (re)set it for each mutant.
@@ -207,7 +207,7 @@ This section gives examples to show how this could be done for some concrete use
 All examples use the default test runner (``python -m pytest -x --assert=plain``).
 
 Selection based on source and test layout
-=========================================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If the location of the test module has a strict correlation with your source code layout, you can simply
 construct the path to the corresponding test file from ``context.filename``.
@@ -226,6 +226,7 @@ production code:
 Your ``mutmut_config.py`` in this case would look like this:
 
 .. code-block:: python
+
     import os.path
 
     def pre_mutation(context):
@@ -234,7 +235,7 @@ Your ``mutmut_config.py`` in this case would look like this:
         context.config.test_command += ' ' + os.path.join(dirname, testfile)
 
 Selection based on imports
-==========================
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you can't rely on the directory structure or naming of the test files, you may assume that the tests most likely
 to kill the mutant are located in test files that directly import the module that is affected by the mutant.
@@ -284,9 +285,9 @@ imports which module, and then lookup all test files importing the mutated modul
         context.config.test_command += f"{' '.join(tests_to_run)}"
 
 Selection based on coverage contexts
-====================================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you recorded [coverage contexts](https://coverage.readthedocs.io/en/coverage-5.5/contexts.html) and use
+If you recorded `coverage contexts <https://coverage.readthedocs.io/en/coverage-5.5/contexts.html>`_ and use
 the ``--use-coverage`` switch, you can access this coverage data inside the ``pre_mutation(context)`` hook
 via the ``context.config.coverage_data`` attribute. This attribute is a dictionary in the form
 ``{filename: {lineno: [contexts]}}``.
@@ -330,7 +331,7 @@ You will have to inspect your ``.coverage`` database using the [Coverage.py API]
 first to determine how you can extract the correct information to use with your test runner.
 
 Making things more robust
-=========================
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Despite your best efforts in picking the right subset of tests, it may happen that the mutant survives because the test which is able
 to kill it was not included in the test set. You can tell ``mutmut`` to re-run the full test suite in that case, to verify that this
