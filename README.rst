@@ -327,7 +327,7 @@ Pay attention that the format of the context name varies depending on the tool y
 For example, the ``pytest-cov`` plugin uses ``::`` as separator between module and test function.
 Furthermore, not all tools are able to correctly pick up the correct contexts. ``coverage.py`` for instance is (at the time of writing)
 unable to pick up tests that are inside a class when using ``pytest``.
-You will have to inspect your ``.coverage`` database using the [Coverage.py API](https://coverage.readthedocs.io/en/coverage-5.5/api.html)
+You will have to inspect your ``.coverage`` database using the `Coverage.py API <https://coverage.readthedocs.io/en/coverage-5.5/api.html>`_
 first to determine how you can extract the correct information to use with your test runner.
 
 Making things more robust
