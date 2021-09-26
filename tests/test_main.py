@@ -322,7 +322,7 @@ def test_mutant_only_killed_after_rerun(filesystem):
     mutmut_config = filesystem / "mutmut_config.py"
     mutmut_config.write("""
 def pre_mutation(context):
-    context.config.test_command = "True"
+    context.config.test_command = "echo True"
 """)
     CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--rerun-all"], catch_exceptions=False)
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
@@ -341,7 +341,7 @@ def test_no_rerun_if_not_specified(filesystem):
     mutmut_config = filesystem / "mutmut_config.py"
     mutmut_config.write("""
 def pre_mutation(context):
-    context.config.test_command = "True"
+    context.config.test_command = "echo True"
 """)
     CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
     result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
