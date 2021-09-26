@@ -318,6 +318,51 @@ def test_full_run_no_surviving_mutants_junit(filesystem):
     assert int(root.attrib['disabled']) == 0
 
 
+def test_mutant_only_killed_after_rerun(filesystem):
+    mutmut_config = filesystem / "mutmut_config.py"
+    mutmut_config.write("""
+def pre_mutation(context):
+    context.config.test_command = "True"
+""")
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--rerun-all"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+""".strip()
+
+
+def test_no_rerun_if_not_specified(filesystem):
+    mutmut_config = filesystem / "mutmut_config.py"
+    mutmut_config.write("""
+def pre_mutation(context):
+    context.config.test_command = "True"
+""")
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['results'], catch_exceptions=False)
+    print(repr(result.output))
+    assert result.exit_code == 0
+    assert result.output.strip() == u"""
+To apply a mutant on disk:
+    mutmut apply <id>
+
+To show a mutant:
+    mutmut show <id>
+
+
+Survived 🙁 (14)
+
+---- foo.py (14) ----
+
+1-14
+""".strip()
+
+
 def test_full_run_one_surviving_mutant(filesystem):
     with open(os.path.join(str(filesystem), "tests", "test_foo.py"), 'w') as f:
         f.write(test_file_contents.replace('assert foo(2, 2) is False', ''))

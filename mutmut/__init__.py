@@ -782,6 +782,10 @@ def run_mutation(context: Context, callback) -> str:
         start = time()
         try:
             survived = tests_pass(config=config, callback=callback)
+            if survived and config.test_command != config._default_test_command and config.rerun_all:
+                # rerun the whole test suite to be sure the mutant can not be killed by other tests
+                config.test_command = config._default_test_command
+                survived = tests_pass(config=config, callback=callback)
         except TimeoutError:
             return BAD_TIMEOUT
 
@@ -798,6 +802,7 @@ def run_mutation(context: Context, callback) -> str:
 
     finally:
         move(context.filename + '.bak', context.filename)
+        config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
 
         if config.post_mutation:
             result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
@@ -810,9 +815,9 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  dict_synonyms, total, using_testmon,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress):
+                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress, rerun_all):
         self.swallow_output = swallow_output
-        self.test_command = test_command
+        self.test_command = self._default_test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
         self.baseline_time_elapsed = baseline_time_elapsed
         self.test_time_multipler = test_time_multiplier
@@ -828,6 +833,7 @@ class Config(object):
         self.paths_to_mutate = paths_to_mutate
         self.mutation_types_to_apply = mutation_types_to_apply
         self.no_progress = no_progress
+        self.rerun_all = rerun_all
 
 
 def tests_pass(config: Config, callback) -> bool:
@@ -1173,7 +1179,8 @@ def run_mutation_tests(config, progress, mutations_by_file):
 
 def read_coverage_data():
     """
-    :rtype: CoverageData or None
+    Reads the coverage database and returns a dictionary which maps the filenames to the covered lines and their contexts.
+    :rtype: dict[str, dict[int, list[str]]]
     """
     try:
         # noinspection PyPackageRequirements,PyUnresolvedReferences
@@ -1183,7 +1190,7 @@ def read_coverage_data():
     cov = Coverage('.coverage')
     cov.load()
     data = cov.get_data()
-    return {filepath: data.lines(filepath) for filepath in data.measured_files()}
+    return {filepath: data.contexts_by_lineno(filepath) for filepath in data.measured_files()}
 
 
 def read_patch_data(patch_file_path):

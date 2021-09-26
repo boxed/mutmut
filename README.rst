@@ -191,6 +191,153 @@ Note that ``--disable-mutation-types`` and ``--enable-mutation-types`` are exclu
 be combined.
 
 
+Selecting tests to run
+----------------------
+
+If you have a large test suite or long running tests, it can be beneficial to narrow the set of tests to
+run for each mutant down to the tests that have a chance of killing it.
+Determining the relevant subset of tests depends on your project, its structure, and the metadata that you
+know about your tests.
+``mutmut`` provides information like the file to mutate and [coverage contexts](https://coverage.readthedocs.io/en/coverage-5.5/contexts.html)
+(if used with the ``--use-coverage`` switch).
+You can set the ``context.config.test_command`` in the ``pre_mutation(context)`` hook of ``mutmut_config.py``.
+The ``test_command`` is reset after each mutant, so you don't have to explicitly (re)set it for each mutant.
+
+This section gives examples to show how this could be done for some concrete use cases.
+All examples use the default test runner (``python -m pytest -x --assert=plain``).
+
+Selection based on source and test layout
+=========================================
+
+If the location of the test module has a strict correlation with your source code layout, you can simply
+construct the path to the corresponding test file from ``context.filename``.
+Suppose your layout follows the following structure where the test file is always located right beside the
+production code:
+
+.. code-block:: console
+
+    mypackage
+    ├── production_module.py
+    ├── test_production_module.py
+    └── subpackage
+        ├── submodule.py
+        └── test_submodule.py
+
+Your ``mutmut_config.py`` in this case would look like this:
+
+.. code-block:: python
+    import os.path
+
+    def pre_mutation(context):
+        dirname, filename = os.path.split(context.filename)
+        testfile = "test_" + filename
+        context.config.test_command += ' ' + os.path.join(dirname, testfile)
+
+Selection based on imports
+==========================
+
+If you can't rely on the directory structure or naming of the test files, you may assume that the tests most likely
+to kill the mutant are located in test files that directly import the module that is affected by the mutant.
+Using the ``ast`` module of the Python standard library, you can use the ``init()`` hook to build a map which test file
+imports which module, and then lookup all test files importing the mutated module and only run those:
+
+.. code-block:: python
+
+    import ast
+    from pathlib import Path
+
+    test_imports = {}
+
+
+    class ImportVisitor(ast.NodeVisitor):
+        """Visitor which records which modules are imported."""
+        def __init__(self) -> None:
+            super().__init__()
+            self.imports = []
+
+        def visit_Import(self, node: ast.Import) -> None:
+            for alias in node.names:
+                self.imports.append(alias.name)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            self.imports.append(node.module)
+
+
+    def init():
+        """Find all test files located under the 'tests' directory and create an abstract syntax tree for each.
+        Let the ``ImportVisitor`` find out what modules they import and store the information in a global dictionary
+        which can be accessed by ``pre_mutation(context)``."""
+        test_files = (Path(__file__).parent / "tests").rglob("test*.py")
+        for fpath in test_files:
+            visitor = ImportVisitor()
+            visitor.visit(ast.parse(fpath.read_bytes()))
+            test_imports[str(fpath)] = visitor.imports
+
+
+    def pre_mutation(context):
+        """Construct the module name from the filename and run all test files which import that module."""
+        tests_to_run = []
+        for testfile, imports in test_imports.items():
+            module_name = context.filename.rstrip(".py").replace("/", ".")
+            if module_name in imports:
+                tests_to_run.append(testfile)
+        context.config.test_command += f"{' '.join(tests_to_run)}"
+
+Selection based on coverage contexts
+====================================
+
+If you recorded [coverage contexts](https://coverage.readthedocs.io/en/coverage-5.5/contexts.html) and use
+the ``--use-coverage`` switch, you can access this coverage data inside the ``pre_mutation(context)`` hook
+via the ``context.config.coverage_data`` attribute. This attribute is a dictionary in the form
+``{filename: {lineno: [contexts]}}``.
+
+Let's say you have used the built-in dynamic context option of ``Coverage.py `` by adding the following to
+your ``.coveragerc`` file:
+
+.. code-block:: console
+
+    [run]
+    dynamic_context = test_function
+
+``coverage`` will create a new context for each test function that you run in the form ``module_name.function_name``.
+With ``pytest``, we can use the ``-k`` switch to filter tests that match a given expression.
+
+.. code-block:: python
+    import os.path
+
+    def pre_mutation(context):
+        """Extract the coverage contexts if possible and only run the tests matching this data."""
+        if not context.config.coverage_data:
+            # mutmut was run without ``--use-coverage``
+            return
+        fname = os.path.abspath(context.filename)
+        contexts_for_file = context.config.coverage_data.get(fname, {})
+        contexts_for_line = contexts_for_file.get(context.current_line_index, [])
+        test_names = [
+            ctx.rsplit(".", 1)[-1]  # extract only the final part after the last dot, which is the test function name
+            for ctx in contexts_for_line
+            if ctx  # skip empty strings
+        ]
+        if not test_names:
+            return
+        context.config.test_command += f' -k "{" or ".join(test_names)}"'
+
+Pay attention that the format of the context name varies depending on the tool you use for creating the contexts.
+For example, the ``pytest-cov`` plugin uses ``::`` as separator between module and test function.
+Furthermore, not all tools are able to correctly pick up the correct contexts. ``coverage.py`` for instance is (at the time of writing)
+unable to pick up tests that are inside a class when using ``pytest``.
+You will have to inspect your ``.coverage`` database using the [Coverage.py API](https://coverage.readthedocs.io/en/coverage-5.5/api.html)
+first to determine how you can extract the correct information to use with your test runner.
+
+Making things more robust
+=========================
+
+Despite your best efforts in picking the right subset of tests, it may happen that the mutant survives because the test which is able
+to kill it was not included in the test set. You can tell ``mutmut`` to re-run the full test suite in that case, to verify that this
+mutant indeed survives.
+You can do so by passing the ``--rerun-all`` option to ``mutmut run``. This option is disabled by default.
+
+
 JUnit XML support
 -----------------
 

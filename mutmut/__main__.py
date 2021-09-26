@@ -106,6 +106,9 @@ def version():
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
+@click.option('--rerun-all', is_flag=True, default=False, help='If you modified the test_command in the pre_mutation hook, '
+                                                               'the default test_command (specified by the "runner" option) '
+                                                               'will be executed if the mutant survives with your modified test_command.')
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
@@ -127,7 +130,7 @@ def version():
 def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
         tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
         dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-        simple_output, no_progress):
+        simple_output, no_progress, rerun_all):
     """
     Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.
     """
@@ -139,7 +142,7 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
     sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
                     tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
                     dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-                    simple_output, no_progress))
+                    simple_output, no_progress, rerun_all))
 
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -237,7 +240,7 @@ def html(dict_synonyms):
 def do_run(argument, paths_to_mutate, disable_mutation_types,
            enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
            swallow_output, use_coverage, dict_synonyms, pre_mutation, post_mutation,
-           use_patch_file, paths_to_exclude, simple_output, no_progress):
+           use_patch_file, paths_to_exclude, simple_output, no_progress, rerun_all):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -387,7 +390,8 @@ Legend for output:
         post_mutation=post_mutation,
         paths_to_mutate=paths_to_mutate,
         mutation_types_to_apply=mutation_types_to_apply,
-        no_progress=no_progress
+        no_progress=no_progress,
+        rerun_all=rerun_all
     )
 
     parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs)
