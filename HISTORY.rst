@@ -12,6 +12,9 @@ Changelog
   to check which parameters are relevant to this specific subcommand. The change is backwards compatible, and all existing commands
   work the same as before, with the exception of ``mutmut --version``, which now has to be ``mutmut version``.
 
+* You can now set the ``context.config.test_command`` in the ``mutmut_config.pre_mutation(context)`` hook to select the relevant subset of tests.
+  Coverage contexts are now accessible in ``config.coverage_data`` to help with the selection.
+
 2.2.0
 ~~~~~
 
