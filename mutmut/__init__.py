@@ -533,7 +533,9 @@ class Context(object):
             }
         return self._pragma_no_mutate_lines
 
-    def should_mutate(self):
+    def should_mutate(self, node):
+        if self.config and node.type not in self.config.mutation_types_to_apply:
+            return False
         if self.mutation_id == ALL:
             return True
         return self.mutation_id in (ALL, self.mutation_id_of_current_index)
@@ -599,9 +601,6 @@ def mutate_node(node, context):
             if context.performed_mutation_ids and context.mutation_id != ALL:
                 return
 
-        if context.config and node.type not in context.config.mutation_types_to_apply:
-            return
-
         mutation = mutations_by_type.get(node.type)
 
         if mutation is None:
@@ -634,7 +633,7 @@ def mutate_node(node, context):
                 if new is not None and new != old:
                     if hasattr(mutmut_config, 'pre_mutation_ast'):
                         mutmut_config.pre_mutation_ast(context=context)
-                    if context.should_mutate():
+                    if context.should_mutate(node):
                         context.performed_mutation_ids.append(context.mutation_id_of_current_index)
                         setattr(node, key, new)
                     context.index += 1

@@ -101,6 +101,14 @@ def test_nothing(): assert True
 
     create_filesystem(tmpdir, foo_py, test_py)
 
+    yield tmpdir
+
+    # This is a hack to get pony to forget about the old db file
+    # otherwise Pony thinks we've already created the tables
+    import mutmut.cache
+    mutmut.cache.db.provider = None
+    mutmut.cache.db.schema = None
+
 
 def create_filesystem(tmpdir, file_to_mutate_contents, test_file_contents):
     test_dir = str(tmpdir)
@@ -599,6 +607,48 @@ def test_enable_and_disable_mutation_type_are_exclusive():
     )
     assert result.exception.code == 2
     assert "You can't combine --disable-mutation-types and --enable-mutation-types" in result.output
+
+
+@pytest.mark.parametrize(
+    "mutation_type, expected_mutation",
+    [
+        ("expr_stmt", "result = None"),
+        ("operator", "result = a - b"),
+    ]
+)
+def test_show_mutant_after_run_with_disabled_mutation_types(surviving_mutants_filesystem, mutation_type, expected_mutation):
+    """Test for issue #234: ``mutmut show <id>`` did not show the correct mutant if ``mutmut run`` was
+    run with ``--enable-mutation-types`` or ``--disable-mutation-types``."""
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', f'--enable-mutation-types={mutation_type}'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', '1'])
+    assert f"""
+ def foo(a, b):
+-    result = a + b
++    {expected_mutation}
+     return result
+""" in result.output
+
+
+def test_run_multiple_times_with_different_mutation_types(filesystem):
+    """Running multiple times with different mutation types enabled should append the new mutants to the cache without
+    altering existing mutants."""
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', '--enable-mutation-types=number'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', '1'])
+    assert """
+-c = 1
++c = 2
+""" in result.output
+    CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', '--enable-mutation-types=operator'], catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['show', '1'])
+    assert """
+-c = 1
++c = 2
+""" in result.output, "mutant ID has changed!"
+    result = CliRunner().invoke(climain, ['show', '8'])
+    assert """
+-c += 1
++c -= 1
+""" in result.output, "no new mutation types added!"
 
 
 def test_show(surviving_mutants_filesystem):
