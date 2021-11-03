@@ -227,11 +227,17 @@ def number_mutation(value, **_):
 
     try:
         parsed = int(value, base=base)
+        result = repr(parsed + 1)
     except ValueError:
         # Since it wasn't an int, it must be a float
         parsed = float(value)
+        # This avoids all very small numbers becoming 1.0, and very
+        # large numbers not changing at all
+        if (1e-5 < abs(parsed) < 1e5) or (parsed == 0.0):
+            result = repr(parsed + 1)
+        else:
+            result = repr(parsed * 2)
 
-    result = repr(parsed + 1)
     if not result.endswith(suffix):
         result += suffix
     return result
