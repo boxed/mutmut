@@ -442,17 +442,10 @@ def get_cached_mutation_statuses(filename, mutations, hash_of_tests):
             mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
 
         result[mutation_id] = mutant.status
-        if mutant.status == OK_KILLED:
-            # We assume that if a mutant was killed, a change to the test
-            # suite will mean it's still killed
-            result[mutation_id] = mutant.status
-        else:
-            if mutant.tested_against_hash != hash_of_tests or \
-                    mutant.tested_against_hash == NO_TESTS_FOUND or \
-                    hash_of_tests == NO_TESTS_FOUND:
-                result[mutation_id] = UNTESTED
-            else:
-                result[mutation_id] = mutant.status
+        if mutant.tested_against_hash != hash_of_tests or \
+                mutant.tested_against_hash == NO_TESTS_FOUND or \
+                hash_of_tests == NO_TESTS_FOUND:
+            result[mutation_id] = UNTESTED
 
     return result
 
@@ -467,11 +460,6 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
     mutant = Mutant.get(line=line, index=mutation_id.index)
     if mutant is None:
         mutant = get_or_create(Mutant, line=line, index=mutation_id.index, defaults=dict(status=UNTESTED))
-
-    if mutant.status == OK_KILLED:
-        # We assume that if a mutant was killed, a change to the test
-        # suite will mean it's still killed
-        return OK_KILLED
 
     if mutant.tested_against_hash != hash_of_tests or \
             mutant.tested_against_hash == NO_TESTS_FOUND or \
