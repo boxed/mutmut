@@ -7,11 +7,8 @@ import re
 import shlex
 import subprocess
 import sys
-from configparser import (
-    ConfigParser,
-    NoOptionError,
-    NoSectionError,
-)
+import toml
+from configparser import ConfigParser
 from copy import copy as copy_obj
 from functools import wraps
 from io import (
@@ -858,22 +855,30 @@ def tests_pass(config: Config, callback) -> bool:
     return returncode != 1
 
 
-def config_from_setup_cfg(**defaults):
+def config_from_file(**defaults):
+    def config_from_pyproject_toml() -> dict:
+        try:
+            return toml.load('pyproject.toml')['tool']['mutmut']
+        except (FileNotFoundError, KeyError):
+            return {}
+
+    def config_from_setup_cfg() -> dict:
+        config_parser = ConfigParser()
+        config_parser.read('setup.cfg')
+
+        try:
+            return dict(config_parser['mutmut'])
+        except KeyError:
+            return {}
+
+    config = config_from_pyproject_toml() or config_from_setup_cfg()
+
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            config_parser = ConfigParser()
-            config_parser.read('setup.cfg')
-
-            def s(key, default):
-                try:
-                    return config_parser.get('mutmut', key)
-                except (NoOptionError, NoSectionError):
-                    return default
-
             for k in list(kwargs.keys()):
                 if not kwargs[k]:
-                    kwargs[k] = s(k, defaults.get(k))
+                    kwargs[k] = config.get(k, defaults.get(k))
             f(*args, **kwargs)
 
         return wrapper
@@ -922,7 +927,8 @@ def guess_paths_to_mutate():
     raise FileNotFoundError(
         'Could not figure out where the code to mutate is. '
         'Please specify it on the command line using --paths-to-mutate, '
-        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
+        'or by adding "paths_to_mutate=code_dir" in pyproject.toml or setup.cfg to the [mutmut] '
+        'section.')
 
 
 class Progress(object):
