@@ -21,7 +21,7 @@ from mutmut import (
     __version__,
     mutations_by_type,
     mutmut_config,
-    config_from_setup_cfg,
+    config_from_file,
     guess_paths_to_mutate,
     Config,
     Progress,
@@ -118,7 +118,7 @@ def version():
 @click.option('--post-mutation')
 @click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
 @click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
-@config_from_setup_cfg(
+@config_from_file(
     dict_synonyms='',
     paths_to_exclude='',
     runner=DEFAULT_RUNNER,
@@ -172,7 +172,7 @@ def result_ids(status):
 @click.argument('mutation-id', nargs=1, required=True)
 @click.option('--backup/--no-backup', default=False)
 @click.option('--dict-synonyms')
-@config_from_setup_cfg(
+@config_from_file(
     dict_synonyms='',
 )
 def apply(mutation_id, backup, dict_synonyms):
@@ -186,7 +186,7 @@ def apply(mutation_id, backup, dict_synonyms):
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument('id-or-file', nargs=1, required=False)
 @click.option('--dict-synonyms')
-@config_from_setup_cfg(
+@config_from_file(
     dict_synonyms='',
 )
 def show(id_or_file, dict_synonyms):
@@ -213,7 +213,7 @@ def show(id_or_file, dict_synonyms):
 @click.option('--dict-synonyms')
 @click.option('--suspicious-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
 @click.option('--untested-policy', type=click.Choice(['ignore', 'skipped', 'error', 'failure']), default='ignore')
-@config_from_setup_cfg(
+@config_from_file(
     dict_synonyms='',
 )
 def junitxml(dict_synonyms, suspicious_policy, untested_policy):
@@ -226,7 +226,7 @@ def junitxml(dict_synonyms, suspicious_policy, untested_policy):
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.option('--dict-synonyms')
-@config_from_setup_cfg(
+@config_from_file(
     dict_synonyms='',
 )
 def html(dict_synonyms):
