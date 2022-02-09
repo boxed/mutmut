@@ -304,6 +304,7 @@ your ``.coveragerc`` file:
 With ``pytest``, we can use the ``-k`` switch to filter tests that match a given expression.
 
 .. code-block:: python
+
     import os.path
 
     def pre_mutation(context):
