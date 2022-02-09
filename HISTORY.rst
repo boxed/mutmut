@@ -1,6 +1,28 @@
 Changelog
 ---------
 
+2.4.0
+~~~~~
+
+* Add pyproject support (thanks sed-i)
+
+* Change very small or very large numbers (floats) by a relative amount (thanks Peter Hill)
+
+    This avoids (some) problems with unkillable mutants, for example:
+
+        1e16 -> 1e+16
+
+    which now becomes
+
+        1e16 -> 2e+16
+
+* Fix inconsistent output of `mutmut show` after using `--enable-mutation-types` (thanks Andreas Finkler)
+
+* Improve test selection through ``pre_mutation(context)`` (thanks Andreas Finkler)
+
+* Remove `--cache-only` option and second argument to `mutmut show` (thanks Andreas Finkler)
+
+
 2.3.0
 ~~~~~
 

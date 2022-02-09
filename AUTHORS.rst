@@ -22,3 +22,5 @@ Credits
 * Tomáš Chvátal <tchvatal@suse.com>
 * Felix Divo <https://github.com/felixdivo>
 * Andreas Finkler <andi.finkler@gmail.com>
+* sed-i
+* Peter Hill <peter.hill@york.ac.uk>
