@@ -482,10 +482,9 @@ def test_use_coverage(filesystem):
 
     # remove existent path to check if an exception is thrown
     os.unlink(os.path.join(str(filesystem), 'foo.py'))
-    with pytest.raises(ValueError,
-                       match=r'^Filepaths in .coverage not recognized, try recreating the .coverage file manually.$'):
-        CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
-                           catch_exceptions=False)
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0", "--use-coverage"],
+                                catch_exceptions=False)
+    assert result.exit_code == 2
 
 
 def test_use_patch_file(filesystem):
