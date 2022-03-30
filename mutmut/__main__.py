@@ -8,6 +8,7 @@ from io import (
     open,
 )
 from os.path import exists
+from pathlib import Path
 from shutil import copy
 from time import time
 
@@ -44,9 +45,6 @@ from mutmut.cache import print_result_cache, print_result_ids_cache, \
     hash_of_tests, \
     filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
-
-from collections import namedtuple
-import re
 
 
 def do_apply(mutation_pk, dict_synonyms, backup):
@@ -271,34 +269,25 @@ def do_run(argument, paths_to_mutate, disable_mutation_types,
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
 
-    Pattern = namedtuple('Pattern', 'char pattern')
-
-    def get_pattern(char):
-        return re.compile(fr"^(\w+)({char}\s*\w+)*$")
-
-    def get_separation_char(input_string, patterns):
-        for p in patterns:
-            if p.pattern.match(input_string):
-                return p.char
-
-    patterns = [Pattern(',', get_pattern(',')),
-                Pattern(':', get_pattern(':'))]
-
-    mut_paths_sep = get_separation_char(paths_to_mutate, patterns)
-    tests_dir_sep = get_separation_char(tests_dir, patterns)
+    def split_paths(paths):
+        for sep in [',', ':']:
+            separated = list(filter(lambda p: Path(p).exists(), paths.split(sep)))
+            if separated:
+                return separated
+        return None
 
     if not isinstance(paths_to_mutate, (list, tuple)):
-        paths_to_mutate = [x.strip() for x in paths_to_mutate.split(mut_paths_sep)]
+        paths_to_mutate = split_paths(paths_to_mutate)
 
     if not paths_to_mutate:
         raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
 
     tests_dirs = []
-    for p in tests_dir.split(tests_dir_sep):
+    for p in split_paths(tests_dir):
         tests_dirs.extend(glob(p, recursive=True))
 
     for p in paths_to_mutate:
-        for pt in tests_dir.split(tests_dir_sep):
+        for pt in split_paths(tests_dir):
             tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
     current_hash_of_tests = hash_of_tests(tests_dirs)
