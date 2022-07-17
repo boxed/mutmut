@@ -138,7 +138,7 @@ def test_compute_return_code():
     # mock of Config for ease of testing
     class MockProgress(Progress):
         def __init__(self, killed_mutants, surviving_mutants,
-                     surviving_mutants_timeout, suspicious_mutants):
+                     surviving_mutants_timeout, suspicious_mutants, **_):
             super(MockProgress, self).__init__(total=0, output_legend={})
             self.killed_mutants = killed_mutants
             self.surviving_mutants = surviving_mutants

@@ -51,7 +51,11 @@ def set_working_dir_and_path(basic_filesystem):
 
 @pytest.mark.usefixtures("set_working_dir_and_path")
 def test_hooks(basic_filesystem):
-    subprocess.check_output(["python", "-m", "mutmut", "run", "--paths-to-mutate=foo.py"])
+    try:
+        subprocess.check_output(["python", "-m", "mutmut", "run", "--paths-to-mutate=foo.py"])
+    except subprocess.CalledProcessError as e:
+        print(e.output)
+        assert False
     assert (basic_filesystem / "init_hook").exists(), "init was not called."
     assert (basic_filesystem / "pre_mutation_hook").exists(), "pre_mutation was not called."
     assert (basic_filesystem / "pre_mutation_ast_hook").exists(), "pre_mutation_ast was not called."
