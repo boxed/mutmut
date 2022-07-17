@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+
+2.4.1
+~~~~~
+
+* Support paths with path separators
+
+* Disable spinner in no-progress mode
+
 2.4.0
 ~~~~~
 
