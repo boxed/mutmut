@@ -932,7 +932,7 @@ def guess_paths_to_mutate():
 
 
 class Progress(object):
-    def __init__(self, total, output_legend):
+    def __init__(self, total, output_legend, no_progress):
         self.total = total
         self.output_legend = output_legend
         self.progress = 0
@@ -941,8 +941,11 @@ class Progress(object):
         self.surviving_mutants = 0
         self.surviving_mutants_timeout = 0
         self.suspicious_mutants = 0
+        self.no_progress = no_progress
 
     def print(self):
+        if self.no_progress:
+            return
         print_status('{}/{}  {} {}  {} {}  {} {}  {} {}  {} {}'.format(
             self.progress,
             self.total,

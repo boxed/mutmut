@@ -335,6 +335,7 @@ Legend for output:
         test_command=runner,
         using_testmon=using_testmon,
         current_hash_of_tests=current_hash_of_tests,
+        no_progress=no_progress,
     )
 
     if hasattr(mutmut_config, 'init'):
@@ -389,7 +390,7 @@ Legend for output:
 
     print()
     print('2. Checking mutants')
-    progress = Progress(total=config.total, output_legend=output_legend)
+    progress = Progress(total=config.total, output_legend=output_legend, no_progress=no_progress)
 
     try:
         run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
@@ -428,7 +429,7 @@ def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths
         mutations_by_file[filename] = [mutation_id]
 
 
-def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests):
+def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests, no_progress):
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
 
@@ -458,7 +459,8 @@ def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of
     def feedback(line):
         if not swallow_output:
             print(line)
-        print_status('Running...')
+        if not no_progress:
+            print_status('Running...')
         output.append(line)
 
     returncode = popen_streaming_output(test_command, feedback)
