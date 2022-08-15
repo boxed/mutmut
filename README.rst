@@ -292,7 +292,7 @@ the ``--use-coverage`` switch, you can access this coverage data inside the ``pr
 via the ``context.config.coverage_data`` attribute. This attribute is a dictionary in the form
 ``{filename: {lineno: [contexts]}}``.
 
-Let's say you have used the built-in dynamic context option of ``Coverage.py `` by adding the following to
+Let's say you have used the built-in dynamic context option of ``Coverage.py`` by adding the following to
 your ``.coveragerc`` file:
 
 .. code-block:: console
