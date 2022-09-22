@@ -3,14 +3,14 @@ mutmut - python mutation tester
 
 .. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
     :target: https://travis-ci.org/boxed/mutmut
- 
+
 .. image:: https://readthedocs.org/projects/mutmut/badge/?version=latest
     :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
-    
+
 .. image:: https://codecov.io/gh/boxed/mutmut/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/boxed/mutmut
-  
+
 .. image:: https://img.shields.io/discord/767914934016802818.svg
   :target: https://discord.gg/cwb9uNt
 
@@ -67,6 +67,15 @@ flags again, just run ``mutmut run`` and it works. Like this:
     runner=python -m hammett -x
     tests_dir=tests/
     dict_synonyms=Struct, NamedStruct
+
+To use multiple paths either in the ``paths_to_mutate`` or ``tests_dir`` option
+use a comma or colon separated list. For example:
+
+.. code-block:: ini
+
+    [mutmut]
+    paths_to_mutate=src/,src2/
+    tests_dir=tests/:tests2/
 
 You can stop the mutation run at any time and mutmut will restart where you
 left off. It's also smart enough to retest only the surviving mutants when the
