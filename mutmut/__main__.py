@@ -270,6 +270,7 @@ def do_run(argument, paths_to_mutate, disable_mutation_types,
         paths_to_mutate = guess_paths_to_mutate()
 
     def split_paths(paths):
+        # This method is used to split paths that are separated by commas or colons
         for sep in [',', ':']:
             separated = list(filter(lambda p: Path(p).exists(), paths.split(sep)))
             if separated:
@@ -277,10 +278,16 @@ def do_run(argument, paths_to_mutate, disable_mutation_types,
         return None
 
     if not isinstance(paths_to_mutate, (list, tuple)):
+        # If the paths_to_mutate is a string, we split it by commas or colons
         paths_to_mutate = split_paths(paths_to_mutate)
 
     if not paths_to_mutate:
-        raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate. Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg')
+        raise click.BadOptionUsage(
+            '--paths-to-mutate',
+            'You must specify a list of paths to mutate.'
+            'Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg.'
+            'To specify multiple paths, separate them with commas or colons (i.e: --paths-to-mutate=path1/,path2/path3/,path4/).'
+        )
 
     tests_dirs = []
     for p in split_paths(tests_dir):
