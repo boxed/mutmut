@@ -230,11 +230,15 @@ def _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache
 @init_db
 @db_session
 def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
+    print(create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy))
+
+
+def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
     test_cases = []
     mutant_list = list(select(x for x in Mutant))
     for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
         for mutant in mutants:
-            tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number, stdout=mutant.line.line)
+            tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number + 1, stdout=mutant.line.line)
             if mutant.status == BAD_SURVIVED:
                 tc.add_failure_info(message=mutant.status, output=get_unified_diff(mutant.id, dict_synonyms))
             if mutant.status == BAD_TIMEOUT:
@@ -251,7 +255,7 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
             test_cases.append(tc)
 
     ts = TestSuite("mutmut", test_cases)
-    print(TestSuite.to_xml_string([ts]))
+    return TestSuite.to_xml_string([ts])
 
 
 @init_db
