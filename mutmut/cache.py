@@ -227,12 +227,12 @@ def _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache
     return output
 
 
-@init_db
-@db_session
 def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_policy):
     print(create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy))
 
 
+@init_db
+@db_session
 def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
     test_cases = []
     mutant_list = list(select(x for x in Mutant))
