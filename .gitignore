@@ -53,3 +53,7 @@ docs/tri*.rst
 
 # tests
 results/
+
+#Pipenv
+Pipfile.lock
+
