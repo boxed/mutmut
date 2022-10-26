@@ -12,6 +12,9 @@ junit-xml = "==1.8"
 toml = "*"
 
 [dev-packages]
+pytest = "*"
+hammett = "*"
+coverage = "*"
 
 [requires]
 python_version = "3.10"
