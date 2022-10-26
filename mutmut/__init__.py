@@ -1045,7 +1045,7 @@ def popen_streaming_output(cmd, callback, timeout=None):
                 line = stdout.readline()
                 # windows gives readline() raw stdout as a b''
                 # need to decode it
-                line = line.decode("utf-8")
+                line = line.decode("latin1")
                 if line:  # ignore empty strings and None
                     callback(line)
             else:
