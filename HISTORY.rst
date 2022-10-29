@@ -1,6 +1,13 @@
 Changelog
 ---------
 
+2.4.2
+~~~~~
+
+* Fix bug with init db on wrong function (thanks Samuel Razzell)
+
+* Fixed junitxml line number, daemon warning, and missing argument in unit test (thanks Samuel Razzell)
+
 
 2.4.1
 ~~~~~

@@ -24,3 +24,6 @@ Credits
 * Andreas Finkler <andi.finkler@gmail.com>
 * sed-i
 * Peter Hill <peter.hill@york.ac.uk>
+* Samuel Razzell <srazzell@apple.com>
+* Daniel Versoza Alves <daniel.alves@voxy.com>
+* Zac Hatfield-Dodds <zac.hatfield.dodds@gmail.com>

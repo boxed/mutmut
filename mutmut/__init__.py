@@ -29,7 +29,7 @@ from time import time
 from parso import parse
 from parso.python.tree import Name, Number, Keyword
 
-__version__ = '2.4.1'
+__version__ = '2.4.2'
 
 
 if os.getcwd() not in sys.path:
