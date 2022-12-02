@@ -181,6 +181,11 @@ def test_compute_return_code():
     assert compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) == 7
     assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) == 15
 
+    assert compute_exit_code(MockProgress(0, 0, 0, 0), ci=True) == 0
+    assert compute_exit_code(MockProgress(1, 1, 1, 1), ci=True) == 0
+    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception(), ci=True) == 1
+    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception(), ci=True) == 1
+
 
 def test_read_coverage_data(filesystem):
     assert read_coverage_data() == {}

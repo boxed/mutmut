@@ -817,7 +817,7 @@ class Config(object):
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  dict_synonyms, total, using_testmon,
                  tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress, rerun_all):
+                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress, ci, rerun_all):
         self.swallow_output = swallow_output
         self.test_command = self._default_test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
@@ -835,6 +835,7 @@ class Config(object):
         self.paths_to_mutate = paths_to_mutate
         self.mutation_types_to_apply = mutation_types_to_apply
         self.no_progress = no_progress
+        self.ci = ci
         self.rerun_all = rerun_all
 
 
@@ -1277,7 +1278,7 @@ def python_source_files(path, tests_dirs, paths_to_exclude=None):
         yield path
 
 
-def compute_exit_code(progress, exception=None):
+def compute_exit_code(progress, exception=None, ci=False):
     """Compute an exit code for mutmut mutation testing
 
     The following exit codes are available for mutmut:
@@ -1290,10 +1291,15 @@ def compute_exit_code(progress, exception=None):
      Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
      different mutant statuses occurred during mutation testing.
 
+     When running with ci=True (--CI flag enabled), the exit code will always be
+     1 for a fatal error or 0 for any other case.
+
     :param exception:
     :type exception: Exception
     :param progress:
     :type progress: Progress
+    :param ci:
+    :type ci: bool
 
     :return: integer noting the exit code of the mutation tests.
     :rtype: int
@@ -1301,6 +1307,8 @@ def compute_exit_code(progress, exception=None):
     code = 0
     if exception is not None:
         code = code | 1
+    if ci:
+        return code
     if progress.surviving_mutants > 0:
         code = code | 2
     if progress.surviving_mutants_timeout > 0:

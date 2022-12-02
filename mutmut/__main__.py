@@ -116,6 +116,7 @@ def version():
 @click.option('--post-mutation')
 @click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
 @click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
+@click.option('--CI', is_flag=True, default=False, help="Returns an exit code of 0 for all successful runs and an exit code of 1 for fatal errors.")
 @config_from_file(
     dict_synonyms='',
     paths_to_exclude='',
@@ -128,7 +129,7 @@ def version():
 def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
         tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
         dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-        simple_output, no_progress, rerun_all):
+        simple_output, no_progress, ci, rerun_all):
     """
     Runs mutmut. You probably want to start with just trying this. If you supply a mutation ID mutmut will check just this mutant.
     """
@@ -140,7 +141,7 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
     sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
                     tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
                     dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-                    simple_output, no_progress, rerun_all))
+                    simple_output, no_progress, ci, rerun_all))
 
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -238,7 +239,7 @@ def html(dict_synonyms):
 def do_run(argument, paths_to_mutate, disable_mutation_types,
            enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
            swallow_output, use_coverage, dict_synonyms, pre_mutation, post_mutation,
-           use_patch_file, paths_to_exclude, simple_output, no_progress, rerun_all):
+           use_patch_file, paths_to_exclude, simple_output, no_progress, ci, rerun_all):
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
@@ -388,6 +389,7 @@ Legend for output:
         paths_to_mutate=paths_to_mutate,
         mutation_types_to_apply=mutation_types_to_apply,
         no_progress=no_progress,
+        ci=ci,
         rerun_all=rerun_all
     )
 
@@ -405,7 +407,7 @@ Legend for output:
         traceback.print_exc()
         return compute_exit_code(progress, e)
     else:
-        return compute_exit_code(progress)
+        return compute_exit_code(progress, ci=ci)
     finally:
         print()  # make sure we end the output with a newline
         # Close all active multiprocessing queues to avoid hanging up the main process
