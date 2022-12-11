@@ -1123,6 +1123,7 @@ def hammett_tests_pass(config, callback):
 
     return returncode == 0
 
+CYCLE_PROCESS_AFTER = 100
 
 def run_mutation_tests(config, progress, mutations_by_file):
     """
@@ -1161,7 +1162,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
             kwargs=dict(
                 mutants_queue=mutants_queue,
                 results_queue=results_queue,
-                cycle_process_after=100,
+                cycle_process_after=CYCLE_PROCESS_AFTER,
             )
         )
         t.start()
@@ -1169,7 +1170,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
 
     t = create_worker()
 
-    while t.is_alive():
+    while True:
         command, status, filename, mutation_id = results_queue.get()
         if command == 'end':
             t.join()
