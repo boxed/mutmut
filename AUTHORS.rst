@@ -27,3 +27,4 @@ Credits
 * Samuel Razzell <srazzell@apple.com>
 * Daniel Versoza Alves <daniel.alves@voxy.com>
 * Zac Hatfield-Dodds <zac.hatfield.dodds@gmail.com>
+* Jan Królikowski <yanekk86@gmail.com>

@@ -1,6 +1,12 @@
 Changelog
 ---------
 
+2.4.3
+~~~~~
+
+* Fix for a big where worker cycling would just hang mutmut (thanks Jan Królikowski!)
+
+
 2.4.2
 ~~~~~
 
