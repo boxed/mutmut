@@ -1,0 +1,4 @@
+diff --git a/existing_empty_file.txt b/renamed_existing_empty_file.txt
+similarity index 100%
+rename from existing_empty_file.txt
+rename to renamed_existing_empty_file.txt

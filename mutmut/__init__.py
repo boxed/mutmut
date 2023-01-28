@@ -1220,7 +1220,7 @@ def read_patch_data(patch_file_path):
 
     return {
         diff.header.new_path: {change.new for change in diff.changes if change.old is None}
-        for diff in diffs
+        for diff in diffs if diff.changes
     }
 
 
