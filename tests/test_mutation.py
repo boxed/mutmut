@@ -80,6 +80,16 @@ for x in y:
         ('"foo"', '"XXfooXX"'),
         ("'foo'", "'XXfooXX'"),
         ("u'foo'", "u'XXfooXX'"),
+        ("f'foo'", "f'XXfooXX'"),
+        ("f'foo'", "f'XXfooXX'"),
+        ("f\"foo\"", "f\"XXfooXX\""),
+        ("f'''foo'''", "f'''XXfooXX'''"),
+        ("f'{foo}'", "f'XX{foo}XX'"),
+        ("f\"\"\"fo\no\"\"\"", "f\"\"\"XXfo\noXX\"\"\""),
+        ("fr'foo'", "fr'XXfooXX'"),
+        ("rf'foo'", "rf'XXfooXX'"),
+        ("return f'foo'", "return f'XXfooXX'"),
+        ("foo(f'foo', abcd)", "foo(f'XXfooXX', abcd)"),
         ("0", "1"),
         ("0o0", "1"),
         ("0.", "1.0"),
@@ -115,6 +125,19 @@ for x in y:
 def test_basic_mutations(original, expected):
     actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
     assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
+
+
+def test_fstring_mutation_fstring_is_mutated_separately_from_other_mutations():
+    # arrange
+    original = "f'fo{x == 1}o'"
+    expected_mutations = ["f'fo{x != 1}o'", "f'fo{x == 2}o'", "f'XXfo{x == 1}oXX'"]
+
+    # act
+    actual_mutations = [mutate(Context(source=original, mutation_id=mutation))[0]
+                        for mutation in list_mutations(Context(source=original))]
+
+    # assert
+    assert actual_mutations == expected_mutations
 
 
 @pytest.mark.parametrize(
