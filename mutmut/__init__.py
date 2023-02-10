@@ -27,7 +27,7 @@ from threading import (
 from time import time
 
 from parso import parse
-from parso.python.tree import Name, Number, Keyword
+from parso.python.tree import Name, Number, Keyword, FStringStart, FStringEnd
 
 __version__ = '2.4.3'
 
@@ -251,6 +251,23 @@ def string_mutation(value, **_):
     return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
 
 
+def fstring_mutation(children, **_):
+    fstring_start: FStringStart = children[0]
+    fstring_end: FStringEnd = children[-1]
+
+    children = children[:]  # we need to copy the list here, to not get in place mutation on the next line!
+
+    children[0] = FStringStart(fstring_start.value + 'XX',
+                               start_pos=fstring_start.start_pos,
+                               prefix=fstring_start.prefix)
+
+    children[-1] = FStringEnd('XX' + fstring_end.value,
+                              start_pos=fstring_end.start_pos,
+                              prefix=fstring_end.prefix)
+
+    return children
+
+
 def partition_node_list(nodes, value):
     for i, n in enumerate(nodes):
         if hasattr(n, 'value') and n.value == value:
@@ -444,6 +461,7 @@ mutations_by_type = {
     'number': dict(value=number_mutation),
     'name': dict(value=name_mutation),
     'string': dict(value=string_mutation),
+    'fstring': dict(children=fstring_mutation),
     'argument': dict(children=argument_mutation),
     'or_test': dict(children=and_or_test_mutation),
     'and_test': dict(children=and_or_test_mutation),
