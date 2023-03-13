@@ -195,7 +195,7 @@ by comma:
 
     mutmut run --disable-mutation-types=string,decorator
 
-Inversly, you can also only specify to only run specific mutations with ``--enable-mutation-types``.
+Inversely, you can also only specify to only run specific mutations with ``--enable-mutation-types``.
 Note that ``--disable-mutation-types`` and ``--enable-mutation-types`` are exclusive and cannot
 be combined.
 
