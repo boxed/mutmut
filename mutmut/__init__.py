@@ -469,7 +469,7 @@ def should_exclude(context, config):
     return False
 
 
-class Context(object):
+class Context:
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None, index=0):
         self._set_source(source)
         self.index = index
@@ -570,26 +570,22 @@ class Context(object):
     def push_stack(self, node):
         if is_pushable_subject(self.subject_stack, node):
             self.subject_stack.append(node)
-            assert len(self.subject_stack) <= 2
+            assert len(self.subject_stack) < 2
         self.stack.append(node)
 
     def pop_stack(self):
         node = self.stack[-1]
-        if is_pushable_subject(self.subject_stack, node):
+        if self.subject_stack and self.subject_stack[0] == node:
             self.subject_stack.pop()
         self.stack.pop()
 
 
 def is_pushable_subject(subject_stack, node):
-    if len(subject_stack) == 2:
+    if len(subject_stack) > 0:
         return False
 
     if node.type in ('funcdef', 'classdef'):
-        # We don't consider nested functions as subjects
-        if subject_stack and subject_stack[0].type == 'funcdef':
-            return False
-        else:
-            return True
+        return True
     else:
         return False
 
@@ -613,13 +609,21 @@ def mutate(context):
     return mutated_source, len(context.performed_mutation_ids)
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def for_node(context, node):
+    context.push_stack(node)
+    yield
+    context.pop_stack()
+
+
 def mutate_node(node, context: Context):
     """
     :type context: Context
     """
-    context.push_stack(node)
 
-    try:
+    with for_node(context, node):
         if node.type in ('tfpdef', 'import_from', 'import_name'):
             return
 
@@ -690,8 +694,6 @@ def mutate_node(node, context: Context):
                 # this is just an optimization to stop early
                 if context.performed_mutation_ids and context.mutation_id != ALL:
                     return
-    finally:
-        context.pop_stack()
 
 
 def mutate_list_of_nodes(node, context):
