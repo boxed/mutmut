@@ -18,8 +18,8 @@ def test_name_mutation_simple_mutants():
 
 
 def test_context_exclude_line():
-    source = "__import__('pkg_resources').declare_namespace(__name__)\n"
+    source = "__import__('pkg_resources').declare_namespace(__name__)"
     assert mutate(Context(source=source)) == (source, 0)
 
-    source = "__all__ = ['hi']\n"
+    source = "__all__ = ['hi']"
     assert mutate(Context(source=source)) == (source, 0)

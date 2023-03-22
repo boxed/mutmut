@@ -41,12 +41,14 @@ except ImportError:
     mutmut_config = None
 
 
-class RelativeMutationID(object):
+class MutationID:
     def __init__(self, line, index, line_number, filename=None):
         self.line = line
         self.index = index
         self.line_number = line_number
         self.filename = filename
+        self.node = None
+        self.subject = None
 
     def __repr__(self):
         return 'MutationID(line="{}", index={}, line_number={}, filename={})'.format(self.line, self.index, self.line_number, self.filename)
@@ -58,14 +60,14 @@ class RelativeMutationID(object):
         return hash((self.line, self.index, self.line_number))
 
 
-ALL = RelativeMutationID(filename='%all%', line='%all%', index=-1, line_number=-1)
+ALL = MutationID(filename='%all%', line='%all%', index=-1, line_number=-1)
 
 
 class InvalidASTPatternException(Exception):
     pass
 
 
-class ASTPattern(object):
+class ASTPattern:
     def __init__(self, source, **definitions):
         if definitions is None:
             definitions = {}
@@ -471,19 +473,19 @@ def should_exclude(context, config):
 
 class Context:
     def __init__(self, source=None, mutation_id=ALL, dict_synonyms=None, filename=None, config=None, index=0):
+        self.undo_stack = []
+        self.reset()
         self._set_source(source)
         self.index = index
         self.mutation_id = mutation_id
-        assert isinstance(mutation_id, RelativeMutationID)
+        assert isinstance(mutation_id, MutationID)
         self.filename = filename
         self.dict_synonyms = (dict_synonyms or []) + ['dict']
         self.config = config
-        self.undo_stack = []
         self._ast = None
         self._source_by_line_number = None
         self._pragma_no_mutate_lines = None
         self._path_by_line = None
-        self.reset()
         self.subject_stack = []
 
     # noinspection PyAttributeOutsideInit
@@ -493,7 +495,6 @@ class Context:
         self.undo_stack = []
 
         self.remove_newline_at_end = False
-        self._source = None
         self.performed_mutation_ids = []
         self.current_line_index = 0
         self.stack = []
@@ -536,8 +537,8 @@ class Context:
     def current_source_line(self):
         return self.source_by_line_number[self.current_line_index]
 
-    def mutation_id_of_current_index(self):
-        return RelativeMutationID(filename=self.filename, line=self.current_source_line, index=self.index, line_number=self.current_line_index)
+    def mutation_id_of_current_index(self) -> MutationID:
+        return MutationID(filename=self.filename, line=self.current_source_line, index=self.index, line_number=self.current_line_index)
 
     @property
     def pragma_no_mutate_lines(self):
@@ -564,7 +565,10 @@ class Context:
     def add_performed_mutation_id(self, node):
         m = self.mutation_id_of_current_index()
         m.node = node
-        m.subject_stack = self.subject_stack[:]
+        if self.subject_stack:
+            m.subject = self.subject_stack[-1]
+        else:
+            m.subject = None
         self.performed_mutation_ids.append(m)
 
     def push_stack(self, node):
@@ -606,7 +610,7 @@ def mutate(context):
             raise RuntimeError(
                 "Mutation context states that a mutation occurred but the "
                 "mutated source remains the same as original")
-    return mutated_source, len(context.performed_mutation_ids)
+    return mutated_source.strip(), len(context.performed_mutation_ids)
 
 
 from contextlib import contextmanager
@@ -857,7 +861,7 @@ def run_mutation(context: Context, callback) -> str:
                 callback(result)
 
 
-class Config(object):
+class Config:
     def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  backup, dict_synonyms, total, using_testmon, cache_only,
@@ -966,7 +970,7 @@ def guess_paths_to_mutate():
         'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
-class Progress(object):
+class Progress:
     def __init__(self, total):
         self.total = total
         self.progress = 0
@@ -1144,7 +1148,7 @@ def run_mutation_tests(config, progress, mutations_by_file):
     """
     :type config: Config
     :type progress: Progress
-    :type mutations_by_file: dict[str, list[RelativeMutationID]]
+    :type mutations_by_file: dict[str, list[MutationID]]
     """
     from mutmut.cache import update_mutant_status
 
@@ -1239,7 +1243,7 @@ def read_patch_data(patch_file_path):
 
 def add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
     """
-    :type mutations_by_file: dict[str, list[RelativeMutationID]]
+    :type mutations_by_file: dict[str, list[MutationID]]
     :type filename: str
     :type dict_synonyms: list[str]
     """

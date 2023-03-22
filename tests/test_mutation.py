@@ -3,7 +3,7 @@
 import pytest
 from parso import parse
 
-from mutmut import mutate, ALL, Context, list_mutations, RelativeMutationID, \
+from mutmut import mutate, ALL, Context, list_mutations, MutationID, \
     array_subscript_pattern, function_call_pattern, ASTPattern
 
 
@@ -203,7 +203,7 @@ def test_mutate_body_of_function_with_return_type_annotation():
     source = """
 def foo() -> int:
     return 0
-    """
+    """.strip()
 
     assert mutate(Context(source=source, mutation_id=ALL))[0] == source.replace('0', '1')
 
@@ -221,39 +221,39 @@ def test_mutate_both():
 
 
 def test_perform_one_indexed_mutation():
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID(line='1+1', index=0, line_number=0))) == ('2+1', 1)
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 1, line_number=0))) == ('1-1', 1)
-    assert mutate(Context(source='1+1', mutation_id=RelativeMutationID('1+1', 2, line_number=0))) == ('1+2', 1)
+    assert mutate(Context(source='1+1', mutation_id=MutationID(line='1+1', index=0, line_number=0))) == ('2+1', 1)
+    assert mutate(Context(source='1+1', mutation_id=MutationID('1+1', 1, line_number=0))) == ('1-1', 1)
+    assert mutate(Context(source='1+1', mutation_id=MutationID('1+1', 2, line_number=0))) == ('1+2', 1)
 
     # TODO: should this case raise an exception?
     # assert mutate(Context(source='def foo():\n    return 1', mutation_id=2)) == ('def foo():\n    return 1\n', 0)
 
 
 def test_function():
-    source = "def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s\n", 1)
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 1, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s\n", 1)
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 2, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s\n", 1)
+    source = "def capitalize(s):\n    return s[0].upper() + s[1:] if s else s\n".strip()
+    assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s):\n    return s[1].upper() + s[1:] if s else s", 1)
+    assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 1, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() - s[1:] if s else s", 1)
+    assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 2, line_number=1))) == ("def capitalize(s):\n    return s[0].upper() + s[2:] if s else s", 1)
 
 
 def test_function_with_annotation():
-    source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s\n", 1)
+    source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
+    assert mutate(Context(source=source, mutation_id=MutationID(source.split('\n')[1], 0, line_number=1))) == ("def capitalize(s : str):\n    return s[1].upper() + s[1:] if s else s", 1)
 
 
 def test_pragma_no_mutate():
-    source = """def foo():\n    return 1+1  # pragma: no mutate\n"""
+    source = """def foo():\n    return 1+1  # pragma: no mutate\n""".strip()
     assert mutate(Context(source=source, mutation_id=ALL)) == (source, 0)
 
 
 def test_pragma_no_mutate_and_no_cover():
-    source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n"""
+    source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n""".strip()
     assert mutate(Context(source=source, mutation_id=ALL)) == (source, 0)
 
 
 def test_mutate_decorator():
-    source = """@foo\ndef foo():\n    pass\n"""
-    assert mutate(Context(source=source, mutation_id=ALL)) == (source.replace('@foo', ''), 1)
+    source = """@foo\ndef foo():\n    pass\n""".strip()
+    assert mutate(Context(source=source, mutation_id=ALL)) == (source.replace('@foo', '').strip(), 1)
 
 
 # TODO: getting this test and the above to both pass is tricky
@@ -264,12 +264,12 @@ def test_mutate_decorator():
 
 def test_mutate_dict():
     source = "dict(a=b, c=d)"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source, 1, line_number=0))) == ("dict(a=b, cXX=d)", 1)
+    assert mutate(Context(source=source, mutation_id=MutationID(source, 1, line_number=0))) == ("dict(a=b, cXX=d)", 1)
 
 
 def test_mutate_dict2():
     source = "dict(a=b, c=d, e=f, g=h)"
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID(source, 3, line_number=0))) == ("dict(a=b, c=d, e=f, gXX=h)", 1)
+    assert mutate(Context(source=source, mutation_id=MutationID(source, 3, line_number=0))) == ("dict(a=b, c=d, e=f, gXX=h)", 1)
 
 
 def test_performed_mutation_ids():
@@ -277,7 +277,7 @@ def test_performed_mutation_ids():
     context = Context(source=source)
     mutate(context)
     # we found two mutation points: mutate "a" and "c"
-    assert context.performed_mutation_ids == [RelativeMutationID(source, 0, 0), RelativeMutationID(source, 1, 0)]
+    assert context.performed_mutation_ids == [MutationID(source, 0, 0), MutationID(source, 1, 0)]
 
 
 def test_syntax_error():
@@ -305,12 +305,14 @@ def test_syntax_error():
 
 
 def test_bug_github_issue_18():
-    source = """@register.simple_tag(name='icon')
+    source = """
+@register.simple_tag(name='icon')
 def icon(name):
     if name is None:
         return ''
     tpl = '<span class="glyphicon glyphicon-{}"></span>'
-    return format_html(tpl, name)"""
+    return format_html(tpl, name)
+    """.strip()
     mutate(Context(source=source))
 
 
@@ -324,7 +326,7 @@ def test_bug_github_issue_26():
     source = """
 class ConfigurationOptions(Protocol):
     min_name_length: int
-    """
+    """.strip()
     mutate(Context(source=source))
 
 
@@ -332,7 +334,7 @@ def test_bug_github_issue_30():
     source = """
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
     pass
-"""
+    """.strip()
     assert mutate(Context(source=source)) == (source, 0)
 
 
@@ -349,7 +351,7 @@ __all__ = [
     'foo',
     'bar',
 ]
-"""
+    """.strip()
     assert mutate(Context(source=source)) == (source, 0)
 
 
@@ -357,12 +359,12 @@ def test_bug_github_issue_162():
     source = """
 primes: List[int] = []
 foo = 'bar'
-"""
-    assert mutate(Context(source=source, mutation_id=RelativeMutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
+""".strip()
+    assert mutate(Context(source=source, mutation_id=MutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
 
 
 def test_bad_mutation_str_type_definition():
     source = """
 foo: 'SomeType'
-    """
+""".strip()
     assert mutate(Context(source=source)) == (source, 0)

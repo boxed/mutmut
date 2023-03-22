@@ -16,7 +16,7 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 from mutmut import BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
-    OK_KILLED, RelativeMutationID, Context, mutate
+    OK_KILLED, MutationID, Context, mutate
 
 db = Database()
 
@@ -292,7 +292,7 @@ def create_html_report(dict_synonyms):
                 def print_diffs(status):
                     mutants = mutants_by_status[status]
                     for mutant in sorted(mutants, key=lambda m: m.id):
-                        diff = _get_unified_diff(source, filename, RelativeMutationID(mutant.line.line, mutant.index, mutant.line.line_number), dict_synonyms, update_cache=False)
+                        diff = _get_unified_diff(source, filename, MutationID(mutant.line.line, mutant.index, mutant.line.line_number), dict_synonyms, update_cache=False)
                         f.write('<h3>Mutant %s</h3>' % mutant.id)
                         f.write('<pre>%s</pre>' % diff)
 
@@ -476,12 +476,12 @@ def cached_mutation_status(filename, mutation_id, hash_of_tests):
 @db_session
 def mutation_id_from_pk(pk):
     mutant = Mutant.get(id=pk)
-    return RelativeMutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
+    return MutationID(line=mutant.line.line, index=mutant.index, line_number=mutant.line.line_number)
 
 
 @init_db
 @db_session
-def filename_and_mutation_id_from_pk(pk) -> Tuple[str, RelativeMutationID]:
+def filename_and_mutation_id_from_pk(pk) -> Tuple[str, MutationID]:
     mutant = Mutant.get(id=pk)
     if mutant is None:
         raise ValueError("Obtained null mutant for pk: {}".format(pk))
