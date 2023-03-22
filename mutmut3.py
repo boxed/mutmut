@@ -74,10 +74,10 @@ class InvalidMutantException(Exception):
 def write_mutant(out, c, mutation_id, next_id, mutant_names, orig_name):
     if not mutation_id.subject:
         return
+    c.mutation_id = mutation_id
+    new_code, number = mutate(c)
+    node = mutation_id.subject
     try:
-        c.mutation_id = mutation_id
-        new_code, number = mutate(c)
-        node = mutation_id.subject
         node.name.value += f'_mutant_{next_id}'
         mutant_names.append(node.name.value)
         # assert number == 1, number
