@@ -47,13 +47,13 @@ def create_mutants():
         create_mutants_for_file(path)
 
 
-def write_trampoline(out, orig_name, mutant_names, invalid_mutants):
+def write_trampoline(out, orig_name, mutant_names):
     print(file=out)
 
-    def index(s):
-        return s.rpartition('_')[-1]
+    def func_name(s):
+        return s.rpartition('.')[-1].replace('$', '_mutant_')
 
-    print(f'{orig_name}_mutants = {{' + ', '.join(f'{index(m)}: {m}' for m in mutant_names if m not in invalid_mutants) + '}', file=out)
+    print(f'{orig_name}_mutants = {{' + ', '.join(f'{repr(m)}: {func_name(m)}' for m in mutant_names) + '}', file=out)
 
     print(file=out)
     print(f"""
@@ -68,7 +68,7 @@ class InvalidMutantException(Exception):
     pass
 
 
-def write_mutant(out, c, mutation_id, next_id, mutant_names, orig_name):
+def write_mutant(out, c, mutation_id, next_id, orig_name, module_name):
     if not mutation_id.subject:
         return
     c.mutation_id = mutation_id
@@ -76,7 +76,7 @@ def write_mutant(out, c, mutation_id, next_id, mutant_names, orig_name):
     node = mutation_id.subject
     try:
         node.name.value += f'_mutant_{next_id}'
-        mutant_names.append(node.name.value)
+        mutant_name = f'{module_name}.{orig_name}${next_id}'
         # assert number == 1, number
         if number != 1:
             print(f'warning: got {number} mutations when mutating {mutation_id}')
@@ -90,7 +90,7 @@ def write_mutant(out, c, mutation_id, next_id, mutant_names, orig_name):
         print(code.strip(), file=out)
         print(file=out)
         print(file=out)
-        return node.get_code()
+        return node.get_code(), mutant_name
     finally:
         node.name.value = orig_name
 
@@ -118,8 +118,7 @@ def trampoline(orig, mutants, *args, **kwargs):
     prefix = orig.__module__ + '.' + orig.__name__ + '$'
     if not mutant_under_test.startswith(prefix):
         return orig(*args, **kwargs)
-    mutant_id = mutant_under_test[len(prefix):]
-    return mutants[int(mutant_id)](*args, **kwargs)
+    return mutants[mutant_under_test](*args, **kwargs)
 
 """, file=out)
 
@@ -133,10 +132,6 @@ def create_mutants_for_file(filename):
     if output_path.exists() and output_path.stat().st_mtime == input_stat.st_mtime:
         # print('    skipped', output_path, 'already up to date')
         return
-
-    num_mutants_by_function = defaultdict(int)
-
-    invalid_mutants = set()
 
     result_by_key = {}
 
@@ -167,7 +162,7 @@ def create_mutants_for_file(filename):
                     write_original_alias(out, last_subject)
 
                 if mutant_names:
-                    write_trampoline(out, orig_name, mutant_names, invalid_mutants)
+                    write_trampoline(out, orig_name, mutant_names)
 
                 orig_name = mutation_id.subject.name.value
                 mutant_names = []
@@ -176,23 +171,25 @@ def create_mutants_for_file(filename):
 
             next_id += 1
 
+            module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, ".").replace('.__init__', '')
+
             try:
-                code = write_mutant(out, c, mutation_id, next_id, mutant_names, orig_name)
+                code, mutant_name = write_mutant(out, c, mutation_id, next_id, orig_name, module_name)
             except InvalidMutantException:
-                invalid_mutants.add(f'{mutation_id.subject.name.value}_mutant_{next_id}')
                 continue
 
-            module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, ".").replace('.__init__', '')
+
+            result_by_key[mutant_name] = None
+            mutant_names.append(mutant_name)
+
             assert last_code != code
             last_code = code
-
-            num_mutants_by_function[f'{module_name}.{orig_name}'] += 1
 
         if last_subject:
             write_original_alias(out, last_subject)
 
         if mutant_names:
-            write_trampoline(out, orig_name, mutant_names, invalid_mutants)
+            write_trampoline(out, orig_name, mutant_names)
 
     # validate no syntax errors
     with open(output_path) as f:
@@ -205,9 +202,7 @@ def create_mutants_for_file(filename):
     meta_filename = str(output_path) + '.meta'
     with open(meta_filename, 'w') as f:
         json.dump(dict(
-            num_mutants_by_function=num_mutants_by_function,
-            result_by_key={},
-            invalid_mutants=list(invalid_mutants),
+            result_by_key=result_by_key,
         ), f)
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
@@ -221,8 +216,6 @@ class MutationData:
 
         self.key_by_pid = {}
         self.result_by_key = self.meta.pop('result_by_key')
-        self.num_mutants_by_function = self.meta.pop('num_mutants_by_function')
-        self.invalid_mutants = set(self.meta.pop('invalid_mutants'))
         assert not self.meta, self.meta  # We should read all the data!
 
     def register_pid(self, *, pid, key):
@@ -237,8 +230,6 @@ class MutationData:
         with open(self.meta_path, 'w') as f:
             json.dump(dict(
                 result_by_key=self.result_by_key,
-                num_mutants_by_function=self.num_mutants_by_function,
-                invalid_mutants=list(self.invalid_mutants),
             ), f)
 
 
@@ -310,6 +301,9 @@ class HammettRunner(TestRunner):
         return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
 
 
+def function_name_from_key(key):
+    return key.rpartition('$')[0]
+
 
 def mutmut_3():
     # TODO: run no-ops once in a while to detect if we get false negatives
@@ -326,18 +320,18 @@ def mutmut_3():
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
+    runner = HammettRunner()
+
     # TODO: run these steps only if we have mutants to test
     print('running stats...')
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
-
     mutmut.tests_by_function = defaultdict(set)
-
-    runner = HammettRunner()
-
     if runner.run_stats():
         print("FAILED")
         return
     print('done')
+
+    return
 
     if not mutmut.tests_by_function:
         print('failed to collect stats')
@@ -378,41 +372,37 @@ def mutmut_3():
             m = MutationData(path=path)
             mutation_data_by_path[str(path)] = m
 
-            for function, count in m.num_mutants_by_function.items():
-                for i in range(count):
-                    key = f'{function}${i}'
+            for key, result in m.result_by_key.items():
+                if result is not None:
+                    continue
 
-                    if key in m.result_by_key:
-                        continue
+                pid = os.fork()
+                if not pid:
+                    sys.path.insert(0, os.path.abspath('mutants'))
+                    # In the child
+                    os.environ['MUTANT_UNDER_TEST'] = key
 
-                    if key in m.invalid_mutants:
-                        continue
+                    function = function_name_from_key(key)
 
-                    pid = os.fork()
-                    if not pid:
-                        sys.path.insert(0, os.path.abspath('mutants'))
-                        # In the child
-                        os.environ['MUTANT_UNDER_TEST'] = key
+                    tests = mutmut.tests_by_function[function]
+                    if not tests:
+                        print(f'  no tests covers {function}')
+                        os._exit(1)
 
-                        tests = mutmut.tests_by_function[function]
-                        if not tests:
-                            print(f'  no tests covers {key}')
-                            os._exit(1)
+                    result = runner.run_tests(key=key, tests=tests)
+                    if result != 0:
+                        # TODO: write failure information to stdout?
+                        pass
+                    os._exit(result)
+                else:
+                    mutation_data_by_pid[pid] = m
+                    m.register_pid(pid=pid, key=key)
+                    running_children += 1
 
-                        result = runner.run_tests(key=key, tests=tests)
-                        if result != 0:
-                            # TODO: write failure information to stdout?
-                            pass
-                        os._exit(result)
-                    else:
-                        mutation_data_by_pid[pid] = m
-                        m.register_pid(pid=pid, key=key)
-                        running_children += 1
-
-                    if running_children >= max_children:
-                        read_one_child_exit_status()
-                        total_count += 1
-                        running_children -= 1
+                if running_children >= max_children:
+                    read_one_child_exit_status()
+                    total_count += 1
+                    running_children -= 1
 
         try:
             while running_children:
