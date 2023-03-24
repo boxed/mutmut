@@ -19,16 +19,13 @@ from mutmut import (
     list_mutations,
     mutate,
 )
+import mutmut
 
-_stats = set()
+mutmut._stats = set()
 
 
 def record_trampoline_hit(name):
-    _stats.add(name)
-
-
-def get_stats():
-    return _stats
+    mutmut._stats.add(name)
 
 
 def walk_files():
@@ -141,6 +138,8 @@ def create_mutants_for_file(filename):
 
     invalid_mutants = set()
 
+    result_by_key = {}
+
     with open(output_path, 'w') as out:
         c = Context(filename=filename)
         # print('asd()', file=out)  # force invalid mutants file
@@ -243,8 +242,78 @@ class MutationData:
             ), f)
 
 
+# For pytest
+def pytest_runtest_teardown(item, nextitem):
+    for function in mutmut._stats:
+        mutmut.tests_by_function[function].add(item._nodeid)
+    mutmut._stats.clear()
+
+
+class TestRunner:
+    def run_stats(self):
+        raise NotImplementedError()
+
+    def run_forced_fail(self):
+        raise NotImplementedError()
+
+    def prepare_main_test_run(self):
+        pass
+
+    def run_tests(self, *, key, tests):
+        raise NotImplementedError()
+
+
+class PytestRunner(TestRunner):
+    def run_stats(self):
+        import pytest
+        return int(pytest.main(['-p', 'mutmut3', '-x', '-q', '--assert=plain']))
+
+    def run_tests(self, *, key, tests):
+        import pytest
+        return int(pytest.main(['-x', '-q', '--assert=plain'] + list(tests)))
+
+    def run_forced_fail(self):
+        import pytest
+        return int(pytest.main(['-x', '-q', '--assert=plain']))
+
+
+class HammettRunner(TestRunner):
+    def __init__(self):
+        self.hammett_kwargs = None
+
+    def run_stats(self):
+        import hammett
+
+        def post_test_callback(_name, **_):
+            for function in mutmut._stats:
+                mutmut.tests_by_function[function].add(_name)
+            mutmut._stats.clear()
+
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
+
+    def run_forced_fail(self):
+        import hammett
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False)
+
+    def prepare_main_test_run(self):
+        import hammett
+        self.hammett_kwargs = hammett.main_setup(
+            quiet=True,
+            fail_fast=True,
+            disable_assert_analyze=True,
+            use_cache=False,
+        )
+
+    def run_tests(self, *, key, tests):
+        import hammett
+        hammett.Config.workerinput = dict(workerinput=f'_{key}')
+        return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
+
+
+
 def mutmut_3():
     # TODO: run no-ops once in a while to detect if we get false negatives
+    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
 
     start = datetime.now()
     print('generating mutants...')
@@ -254,7 +323,6 @@ def mutmut_3():
 
     import sys
     import os
-    import hammett
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
@@ -262,22 +330,23 @@ def mutmut_3():
     print('running stats...')
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
 
-    tests_by_function = defaultdict(set)
+    mutmut.tests_by_function = defaultdict(set)
 
-    def post_test_callback(_name, **_):
-        for function in get_stats():
-            tests_by_function[function].add(_name)
-        _stats.clear()
+    runner = HammettRunner()
 
-    if hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False) != 0:
+    if runner.run_stats():
         print("FAILED")
         return
     print('done')
 
+    if not mutmut.tests_by_function:
+        print('failed to collect stats')
+        return
+
     print('running forced fail test')
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
     try:
-        if hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False) == 0:
+        if runner.run_forced_fail() == 0:
             print("FAILED")
             return
     except Exception as e:
@@ -289,12 +358,7 @@ def mutmut_3():
         pid, exit_code = os.wait()
         mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
 
-    hammett_kwargs = hammett.main_setup(
-        quiet=True,
-        fail_fast=True,
-        disable_assert_analyze=True,
-        use_cache=False,
-    )
+    runner.prepare_main_test_run()
 
     mutation_data_by_path : Dict[str, MutationData] = {}
     mutation_data_by_pid : Dict[int, MutationData] = {}  # many pids map to one MutationData
@@ -330,9 +394,12 @@ def mutmut_3():
                         # In the child
                         os.environ['MUTANT_UNDER_TEST'] = key
 
-                        hammett.Config.workerinput = dict(workerinput=f'_{key}')
+                        tests = mutmut.tests_by_function[function]
+                        if not tests:
+                            print(f'  no tests covers {key}')
+                            os._exit(1)
 
-                        result = hammett.main_run_tests(**hammett_kwargs, tests=tests_by_function[function])
+                        result = runner.run_tests(key=key, tests=tests)
                         if result != 0:
                             # TODO: write failure information to stdout?
                             pass
