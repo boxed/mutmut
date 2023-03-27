@@ -2,5 +2,5 @@ glob2
 parso
 click
 pony
-junit-xml==1.8
+junit-xml>=1.8,<2
 toml
