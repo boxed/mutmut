@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import fnmatch
 import itertools
 import multiprocessing
@@ -297,7 +296,6 @@ def keyword_mutation(value, context, **_):
         return
 
     return {
-        # 'not': 'not not',
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
@@ -892,12 +890,6 @@ def tests_pass(config: Config, callback) -> bool:
     """
     if config.using_testmon:
         copy('.testmondata-initial', '.testmondata')
-
-    use_special_case = True
-
-    # Special case for hammett! We can do in-process test running which is much faster
-    if use_special_case and config.test_command.startswith(hammett_prefix):
-        return hammett_tests_pass(config, callback)
 
     returncode = popen_streaming_output(config.test_command, callback, timeout=config.baseline_time_elapsed * 10)
     return returncode == 0 or (config.using_testmon and returncode == 5)

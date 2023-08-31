@@ -1,10 +1,11 @@
-# -*- coding: utf-8 -*-
-
 import pytest
 from parso import parse
 
-from mutmut import mutate, ALL, Context, list_mutations, MutationID, \
-    array_subscript_pattern, function_call_pattern, ASTPattern
+from mutmut import array_subscript_pattern, function_call_pattern, ASTPattern
+from mutmut3 import (
+    FuncContext,
+    yield_mutants_for_node,
+)
 
 
 def test_matches_py3():
@@ -61,15 +62,15 @@ for x in y:
 
 @pytest.mark.parametrize(
     'original, expected', [
-        ('lambda: 0', 'lambda: None'),
+        ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ('a(b)', 'a(None)'),
         ('a[b]', 'a[None]'),
-        ("1 in (1, 2)", "2 not in (2, 3)"),
-        ('1+1', '2-2'),
+        ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
+        ('1+1', ['2+1', '1-1', '1+2']),
         ('1', '2'),
-        ('1-1', '2+2'),
-        ('1*1', '2/2'),
-        ('1/1', '2*2'),
+        ('1-1', ['2-1', '1+1', '1-2']),
+        ('1*1', ['2*1', '1/1', '1*2']),
+        ('1/1', ['2/1', '1*1', '1/2']),
         # ('1.0', '1.0000000000000002'),  # using numpy features
         ('1.0', '2.0'),
         ('0.1', '1.1'),
@@ -84,9 +85,9 @@ for x in y:
         ("0.", "1.0"),
         ("0x0", "1"),
         ("0b0", "1"),
-        ("1<2", "2<=3"),
-        ('(1, 2)', '(2, 3)'),
-        ("1 not in (1, 2)", "2  in (2, 3)"),  # two spaces here because "not in" is two words
+        ("1<2", ['2<2', '1<=2', '1<3']),
+        ('(1, 2)', ['(2, 2)', '(1, 3)']),
+        ("1 not in (1, 2)", ['2 not in (1, 2)', '1  in (1, 2)', '1 not in (2, 2)', '1 not in (1, 3)']),  # two spaces here because "not in" is two words
         ("foo is foo", "foo is not foo"),
         ("foo is not foo", "foo is  foo"),
         ("x if a else b", "x if a else b"),
@@ -95,7 +96,7 @@ for x in y:
         ('a = b', 'a = None'),
         ('a = b = c = x', 'a = b = c = None'),
         ('s[0]', 's[1]'),
-        ('s[0] = a', 's[1] = None'),
+        ('s[0] = a', ['s[1] = a', 's[0] = None']),
         ('s[x]', 's[None]'),
         ('s[1:]', 's[2:]'),
         ('1j', '2j'),
@@ -111,8 +112,17 @@ for x in y:
     ]
 )
 def test_basic_mutations(original, expected):
-    actual, number_of_performed_mutations = mutate(Context(source=original, mutation_id=ALL, dict_synonyms=['Struct', 'FooBarDict']))
-    assert actual == expected, 'Performed {} mutations for original "{}"'.format(number_of_performed_mutations, original)
+    if isinstance(expected, str):
+        expected = [expected]
+    func_node = parse(f'def fake():\n    {original}').children[0]
+    node = func_node.children[-1]
+    assert node.get_code().strip() == original.strip()
+    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
+    actual = [
+        parse(mutant).children[0].children[-1].get_code().strip()
+        for (mutant, _) in mutants
+    ]
+    assert actual == expected
 
 
 @pytest.mark.parametrize(

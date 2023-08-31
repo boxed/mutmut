@@ -3,6 +3,7 @@ import gc
 import json
 import os
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
 from os import (
     makedirs,
@@ -11,15 +12,11 @@ from os import (
 from pathlib import Path
 from typing import Dict
 
+from parso import parse
 from tqdm import tqdm
 
-from mutmut import (
-    Context,
-    guess_paths_to_mutate,
-    list_mutations,
-    mutate,
-)
 import mutmut
+from mutmut import guess_paths_to_mutate
 
 mutmut._stats = set()
 
@@ -42,71 +39,18 @@ def walk_files():
                 yield Path(root) / filename
 
 
-def create_mutants():
-    for path in walk_files():
-        create_mutants_for_file(path)
-
-
-def write_trampoline(out, orig_name, mutant_names):
-    print(file=out)
-
-    def func_name(s):
-        return s.rpartition('.')[-1].replace('$', '_mutant_')
-
-    print(f'{orig_name}_mutants = {{' + ', '.join(f'{repr(m)}: {func_name(m)}' for m in mutant_names) + '}', file=out)
-
-    print(file=out)
-    print(f"""
-def {orig_name}(*args, **kwargs):
-    return trampoline({orig_name}_orig, {orig_name}_mutants, *args, **kwargs) 
- 
-""", file=out)
-    print(f'{orig_name}.__signature__ = __signature({orig_name}_orig)\n', file=out)
 
 
 class InvalidMutantException(Exception):
     pass
 
 
-def write_mutant(out, c, mutation_id, next_id, orig_name, module_name):
-    if not mutation_id.subject:
-        return
-    c.mutation_id = mutation_id
-    new_code, number = mutate(c)
-    node = mutation_id.subject
-    try:
-        node.name.value += f'_mutant_{next_id}'
-        mutant_name = f'{module_name}.{orig_name}${next_id}'
-        # assert number == 1, number
-        if number != 1:
-            print(f'warning: got {number} mutations when mutating {mutation_id}')
-        code = node.get_code()
-
-        try:
-            ast.parse(code)
-        except (IndentationError, SyntaxError):
-            raise InvalidMutantException()
-
-        print(code.strip(), file=out)
-        print(file=out)
-        print(file=out)
-        return node.get_code(), mutant_name
-    finally:
-        node.name.value = orig_name
-
-
-def write_original_alias(out, last_subject):
-    orig_name = last_subject.name.value
-    print(f'{orig_name}_orig = {orig_name}', file=out)  # the trampoline will then overwrite the original
-
-
-def write_trampoline_impl(out):
-    # language=python
-    print("""
+# language=python
+trampoline_impl = """
 from inspect import signature as __signature
 
 
-def trampoline(orig, mutants, *args, **kwargs):
+def __mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
@@ -120,7 +64,11 @@ def trampoline(orig, mutants, *args, **kwargs):
         return orig(*args, **kwargs)
     return mutants[mutant_under_test](*args, **kwargs)
 
-""", file=out)
+"""
+
+def create_mutants():
+    for path in walk_files():
+        create_mutants_for_file(path)
 
 
 def create_mutants_for_file(filename):
@@ -133,63 +81,17 @@ def create_mutants_for_file(filename):
         # print('    skipped', output_path, 'already up to date')
         return
 
-    result_by_key = {}
+    mutant_names = []
+
+    with open(filename) as f:
+        source = f.read()
+
 
     with open(output_path, 'w') as out:
-        c = Context(filename=filename)
-        # print('asd()', file=out)  # force invalid mutants file
-        print(c.source, file=out)
-        write_trampoline_impl(out)
-
-        mutation_ids = list_mutations(c)
-
-        mutant_names = []
-        last_subject = None
-
-        last_code = None
-
-        next_id = 0
-        for mutation_id in mutation_ids:
-            if not mutation_id.subject:
-                continue
-
-            # TODO: mutate methods too!, then we have a classdef then a funcdef in the stack
-            if mutation_id.subject.type != 'funcdef':
-                continue
-
-            if last_subject != mutation_id.subject:
-                if last_subject:
-                    write_original_alias(out, last_subject)
-
-                if mutant_names:
-                    write_trampoline(out, orig_name, mutant_names)
-
-                orig_name = mutation_id.subject.name.value
-                mutant_names = []
-                last_subject = mutation_id.subject
-                next_id = 0
-
-            next_id += 1
-
-            module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, ".").replace('.__init__', '')
-
-            try:
-                code, mutant_name = write_mutant(out, c, mutation_id, next_id, orig_name, module_name)
-            except InvalidMutantException:
-                continue
-
-
-            result_by_key[mutant_name] = None
-            mutant_names.append(mutant_name)
-
-            assert last_code != code
-            last_code = code
-
-        if last_subject:
-            write_original_alias(out, last_subject)
-
-        if mutant_names:
-            write_trampoline(out, orig_name, mutant_names)
+        for x, mutant_name in yield_mutants_for_module(parse(source)):
+            out.write(x)
+            if mutant_name:
+                mutant_names.append(mutant_name)
 
     # validate no syntax errors
     with open(output_path) as f:
@@ -201,11 +103,155 @@ def create_mutants_for_file(filename):
 
     meta_filename = str(output_path) + '.meta'
     with open(meta_filename, 'w') as f:
+        module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
         json.dump(dict(
-            result_by_key=result_by_key,
+            result_by_key={
+                 '.'.join([module_name, x]): None
+                for x in mutant_names
+            },
         ), f)
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
+
+
+def build_trampoline(orig_name, mutants):
+    mutants_dict = f'{orig_name}__mutmut_mutants = {{' + ', '.join(f'{repr(m)}: {m}' for m in mutants) + '}'
+
+    return f"""
+{mutants_dict}
+
+def {orig_name}(*args, **kwargs):
+    return __mutmut_trampoline({orig_name}__mutmut_orig, {orig_name}__mutmut_mutants, *args, **kwargs) 
+
+{orig_name}.__signature__ = __signature({orig_name}__mutmut_orig)
+{orig_name}__mutmut_orig.__name__ = '{orig_name}'
+"""
+
+
+@contextmanager
+def rename(node, *, suffix):
+    orig_name = node.name.value
+    node.name.value += f'__mutmut_{suffix}'
+    yield
+    node.name.value = orig_name
+
+
+def yield_mutants_for_node(*, func_node, context, node):
+    return_annotation_started = False
+
+    if hasattr(node, 'children'):
+        for child_node in node.children:
+            if child_node.type == 'operator' and child_node.value == '->':
+                return_annotation_started = True
+
+            if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
+                return_annotation_started = False
+
+            if return_annotation_started:
+                continue
+
+            context.stack.append(child_node)
+            try:
+                yield from yield_mutants_for_node(func_node=func_node, context=context, node=child_node)
+            finally:
+                context.stack.pop()
+
+    mutation = mutmut.mutations_by_type.get(node.type)
+    if not mutation:
+        return
+
+
+    for key, value in sorted(mutation.items()):
+        old = getattr(node, key)
+        if context.exclude_line():
+            continue
+
+        new = value(
+            context=context,
+            node=node,
+            value=getattr(node, 'value', None),
+            children=getattr(node, 'children', None),
+        )
+
+        if isinstance(new, list) and not isinstance(old, list):
+            # multiple mutations
+            new_list = new
+        else:
+            # one mutation
+            new_list = [new]
+
+        # go through the alternate mutations in reverse as they may have
+        # adverse effects on subsequent mutations, this ensures the last
+        # mutation applied is the original/default/legacy mutmut mutation
+        for new in reversed(new_list):
+            assert not callable(new)
+            if new is not None and new != old:
+                # TODO
+                # if hasattr(mutmut_config, 'pre_mutation_ast'):
+                #     mutmut_config.pre_mutation_ast(context=context)
+
+                setattr(node, key, new)
+
+                context.count += 1
+
+                with rename(func_node, suffix=f'{context.count}'):
+                    code = func_node.get_code()
+
+                    try:
+                        ast.parse(code)
+                        context.mutants.append(func_node.name.value)
+                        yield code, func_node.name.value
+                    except (SyntaxError, IndentationError):
+                        pass
+
+                setattr(node, key, old)
+
+
+class FuncContext:
+    def __init__(self):
+        self.count = 0
+        self.mutants = []
+        self.stack = []
+
+    def exclude_line(self):
+        return False
+
+
+def yield_mutants_for_function(node):
+    assert node.type == 'funcdef'
+
+    with rename(node, suffix='orig'):
+        yield node.get_code(), None
+
+    context = FuncContext()
+
+    for child_node in node.children:
+        context.stack.append(child_node)
+        try:
+            yield from yield_mutants_for_node(func_node=node, node=child_node, context=context)
+        finally:
+            context.stack.pop()
+
+    yield build_trampoline(node.name.value, context.mutants), None
+
+
+def yield_mutants_for_class(node):
+    assert node.type == 'classdef'
+    yield node.get_code(), None
+
+
+def yield_mutants_for_module(node):
+    yield trampoline_impl, None
+    yield '\n', None
+    assert node.type == 'file_input'
+    for child_node in node.children:
+        # TODO: support methods
+        if child_node.type == 'funcdef':
+            yield from yield_mutants_for_function(child_node)
+        elif child_node.type == 'classdef':
+            yield from yield_mutants_for_class(child_node)
+        else:
+            yield child_node.get_code(), None
 
 
 class MutationData:
@@ -232,9 +278,12 @@ class MutationData:
                 result_by_key=self.result_by_key,
             ), f)
 
+def unused(*_):
+    pass
 
 # For pytest
 def pytest_runtest_teardown(item, nextitem):
+    unused(nextitem)
     for function in mutmut._stats:
         mutmut.tests_by_function[function].add(item._nodeid)
     mutmut._stats.clear()
@@ -280,7 +329,7 @@ class HammettRunner(TestRunner):
                 mutmut.tests_by_function[function].add(_name)
             mutmut._stats.clear()
 
-        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
+        return hammett.main(quiet=False, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
 
     def run_forced_fail(self):
         import hammett
@@ -302,7 +351,27 @@ class HammettRunner(TestRunner):
 
 
 def function_name_from_key(key):
-    return key.rpartition('$')[0]
+    return key.partition('__mutmut_')[0]
+
+
+def print_stats(mutation_data_by_path):
+    not_checked = set()
+    killed = set()
+    survived = set()
+    for m in mutation_data_by_path.values():
+        for k, v in m.result_by_key.items():
+            if v is None:
+                not_checked.add(k)
+            else:
+                if v == 0:
+                    survived.add(k)
+                else:
+                    killed.add(k)
+    print(len(not_checked), 'not checked')
+    print('killed:', len(killed))
+    print('survived:', len(survived))
+    if killed and not survived:
+        print('% killed:', len(killed) / (len(killed) + len(survived)) * 100)
 
 
 def mutmut_3():
@@ -330,8 +399,6 @@ def mutmut_3():
         print("FAILED")
         return
     print('done')
-
-    return
 
     if not mutmut.tests_by_function:
         print('failed to collect stats')
@@ -365,44 +432,54 @@ def mutmut_3():
 
     total_count = 0
 
+    for path in walk_files():
+        assert path not in mutation_data_by_path
+        m = MutationData(path=path)
+        mutation_data_by_path[str(path)] = m
+
+    print_stats(mutation_data_by_path)
+
     try:
         print('Running mutation testing...')
-        for path in tqdm(walk_files()):  # TODO: now the progress bar is per file, which sucks a bit
-            assert path not in mutation_data_by_path
-            m = MutationData(path=path)
-            mutation_data_by_path[str(path)] = m
 
-            for key, result in m.result_by_key.items():
-                if result is not None:
-                    continue
+        it = [
+            (m, key, result)
+            for path, m in mutation_data_by_path.items()
+            for key, result in m.result_by_key.items()
+        ]
 
-                pid = os.fork()
-                if not pid:
-                    sys.path.insert(0, os.path.abspath('mutants'))
-                    # In the child
-                    os.environ['MUTANT_UNDER_TEST'] = key
+        for m, key, result in tqdm(it):
+            if result is not None:
+                continue
 
-                    function = function_name_from_key(key)
+            pid = os.fork()
+            if not pid:
+                # In the child
+                sys.path.insert(0, os.path.abspath('mutants'))
+                os.environ['MUTANT_UNDER_TEST'] = key
 
-                    tests = mutmut.tests_by_function[function]
-                    if not tests:
-                        print(f'  no tests covers {function}')
-                        os._exit(1)
+                function = function_name_from_key(key)
 
-                    result = runner.run_tests(key=key, tests=tests)
-                    if result != 0:
-                        # TODO: write failure information to stdout?
-                        pass
-                    os._exit(result)
-                else:
-                    mutation_data_by_pid[pid] = m
-                    m.register_pid(pid=pid, key=key)
-                    running_children += 1
+                tests = mutmut.tests_by_function[function]
+                if not tests:
+                    print(f'  no tests covers {function}')
+                    os._exit(1)
 
-                if running_children >= max_children:
-                    read_one_child_exit_status()
-                    total_count += 1
-                    running_children -= 1
+                result = runner.run_tests(key=key, tests=tests)
+                if result != 0:
+                    # TODO: write failure information to stdout?
+                    pass
+                os._exit(result)
+            else:
+                # in the parent
+                mutation_data_by_pid[pid] = m
+                m.register_pid(pid=pid, key=key)
+                running_children += 1
+
+            if running_children >= max_children:
+                read_one_child_exit_status()
+                total_count += 1
+                running_children -= 1
 
         try:
             while running_children:
@@ -416,13 +493,7 @@ def mutmut_3():
 
     t = datetime.now() - start
 
-    covered = {k for m in mutation_data_by_path.values() for k, v in m.result_by_key.items() if v != 0}
-    not_covered = {k for m in mutation_data_by_path.values() for k, v in m.result_by_key.items() if v == 0}
-
-    print('number of covered:', len(covered))
-    print('number of not covered:', len(not_covered))
-    print('%:', len(not_covered) / (len(covered) + len(not_covered)) * 100)
-
+    print_stats(mutation_data_by_path)
     print('time:', t)
     print('number of tested mutants:', total_count)
     print('mutations/s:', total_count / t.total_seconds())

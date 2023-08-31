@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -295,8 +294,6 @@ Legend for output:
         paths_to_mutate=paths_to_mutate,
     )
 
-    parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs)
-
     config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
     print()
@@ -312,75 +309,6 @@ Legend for output:
         return compute_exit_code(progress)
     finally:
         print()  # make sure we end the output with a newline
-
-
-def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs):
-    if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-    else:
-        try:
-            int(argument)
-        except ValueError:
-            filename = argument
-            if not os.path.exists(filename):
-                raise click.BadArgumentUsage('The run command takes either an integer that is the mutation id or a path to a file to mutate')
-            update_line_numbers(filename)
-            add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-            return
-
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
-        update_line_numbers(filename)
-        mutations_by_file[filename] = [mutation_id]
-
-
-def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests):
-    """Execute a test suite specified by ``test_command`` and record
-    the time it took to execute the test suite as a floating point number
-
-    :param swallow_output: if :obj:`True` test stdout will be not be printed
-    :type swallow_output: bool
-
-    :param test_command: command to spawn the testing subprocess
-    :type test_command: str
-
-    :param using_testmon: if :obj:`True` the test return code evaluation will
-        accommodate for ``pytest-testmon``
-    :type using_testmon: bool
-
-    :return: execution time of the test suite
-    :rtype: float
-    """
-    cached_time = cached_test_time()
-    if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
-        print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
-        return cached_time
-
-    print('1. Running tests without mutations')
-    start_time = time()
-
-    output = []
-
-    def feedback(line):
-        if not swallow_output:
-            print(line)
-        print_status('Running...')
-        output.append(line)
-
-    returncode = popen_streaming_output(test_command, feedback)
-
-    if returncode == 0 or (using_testmon and returncode == 5):
-        baseline_time_elapsed = time() - start_time
-    else:
-        raise RuntimeError("Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
-
-    print('Done')
-
-    set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
-
-    return baseline_time_elapsed
 
 
 if __name__ == '__main__':
