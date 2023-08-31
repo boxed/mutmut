@@ -33,7 +33,7 @@ from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 from parso import parse
 from parso.python.tree import Name, Number, Keyword, FStringStart, FStringEnd
 
-__version__ = '2.4.3'
+__version__ = '2.4.4'
 
 
 if os.getcwd() not in sys.path:

@@ -1,10 +1,22 @@
 Changelog
 ---------
 
+2.4.4
+~~~~~
+
+* Fix issue with `TypeError` for empty file diffs
+
+* Introduce mutation of f-strings
+
+* Allow newer versions of junit-xml
+
 2.4.3
 ~~~~~
 
 * Fix for a big where worker cycling would just hang mutmut (thanks Jan Królikowski!)
+
+* Added `--CI` flag
+
 
 
 2.4.2
@@ -455,4 +467,3 @@ Thanks goes out Marcelo Da Cruz Pinto, Savo Kovačević,
 ~~~~~~~~~~~~~~~~~~
 
 * Initial version
-
