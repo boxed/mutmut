@@ -43,7 +43,7 @@ except ImportError:
     mutmut_config = None
 
 
-class RelativeMutationID(object):
+class RelativeMutationID:
     def __init__(
         self, line: str, index: int, line_number: int, filename: Optional[str] = None
     ):
@@ -69,7 +69,7 @@ class InvalidASTPatternException(Exception):
     pass
 
 
-class ASTPattern(object):
+class ASTPattern:
     def __init__(self, source, **definitions):
         if definitions is None:
             definitions = {}
@@ -506,7 +506,7 @@ def should_exclude(context, config: Optional[Config]):
     return False
 
 
-class Context(object):
+class Context:
     def __init__(
         self,
         source: Optional[str] = None,
@@ -838,7 +838,7 @@ def run_mutation(context: Context, callback) -> str:
                 callback(result)
 
 
-class Config(object):
+class Config:
     def __init__(self, swallow_output, test_command, covered_lines_by_filename,
                  baseline_time_elapsed, test_time_multiplier, test_time_base,
                  dict_synonyms, total, using_testmon,
@@ -956,7 +956,7 @@ def guess_paths_to_mutate() -> str:
         'section.')
 
 
-class Progress(object):
+class Progress:
     def __init__(self, total, output_legend, no_progress=False):
         self.total = total
         self.output_legend = output_legend
