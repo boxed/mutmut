@@ -11,6 +11,7 @@ from os.path import exists
 from pathlib import Path
 from shutil import copy
 from time import time
+from typing import List
 
 import click
 from glob2 import glob
@@ -47,18 +48,13 @@ from mutmut.cache import print_result_cache, print_result_ids_cache, \
     update_line_numbers, print_result_cache_junitxml, get_unified_diff
 
 
-def do_apply(mutation_pk, dict_synonyms, backup):
+def do_apply(mutation_pk: str, dict_synonyms: List[str], backup: bool):
     """Apply a specified mutant to the source code
 
     :param mutation_pk: mutmut cache primary key of the mutant to apply
-    :type mutation_pk: str
-
     :param dict_synonyms: list of synonym keywords for a python dictionary
-    :type dict_synonyms: list[str]
-
     :param backup: if :obj:`True` create a backup of the source file
         before applying the mutation
-    :type backup: bool
     """
     filename, mutation_id = filename_and_mutation_id_from_pk(int(mutation_pk))
 
