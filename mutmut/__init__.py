@@ -12,6 +12,7 @@ import sys
 import toml
 from configparser import ConfigParser
 from copy import copy as copy_obj
+from dataclasses import dataclass, field
 from functools import wraps
 from io import (
     open,
@@ -43,23 +44,12 @@ except ImportError:
     mutmut_config = None
 
 
+@dataclass(frozen=True)
 class RelativeMutationID:
-    def __init__(
-        self, line: str, index: int, line_number: int, filename: Optional[str] = None
-    ):
-        self.line = line
-        self.index = index
-        self.line_number = line_number
-        self.filename = filename
-
-    def __repr__(self):
-        return 'MutationID(line="{}", index={}, line_number={}, filename={})'.format(self.line, self.index, self.line_number, self.filename)
-
-    def __eq__(self, other):
-        return (self.line, self.index, self.line_number) == (other.line, other.index, other.line_number)
-
-    def __hash__(self):
-        return hash((self.line, self.index, self.line_number))
+    line: str
+    index: int
+    line_number: int
+    filename: Optional[str] = field(default=None, compare=False, hash=False)
 
 
 ALL = RelativeMutationID(filename='%all%', line='%all%', index=-1, line_number=-1)
