@@ -28,7 +28,7 @@ from threading import (
     Thread,
 )
 from time import time
-from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from parso import parse
 from parso.python.tree import Name, Number, Keyword, FStringStart, FStringEnd
@@ -822,31 +822,31 @@ def run_mutation(context: Context, callback) -> str:
                 callback(result)
 
 
+@dataclass
 class Config:
-    def __init__(self, swallow_output, test_command, covered_lines_by_filename,
-                 baseline_time_elapsed, test_time_multiplier, test_time_base,
-                 dict_synonyms, total, using_testmon,
-                 tests_dirs, hash_of_tests, pre_mutation, post_mutation,
-                 coverage_data, paths_to_mutate, mutation_types_to_apply, no_progress, ci, rerun_all):
-        self.swallow_output = swallow_output
-        self.test_command = self._default_test_command = test_command
-        self.covered_lines_by_filename = covered_lines_by_filename
-        self.baseline_time_elapsed = baseline_time_elapsed
-        self.test_time_multiplier = test_time_multiplier
-        self.test_time_base = test_time_base
-        self.dict_synonyms = dict_synonyms
-        self.total = total
-        self.using_testmon = using_testmon
-        self.tests_dirs = tests_dirs
-        self.hash_of_tests = hash_of_tests
-        self.post_mutation = post_mutation
-        self.pre_mutation = pre_mutation
-        self.coverage_data = coverage_data
-        self.paths_to_mutate = paths_to_mutate
-        self.mutation_types_to_apply = mutation_types_to_apply
-        self.no_progress = no_progress
-        self.ci = ci
-        self.rerun_all = rerun_all
+    swallow_output: bool
+    test_command: str
+    _default_test_command: str = field(init=False)
+    covered_lines_by_filename: Optional[Dict[str, set[Optional[int]]]]
+    baseline_time_elapsed: float
+    test_time_multiplier: float
+    test_time_base: float
+    dict_synonyms: List[str]
+    total: int
+    using_testmon: bool
+    tests_dirs: List[str]
+    hash_of_tests: str
+    post_mutation: str
+    pre_mutation: str
+    coverage_data: Dict[str, Dict[int, List[str]]]
+    paths_to_mutate: List[str]
+    mutation_types_to_apply: Set[str]
+    no_progress: bool
+    ci: bool
+    rerun_all: bool
+
+    def __post_init__(self):
+        self._default_test_command = self.test_command
 
 
 def tests_pass(config: Config, callback) -> bool:
