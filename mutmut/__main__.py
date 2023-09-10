@@ -232,14 +232,30 @@ def html(dict_synonyms):
     sys.exit(0)
 
 
-def do_run(argument, paths_to_mutate, disable_mutation_types,
-           enable_mutation_types, runner, tests_dir, test_time_multiplier, test_time_base,
-           swallow_output, use_coverage, dict_synonyms, pre_mutation, post_mutation,
-           use_patch_file, paths_to_exclude, simple_output, no_progress, ci, rerun_all):
+def do_run(
+    argument,
+    paths_to_mutate,
+    disable_mutation_types,
+    enable_mutation_types,
+    runner,
+    tests_dir,
+    test_time_multiplier,
+    test_time_base,
+    swallow_output,
+    use_coverage,
+    dict_synonyms,
+    pre_mutation,
+    post_mutation,
+    use_patch_file,
+    paths_to_exclude,
+    simple_output,
+    no_progress,
+    ci,
+    rerun_all,
+) -> int:
     """return exit code, after performing an mutation test run.
 
     :return: the exit code from executing the mutation tests
-    :rtype: int
     """
     if use_coverage and use_patch_file:
         raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
@@ -434,22 +450,22 @@ def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths
         mutations_by_file[filename] = [mutation_id]
 
 
-def time_test_suite(swallow_output, test_command, using_testmon, current_hash_of_tests, no_progress):
+def time_test_suite(
+    swallow_output: bool,
+    test_command: str,
+    using_testmon: bool,
+    current_hash_of_tests,
+    no_progress,
+) -> float:
     """Execute a test suite specified by ``test_command`` and record
     the time it took to execute the test suite as a floating point number
 
     :param swallow_output: if :obj:`True` test stdout will be not be printed
-    :type swallow_output: bool
-
     :param test_command: command to spawn the testing subprocess
-    :type test_command: str
-
     :param using_testmon: if :obj:`True` the test return code evaluation will
         accommodate for ``pytest-testmon``
-    :type using_testmon: bool
 
     :return: execution time of the test suite
-    :rtype: float
     """
     cached_time = cached_test_time()
     if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
