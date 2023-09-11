@@ -185,6 +185,22 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, only_this_file=None
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
     print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED))
 
+def _get_line_diff(source, filename, mutation_id, dict_synonyms, update_cache):
+    context = Context(
+        source=source,
+        filename=filename,
+        mutation_id=mutation_id,
+        dict_synonyms=dict_synonyms,
+    )
+    mutated_source, number_of_mutations_performed = mutate(context)
+    if not number_of_mutations_performed:
+        return ""
+    try:
+        return mutated_source.splitlines()[mutation_id.line_number]
+    except IndexError as exc:
+        print(exc)
+        return str(exc)
+
 
 @init_db
 @db_session
@@ -262,6 +278,12 @@ def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
 @db_session
 def create_html_report(dict_synonyms):
     mutants = list(select(x for x in Mutant))
+    status_emoji = {
+        BAD_TIMEOUT: '⏰',
+        OK_SUSPICIOUS: '🤔',
+        BAD_SURVIVED : '🙁',
+
+    }
 
     os.makedirs('html', exist_ok=True)
 
@@ -285,6 +307,9 @@ def create_html_report(dict_synonyms):
                 mutants_by_status = defaultdict(list)
                 for mutant in mutants:
                     mutants_by_status[mutant.status].append(mutant)
+                mutants_by_line = defaultdict(list)
+                for mutant in mutants:
+                    mutants_by_line[mutant.line.line_number].append(mutant)
 
                 f.write('<html><body>')
 
@@ -301,6 +326,18 @@ def create_html_report(dict_synonyms):
                     (killed / len(mutants) * 100),
                     len(mutants_by_status[BAD_SURVIVED]),
                 ))
+
+                def print_line_diff(line_no):
+                    mutants = mutants_by_line[line_no]
+                    for mutant in sorted(mutants, key=lambda m: m.id):
+                        if mutant.status in [BAD_TIMEOUT, BAD_SURVIVED, OK_SUSPICIOUS]:
+                            diff = _get_line_diff(source, filename, RelativeMutationID(mutant.line.line, mutant.index, mutant.line.line_number), dict_synonyms, update_cache=False)
+                            yield mutant.status, diff
+
+                for i, line in enumerate(source.splitlines()):
+                    f.write(f'<p><span style="float: left; width: 4em;">{i}</span><pre>{line}</pre>&nbsp;</p>')
+                    for status, diff in print_line_diff(i):
+                        f.write(f'<p><span style="float: left; width: 4em;">{status_emoji[status]}</span><pre>{diff}</pre></p>')
 
                 def print_diffs(status):
                     mutants = mutants_by_status[status]
