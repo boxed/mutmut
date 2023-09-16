@@ -800,7 +800,9 @@ def run_mutation(context: Context, callback) -> str:
             return BAD_TIMEOUT
 
         time_elapsed = time() - start
-        if not survived and time_elapsed > config.test_time_base + (config.baseline_time_elapsed * config.test_time_multipler):
+        if not survived and time_elapsed > config.test_time_base + (
+            config.baseline_time_elapsed * config.test_time_multiplier
+        ):
             return OK_SUSPICIOUS
 
         if survived:
@@ -830,7 +832,7 @@ class Config:
         self.test_command = self._default_test_command = test_command
         self.covered_lines_by_filename = covered_lines_by_filename
         self.baseline_time_elapsed = baseline_time_elapsed
-        self.test_time_multipler = test_time_multiplier
+        self.test_time_multiplier = test_time_multiplier
         self.test_time_base = test_time_base
         self.dict_synonyms = dict_synonyms
         self.total = total
