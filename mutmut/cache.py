@@ -261,7 +261,7 @@ def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
 @init_db
 @db_session
 def create_html_report(dict_synonyms):
-    mutants = list(select(x for x in Mutant))
+    mutants = sorted(list(select(x for x in Mutant)), key=lambda x: x.line.sourcefile.filename)
 
     os.makedirs('html', exist_ok=True)
 
