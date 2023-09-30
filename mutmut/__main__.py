@@ -142,7 +142,7 @@ def main(command, argument, argument2, paths_to_mutate, backup, runner, tests_di
          swallow_output, use_coverage, dict_synonyms, cache_only, version,
          suspicious_policy, untested_policy, pre_mutation, post_mutation,
          use_patch_file, paths_to_exclude):
-    """return exit code, after performing an mutation test run.
+    """return exit code, after performing a mutation test run.
 
     :return: the exit code from executing the mutation tests
     :rtype: int

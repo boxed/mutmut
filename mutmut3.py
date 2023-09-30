@@ -2,6 +2,7 @@ import ast
 import gc
 import json
 import os
+import shutil
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -30,7 +31,7 @@ def walk_files():
     for path in paths:
         for root, dirs, files in walk(path):
             for filename in files:
-                if not filename.endswith('.py'):
+                if filename.endswith('.pyc'):
                     continue
                 if filename.endswith('__tests.py'):
                     continue
@@ -45,6 +46,10 @@ class InvalidMutantException(Exception):
     pass
 
 
+class MutmutProgrammaticFailException(Exception):
+    pass
+
+
 # language=python
 trampoline_impl = """
 from inspect import signature as __signature
@@ -54,7 +59,8 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
-        raise Exception('Failed programmatically')      
+        from __main__ import MutmutProgrammaticFailException
+        raise MutmutProgrammaticFailException('Failed programmatically')      
     elif mutant_under_test == 'stats':
         from __main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
@@ -68,12 +74,16 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
 
 def create_mutants():
     for path in walk_files():
-        create_mutants_for_file(path)
+        output_path = Path('mutants') / path
+        makedirs(output_path.parent, exist_ok=True)
+
+        if str(path).endswith('.py'):
+            create_mutants_for_file(path, output_path)
+        else:
+            shutil.copy(path, output_path)
 
 
-def create_mutants_for_file(filename):
-    output_path = Path('mutants') / filename
-    makedirs(output_path.parent, exist_ok=True)
+def create_mutants_for_file(filename, output_path):
 
     input_stat = os.stat(filename)
 
@@ -212,6 +222,7 @@ class FuncContext:
         self.count = 0
         self.mutants = []
         self.stack = []
+        self.dict_synonyms = {}
 
     def exclude_line(self):
         return False
@@ -333,7 +344,7 @@ class HammettRunner(TestRunner):
 
     def run_forced_fail(self):
         import hammett
-        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False)
+        return hammett.main(quiet=False, fail_fast=True, disable_assert_analyze=True, use_cache=False)
 
     def prepare_main_test_run(self):
         import hammett
@@ -389,7 +400,11 @@ def mutmut_3():
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
+    print(sys.path)
+
     runner = HammettRunner()
+    # runner = PytestRunner()
+    runner.prepare_main_test_run()
 
     # TODO: run these steps only if we have mutants to test
     print('running stats...')
@@ -400,26 +415,26 @@ def mutmut_3():
         return
     print('done')
 
-    if not mutmut.tests_by_function:
-        print('failed to collect stats')
-        return
 
+    # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
     print('running forced fail test')
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
     try:
         if runner.run_forced_fail() == 0:
             print("FAILED")
             return
-    except Exception as e:
+    except MutmutProgrammaticFailException as e:
         # We get here if there's a mutant in the setup code path
         assert e.args[0] == 'Failed programmatically'
     print('done')
 
+    if not mutmut.tests_by_function:
+        print('failed to collect stats')
+        return
+
     def read_one_child_exit_status():
         pid, exit_code = os.wait()
         mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
-
-    runner.prepare_main_test_run()
 
     mutation_data_by_path : Dict[str, MutationData] = {}
     mutation_data_by_pid : Dict[int, MutationData] = {}  # many pids map to one MutationData
@@ -433,6 +448,8 @@ def mutmut_3():
     total_count = 0
 
     for path in walk_files():
+        if not str(path).endswith('.py'):
+            continue
         assert path not in mutation_data_by_path
         m = MutationData(path=path)
         mutation_data_by_path[str(path)] = m
