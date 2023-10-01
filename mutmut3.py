@@ -54,7 +54,6 @@ class MutmutProgrammaticFailException(Exception):
 trampoline_impl = """
 from inspect import signature as __signature
 
-
 def __mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
@@ -64,11 +63,11 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
     elif mutant_under_test == 'stats':
         from __main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
-        mutant_under_test = '..matches nothing..'
-    prefix = orig.__module__ + '.' + orig.__name__ + '$'
-    if not mutant_under_test.startswith(prefix):
         return orig(*args, **kwargs)
-    return mutants[mutant_under_test](*args, **kwargs)
+    prefix = orig.__module__ + '.'
+    # if not mutant_under_test.startswith(prefix):
+    #     return orig(*args, **kwargs)
+    return mutants[mutant_under_test[len(prefix):]](*args, **kwargs)
 
 """
 
@@ -340,11 +339,11 @@ class HammettRunner(TestRunner):
                 mutmut.tests_by_function[function].add(_name)
             mutmut._stats.clear()
 
-        return hammett.main(quiet=False, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
 
     def run_forced_fail(self):
         import hammett
-        return hammett.main(quiet=False, fail_fast=True, disable_assert_analyze=True, use_cache=False)
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False)
 
     def prepare_main_test_run(self):
         import hammett
@@ -385,6 +384,16 @@ def print_stats(mutation_data_by_path):
         print('% killed:', len(killed) / (len(killed) + len(survived)) * 100)
 
 
+def run_forced_fail(runner):
+    os.environ['MUTANT_UNDER_TEST'] = 'fail'
+    try:
+        if runner.run_forced_fail() == 0:
+            print("FAILED")
+            os._exit(1)
+    except MutmutProgrammaticFailException:
+        pass
+
+
 def mutmut_3():
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
@@ -400,8 +409,6 @@ def mutmut_3():
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
-    print(sys.path)
-
     runner = HammettRunner()
     # runner = PytestRunner()
     runner.prepare_main_test_run()
@@ -413,24 +420,20 @@ def mutmut_3():
     if runner.run_stats():
         print("FAILED")
         return
-    print('done')
+    print('    done')
 
-
-    # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
-    print('running forced fail test')
-    os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    try:
-        if runner.run_forced_fail() == 0:
-            print("FAILED")
-            return
-    except MutmutProgrammaticFailException as e:
-        # We get here if there's a mutant in the setup code path
-        assert e.args[0] == 'Failed programmatically'
-    print('done')
+    runner.prepare_main_test_run()
 
     if not mutmut.tests_by_function:
         print('failed to collect stats')
         return
+
+    # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
+    print('running forced fail test')
+    run_forced_fail(runner)
+    print('    done')
+
+    runner.prepare_main_test_run()
 
     def read_one_child_exit_status():
         pid, exit_code = os.wait()
@@ -454,8 +457,6 @@ def mutmut_3():
         m = MutationData(path=path)
         mutation_data_by_path[str(path)] = m
 
-    print_stats(mutation_data_by_path)
-
     try:
         print('Running mutation testing...')
 
@@ -466,15 +467,21 @@ def mutmut_3():
         ]
 
         for m, key, result in tqdm(it):
+            key = key.replace('__init__.', '')
             if result is not None:
                 continue
+
+            # # single threaded:
+            # runner.prepare_main_test_run()
+            # os.environ['MUTANT_UNDER_TEST'] = key
+            # function = function_name_from_key(key)
+            # tests = mutmut.tests_by_function[function]
+            # result = runner.run_tests(key=key, tests=tests)
 
             pid = os.fork()
             if not pid:
                 # In the child
-                sys.path.insert(0, os.path.abspath('mutants'))
                 os.environ['MUTANT_UNDER_TEST'] = key
-
                 function = function_name_from_key(key)
 
                 tests = mutmut.tests_by_function[function]
