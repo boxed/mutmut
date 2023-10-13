@@ -303,7 +303,12 @@ def do_run(
         )
 
     tests_dirs = []
-    for p in split_paths(tests_dir):
+    test_paths = split_paths(tests_dir)
+    if test_paths is None:
+        raise FileNotFoundError(
+            'No test folders found in current folder. Run this where there is a "tests" or "test" folder.'
+        )
+    for p in test_paths:
         tests_dirs.extend(glob(p, recursive=True))
 
     for p in paths_to_mutate:
