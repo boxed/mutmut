@@ -11,7 +11,7 @@ from os.path import join, dirname
 from typing import Tuple
 
 
-from junit_xml import TestSuite, TestCase
+from junit_xml import TestSuite, TestCase, to_xml_report_string
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
@@ -255,7 +255,7 @@ def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
             test_cases.append(tc)
 
     ts = TestSuite("mutmut", test_cases)
-    return TestSuite.to_xml_string([ts])
+    return to_xml_report_string([ts])
 
 
 @init_db
