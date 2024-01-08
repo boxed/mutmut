@@ -55,9 +55,11 @@ it will try to figure out where the code to mutate lies. Run
     mutmut --help
 
 for the available flags, to use other runners, etc. The recommended way to use
-mutmut if the defaults aren't working for you is to add a block in ``setup.cfg``.
+mutmut if the defaults aren't working for you is to add a
+block in ``setup.cfg`` or ``project.toml``.
 Then when you come back to mutmut weeks later you don't have to figure out the
-flags again, just run ``mutmut run`` and it works. Like this:
+flags again, just run ``mutmut run`` and it works.
+Like this in ``setup.cfg``:
 
 .. code-block:: ini
 
@@ -67,6 +69,14 @@ flags again, just run ``mutmut run`` and it works. Like this:
     runner=python -m hammett -x
     tests_dir=tests/
     dict_synonyms=Struct, NamedStruct
+
+or like this in ``pyproject.toml``:
+
+.. code-block:: ini
+
+    [tool.mutmut]
+    paths_to_mutate="src"
+    runner="python -m hammett -x"
 
 To use multiple paths either in the ``paths_to_mutate`` or ``tests_dir`` option
 use a comma or colon separated list. For example:
