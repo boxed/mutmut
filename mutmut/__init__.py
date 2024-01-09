@@ -1286,7 +1286,7 @@ def compute_exit_code(
 ) -> int:
     """Compute an exit code for mutmut mutation testing
 
-    The following exit codes are available for mutmut:
+    The following exit codes are available for mutmut (as documented for the CLI run command):
      * 0 if all mutants were killed (OK_KILLED)
      * 1 if a fatal error occurred
      * 2 if one or more mutants survived (BAD_SURVIVED)
