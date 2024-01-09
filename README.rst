@@ -48,11 +48,17 @@ You can get started with a simple:
 
 This will by default run pytest (or unittest if pytest is unavailable)
 on tests in the "tests" or "test" folder and
-it will try to figure out where the code to mutate lies. Run
+it will try to figure out where the code to mutate lies.
+
+NOTE that mutmut will apply the mutations directly, one at a time;
+it is **highly** recommended to add all changes to source control
+before running.
+
+Enter
 
 .. code-block:: console
 
-    mutmut --help
+    mutmut run --help
 
 for the available flags, to use other runners, etc. The recommended way to use
 mutmut if the defaults aren't working for you is to add a
@@ -96,11 +102,11 @@ grouped by file. You can now look at a specific mutant diff with ``mutmut show 3
 all mutants for a specific file with ``mutmut show path/to/file.py`` or all mutants
 with ``mutmut show all``.
 
-
 You can also write a mutant to disk with ``mutmut apply 3``. You should **REALLY**
 have the file you mutate under source code control and committed before you apply
 a mutant!
 
+To generate a HTML report for a web browser: ``mutmut html``
 
 Whitelisting
 ------------
