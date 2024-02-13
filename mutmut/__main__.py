@@ -388,16 +388,16 @@ Legend for output:
         except ImportError:
             runner = 'python -m unittest'
 
+    if hasattr(mutmut_config, 'init'):
+        mutmut_config.init()
+        
     baseline_time_elapsed = time_test_suite(
         swallow_output=not swallow_output,
         test_command=runner,
         using_testmon=using_testmon,
         current_hash_of_tests=current_hash_of_tests,
         no_progress=no_progress,
-    )
-
-    if hasattr(mutmut_config, 'init'):
-        mutmut_config.init()
+    )    
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
