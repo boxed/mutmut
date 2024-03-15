@@ -15,7 +15,7 @@ from junit_xml import TestSuite, TestCase, to_xml_report_string
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, UNTESTED, \
+from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
     OK_KILLED, RelativeMutationID, Context, mutate
 
 db = Database()
@@ -183,7 +183,7 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, only_this_file=None
     print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
     print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
     print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED))
+    print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED or x.status == SKIPPED))
 
 
 @init_db
