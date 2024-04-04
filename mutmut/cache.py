@@ -260,12 +260,12 @@ def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
 
 @init_db
 @db_session
-def create_html_report(dict_synonyms):
+def create_html_report(dict_synonyms, directory):
     mutants = sorted(list(select(x for x in Mutant)), key=lambda x: x.line.sourcefile.filename)
 
-    os.makedirs('html', exist_ok=True)
+    os.makedirs(directory, exist_ok=True)
 
-    with open('html/index.html', 'w') as index_file:
+    with open(join(directory, 'index.html'), 'w') as index_file:
         index_file.write('<h1>Mutation testing report</h1>')
 
         index_file.write('Killed %s out of %s mutants' % (len([x for x in mutants if x.status == OK_KILLED]), len(mutants)))
@@ -273,7 +273,7 @@ def create_html_report(dict_synonyms):
         index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Skipped</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
 
         for filename, mutants in groupby(mutants, key=lambda x: x.line.sourcefile.filename):
-            report_filename = join('html', filename)
+            report_filename = join(directory, filename)
 
             mutants = list(mutants)
 

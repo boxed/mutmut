@@ -704,3 +704,16 @@ def test_html_output(surviving_mutants_filesystem):
             '<table><thead><tr><th>File</th><th>Total</th><th>Skipped</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
             '<tr><td><a href="foo.py.html">foo.py</a></td><td>2</td><td>0</td><td>0</td><td>0.00</td><td>2</td>'
             '</table></body></html>')
+        
+def test_html_custom_output(surviving_mutants_filesystem):
+    result = CliRunner().invoke(climain, ['run', '--paths-to-mutate=foo.py', "--test-time-base=15.0"], catch_exceptions=False)
+    print(repr(result.output))
+    result = CliRunner().invoke(climain, ['html', '--directory', 'htmlmut'])
+    assert os.path.isfile("htmlmut/index.html")
+    with open("htmlmut/index.html") as f:
+        assert f.read() == (
+            '<h1>Mutation testing report</h1>'
+            'Killed 0 out of 2 mutants'
+            '<table><thead><tr><th>File</th><th>Total</th><th>Skipped</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
+            '<tr><td><a href="foo.py.html">foo.py</a></td><td>2</td><td>0</td><td>0</td><td>0.00</td><td>2</td>'
+            '</table></body></html>')
