@@ -701,6 +701,6 @@ def test_html_output(surviving_mutants_filesystem):
         assert f.read() == (
             '<h1>Mutation testing report</h1>'
             'Killed 0 out of 2 mutants'
-            '<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
-            '<tr><td><a href="foo.py.html">foo.py</a></td><td>2</td><td>0</td><td>0.00</td><td>2</td>'
+            '<table><thead><tr><th>File</th><th>Total</th><th>Skipped</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>'
+            '<tr><td><a href="foo.py.html">foo.py</a></td><td>2</td><td>0</td><td>0</td><td>0.00</td><td>2</td>'
             '</table></body></html>')
