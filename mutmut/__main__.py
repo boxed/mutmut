@@ -254,14 +254,16 @@ def junitxml(dict_synonyms, suspicious_policy, untested_policy):
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))
 @click.option('--dict-synonyms')
+@click.option('-d', '--directory', help='Write the output files to DIR.')
 @config_from_file(
     dict_synonyms='',
+    directory='html',
 )
-def html(dict_synonyms):
+def html(dict_synonyms, directory):
     """
     Generate a HTML report of surviving mutants.
     """
-    create_html_report(dict_synonyms)
+    create_html_report(dict_synonyms, directory)
     sys.exit(0)
 
 
