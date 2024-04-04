@@ -325,6 +325,11 @@ def create_html_report(dict_synonyms):
                     f.write('Mutants that made the test suite take longer, but otherwise seemed ok')
                     print_diffs(OK_SUSPICIOUS)
 
+                if mutants_by_status[SKIPPED]:
+                    f.write('<h2>Skipped</h2>')
+                    f.write('Mutants that were skipped')
+                    print_diffs(SKIPPED)
+
                 f.write('</body></html>')
 
         index_file.write('</table></body></html>')
