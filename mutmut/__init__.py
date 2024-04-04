@@ -1220,7 +1220,7 @@ def read_patch_data(patch_file_path: str):
         diffs = whatthepatch.parse_patch(f.read())
 
     return {
-        diff.header.new_path: {change.new for change in diff.changes if change.old is None}
+        os.path.normpath(diff.header.new_path): {change.new for change in diff.changes if change.old is None}
         for diff in diffs if diff.changes
     }
 
