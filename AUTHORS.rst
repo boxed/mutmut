@@ -28,3 +28,11 @@ Credits
 * Daniel Versoza Alves <daniel.alves@voxy.com>
 * Zac Hatfield-Dodds <zac.hatfield.dodds@gmail.com>
 * Jan Królikowski <yanekk86@gmail.com>
+* Tal Amuyal <talamuyal@gmail.com>
+* Eivind Jahren <eivind.jahren@gmail.com>
+* WiredNerd <pbuschmail-gitlab@yahoo.com>
+* Kees Hink <kees@fourdigits.nl>
+* Jim Rybarski <jim@rybarski.com>
+* Christopher J. Brody <chris.brody+brodybits@gmail.com>
+* Century-ss <hgfc7543ggfdch@gmail.com>
+* Michael Champagne <michael.champagne@elapsetech.com>
