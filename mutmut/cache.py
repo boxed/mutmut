@@ -270,7 +270,7 @@ def create_html_report(dict_synonyms):
 
         index_file.write('Killed %s out of %s mutants' % (len([x for x in mutants if x.status == OK_KILLED]), len(mutants)))
 
-        index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
+        index_file.write('<table><thead><tr><th>File</th><th>Total</th><th>Skipped</th><th>Killed</th><th>% killed</th><th>Survived</th></thead>')
 
         for filename, mutants in groupby(mutants, key=lambda x: x.line.sourcefile.filename):
             report_filename = join('html', filename)
@@ -293,10 +293,11 @@ def create_html_report(dict_synonyms):
                 killed = len(mutants_by_status[OK_KILLED])
                 f.write('Killed %s out of %s mutants' % (killed, len(mutants)))
 
-                index_file.write('<tr><td><a href="%s.html">%s</a></td><td>%s</td><td>%s</td><td>%.2f</td><td>%s</td>' % (
+                index_file.write('<tr><td><a href="%s.html">%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%.2f</td><td>%s</td>' % (
                     filename,
                     filename,
                     len(mutants),
+                    len(mutants_by_status[SKIPPED]),
                     killed,
                     (killed / len(mutants) * 100),
                     len(mutants_by_status[BAD_SURVIVED]),
@@ -323,6 +324,11 @@ def create_html_report(dict_synonyms):
                     f.write('<h2>Suspicious</h2>')
                     f.write('Mutants that made the test suite take longer, but otherwise seemed ok')
                     print_diffs(OK_SUSPICIOUS)
+
+                if mutants_by_status[SKIPPED]:
+                    f.write('<h2>Skipped</h2>')
+                    f.write('Mutants that were skipped')
+                    print_diffs(SKIPPED)
 
                 f.write('</body></html>')
 
