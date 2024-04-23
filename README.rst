@@ -215,6 +215,8 @@ Inversely, you can also only specify to only run specific mutations with ``--ena
 Note that ``--disable-mutation-types`` and ``--enable-mutation-types`` are exclusive and cannot
 be combined.
 
+Changes made to ``mutmut_config.py`` does not invalidate the cache.
+If you modify the configuration file, you will likely need to remove ``.mutmut-cache`` manually to ensure that the changes take effect.
 
 Selecting tests to run
 ----------------------
