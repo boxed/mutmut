@@ -3,6 +3,9 @@ from parso.python.tree import Number, Keyword
 
 
 class LambdaMutation(Mutation):
+    def __init__(self):
+        super().__init__('LambdaMutation')
+
     def partition_node_list(self, nodes, value):
         for i, n in enumerate(nodes):
             if hasattr(n, 'value') and n.value == value:
@@ -10,7 +13,7 @@ class LambdaMutation(Mutation):
 
         assert False, "didn't find node to split on"
 
-    def mutate(self, children, **_):
+    def mutate(self, children, **kwargs):
         pre, op, post = self.partition_node_list(children, value=':')
 
         if len(post) == 1 and getattr(post[0], 'value', None) == 'None':

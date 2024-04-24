@@ -3,7 +3,10 @@ from parso.python.tree import Name
 
 
 class ExpressionMutation(Mutation):
-    def mutate(self, children, **_):
+    def __init__(self):
+        super().__init__('ExpressionMutation')
+
+    def mutate(self, children, **kwargs):
         def handle_assignment(children):
             mutation_index = -1  # we mutate the last value to handle multiple assignement
             if getattr(children[mutation_index], 'value', '---') != 'None':

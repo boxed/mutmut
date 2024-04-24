@@ -3,7 +3,10 @@ from parso.python.tree import Keyword
 
 
 class AndOrTestMutation(Mutation):
-    def mutate(self, children, node, **_):
+    def __init__(self):
+        super().__init__('AndOrTestMutation')
+
+    def mutate(self, children, node, **kwargs):
         children = children[:]
         children[1] = Keyword(
             value={'and': ' or', 'or': ' and'}[children[1].value],

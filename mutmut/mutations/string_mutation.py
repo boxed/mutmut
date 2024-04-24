@@ -2,7 +2,10 @@ from mutation import *
 
 
 class StringMutation(Mutation):
-    def mutate(self, value, **_):
+    def __init__(self):
+        super().__init__('StringMutation')
+
+    def mutate(self, value, **kwargs):
         prefix = value[:min(x for x in [value.find('"'), value.find("'")] if x != -1)]
         value = value[len(prefix):]
 
