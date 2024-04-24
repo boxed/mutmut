@@ -6,5 +6,5 @@ class Mutation(ABC):
         self.name = name
 
     @abstractmethod
-    def mutate(self):
+    def mutate(self, **kwargs):
         ...
