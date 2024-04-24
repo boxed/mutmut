@@ -21,7 +21,6 @@ from mutmut import (
     MUTANT_STATUSES,
     Context,
     __version__,
-    mutations_by_type,
     mutmut_config,
     config_from_file,
     guess_paths_to_mutate,
@@ -38,6 +37,7 @@ from mutmut import (
     print_status,
     close_active_queues,
 )
+from mutmut.mutator import mutations_by_type
 from mutmut.cache import (
     create_html_report,
     cached_hash_of_tests,

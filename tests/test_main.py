@@ -19,7 +19,6 @@ from click.testing import CliRunner
 
 from mutmut import (
     compute_exit_code,
-    mutations_by_type,
     popen_streaming_output,
     Progress,
     python_source_files,
@@ -27,6 +26,7 @@ from mutmut import (
     MUTANT_STATUSES,
     __version__,
 )
+from mutmut.mutator import mutations_by_type
 from mutmut.__main__ import climain
 
 file_to_mutate_lines = [

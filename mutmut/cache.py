@@ -16,7 +16,8 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
-    OK_KILLED, RelativeMutationID, Context, mutate
+    OK_KILLED, RelativeMutationID, Context
+from mutmut.mutator import mutate
 
 db = Database()
 

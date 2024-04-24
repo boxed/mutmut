@@ -6,16 +6,15 @@ from pytest import raises, fixture
 from unittest.mock import MagicMock, patch
 
 from mutmut import (
-    partition_node_list,
-    name_mutation,
     run_mutation_tests,
     check_mutants,
     close_active_queues,
     read_patch_data,
     OK_KILLED,
     Context, 
-    mutate)
+    )
 
+from mutmut.mutator import partition_node_list, name_mutation, mutate
 
 def test_partition_node_list_no_nodes():
     with raises(AssertionError):

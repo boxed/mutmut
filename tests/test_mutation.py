@@ -3,8 +3,10 @@
 import pytest
 from parso import parse
 
-from mutmut import mutate, ALL, Context, list_mutations, RelativeMutationID, \
-    array_subscript_pattern, function_call_pattern, ASTPattern
+from mutmut import ALL, Context, list_mutations, RelativeMutationID
+
+from mutmut.mutator import mutate, array_subscript_pattern, function_call_pattern
+from mutmut.helpers.astpattern import ASTPattern
 
 
 def test_matches_py3():
