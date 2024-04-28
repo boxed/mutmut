@@ -5,27 +5,30 @@ from parso import parse
 
 from mutmut import ALL, Context, list_mutations, RelativeMutationID
 
-from mutmut.mutator import mutate, array_subscript_pattern, function_call_pattern
+from mutmut.mutator import mutate
+from mutmut.mutations.name_mutation import NameMutation
 from mutmut.helpers.astpattern import ASTPattern
 
 
 def test_matches_py3():
     node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
-    assert not array_subscript_pattern.matches(node=node)
+    name_mutator = NameMutation()
+    assert not name_mutator.array_subscript_pattern.matches(node=node)
 
 
 def test_matches():
     node = parse('from foo import bar').children[0]
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
+    name_mutator = NameMutation()
+    assert not name_mutator.array_subscript_pattern.matches(node=node)
+    assert not name_mutator.function_call_pattern.matches(node=node)
+    assert not name_mutator.array_subscript_pattern.matches(node=node)
+    assert not name_mutator.function_call_pattern.matches(node=node)
 
     node = parse('foo[bar]\n').children[0].children[0].children[1].children[1]
-    assert array_subscript_pattern.matches(node=node)
+    assert name_mutator.array_subscript_pattern.matches(node=node)
 
     node = parse('foo(bar)\n').children[0].children[0].children[1].children[1]
-    assert function_call_pattern.matches(node=node)
+    assert name_mutator.function_call_pattern.matches(node=node)
 
 
 def test_ast_pattern_for_loop():

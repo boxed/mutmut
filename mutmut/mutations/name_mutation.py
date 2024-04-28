@@ -20,7 +20,7 @@ _name(_any)
             'None': '""',
         }
 
-    def mutate(self, node, value):
+    def mutate(self, node, value, **kwargs):
         if value in self.simple_mutants:
             return self.simple_mutants[value]
 

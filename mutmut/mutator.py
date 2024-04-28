@@ -4,19 +4,18 @@ from typing import Tuple
 from parso import parse
 from parso.python.tree import Name, Number, Keyword, FStringStart, FStringEnd
 
-from mutmut.helpers.astpattern import ASTPattern
 from mutmut.helpers.context import Context, ALL
-from mutations.and_or_test_mutation import AndOrTestMutation
-from mutations.argument_mutation import ArgumentMutation
-from mutations.decorator_mutation import DecoratorMutation
-from mutations.expression_mutation import ExpressionMutation
-from mutations.f_string_mutation import FStringMutation
-from mutations.keyword_mutation import KeywordMutation
-from mutations.lambda_mutation import LambdaMutation
-from mutations.name_mutation import NameMutation
-from mutations.number_mutation import NumberMutation
-from mutations.operator_mutation import OperatorMutation
-from mutations.string_mutation import StringMutation
+from mutmut.mutations.and_or_test_mutation import AndOrTestMutation
+from mutmut.mutations.argument_mutation import ArgumentMutation
+from mutmut.mutations.decorator_mutation import DecoratorMutation
+from mutmut.mutations.expression_mutation import ExpressionMutation
+from mutmut.mutations.f_string_mutation import FStringMutation
+from mutmut.mutations.keyword_mutation import KeywordMutation
+from mutmut.mutations.lambda_mutation import LambdaMutation
+from mutmut.mutations.name_mutation import NameMutation
+from mutmut.mutations.number_mutation import NumberMutation
+from mutmut.mutations.operator_mutation import OperatorMutation
+from mutmut.mutations.string_mutation import StringMutation
 
 try:
     import mutmut_config
@@ -47,7 +46,6 @@ class SkipException(Exception):
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 CYCLE_PROCESS_AFTER = 100
-
 
 mutations_by_type = {
     'operator': dict(value=OperatorMutation),
@@ -109,8 +107,8 @@ def mutate_node(node, context: Context):
             context.index = 0  # indexes are unique per line, so start over here!
 
         if node.type == 'expr_stmt':
-            if node.children[0].type == 'name' and node.children[0].value.startswith('__') and node.children[
-                0].value.endswith('__'):
+            if (node.children[0].type == 'name' and node.children[0].value.startswith('__') and
+                    node.children[0].value.endswith('__')):
                 if node.children[0].value[2:-2] in dunder_whitelist:
                     return
 
@@ -130,12 +128,13 @@ def mutate_node(node, context: Context):
         if mutation is None:
             return
 
-        for key, value in sorted(mutation.items()):
-            old = getattr(node, key)
+        for node_attribute, concrete_mutation in sorted(mutation.items()):
+            old = getattr(node, node_attribute)
             if context.exclude_line():
                 continue
 
-            new = value(
+            mutation_instance = concrete_mutation()
+            new = mutation_instance.mutate(
                 context=context,
                 node=node,
                 value=getattr(node, 'value', None),
@@ -159,7 +158,7 @@ def mutate_node(node, context: Context):
                         mutmut_config.pre_mutation_ast(context=context)
                     if context.should_mutate(node):
                         context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                        setattr(node, key, new)
+                        setattr(node, node_attribute, new)
                     context.index += 1
                 # this is just an optimization to stop early
                 if context.performed_mutation_ids and context.mutation_id != ALL:

@@ -47,7 +47,7 @@ from _name import *
             '<>': '==',
         }
 
-    def mutate(self, node, value):
+    def mutate(self, node, value, **kwargs):
         if self.import_from_star_pattern.matches(node=node):
             return
 

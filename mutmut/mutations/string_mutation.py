@@ -1,4 +1,4 @@
-from mutation import *
+from mutmut.mutations.mutation import *
 
 
 class StringMutation(Mutation):

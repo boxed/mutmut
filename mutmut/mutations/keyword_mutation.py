@@ -15,7 +15,7 @@ class KeywordMutation(Mutation):
             'False': 'True',
         }
 
-    def mutate(self, context, value):
+    def mutate(self, context, value, **kwargs):
         if len(context.stack) > 2 and context.stack[-2].type in ('comp_op', 'sync_comp_for') and value in ('in', 'is'):
             return
 
