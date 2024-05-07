@@ -1,25 +1,13 @@
 import os
 import traceback
-from io import (
-    open,
-)
+from io import (open, )
 from os.path import exists
 
 import click
 from glob2 import glob
 
-from mutmut import (
-    mutmut_config,
-    guess_paths_to_mutate,
-    Config,
-    Progress,
-    check_coverage_data_filepaths,
-    run_mutation_tests,
-    read_coverage_data,
-    read_patch_data,
-    compute_exit_code,
-    close_active_queues,
-)
+from mutmut import (mutmut_config, guess_paths_to_mutate, Config, Progress, check_coverage_data_filepaths,
+                    run_mutation_tests, read_coverage_data, read_patch_data, compute_exit_code, close_active_queues, )
 from mutmut.cache import hash_of_tests
 from mutmut.cli.cli_helper import parse_run_argument
 from mutmut.cli.helper.run_utils import split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files
@@ -31,26 +19,9 @@ class Run:
     null_out = open(os.devnull, 'w')
     DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
-    def __init__(self,
-                 argument,
-                 paths_to_mutate,
-                 disable_mutation_types,
-                 enable_mutation_types,
-                 runner,
-                 tests_dir,
-                 test_time_multiplier,
-                 test_time_base,
-                 swallow_output,
-                 use_coverage,
-                 dict_synonyms,
-                 pre_mutation,
-                 post_mutation,
-                 use_patch_file,
-                 paths_to_exclude,
-                 simple_output,
-                 no_progress,
-                 ci,
-                 rerun_all):
+    def __init__(self, argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner, tests_dir,
+                 test_time_multiplier, test_time_base, swallow_output, use_coverage, dict_synonyms, pre_mutation,
+                 post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress, ci, rerun_all):
 
         self.argument = argument
         self.paths_to_mutate = paths_to_mutate
@@ -81,8 +52,7 @@ class Run:
 
         if test_paths is None:
             raise FileNotFoundError(
-                'No test folders found in current folder. Run this where there is a "tests" or "test" folder.'
-            )
+                'No test folders found in current folder. Run this where there is a "tests" or "test" folder.')
 
         for p in test_paths:
             tests_dirs.extend(glob(p, recursive=True))
@@ -134,7 +104,8 @@ class Run:
 
         if invalid_types:
             raise click.BadArgumentUsage(
-                f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
+                f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation "
+                f"types are: {', '.join(mutations_by_type.keys())}")
 
     def check_coverage_file(self):
         """
@@ -157,27 +128,19 @@ class Run:
             self.paths_to_mutate = split_paths(self.paths_to_mutate)
 
         if not self.paths_to_mutate:
-            raise click.BadOptionUsage(
-                '--paths-to-mutate',
-                'You must specify a list of paths to mutate.'
-                'Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg.'
-                'To specify multiple paths, separate them with commas or colons (i.e: --paths-to-mutate=path1/,'
-                'path2/path3/,path4/).'
-            )
+            raise click.BadOptionUsage('--paths-to-mutate', 'You must specify a list of paths to mutate.'
+                                                            'Either as a command line argument, or by setting '
+                                                            'paths_to_mutate under the section [mutmut] in setup.cfg.'
+                                                            'To specify multiple paths, separate them with commas or '
+                                                            'colons (i.e: --paths-to-mutate=path1/,'
+                                                            'path2/path3/,path4/).')
 
     def get_output_legend(self):
         """
         Get the output legend based on the simple_output flag
-
         """
 
-        output_legend = {
-            "killed": "🎉",
-            "timeout": "⏰",
-            "suspicious": "🤔",
-            "survived": "🙁",
-            "skipped": "🔇",
-        }
+        output_legend = {"killed": "🎉", "timeout": "⏰", "suspicious": "🤔", "survived": "🙁", "skipped": "🔇", }
 
         if self.simple_output:
             output_legend = {key: key.upper() for (key, value) in output_legend.items()}
@@ -208,8 +171,8 @@ class Run:
     def check_additional_imports(self):
         """
         Check if additional imports are needed for the runner
-
         """
+
         if self.runner is self.DEFAULT_RUNNER:
             try:
                 import pytest  # noqa
@@ -222,7 +185,6 @@ class Run:
     def check_paths_to_exclude(self):
         """
         Check if the paths to exclude are valid
-
         """
 
         self.paths_to_exclude = self.paths_to_exclude or ''
@@ -284,12 +246,8 @@ class Run:
         :param current_hash_of_tests: hash of the tests
         :return: configuration for the mutation testing
         """
-        testSuiteTimer = TestSuiteTimer(
-            swallow_output=not self.swallow_output,
-            test_command=self.runner,
-            using_testmon=self.using_testmon,
-            no_progress=self.no_progress,
-        )
+        testSuiteTimer = TestSuiteTimer(swallow_output=not self.swallow_output, test_command=self.runner,
+                                        using_testmon=self.using_testmon, no_progress=self.no_progress, )
 
         baseline_time_elapsed = testSuiteTimer.time_test_suite(current_hash_of_tests)
 
@@ -300,27 +258,16 @@ class Run:
 
         self.check_paths_to_exclude()
 
-        return Config(
-            total=0,  # we'll fill this in later!
-            swallow_output=not self.swallow_output,
-            test_command=self.runner,
-            covered_lines_by_filename=covered_lines_by_filename,
-            coverage_data=coverage_data,
-            baseline_time_elapsed=baseline_time_elapsed,
-            dict_synonyms=self.dict_synonyms,
-            using_testmon=self.using_testmon,
-            tests_dirs=self.tests_dirs,
-            hash_of_tests=current_hash_of_tests,
-            test_time_multiplier=self.test_time_multiplier,
-            test_time_base=self.test_time_base,
-            pre_mutation=self.pre_mutation,
-            post_mutation=self.post_mutation,
-            paths_to_mutate=self.paths_to_mutate,
-            mutation_types_to_apply=self.mutation_types_to_apply,
-            no_progress=self.no_progress,
-            ci=self.ci,
-            rerun_all=self.rerun_all
-        )
+        return Config(total=0,  # we'll fill this in later!
+                      swallow_output=not self.swallow_output, test_command=self.runner,
+                      covered_lines_by_filename=covered_lines_by_filename, coverage_data=coverage_data,
+                      baseline_time_elapsed=baseline_time_elapsed, dict_synonyms=self.dict_synonyms,
+                      using_testmon=self.using_testmon, tests_dirs=self.tests_dirs, hash_of_tests=current_hash_of_tests,
+                      test_time_multiplier=self.test_time_multiplier, test_time_base=self.test_time_base,
+                      pre_mutation=self.pre_mutation, post_mutation=self.post_mutation,
+                      paths_to_mutate=self.paths_to_mutate,
+                      mutation_types_to_apply=self.mutation_types_to_apply, no_progress=self.no_progress, ci=self.ci,
+                      rerun_all=self.rerun_all)
 
     def do_run(self):
         """
@@ -344,8 +291,7 @@ class Run:
         mutations_by_file = {}
 
         parse_run_argument(self.argument, config, self.dict_synonyms, mutations_by_file, self.paths_to_exclude,
-                           self.paths_to_mutate,
-                           self.tests_dirs)
+                           self.paths_to_mutate, self.tests_dirs)
 
         config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
