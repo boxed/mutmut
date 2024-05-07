@@ -130,14 +130,6 @@ def do_run(
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
 
-    def split_paths(paths):
-        # This method is used to split paths that are separated by commas or colons
-        for sep in [',', ':']:
-            separated = list(filter(lambda p: Path(p).exists(), paths.split(sep)))
-            if separated:
-                return separated
-        return None
-
     if not isinstance(paths_to_mutate, (list, tuple)):
         # If the paths_to_mutate is a string, we split it by commas or colons
         paths_to_mutate = split_paths(paths_to_mutate)
@@ -281,6 +273,15 @@ Legend for output:
         print()  # make sure we end the output with a newline
         # Close all active multiprocessing queues to avoid hanging up the main process
         close_active_queues()
+
+
+def split_paths(paths):
+    # This method is used to split paths that are separated by commas or colons
+    for sep in [',', ':']:
+        separated = list(filter(lambda p: Path(p).exists(), paths.split(sep)))
+        if separated:
+            return separated
+    return None
 
 
 """
