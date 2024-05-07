@@ -107,8 +107,11 @@ def do_run(
     # Check bad arguments
     check_bad_arguments(use_coverage, use_patch_file, disable_mutation_types, enable_mutation_types)
 
-    # Get mutation types to apply and invalid types
+    # Get mutation types to apply
     mutation_types_to_apply = get_mutation_types_to_apply(enable_mutation_types, disable_mutation_types)
+
+    # Check invalid types
+    check_invalid_types(mutation_types_to_apply, enable_mutation_types, disable_mutation_types)
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
@@ -305,24 +308,37 @@ def get_mutation_types_to_apply(enable_mutation_types, disable_mutation_types):
     :return: mutation types to apply
     """
 
+    mutation_types_to_apply = set(mutations_by_type.keys())
+
     if enable_mutation_types:
         mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
-        invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
 
     elif disable_mutation_types:
         mutation_types_to_apply = set(mutations_by_type.keys()) - set(
             mtype.strip() for mtype in disable_mutation_types.split(","))
-        invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
 
-    else:
-        mutation_types_to_apply = set(mutations_by_type.keys())
-        invalid_types = None
+    return mutation_types_to_apply
+
+
+def check_invalid_types(mutation_types_to_apply, enable_mutation_types, disable_mutation_types):
+    """
+    Check if the mutation types to apply are valid
+
+    :param mutation_types_to_apply: mutation types to apply
+    :param enable_mutation_types: mutation types to enable
+    :param disable_mutation_types: mutation types to disable
+    """
+
+    invalid_types = None
+
+    if enable_mutation_types:
+        invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
+    elif disable_mutation_types:
+        invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
 
     if invalid_types:
         raise click.BadArgumentUsage(
             f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
-
-    return mutation_types_to_apply
 
 
 def check_paths_to_mutate(paths_to_mutate):
