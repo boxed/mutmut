@@ -9,9 +9,9 @@ from glob2 import glob
 from mutmut import (mutmut_config, guess_paths_to_mutate, Config, Progress, check_coverage_data_filepaths,
                     run_mutation_tests, read_coverage_data, read_patch_data, compute_exit_code, close_active_queues, )
 from mutmut.cache import hash_of_tests
-from mutmut.cli.cli_helper import parse_run_argument
-from mutmut.cli.helper.run_utils import split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files
+from mutmut.cli.helper.run_argument_parser import RunArgumentParser
 from mutmut.cli.helper.test_suite_timer import TestSuiteTimer
+from mutmut.cli.helper.utils import split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files
 from mutmut.mutator import mutations_by_type
 
 
@@ -290,8 +290,11 @@ class Run:
 
         mutations_by_file = {}
 
-        parse_run_argument(self.argument, config, self.dict_synonyms, mutations_by_file, self.paths_to_exclude,
-                           self.paths_to_mutate, self.tests_dirs)
+        run_argument_parser = RunArgumentParser(self.argument, config, self.dict_synonyms, mutations_by_file,
+                                                self.paths_to_exclude,
+                                                self.paths_to_mutate, self.tests_dirs)
+
+        run_argument_parser.parse_run_argument()
 
         config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 

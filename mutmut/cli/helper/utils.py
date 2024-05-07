@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from shutil import copy
 
+import click
 from glob2 import glob
 
 
@@ -30,3 +31,8 @@ def copy_testmon_data(using_testmon):
 
 def stop_creating_pyc_files():
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+
+
+def check_file_exists(filename):
+    if not os.path.exists(filename):
+        raise click.BadArgumentUsage(f'File {filename} does not exist')
