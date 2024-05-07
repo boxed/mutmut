@@ -9,7 +9,6 @@ from io import (
 from os.path import exists
 from pathlib import Path
 from shutil import copy
-from time import time
 from typing import List
 
 import click
@@ -23,23 +22,19 @@ from mutmut import (
     Config,
     Progress,
     check_coverage_data_filepaths,
-    popen_streaming_output,
     run_mutation_tests,
     read_coverage_data,
     read_patch_data,
     add_mutations_by_file,
     python_source_files,
     compute_exit_code,
-    print_status,
     close_active_queues,
 )
-from mutmut.cache import (
-    cached_hash_of_tests,
-)
 from mutmut.cache import hash_of_tests, \
-    filename_and_mutation_id_from_pk, cached_test_time, set_cached_test_time, \
-    update_line_numbers
+    filename_and_mutation_id_from_pk, update_line_numbers
 from mutmut.mutator import mutations_by_type
+
+from mutmut.cli.helper.test_suite_timer import TestSuiteTimer
 
 DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 null_out = open(os.devnull, 'w')
@@ -471,98 +466,3 @@ def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths
         filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
         update_line_numbers(filename)
         mutations_by_file[filename] = [mutation_id]
-
-
-"""
-CodeScene analysis:
-    This function is prioritized to be refactored because of :
-        - Complex method: cyclomatic complexity equal to 10, with threshold equal to 9 [fixed]
-        - Excess number of function arguments: 5 arguments, with threshold equal to 4
-        - Complex conditional: 1 complex conditional with 2 branches, with threshold equal to 2 
-            [fixed -> moved to calculate_baseline_time]
-"""
-
-
-class TestSuiteTimer:
-
-    def __init__(self, swallow_output: bool, test_command: str, using_testmon: bool, no_progress: bool):
-
-        self.swallow_output = swallow_output
-        self.test_command = test_command
-        self.using_testmon = using_testmon
-        self.no_progress = no_progress
-
-    def run_tests_without_mutations(self):
-        """Execute a test suite specified by ``test_command`` and record
-        the time it took to execute the test suite as a floating point number
-
-        :return: execution time of the test suite
-        """
-
-        output = []
-
-        def feedback(line):
-            if not self.swallow_output:
-                print(line)
-            if not self.no_progress:
-                print_status('Running...')
-            output.append(line)
-
-        return_code = popen_streaming_output(self.test_command, feedback)
-
-        return return_code, output
-
-    def check_test_run_cleanliness(self, return_code: int) -> bool:
-        """
-        Check if the test suite ran cleanly without any errors
-
-        :param return_code: return code of the test suite
-        :return: True if the test suite ran cleanly without any errors, False otherwise
-        """
-
-        return return_code == 0 or (self.using_testmon and return_code == 5)
-
-    def calculate_baseline_time(self, return_code: int, start_time: float, output: list[str]):
-        """
-        Calculate the baseline time elapsed for the test suite
-
-        :param return_code: return code of the test suite
-        :param start_time: start time of the test suite
-        :param output: output of the test suite
-        :return baseline_time_elapsed: execution time of the test suite
-        """
-
-        if self.check_test_run_cleanliness(return_code):
-            baseline_time_elapsed = time() - start_time
-        else:
-            raise RuntimeError(
-                "Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(
-                    self.test_command,
-                    '\n'.join(
-                        output)))
-
-        return baseline_time_elapsed
-
-    def time_test_suite(self, current_hash_of_tests) -> float:
-        """Execute a test suite specified by ``test_command`` and record
-        the time it took to execute the test suite as a floating point number
-
-        :param current_hash_of_tests: hash of the test suite
-        :return: execution time of the test suite
-        """
-
-        cached_time = cached_test_time()
-        if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
-            print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
-            return cached_time
-
-        print('1. Running tests without mutations')
-        start_time = time()
-        return_code, output = self.run_tests_without_mutations()
-
-        baseline_time_elapsed = self.calculate_baseline_time(return_code, start_time, output)
-        print('Done')
-
-        set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
-
-        return baseline_time_elapsed
