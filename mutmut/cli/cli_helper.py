@@ -108,23 +108,7 @@ def do_run(
     check_bad_arguments(use_coverage, use_patch_file, disable_mutation_types, enable_mutation_types)
 
     # Get mutation types to apply and invalid types
-    if enable_mutation_types:
-        mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
-        invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
-
-    elif disable_mutation_types:
-        mutation_types_to_apply = set(mutations_by_type.keys()) - set(
-            mtype.strip() for mtype in disable_mutation_types.split(","))
-        invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
-
-    else:
-        mutation_types_to_apply = set(mutations_by_type.keys())
-        invalid_types = None
-
-    # Check invalid types
-    if invalid_types:
-        raise click.BadArgumentUsage(
-            f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
+    mutation_types_to_apply = get_mutation_types_to_apply(enable_mutation_types, disable_mutation_types)
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
@@ -323,6 +307,35 @@ def check_bad_arguments(use_coverage, use_patch_file, disable_mutation_types, en
 
     if disable_mutation_types and enable_mutation_types:
         raise click.BadArgumentUsage("You can't combine --disable-mutation-types and --enable-mutation-types")
+
+
+def get_mutation_types_to_apply(enable_mutation_types, disable_mutation_types):
+    """
+    Get mutation types to apply and raise an error if invalid types are provided
+
+    :param enable_mutation_types: mutation types to enable
+    :param disable_mutation_types: mutation types to disable
+    :return: mutation types to apply
+    """
+
+    if enable_mutation_types:
+        mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
+        invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
+
+    elif disable_mutation_types:
+        mutation_types_to_apply = set(mutations_by_type.keys()) - set(
+            mtype.strip() for mtype in disable_mutation_types.split(","))
+        invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
+
+    else:
+        mutation_types_to_apply = set(mutations_by_type.keys())
+        invalid_types = None
+
+    if invalid_types:
+        raise click.BadArgumentUsage(
+            f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
+
+    return mutation_types_to_apply
 
 
 """
