@@ -115,8 +115,8 @@ def do_run(
 
     dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
 
-    if use_coverage and not exists('.coverage'):
-        raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
+    # Check coverage file
+    check_coverage_file(use_coverage)
 
     # Check paths to mutate
     paths_to_mutate = check_paths_to_mutate(paths_to_mutate)
@@ -305,6 +305,17 @@ def check_invalid_types(mutation_types_to_apply, enable_mutation_types, disable_
     if invalid_types:
         raise click.BadArgumentUsage(
             f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
+
+
+def check_coverage_file(use_coverage):
+    """
+    Check if the coverage file exists
+
+    :param use_coverage: whether to use coverage
+    """
+
+    if use_coverage and not exists('.coverage'):
+        raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
 
 
 def check_paths_to_mutate(paths_to_mutate):
