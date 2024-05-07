@@ -345,6 +345,7 @@ def time_test_suite(
 
     :return: execution time of the test suite
     """
+
     cached_time = cached_test_time()
     if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
         print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
@@ -352,6 +353,29 @@ def time_test_suite(
 
     print('1. Running tests without mutations')
     start_time = time()
+    return_code, output = run_tests_without_mutations(swallow_output, test_command, no_progress)
+
+    baseline_time_elapsed = calculate_baseline_time(return_code, start_time, test_command, output, using_testmon)
+    print('Done')
+
+    set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
+
+    return baseline_time_elapsed
+
+
+def run_tests_without_mutations(
+        swallow_output: bool,
+        test_command: str,
+        no_progress: bool,
+) -> tuple[int, list[str]]:
+    """Execute a test suite specified by ``test_command`` and record
+    the time it took to execute the test suite as a floating point number
+
+    :param swallow_output: if :obj:`True` test stdout will be not be printed
+    :param test_command: command to spawn the testing subprocess
+    :param no_progress: if :obj:`True` test progress will not be printed
+    :return: execution time of the test suite
+    """
 
     output = []
 
@@ -362,18 +386,28 @@ def time_test_suite(
             print_status('Running...')
         output.append(line)
 
-    returncode = popen_streaming_output(test_command, feedback)
+    return_code = popen_streaming_output(test_command, feedback)
 
-    if returncode == 0 or (using_testmon and returncode == 5):
+    return return_code, output
+
+
+def calculate_baseline_time(return_code, start_time, test_command, output, using_testmon):
+    """
+    Calculate the baseline time elapsed for the test suite
+    :param return_code: return code of the test suite
+    :param start_time: start time of the test suite
+    :param test_command: command to spawn the testing subprocess
+    :param output: output of the test suite
+    :param using_testmon: if :obj:`True` the test return code evaluation will
+        accommodate for ``pytest-testmon``
+    """
+
+    if return_code == 0 or (using_testmon and return_code == 5):
         baseline_time_elapsed = time() - start_time
     else:
         raise RuntimeError(
             "Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command,
                                                                                                       '\n'.join(
                                                                                                           output)))
-
-    print('Done')
-
-    set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
 
     return baseline_time_elapsed
