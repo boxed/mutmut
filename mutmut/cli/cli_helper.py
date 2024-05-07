@@ -191,6 +191,7 @@ Legend for output:
 {survived} Survived.         This means your tests need to be expanded.
 {skipped} Skipped.          Skipped.
 """.format(**output_legend))
+
     if runner is DEFAULT_RUNNER:
         try:
             import pytest  # noqa
@@ -215,14 +216,16 @@ Legend for output:
     # if we're running in a mode with externally whitelisted lines
     covered_lines_by_filename = None
     coverage_data = None
-    if use_coverage or use_patch_file:
+
+    if use_coverage:
         covered_lines_by_filename = {}
-        if use_coverage:
-            coverage_data = read_coverage_data()
-            check_coverage_data_filepaths(coverage_data)
-        else:
-            assert use_patch_file
-            covered_lines_by_filename = read_patch_data(use_patch_file)
+        coverage_data = read_coverage_data()
+        check_coverage_data_filepaths(coverage_data)
+
+    elif use_patch_file:
+        assert use_patch_file
+        covered_lines_by_filename = read_patch_data(use_patch_file)
+
 
     mutations_by_file = {}
 
