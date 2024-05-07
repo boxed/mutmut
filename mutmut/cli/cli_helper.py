@@ -133,25 +133,8 @@ def do_run(
     # get output legend
     output_legend = get_output_legend(simple_output)
 
-    print("""
-- Mutation testing starting -
-
-These are the steps:
-1. A full test suite run will be made to make sure we
-   can run the tests successfully and we know how long
-   it takes (to detect infinite loops for example)
-2. Mutants will be generated and checked
-
-Results are stored in .mutmut-cache.
-Print found mutants with `mutmut results`.
-
-Legend for output:
-{killed} Killed mutants.   The goal is for everything to end up in this bucket.
-{timeout} Timeout.          Test suite took 10 times as long as the baseline so were killed.
-{suspicious} Suspicious.       Tests took a long time, but not long enough to be fatal.
-{survived} Survived.         This means your tests need to be expanded.
-{skipped} Skipped.          Skipped.
-""".format(**output_legend))
+    # Print mutation testing starting
+    print_mutation_testing_starting(output_legend)
 
     if runner is DEFAULT_RUNNER:
         try:
@@ -379,6 +362,28 @@ def get_output_legend(simple_output):
         output_legend = {key: key.upper() for (key, value) in output_legend.items()}
 
     return output_legend
+
+
+def print_mutation_testing_starting(output_legend):
+    print("""
+    - Mutation testing starting -
+
+    These are the steps:
+    1. A full test suite run will be made to make sure we
+       can run the tests successfully and we know how long
+       it takes (to detect infinite loops for example)
+    2. Mutants will be generated and checked
+
+    Results are stored in .mutmut-cache.
+    Print found mutants with `mutmut results`.
+
+    Legend for output:
+    {killed} Killed mutants.   The goal is for everything to end up in this bucket.
+    {timeout} Timeout.          Test suite took 10 times as long as the baseline so were killed.
+    {suspicious} Suspicious.       Tests took a long time, but not long enough to be fatal.
+    {survived} Survived.         This means your tests need to be expanded.
+    {skipped} Skipped.          Skipped.
+    """.format(**output_legend))
 
 
 """
