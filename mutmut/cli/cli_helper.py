@@ -116,20 +116,7 @@ def do_run(
         raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
 
     # Check paths to mutate
-    if paths_to_mutate is None:
-        paths_to_mutate = guess_paths_to_mutate()
-
-    if not isinstance(paths_to_mutate, (list, tuple)):
-        # If the paths_to_mutate is a string, we split it by commas or colons
-        paths_to_mutate = split_paths(paths_to_mutate)
-
-    if not paths_to_mutate:
-        raise click.BadOptionUsage(
-            '--paths-to-mutate',
-            'You must specify a list of paths to mutate.'
-            'Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg.'
-            'To specify multiple paths, separate them with commas or colons (i.e: --paths-to-mutate=path1/,path2/path3/,path4/).'
-        )
+    paths_to_mutate = check_paths_to_mutate(paths_to_mutate)
 
     tests_dirs = get_tests_directories(tests_dir, paths_to_mutate)
 
@@ -336,6 +323,32 @@ def get_mutation_types_to_apply(enable_mutation_types, disable_mutation_types):
             f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
 
     return mutation_types_to_apply
+
+
+def check_paths_to_mutate(paths_to_mutate):
+    """
+    Check if the paths to mutate are valid
+
+    :param paths_to_mutate: paths to mutate
+    """
+
+    if paths_to_mutate is None:
+        paths_to_mutate = guess_paths_to_mutate()
+
+    if not isinstance(paths_to_mutate, (list, tuple)):
+        # If the paths_to_mutate is a string, we split it by commas or colons
+        paths_to_mutate = split_paths(paths_to_mutate)
+
+    if not paths_to_mutate:
+        raise click.BadOptionUsage(
+            '--paths-to-mutate',
+            'You must specify a list of paths to mutate.'
+            'Either as a command line argument, or by setting paths_to_mutate under the section [mutmut] in setup.cfg.'
+            'To specify multiple paths, separate them with commas or colons (i.e: --paths-to-mutate=path1/,'
+            'path2/path3/,path4/).'
+        )
+
+    return paths_to_mutate
 
 
 """
