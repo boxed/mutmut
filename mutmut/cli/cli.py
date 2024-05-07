@@ -14,6 +14,7 @@ from mutmut.cache import (
 from mutmut.cache import print_result_cache, print_result_ids_cache, \
     print_result_cache_junitxml, get_unified_diff
 from mutmut.cli.cli_helper import *
+from mutmut.cli.helper.run import Run
 
 
 @click.group(context_settings=dict(help_option_names=['-h', '--help']))
@@ -50,9 +51,10 @@ def version():
 @click.option('--runner')
 @click.option('--use-coverage', is_flag=True, default=False)
 @click.option('--use-patch-file', help='Only mutate lines added/changed in the given patch file')
-@click.option('--rerun-all', is_flag=True, default=False, help='If you modified the test_command in the pre_mutation hook, '
-                                                               'the default test_command (specified by the "runner" option) '
-                                                               'will be executed if the mutant survives with your modified test_command.')
+@click.option('--rerun-all', is_flag=True, default=False,
+              help='If you modified the test_command in the pre_mutation hook, '
+                   'the default test_command (specified by the "runner" option) '
+                   'will be executed if the mutant survives with your modified test_command.')
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
@@ -60,14 +62,15 @@ def version():
 @click.option('--dict-synonyms')
 @click.option('--pre-mutation')
 @click.option('--post-mutation')
-@click.option('--simple-output', is_flag=True, default=False, help="Swap emojis in mutmut output to plain text alternatives.")
+@click.option('--simple-output', is_flag=True, default=False,
+              help="Swap emojis in mutmut output to plain text alternatives.")
 @click.option('--no-progress', is_flag=True, default=False, help="Disable real-time progress indicator")
 @click.option('--CI', is_flag=True, default=False,
               help="Returns an exit code of 0 for all successful runs and an exit code of 1 for fatal errors.")
 @config_from_file(
     dict_synonyms='',
     paths_to_exclude='',
-    runner=DEFAULT_RUNNER,
+    runner=Run.DEFAULT_RUNNER,
     tests_dir='tests/:test/',
     pre_mutation=None,
     post_mutation=None,
@@ -108,10 +111,14 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
     if test_time_multiplier is None:  # click sets the default=0.0 to None
         test_time_multiplier = 0.0
 
-    sys.exit(do_run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
-                    tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
-                    dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
-                    simple_output, no_progress, ci, rerun_all))
+    cli_run = Run(
+        argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
+        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
+        dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
+        simple_output, no_progress, ci, rerun_all
+    )
+
+    sys.exit(cli_run.do_run())
 
 
 @climain.command(context_settings=dict(help_option_names=['-h', '--help']))

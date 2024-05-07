@@ -52,24 +52,53 @@ CodeScene analysis:
 def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate,
                        tests_dirs):
     if argument is None:
-        for path in paths_to_mutate:
-            for filename in python_source_files(path, tests_dirs, paths_to_exclude):
-                if filename.startswith('test_') or filename.endswith('__tests.py'):
-                    continue
-                update_line_numbers(filename)
-                add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-    else:
-        try:
-            int(argument)
-        except ValueError:
-            filename = argument
-            if not os.path.exists(filename):
-                raise click.BadArgumentUsage(
-                    'The run command takes either an integer that is the mutation id or a path to a file to mutate')
-            update_line_numbers(filename)
-            add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
-            return
+        iterate_over_paths_to_mutate(paths_to_mutate, tests_dirs, paths_to_exclude, dict_synonyms, config,
+                                     mutations_by_file)
+        return
 
-        filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+    # Try to convert the argument to an integer
+    try:
+        # Convert the argument to an integer
+        int(argument)
+
+    # If the argument cannot be converted to an integer, then the argument is a filename
+    except ValueError:
+
+        # If the filename does not exist, then raise a BadArgumentUsage exception
+        filename = argument
+        check_file_exists(filename)
+
+        # Update the line numbers in the filename
         update_line_numbers(filename)
-        mutations_by_file[filename] = [mutation_id]
+
+        # Add the mutations by file
+        add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+        return
+
+    filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
+    update_line_numbers(filename)
+    mutations_by_file[filename] = [mutation_id]
+
+
+def iterate_over_paths_to_mutate(paths_to_mutate, tests_dirs, paths_to_exclude, dict_synonyms, config,
+                                 mutations_by_file):
+    for path in paths_to_mutate:
+        iterate_over_python_source_files(path, tests_dirs, paths_to_exclude, mutations_by_file, dict_synonyms, config)
+
+
+def iterate_over_python_source_files(path, tests_dirs, paths_to_exclude, mutations_by_file, dict_synonyms, config):
+    for filename in python_source_files(path, tests_dirs, paths_to_exclude):
+        update_lines_and_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+
+
+def update_lines_and_mutations_by_file(mutations_by_file, filename, dict_synonyms, config):
+    if filename.startswith('test_') or filename.endswith('__tests.py'):
+        return
+
+    update_line_numbers(filename)
+    add_mutations_by_file(mutations_by_file, filename, dict_synonyms, config)
+
+
+def check_file_exists(filename):
+    if not os.path.exists(filename):
+        raise click.BadArgumentUsage(f'File {filename} does not exist')
