@@ -212,11 +212,10 @@ Legend for output:
         swallow_output=not swallow_output,
         test_command=runner,
         using_testmon=using_testmon,
-        current_hash_of_tests=current_hash_of_tests,
         no_progress=no_progress,
     )
 
-    baseline_time_elapsed = testSuiteTimer.time_test_suite()
+    baseline_time_elapsed = testSuiteTimer.time_test_suite(current_hash_of_tests)
 
     if using_testmon:
         copy('.testmondata', '.testmondata-initial')
@@ -333,13 +332,11 @@ CodeScene analysis:
 
 class TestSuiteTimer:
 
-    def __init__(
-            self, swallow_output: bool, test_command: str, using_testmon: bool, current_hash_of_tests, no_progress: bool
-    ):
+    def __init__(self, swallow_output: bool, test_command: str, using_testmon: bool, no_progress: bool):
+
         self.swallow_output = swallow_output
         self.test_command = test_command
         self.using_testmon = using_testmon
-        self.current_hash_of_tests = current_hash_of_tests
         self.no_progress = no_progress
 
     def run_tests_without_mutations(self):
@@ -362,6 +359,16 @@ class TestSuiteTimer:
 
         return return_code, output
 
+    def check_test_run_cleanliness(self, return_code: int) -> bool:
+        """
+        Check if the test suite ran cleanly without any errors
+
+        :param return_code: return code of the test suite
+        :return: True if the test suite ran cleanly without any errors, False otherwise
+        """
+
+        return return_code == 0 or (self.using_testmon and return_code == 5)
+
     def calculate_baseline_time(self, return_code: int, start_time: float, output: list[str]):
         """
         Calculate the baseline time elapsed for the test suite
@@ -372,7 +379,7 @@ class TestSuiteTimer:
         :return baseline_time_elapsed: execution time of the test suite
         """
 
-        if return_code == 0 or (self.using_testmon and return_code == 5):
+        if self.check_test_run_cleanliness(return_code):
             baseline_time_elapsed = time() - start_time
         else:
             raise RuntimeError(
@@ -383,10 +390,11 @@ class TestSuiteTimer:
 
         return baseline_time_elapsed
 
-    def time_test_suite(self) -> float:
+    def time_test_suite(self, current_hash_of_tests) -> float:
         """Execute a test suite specified by ``test_command`` and record
         the time it took to execute the test suite as a floating point number
 
+        :param current_hash_of_tests: hash of the test suite
         :return: execution time of the test suite
         """
 
