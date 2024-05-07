@@ -68,6 +68,16 @@ def do_apply(mutation_pk: str, dict_synonyms: List[str], backup: bool):
     )
 
 
+"""
+CodeScene analysis:
+    This function is prioritized to be refactored because of :
+        - Complex method: cyclomatic complexity equal to 47, with threshold equal to 9
+        - Excess number of function arguments: 19 arguments, with threshold equal to 4
+        - Bumpy Road Ahead: 4 blocks with nested conditional logic, any nesting of 2 or deeper is considered, 
+            with threshold equal to one single nested block per function
+"""
+
+
 def do_run(
         argument,
         paths_to_mutate,
@@ -102,7 +112,8 @@ def do_run(
         mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
         invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
     elif disable_mutation_types:
-        mutation_types_to_apply = set(mutations_by_type.keys()) - set(mtype.strip() for mtype in disable_mutation_types.split(","))
+        mutation_types_to_apply = set(mutations_by_type.keys()) - set(
+            mtype.strip() for mtype in disable_mutation_types.split(","))
         invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
     else:
         mutation_types_to_apply = set(mutations_by_type.keys())
@@ -249,7 +260,8 @@ Legend for output:
         rerun_all=rerun_all
     )
 
-    parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs)
+    parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate,
+                       tests_dirs)
 
     config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
@@ -270,7 +282,19 @@ Legend for output:
         close_active_queues()
 
 
-def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate, tests_dirs):
+"""
+CodeScene analysis:
+    This function is recommended to be refactored because of:
+        - Complex method: cyclomatic complexity equal to 10, with threshold equal to 9
+        - Excess number of function arguments: 7 arguments, with threshold equal to 4
+        - Bumpy Road Ahead: 2 blocks with nested conditional logic, any nesting of 2 or deeper is considered, 
+            with threshold equal to one single nested block per function
+        - Deep, Nested Complexity: a nested complexity depth of 4, with threshold equal to 4
+"""
+
+
+def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths_to_exclude, paths_to_mutate,
+                       tests_dirs):
     if argument is None:
         for path in paths_to_mutate:
             for filename in python_source_files(path, tests_dirs, paths_to_exclude):
@@ -293,6 +317,15 @@ def parse_run_argument(argument, config, dict_synonyms, mutations_by_file, paths
         filename, mutation_id = filename_and_mutation_id_from_pk(int(argument))
         update_line_numbers(filename)
         mutations_by_file[filename] = [mutation_id]
+
+
+"""
+CodeScene analysis:
+    This function is prioritized to be refactored because of :
+        - Complex method: cyclomatic complexity equal to 10, with threshold equal to 9
+        - Excess number of function arguments: 5 arguments, with threshold equal to 4
+        - Complex conditional: 1 complex conditional with 2 branches, with threshold equal to 2
+"""
 
 
 def time_test_suite(
@@ -335,7 +368,9 @@ def time_test_suite(
         baseline_time_elapsed = time() - start_time
     else:
         raise RuntimeError(
-            "Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command, '\n'.join(output)))
+            "Tests don't run cleanly without mutations. Test command was: {}\n\nOutput:\n\n{}".format(test_command,
+                                                                                                      '\n'.join(
+                                                                                                          output)))
 
     print('Done')
 
