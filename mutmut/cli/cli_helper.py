@@ -399,7 +399,7 @@ class TestSuiteTimer:
         """
 
         cached_time = cached_test_time()
-        if cached_time is not None and self.current_hash_of_tests == cached_hash_of_tests():
+        if cached_time is not None and current_hash_of_tests == cached_hash_of_tests():
             print('1. Using cached time for baseline tests, to run baseline again delete the cache file')
             return cached_time
 
@@ -410,6 +410,6 @@ class TestSuiteTimer:
         baseline_time_elapsed = self.calculate_baseline_time(return_code, start_time, output)
         print('Done')
 
-        set_cached_test_time(baseline_time_elapsed, self.current_hash_of_tests)
+        set_cached_test_time(baseline_time_elapsed, current_hash_of_tests)
 
         return baseline_time_elapsed
