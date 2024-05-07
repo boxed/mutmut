@@ -130,16 +130,8 @@ def do_run(
 
     using_testmon = '--testmon' in runner
 
-    output_legend = {
-        "killed": "🎉",
-        "timeout": "⏰",
-        "suspicious": "🤔",
-        "survived": "🙁",
-        "skipped": "🔇",
-    }
-
-    if simple_output:
-        output_legend = {key: key.upper() for (key, value) in output_legend.items()}
+    # get output legend
+    output_legend = get_output_legend(simple_output)
 
     print("""
 - Mutation testing starting -
@@ -365,6 +357,28 @@ def check_paths_to_mutate(paths_to_mutate):
         )
 
     return paths_to_mutate
+
+
+def get_output_legend(simple_output):
+    """
+    Get the output legend based on the simple_output flag
+
+    :param simple_output: flag to determine if the output should be simple
+    :return: output legend
+    """
+
+    output_legend = {
+        "killed": "🎉",
+        "timeout": "⏰",
+        "suspicious": "🤔",
+        "survived": "🙁",
+        "skipped": "🔇",
+    }
+
+    if simple_output:
+        output_legend = {key: key.upper() for (key, value) in output_legend.items()}
+
+    return output_legend
 
 
 """
