@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import sys
+
+import click
 
 from mutmut import (
     MUTANT_STATUSES,
@@ -13,7 +16,7 @@ from mutmut.cache import (
 )
 from mutmut.cache import print_result_cache, print_result_ids_cache, \
     print_result_cache_junitxml, get_unified_diff
-from mutmut.cli.cli_helper import *
+from mutmut.cli.helper.do_apply import do_apply
 from mutmut.cli.helper.run import Run
 
 
