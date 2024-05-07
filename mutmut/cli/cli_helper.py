@@ -142,18 +142,8 @@ def do_run(
             'To specify multiple paths, separate them with commas or colons (i.e: --paths-to-mutate=path1/,path2/path3/,path4/).'
         )
 
-    tests_dirs = []
-    test_paths = split_paths(tests_dir)
-    if test_paths is None:
-        raise FileNotFoundError(
-            'No test folders found in current folder. Run this where there is a "tests" or "test" folder.'
-        )
-    for p in test_paths:
-        tests_dirs.extend(glob(p, recursive=True))
+    tests_dirs = get_tests_directories(tests_dir, paths_to_mutate)
 
-    for p in paths_to_mutate:
-        for pt in split_paths(tests_dir):
-            tests_dirs.extend(glob(p + '/**/' + pt, recursive=True))
     del tests_dir
     current_hash_of_tests = hash_of_tests(tests_dirs)
 
@@ -226,7 +216,6 @@ Legend for output:
         assert use_patch_file
         covered_lines_by_filename = read_patch_data(use_patch_file)
 
-
     mutations_by_file = {}
 
     paths_to_exclude = paths_to_exclude or ''
@@ -285,6 +274,33 @@ def split_paths(paths):
         if separated:
             return separated
     return None
+
+
+def get_tests_directories(tests_dir, paths_to_mutate):
+    tests_dirs = []
+    test_paths = split_paths(tests_dir)
+
+    if test_paths is None:
+        raise FileNotFoundError(
+            'No test folders found in current folder. Run this where there is a "tests" or "test" folder.'
+        )
+
+    for p in test_paths:
+        tests_dirs.extend(glob(p, recursive=True))
+
+    for p in paths_to_mutate:
+        tests_dirs.extend(get_split_paths(p, test_paths))
+
+    return tests_dirs
+
+
+def get_split_paths(p, test_paths):
+    split = []
+
+    for pt in test_paths:
+        split.extend(glob(p + '/**/' + pt, recursive=True))
+
+    return split
 
 
 """
