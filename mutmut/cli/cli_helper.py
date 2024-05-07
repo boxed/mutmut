@@ -136,14 +136,8 @@ def do_run(
     # Print mutation testing starting
     print_mutation_testing_starting(output_legend)
 
-    if runner is DEFAULT_RUNNER:
-        try:
-            import pytest  # noqa
-        except ImportError:
-            runner = 'python -m unittest'
-
-    if hasattr(mutmut_config, 'init'):
-        mutmut_config.init()
+    # Check additional imports for the runner and mutmut_config
+    runner = check_additional_imports(runner)
 
     testSuiteTimer = TestSuiteTimer(
         swallow_output=not swallow_output,
@@ -384,6 +378,25 @@ def print_mutation_testing_starting(output_legend):
     {survived} Survived.         This means your tests need to be expanded.
     {skipped} Skipped.          Skipped.
     """.format(**output_legend))
+
+
+def check_additional_imports(runner):
+    """
+    Check if additional imports are needed for the runner
+
+    :param runner: runner to check
+    :return: the new or default runner
+    """
+    if runner is DEFAULT_RUNNER:
+        try:
+            import pytest  # noqa
+        except ImportError:
+            runner = 'python -m unittest'
+
+    if hasattr(mutmut_config, 'init'):
+        mutmut_config.init()
+
+    return runner
 
 
 """
