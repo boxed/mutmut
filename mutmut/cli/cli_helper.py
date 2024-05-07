@@ -152,17 +152,7 @@ def do_run(
         copy('.testmondata', '.testmondata-initial')
 
     # if we're running in a mode with externally whitelisted lines
-    covered_lines_by_filename = None
-    coverage_data = None
-
-    if use_coverage:
-        covered_lines_by_filename = {}
-        coverage_data = read_coverage_data()
-        check_coverage_data_filepaths(coverage_data)
-
-    elif use_patch_file:
-        assert use_patch_file
-        covered_lines_by_filename = read_patch_data(use_patch_file)
+    covered_lines_by_filename, coverage_data = get_covered_data(use_coverage, use_patch_file)
 
     mutations_by_file = {}
 
@@ -420,6 +410,30 @@ def check_paths_to_exclude(paths_to_exclude):
         paths_to_exclude = [x for x in paths_to_exclude if x]
 
     return paths_to_exclude
+
+
+def get_covered_data(use_coverage, use_patch_file):
+    """
+    Get the covered data based on the use_coverage and use_patch_file flags
+
+    :param use_coverage: whether to use coverage
+    :param use_patch_file: whether to use patch file
+    :return: covered lines by filename and coverage data
+    """
+
+    covered_lines_by_filename = None
+    coverage_data = None
+
+    if use_coverage:
+        covered_lines_by_filename = {}
+        coverage_data = read_coverage_data()
+        check_coverage_data_filepaths(coverage_data)
+
+    elif use_patch_file:
+        assert use_patch_file
+        covered_lines_by_filename = read_patch_data(use_patch_file)
+
+    return covered_lines_by_filename, coverage_data
 
 
 """
