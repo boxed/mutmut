@@ -166,10 +166,7 @@ def do_run(
 
     mutations_by_file = {}
 
-    paths_to_exclude = paths_to_exclude or ''
-    if paths_to_exclude:
-        paths_to_exclude = [path.strip() for path in paths_to_exclude.replace(',', '\n').split('\n')]
-        paths_to_exclude = [x for x in paths_to_exclude if x]
+    paths_to_exclude = check_paths_to_exclude(paths_to_exclude)
 
     config = Config(
         total=0,  # we'll fill this in later!
@@ -397,6 +394,21 @@ def check_additional_imports(runner):
         mutmut_config.init()
 
     return runner
+
+
+def check_paths_to_exclude(paths_to_exclude):
+    """
+    Check if the paths to exclude are valid
+
+    :param paths_to_exclude: paths to exclude
+    """
+
+    paths_to_exclude = paths_to_exclude or ''
+    if paths_to_exclude:
+        paths_to_exclude = [path.strip() for path in paths_to_exclude.replace(',', '\n').split('\n')]
+        paths_to_exclude = [x for x in paths_to_exclude if x]
+
+    return paths_to_exclude
 
 
 """
