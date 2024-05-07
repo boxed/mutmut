@@ -74,7 +74,7 @@ CodeScene analysis:
         - Complex method: cyclomatic complexity equal to 47, with threshold equal to 9
         - Excess number of function arguments: 19 arguments, with threshold equal to 4
         - Bumpy Road Ahead: 4 blocks with nested conditional logic, any nesting of 2 or deeper is considered, 
-            with threshold equal to one single nested block per function
+            with threshold equal to one single nested block per function [fixed]
 """
 
 
@@ -99,25 +99,29 @@ def do_run(
         ci,
         rerun_all,
 ) -> int:
-    """return exit code, after performing an mutation test run.
+    """return exit code, after performing a mutation test run.
 
     :return: the exit code from executing the mutation tests for run command
     """
-    if use_coverage and use_patch_file:
-        raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
 
-    if disable_mutation_types and enable_mutation_types:
-        raise click.BadArgumentUsage("You can't combine --disable-mutation-types and --enable-mutation-types")
+    # Check bad arguments
+    check_bad_arguments(use_coverage, use_patch_file, disable_mutation_types, enable_mutation_types)
+
+    # Get mutation types to apply and invalid types
     if enable_mutation_types:
         mutation_types_to_apply = set(mtype.strip() for mtype in enable_mutation_types.split(","))
         invalid_types = [mtype for mtype in mutation_types_to_apply if mtype not in mutations_by_type]
+
     elif disable_mutation_types:
         mutation_types_to_apply = set(mutations_by_type.keys()) - set(
             mtype.strip() for mtype in disable_mutation_types.split(","))
         invalid_types = [mtype for mtype in disable_mutation_types.split(",") if mtype not in mutations_by_type]
+
     else:
         mutation_types_to_apply = set(mutations_by_type.keys())
         invalid_types = None
+
+    # Check invalid types
     if invalid_types:
         raise click.BadArgumentUsage(
             f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation types are: {', '.join(mutations_by_type.keys())}")
@@ -127,6 +131,7 @@ def do_run(
     if use_coverage and not exists('.coverage'):
         raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
 
+    # Check paths to mutate
     if paths_to_mutate is None:
         paths_to_mutate = guess_paths_to_mutate()
 
@@ -301,6 +306,23 @@ def get_split_paths(p, test_paths):
         split.extend(glob(p + '/**/' + pt, recursive=True))
 
     return split
+
+
+def check_bad_arguments(use_coverage, use_patch_file, disable_mutation_types, enable_mutation_types):
+    """
+    Checks on bad arguments for the do_run function
+
+    :param use_coverage: whether to use coverage
+    :param use_patch_file: whether to use patch file
+    :param disable_mutation_types: mutation types to disable
+    :param enable_mutation_types: mutation types to enable
+    """
+
+    if use_coverage and use_patch_file:
+        raise click.BadArgumentUsage("You can't combine --use-coverage and --use-patch")
+
+    if disable_mutation_types and enable_mutation_types:
+        raise click.BadArgumentUsage("You can't combine --disable-mutation-types and --enable-mutation-types")
 
 
 """
