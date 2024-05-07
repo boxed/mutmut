@@ -276,7 +276,7 @@ class Run:
 
         self.prepare_test_directories()
 
-        current_hash_of_tests = hash_of_tests(self.tests_dir)
+        current_hash_of_tests = hash_of_tests(self.tests_dirs)
 
         stop_creating_pyc_files()
 
@@ -288,13 +288,13 @@ class Run:
 
         config = self.setup_config(current_hash_of_tests)
 
-        mutations_by_file = {}
-
-        run_argument_parser = RunArgumentParser(self.argument, config, self.dict_synonyms, mutations_by_file,
+        run_argument_parser = RunArgumentParser(self.argument, config, self.dict_synonyms, {},
                                                 self.paths_to_exclude,
                                                 self.paths_to_mutate, self.tests_dirs)
 
         run_argument_parser.parse_run_argument()
+
+        mutations_by_file = run_argument_parser.mutations_by_file
 
         config.total = sum(len(mutations) for mutations in mutations_by_file.values())
 
