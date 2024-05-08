@@ -6,7 +6,6 @@ from pytest import raises, fixture
 from unittest.mock import MagicMock, patch
 
 from mutmut import (
-    run_mutation_tests,
     check_mutants,
     close_active_queues,
     read_patch_data,
@@ -17,6 +16,7 @@ from mutmut import (
 from mutmut.mutations.lambda_mutation import LambdaMutation
 from mutmut.mutations.name_mutation import NameMutation
 from mutmut.mutator import mutate
+from mutmut.tester import run_mutation_tests
 
 
 def test_partition_node_list_no_nodes():
@@ -43,7 +43,7 @@ def check_mutants_stub(**kwargs):
         sleep(0.15)
         return OK_KILLED
     check_mutants_original = check_mutants
-    with patch('mutmut.run_mutation', run_mutation_stub):
+    with patch('mutmut.tester.run_mutation', run_mutation_stub):
         check_mutants_original(**kwargs)
 
 class ConfigStub:
@@ -59,14 +59,14 @@ def test_run_mutation_tests_thread_synchronization(monkeypatch):
         for _ in range(total_mutants):
             kwargs['mutants_queue'].put(('mutant', Context(config=config_stub)))
         kwargs['mutants_queue'].put(('end', None))
-    monkeypatch.setattr('mutmut.queue_mutants', queue_mutants_stub)
+    monkeypatch.setattr('mutmut.tester.queue_mutants', queue_mutants_stub)
 
     def update_mutant_status_stub(**_):
         sleep(0.1)
 
-    monkeypatch.setattr('mutmut.check_mutants', check_mutants_stub)
+    monkeypatch.setattr('mutmut.tester.check_mutants', check_mutants_stub)
     monkeypatch.setattr('mutmut.cache.update_mutant_status', update_mutant_status_stub)
-    monkeypatch.setattr('mutmut.CYCLE_PROCESS_AFTER', cycle_process_after)
+    monkeypatch.setattr('mutmut.tester.CYCLE_PROCESS_AFTER', cycle_process_after)
 
     progress_mock = MagicMock()
     progress_mock.registered_mutants = 0
