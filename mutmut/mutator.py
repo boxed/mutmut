@@ -2,7 +2,6 @@ from io import open
 from typing import Tuple
 
 from parso import parse
-from parso.python.tree import Name, Number, Keyword, FStringStart, FStringEnd
 
 from mutmut.helpers.context import Context, ALL
 from mutmut.mutations.and_or_test_mutation import AndOrTestMutation
@@ -171,11 +170,8 @@ def mutate_list_of_nodes(node, context: Context):
     return_annotation_started = False
 
     for child_node in node.children:
-        if child_node.type == 'operator' and child_node.value == '->':
-            return_annotation_started = True
 
-        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
-            return_annotation_started = False
+        return_annotation_started = get_return_annotation_started(child_node, return_annotation_started)
 
         if return_annotation_started:
             continue
@@ -183,8 +179,34 @@ def mutate_list_of_nodes(node, context: Context):
         mutate_node(child_node, context=context)
 
         # this is just an optimization to stop early
-        if context.performed_mutation_ids and context.mutation_id != ALL:
+        if stop_early(context):
             return
+
+
+def check_node_type_and_value(node, type, value):
+    return node.type == type and node.value == value
+
+
+def get_return_annotation_started(node, return_annotation_started):
+    if return_annotation_started(node):
+        return_annotation_started = True
+
+    if return_annotation_started and is_return_annotation_end(node):
+        return_annotation_started = False
+
+    return return_annotation_started
+
+
+def is_return_annotation_start(node):
+    return check_node_type_and_value(node, 'operator', '->')
+
+
+def is_return_annotation_end(node):
+    return check_node_type_and_value(node, 'operator', ':')
+
+
+def stop_early(context: Context):
+    return context.performed_mutation_ids and context.mutation_id != ALL
 
 
 def list_mutations(context: Context):
