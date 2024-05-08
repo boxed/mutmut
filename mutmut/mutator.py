@@ -94,32 +94,29 @@ def mutate(context: Context) -> Tuple[str, int]:
 def mutate_node(node, context: Context):
     context.stack.append(node)
     try:
-        if node.type in ('tfpdef', 'import_from', 'import_name'):
+
+        if is_special_node(node):
             return
 
-        if node.type == 'atom_expr' and node.children and node.children[0].type == 'name' and node.children[
-            0].value == '__import__':
+        if is_dynamic_import_node(node):
             return
 
-        if node.start_pos[0] - 1 != context.current_line_index:
+        if should_update_line_index(node, context):
             context.current_line_index = node.start_pos[0] - 1
             context.index = 0  # indexes are unique per line, so start over here!
 
-        if node.type == 'expr_stmt':
-            if (node.children[0].type == 'name' and node.children[0].value.startswith('__') and
-                    node.children[0].value.endswith('__')):
-                if node.children[0].value[2:-2] in dunder_whitelist:
-                    return
+        if is_a_dunder_whitelist_node(node):
+            return
 
         # Avoid mutating pure annotations
-        if node.type == 'annassign' and len(node.children) == 2:
+        if is_pure_annotation(node):
             return
 
         if hasattr(node, 'children'):
             mutate_list_of_nodes(node, context=context)
 
             # this is just an optimization to stop early
-            if context.performed_mutation_ids and context.mutation_id != ALL:
+            if stop_early(context):
                 return
 
         mutation = mutations_by_type.get(node.type)
@@ -127,43 +124,110 @@ def mutate_node(node, context: Context):
         if mutation is None:
             return
 
-        for node_attribute, concrete_mutation in sorted(mutation.items()):
-            old = getattr(node, node_attribute)
-            if context.exclude_line():
-                continue
+        process_mutations(node, mutation, context)
 
-            mutation_instance = concrete_mutation()
-            new = mutation_instance.mutate(
-                context=context,
-                node=node,
-                value=getattr(node, 'value', None),
-                children=getattr(node, 'children', None),
-            )
-
-            if isinstance(new, list) and not isinstance(old, list):
-                # multiple mutations
-                new_list = new
-            else:
-                # one mutation
-                new_list = [new]
-
-            # go through the alternate mutations in reverse as they may have
-            # adverse effects on subsequent mutations, this ensures the last
-            # mutation applied is the original/default/legacy mutmut mutation
-            for new in reversed(new_list):
-                assert not callable(new)
-                if new is not None and new != old:
-                    if hasattr(mutmut_config, 'pre_mutation_ast'):
-                        mutmut_config.pre_mutation_ast(context=context)
-                    if context.should_mutate(node):
-                        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
-                        setattr(node, node_attribute, new)
-                    context.index += 1
-                # this is just an optimization to stop early
-                if context.performed_mutation_ids and context.mutation_id != ALL:
-                    return
     finally:
         context.stack.pop()
+
+
+def is_special_node(node):
+    return node.type in ('tfpdef', 'import_from', 'import_name')
+
+
+def is_dynamic_import_node(node):
+    return node.type == 'atom_expr' and node.children and node.children[0].type == 'name' and node.children[
+        0].value == '__import__'
+
+
+def should_update_line_index(node, context):
+    return node.start_pos[0] - 1 != context.current_line_index
+
+
+def is_a_dunder_whitelist_node(node):
+    if node.type != 'expr_stmt':
+        return False
+
+    if (node.children[0].type != 'name' or not node.children[0].value.startswith('__') or
+            not node.children[0].value.endswith('__')):
+        return False
+
+    return node.children[0].value[2:-2] in dunder_whitelist
+
+
+def is_pure_annotation(node):
+    return node.type == 'annassign' and len(node.children) == 2
+
+
+def wrap_or_return_mutation_instance(new, old):
+    if isinstance(new, list) and not isinstance(old, list):
+        # multiple mutations
+        return new
+
+    return [new]
+
+
+def get_old_and_new_mutation_instance(node, node_attribute, concrete_mutation, context):
+    old = getattr(node, node_attribute)
+
+    mutation_instance = concrete_mutation()
+
+    new = mutation_instance.mutate(
+        context=context,
+        node=node,
+        value=getattr(node, 'value', None),
+        children=getattr(node, 'children', None),
+    )
+
+    return old, new
+
+
+def process_mutations(node, mutation, context):
+    for node_attribute, concrete_mutation in sorted(mutation.items()):
+        if context.exclude_line():
+            continue
+
+        old, new = get_old_and_new_mutation_instance(node, node_attribute, concrete_mutation, context)
+
+        new_list = wrap_or_return_mutation_instance(new, old)
+
+        is_optimized = alternate_mutations(new_list, old, node, node_attribute, context)
+
+        if is_optimized:
+            return
+
+
+def alternate_mutations(new_list, old, node, node_attribute, context):
+    # go through the alternate mutations in reverse as they may have
+    # adverse effects on subsequent mutations, this ensures the last
+    # mutation applied is the original/default/legacy mutmut mutation
+    for new in reversed(new_list):
+        assert not callable(new)
+
+        apply_mutation_and_update_context(new, old, node, node_attribute, context)
+
+        # this is just an optimization to stop early
+        if stop_early(context):
+            return True
+
+    return False
+
+
+def apply_mutation_and_update_context(new, old, node, node_attribute, context):
+    if new is None or new == old:
+        context.index += 1
+        return
+
+    if hasattr(mutmut_config, 'pre_mutation_ast'):
+        mutmut_config.pre_mutation_ast(context=context)
+
+    if context.should_mutate(node):
+        context.performed_mutation_ids.append(context.mutation_id_of_current_index)
+        setattr(node, node_attribute, new)
+
+    context.index += 1
+
+
+# ----------------------------------
 
 
 def mutate_list_of_nodes(node, context: Context):
@@ -208,6 +272,8 @@ def is_return_annotation_end(node):
 def stop_early(context: Context):
     return context.performed_mutation_ids and context.mutation_id != ALL
 
+
+# ----------------------------------
 
 def list_mutations(context: Context):
     assert context.mutation_id == ALL
