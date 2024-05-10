@@ -18,11 +18,11 @@ from threading import (
 from time import time
 from typing import Callable, Dict, List, Optional
 
-from mutmut.helpers.relativemutationid import RelativeMutationID
-from mutmut.helpers.context import Context
 from mutmut.helpers.config import Config
+from mutmut.helpers.context import Context
 from mutmut.helpers.progress import *
-from mutmut.mutator import mutate_file
+from mutmut.helpers.relativemutationid import RelativeMutationID
+from mutmut.mutator.mutator import Mutator
 
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
@@ -33,6 +33,7 @@ except ImportError:
 
 CYCLE_PROCESS_AFTER = 100
 hammett_prefix = 'python -m hammett '
+
 
 def run_mutation_tests(
         config: Config,
@@ -157,11 +158,12 @@ def run_mutation(context: Context, callback) -> str:
         if result and not config.swallow_output:
             callback(result)
 
+    mutator = Mutator(context)
+
     try:
-        mutate_file(
-            backup=True,
-            context=context
-        )
+
+        mutator.mutate_file(backup=True)
+
         start = time()
         try:
             survived = tests_pass(config=config, callback=callback)
@@ -186,7 +188,7 @@ def run_mutation(context: Context, callback) -> str:
         return SKIPPED
 
     finally:
-        move(context.filename + '.bak', context.filename)
+        move(mutator.context.filename + '.bak', mutator.context.filename)
         config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
 
         if config.post_mutation:

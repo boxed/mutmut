@@ -26,7 +26,7 @@ from mutmut import (
     MUTANT_STATUSES,
     __version__,
 )
-from mutmut.mutator import mutations_by_type
+from mutmut.mutator.mutator import MutatorHelper
 from mutmut.__main__ import climain
 
 file_to_mutate_lines = [
@@ -597,7 +597,7 @@ def test_select_unknown_mutation_type(option):
         ]
     )
     assert result.exception.code == 2
-    assert f"The following are not valid mutation types: bar, foo. Valid mutation types are: {', '.join(mutations_by_type.keys())}" in result.output, result.output
+    assert f"The following are not valid mutation types: bar, foo. Valid mutation types are: {', '.join(MutatorHelper().mutations_by_type.keys())}" in result.output, result.output
 
 
 def test_enable_and_disable_mutation_type_are_exclusive():

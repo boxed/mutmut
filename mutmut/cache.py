@@ -17,7 +17,7 @@ from pony.orm import Database, Required, db_session, Set, Optional, select, \
 
 from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
     OK_KILLED, RelativeMutationID, Context
-from mutmut.mutator import mutate
+from mutmut.mutator.mutator import Mutator
 
 db = Database()
 
@@ -218,7 +218,10 @@ def _get_unified_diff(source, filename, mutation_id, dict_synonyms, update_cache
         mutation_id=mutation_id,
         dict_synonyms=dict_synonyms,
     )
-    mutated_source, number_of_mutations_performed = mutate(context)
+
+    mutator = Mutator(context)
+
+    mutated_source, number_of_mutations_performed = mutator.mutate()
     if not number_of_mutations_performed:
         return ""
 

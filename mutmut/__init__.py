@@ -2,31 +2,11 @@
 from __future__ import annotations
 
 import fnmatch
-import itertools
-import multiprocessing
-import os
-import shlex
-import subprocess
-import sys
 import toml
 from configparser import ConfigParser
-from copy import copy as copy_obj
 from functools import wraps
-from io import (
-    open,
-    TextIOBase,
-)
 from os.path import isdir
-from shutil import (
-    move,
-    copy,
-)
-from threading import (
-    Timer,
-    Thread,
-)
-from time import time
-from typing import Callable, Dict, Iterator, List, Optional, Set
+from typing import Iterator
 
 __version__ = '2.4.5'
 
@@ -34,7 +14,7 @@ from mutmut.helpers.relativemutationid import RelativeMutationID
 from mutmut.helpers.context import Context, ALL
 from mutmut.helpers.config import Config
 from mutmut.helpers.progress import *
-from mutmut.mutator import mutate_file, list_mutations
+from mutmut.mutator.mutator import Mutator
 from mutmut.tester import *
 
 if os.getcwd() not in sys.path:
@@ -161,7 +141,8 @@ def add_mutations_by_file(
     )
 
     try:
-        mutations_by_file[filename] = list_mutations(context)
+        mutator = Mutator(context)
+        mutations_by_file[filename] = mutator.list_mutations()
         from mutmut.cache import register_mutants
 
         register_mutants(mutations_by_file)

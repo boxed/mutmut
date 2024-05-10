@@ -15,7 +15,7 @@ from mutmut import (
 
 from mutmut.mutations.lambda_mutation import LambdaMutation
 from mutmut.mutations.name_mutation import NameMutation
-from mutmut.mutator import mutate
+from mutmut.mutator.mutator import Mutator
 from mutmut.tester import run_mutation_tests
 
 
@@ -32,10 +32,12 @@ def test_name_mutation_simple_mutants():
 
 def test_context_exclude_line():
     source = "__import__('pkg_resources').declare_namespace(__name__)\n"
-    assert mutate(Context(source=source)) == (source, 0)
+    mutator = Mutator(Context(source=source))
+    assert mutator.mutate() == (source, 0)
 
     source = "__all__ = ['hi']\n"
-    assert mutate(Context(source=source)) == (source, 0)
+    mutator = Mutator(Context(source=source))
+    assert mutator.mutate() == (source, 0)
 
 
 def check_mutants_stub(**kwargs):

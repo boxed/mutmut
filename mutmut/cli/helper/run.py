@@ -12,7 +12,7 @@ from mutmut.cache import hash_of_tests
 from mutmut.cli.helper.run_argument_parser import RunArgumentParser
 from mutmut.cli.helper.test_suite_timer import TestSuiteTimer
 from mutmut.cli.helper.utils import split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files
-from mutmut.mutator import mutations_by_type
+from mutmut.mutator.mutator_helper import MutatorHelper
 
 
 class Run:
@@ -46,6 +46,8 @@ class Run:
         self.tests_dirs = None
         self.using_testmon = None
 
+        self.mutator_helper = MutatorHelper()
+
     def set_tests_directories(self):
         tests_dirs = []
         test_paths = split_paths(self.tests_dir)
@@ -78,13 +80,13 @@ class Run:
         Get mutation types to apply and raise an error if invalid types are provided
         """
 
-        mutation_types_to_apply = set(mutations_by_type.keys())
+        mutation_types_to_apply = set(self.mutator_helper.mutations_by_type.keys())
 
         if self.enable_mutation_types:
             mutation_types_to_apply = set(mtype.strip() for mtype in self.enable_mutation_types.split(","))
 
         elif self.disable_mutation_types:
-            mutation_types_to_apply = set(mutations_by_type.keys()) - set(
+            mutation_types_to_apply = set(self.mutator_helper.mutations_by_type.keys()) - set(
                 mtype.strip() for mtype in self.disable_mutation_types.split(","))
 
         self.mutation_types_to_apply = mutation_types_to_apply
@@ -97,15 +99,16 @@ class Run:
         invalid_types = None
 
         if self.enable_mutation_types:
-            invalid_types = [mtype for mtype in self.mutation_types_to_apply if mtype not in mutations_by_type]
+            invalid_types = [mtype for mtype in self.mutation_types_to_apply if
+                             mtype not in self.mutator_helper.mutations_by_type]
         elif self.disable_mutation_types:
             invalid_types = [mtype for mtype in self.disable_mutation_types.split(",") if
-                             mtype not in mutations_by_type]
+                             mtype not in self.mutator_helper.mutations_by_type]
 
         if invalid_types:
             raise click.BadArgumentUsage(
                 f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation "
-                f"types are: {', '.join(mutations_by_type.keys())}")
+                f"types are: {', '.join(self.mutator_helper.mutations_by_type.keys())}")
 
     def check_coverage_file(self):
         """

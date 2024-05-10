@@ -1,9 +1,7 @@
 from typing import List
 
-from mutmut import (
-    mutate_file,
-    Context,
-)
+from mutmut import Context
+from mutmut.mutator.mutator import Mutator
 from mutmut.cache import filename_and_mutation_id_from_pk, update_line_numbers
 
 
@@ -24,7 +22,6 @@ def do_apply(mutation_pk: str, dict_synonyms: List[str], backup: bool):
         filename=filename,
         dict_synonyms=dict_synonyms,
     )
-    mutate_file(
-        backup=backup,
-        context=context,
-    )
+
+    mutator = Mutator(context=context)
+    mutator.mutate_file(backup=backup)
