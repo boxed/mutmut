@@ -44,8 +44,6 @@ class SkipException(Exception):
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
-CYCLE_PROCESS_AFTER = 100
-
 mutations_by_type = {
     'operator': dict(value=OperatorMutation),
     'keyword': dict(value=KeywordMutation),
