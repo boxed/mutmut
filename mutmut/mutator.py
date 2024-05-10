@@ -44,8 +44,6 @@ class SkipException(Exception):
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
-CYCLE_PROCESS_AFTER = 100
-
 mutations_by_type = {
     'operator': dict(value=OperatorMutation),
     'keyword': dict(value=KeywordMutation),
@@ -147,8 +145,13 @@ def is_a_dunder_whitelist_node(node):
     if node.type != 'expr_stmt':
         return False
 
-    if (node.children[0].type != 'name' or not node.children[0].value.startswith('__') or
-            not node.children[0].value.endswith('__')):
+    if node.childeren[0].type != 'name':
+        return False
+
+    if not node.children[0].value.startswith('__'):
+        return False
+
+    if not node.children[0].value.endswith('__'):
         return False
 
     return node.children[0].value[2:-2] in dunder_whitelist
