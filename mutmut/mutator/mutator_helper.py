@@ -54,7 +54,7 @@ class MutatorHelper:
         if node.type != 'expr_stmt':
             return False
 
-        if node.childeren[0].type != 'name':
+        if node.children[0].type != 'name':
             return False
 
         if not node.children[0].value.startswith('__'):

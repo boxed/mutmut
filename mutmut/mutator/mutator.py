@@ -131,7 +131,6 @@ class Mutator:
 
     def apply_mutation_and_update_context(self, new, old, node, node_attribute):
         if new is None or new == old:
-            self.context.index += 1
             return
 
         if hasattr(mutmut_config, 'pre_mutation_ast'):
