@@ -55,17 +55,21 @@ def python_source_files(path: str, tests_dirs: List[str], paths_to_exclude: Opti
     """
     paths_to_exclude = paths_to_exclude or []
     if isdir(path):
-        for root, dirs, files in os.walk(path, topdown=True):
-            for exclude_pattern in paths_to_exclude:
-                dirs[:] = [d for d in dirs if not fnmatch.fnmatch(d, exclude_pattern)]
-                files[:] = [f for f in files if not fnmatch.fnmatch(f, exclude_pattern)]
-
-            dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
-            for filename in files:
-                if filename.endswith('.py'):
-                    yield os.path.join(root, filename)
+        yield from process_python_dir(path, paths_to_exclude, tests_dirs)
     else:
         yield path
+
+
+def process_python_dir(path, paths_to_exclude, tests_dirs):
+    for root, dirs, files in os.walk(path, topdown=True):
+        for exclude_pattern in paths_to_exclude:
+            dirs[:] = [d for d in dirs if not fnmatch.fnmatch(d, exclude_pattern)]
+            files[:] = [f for f in files if not fnmatch.fnmatch(f, exclude_pattern)]
+
+        dirs[:] = [d for d in dirs if os.path.join(root, d) not in tests_dirs]
+        python_files = filter(lambda name: name.endswith('.py'), files)
+        for filename in python_files:
+            yield os.path.join(root, filename)
 
 
 def read_patch_data(patch_file_path: str):
