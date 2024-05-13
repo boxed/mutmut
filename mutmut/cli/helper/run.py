@@ -1,18 +1,24 @@
 import os
 import traceback
 from io import (open, )
-from os.path import exists
+from os.path import exists, isdir
 
 import click
 from glob2 import glob
 
-from mutmut import (mutmut_config, guess_paths_to_mutate, Config, Progress, check_coverage_data_filepaths,
-                    run_mutation_tests, read_coverage_data, read_patch_data, compute_exit_code, close_active_queues, )
+try:
+    import mutmut_config
+except ImportError:
+    mutmut_config = None
+from mutmut.helpers.config import Config
+from mutmut.helpers.progress import Progress
 from mutmut.cache import hash_of_tests
 from mutmut.cli.helper.run_argument_parser import RunArgumentParser
 from mutmut.cli.helper.test_suite_timer import TestSuiteTimer
-from mutmut.cli.helper.utils import split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files
+from mutmut.cli.helper.utils import (split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files,
+                                     read_coverage_data, read_patch_data)
 from mutmut.mutator.mutator_helper import MutatorHelper
+from mutmut.tester import run_mutation_tests, close_active_queues
 
 
 class Run:
@@ -110,6 +116,11 @@ class Run:
                 f"The following are not valid mutation types: {', '.join(sorted(invalid_types))}. Valid mutation "
                 f"types are: {', '.join(self.mutator_helper.mutations_by_type.keys())}")
 
+    def check_coverage_data_filepaths(self, coverage_data):
+        for filepath in coverage_data:
+            if not os.path.exists(filepath):
+                raise ValueError('Filepaths in .coverage not recognized, try recreating the .coverage file manually.')
+
     def check_coverage_file(self):
         """
         Check if the coverage file exists
@@ -118,13 +129,36 @@ class Run:
         if self.use_coverage and not exists('.coverage'):
             raise FileNotFoundError('No .coverage file found. You must generate a coverage file to use this feature.')
 
+    def guess_paths_to_mutate(self) -> str:
+        """Guess the path to source code to mutate"""
+        this_dir = os.getcwd().split(os.sep)[-1]
+        if isdir('lib'):
+            return 'lib'
+        elif isdir('src'):
+            return 'src'
+        elif isdir(this_dir):
+            return this_dir
+        elif isdir(this_dir.replace('-', '_')):
+            return this_dir.replace('-', '_')
+        elif isdir(this_dir.replace(' ', '_')):
+            return this_dir.replace(' ', '_')
+        elif isdir(this_dir.replace('-', '')):
+            return this_dir.replace('-', '')
+        elif isdir(this_dir.replace(' ', '')):
+            return this_dir.replace(' ', '')
+        raise FileNotFoundError(
+            'Could not figure out where the code to mutate is. '
+            'Please specify it on the command line using --paths-to-mutate, '
+            'or by adding "paths_to_mutate=code_dir" in pyproject.toml or setup.cfg to the [mutmut] '
+            'section.')
+
     def check_paths_to_mutate(self):
         """
         Check if the paths to mutate are valid
         """
 
         if self.paths_to_mutate is None:
-            self.paths_to_mutate = guess_paths_to_mutate()
+            self.paths_to_mutate = self.guess_paths_to_mutate()
 
         if not isinstance(self.paths_to_mutate, (list, tuple)):
             # If the paths_to_mutate is a string, we split it by commas or colons
@@ -199,7 +233,6 @@ class Run:
         """
         Get the covered data based on the use_coverage and use_patch_file flags
 
-        :param use_patch_file: whether to use patch file
         :return: covered lines by filename and coverage data
         """
 
@@ -209,7 +242,7 @@ class Run:
         if self.use_coverage:
             covered_lines_by_filename = {}
             coverage_data = read_coverage_data()
-            check_coverage_data_filepaths(coverage_data)
+            self.check_coverage_data_filepaths(coverage_data)
 
         elif self.use_patch_file:
             assert self.use_patch_file
@@ -309,9 +342,9 @@ class Run:
             run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
         except Exception as e:
             traceback.print_exc()
-            return compute_exit_code(progress, e)
+            return progress.compute_exit_code(e)
         else:
-            return compute_exit_code(progress, ci=self.ci)
+            return progress.compute_exit_code(ci=self.ci)
         finally:
             print()  # make sure we end the output with a newline
             # Close all active multiprocessing queues to avoid hanging up the main process

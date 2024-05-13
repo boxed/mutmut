@@ -5,17 +5,13 @@ from time import sleep
 from pytest import raises, fixture
 from unittest.mock import MagicMock, patch
 
-from mutmut import (
-    check_mutants,
-    close_active_queues,
-    read_patch_data,
-    OK_KILLED,
-    Context, 
-    )
-
 from mutmut.mutations.lambda_mutation import LambdaMutation
 from mutmut.mutations.name_mutation import NameMutation
 from mutmut.mutator.mutator import Mutator
+from mutmut.tester import check_mutants, close_active_queues
+from mutmut.cli.helper.utils import read_patch_data
+from mutmut.helpers.progress import OK_KILLED
+from mutmut.helpers.context import Context
 from mutmut.tester import run_mutation_tests
 
 

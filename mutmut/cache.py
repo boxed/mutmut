@@ -15,8 +15,10 @@ from junit_xml import TestSuite, TestCase, to_xml_report_string
 from pony.orm import Database, Required, db_session, Set, Optional, select, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
-from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
-    OK_KILLED, RelativeMutationID, Context
+from mutmut.helpers.progress import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
+    OK_KILLED
+from mutmut.helpers.relativemutationid import RelativeMutationID
+from mutmut.helpers.context import Context
 from mutmut.mutator.mutator import Mutator
 
 db = Database()

@@ -3,9 +3,9 @@
 import pytest
 from parso import parse
 
-from mutmut import ALL, Context, RelativeMutationID
-
-from mutmut.mutator.mutator import Mutator
+from mutmut.mutator.mutator import Mutator, ALL
+from mutmut.helpers.relativemutationid import RelativeMutationID
+from mutmut.helpers.context import Context
 from mutmut.mutations.name_mutation import NameMutation
 from mutmut.helpers.astpattern import ASTPattern
 
@@ -357,7 +357,7 @@ class ConfigurationOptions(Protocol):
     min_name_length: int
     """
     Mutator(Context(source=source)).mutate()
-    
+
 
 def test_bug_github_issue_30():
     source = """
@@ -389,7 +389,7 @@ def test_bug_github_issue_162():
 primes: List[int] = []
 foo = 'bar'
 """
-    
+
     assert Mutator(Context(source=source, mutation_id=RelativeMutationID("foo = 'bar'", 0, 2))).mutate() == (source.replace("'bar'", "'XXbarXX'"), 1)
 
 

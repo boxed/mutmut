@@ -1,5 +1,6 @@
 import itertools
 import sys
+from typing import Optional
 
 UNTESTED = 'untested'
 OK_KILLED = 'ok_killed'
@@ -63,6 +64,41 @@ class Progress:
             raise ValueError('Unknown status returned from run_mutation: {}'.format(status))
         self.progress += 1
         self.print()
+
+    def compute_exit_code(self, exception: Optional[Exception] = None, ci: bool = False) -> int:
+        """Compute an exit code for mutmut mutation testing
+
+        The following exit codes are available for mutmut (as documented for the CLI run command):
+         * 0 if all mutants were killed (OK_KILLED)
+         * 1 if a fatal error occurred
+         * 2 if one or more mutants survived (BAD_SURVIVED)
+         * 4 if one or more mutants timed out (BAD_TIMEOUT)
+         * 8 if one or more mutants caused tests to take twice as long (OK_SUSPICIOUS)
+
+         Exit codes 1 to 8 will be bit-ORed so that it is possible to know what
+         different mutant statuses occurred during mutation testing.
+
+         When running with ci=True (--CI flag enabled), the exit code will always be
+         1 for a fatal error or 0 for any other case.
+
+        :param exception:
+        :param progress:
+        :param ci:
+
+        :return: integer noting the exit code of the mutation tests.
+        """
+        code = 0
+        if exception is not None:
+            code = code | 1
+        if ci:
+            return code
+        if self.surviving_mutants > 0:
+            code = code | 2
+        if self.surviving_mutants_timeout > 0:
+            code = code | 4
+        if self.suspicious_mutants > 0:
+            code = code | 8
+        return code
 
 
 def status_printer():

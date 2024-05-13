@@ -1,6 +1,6 @@
 from time import time
 
-from mutmut import (
+from mutmut.tester import (
     popen_streaming_output,
     print_status,
 )

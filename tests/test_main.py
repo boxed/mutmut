@@ -17,16 +17,12 @@ from unittest.mock import (
 import pytest
 from click.testing import CliRunner
 
-from mutmut import (
-    compute_exit_code,
-    popen_streaming_output,
-    Progress,
-    python_source_files,
-    read_coverage_data,
-    MUTANT_STATUSES,
-    __version__,
-)
-from mutmut.mutator.mutator import MutatorHelper
+from mutmut import __version__
+from mutmut.mutator.mutator_helper import MutatorHelper
+from mutmut.tester import popen_streaming_output
+from mutmut.helpers.progress import Progress
+from mutmut.helpers.progress import MUTANT_STATUSES
+from mutmut.cli.helper.utils import python_source_files, read_coverage_data
 from mutmut.__main__ import climain
 
 file_to_mutate_lines = [
@@ -145,46 +141,82 @@ def test_compute_return_code():
             self.surviving_mutants_timeout = surviving_mutants_timeout
             self.suspicious_mutants = suspicious_mutants
 
-    assert compute_exit_code(MockProgress(0, 0, 0, 0)) == 0
-    assert compute_exit_code(MockProgress(0, 0, 0, 1)) == 8
-    assert compute_exit_code(MockProgress(0, 0, 1, 0)) == 4
-    assert compute_exit_code(MockProgress(0, 0, 1, 1)) == 12
-    assert compute_exit_code(MockProgress(0, 1, 0, 0)) == 2
-    assert compute_exit_code(MockProgress(0, 1, 0, 1)) == 10
-    assert compute_exit_code(MockProgress(0, 1, 1, 0)) == 6
-    assert compute_exit_code(MockProgress(0, 1, 1, 1)) == 14
+    assert (MockProgress(0, 0, 0, 0)
+            .compute_exit_code()) == 0
+    assert (MockProgress(0, 0, 0, 1)
+            .compute_exit_code()) == 8
+    assert (MockProgress(0, 0, 1, 0)
+            .compute_exit_code()) == 4
+    assert (MockProgress(0, 0, 1, 1)
+            .compute_exit_code()) == 12
+    assert (MockProgress(0, 1, 0, 0)
+            .compute_exit_code()) == 2
+    assert (MockProgress(0, 1, 0, 1)
+            .compute_exit_code()) == 10
+    assert (MockProgress(0, 1, 1, 0)
+            .compute_exit_code()) == 6
+    assert (MockProgress(0, 1, 1, 1)
+            .compute_exit_code()) == 14
 
-    assert compute_exit_code(MockProgress(1, 0, 0, 0)) == 0
-    assert compute_exit_code(MockProgress(1, 0, 0, 1)) == 8
-    assert compute_exit_code(MockProgress(1, 0, 1, 0)) == 4
-    assert compute_exit_code(MockProgress(1, 0, 1, 1)) == 12
-    assert compute_exit_code(MockProgress(1, 1, 0, 0)) == 2
-    assert compute_exit_code(MockProgress(1, 1, 0, 1)) == 10
-    assert compute_exit_code(MockProgress(1, 1, 1, 0)) == 6
-    assert compute_exit_code(MockProgress(1, 1, 1, 1)) == 14
+    assert (MockProgress(1, 0, 0, 0)
+            .compute_exit_code()) == 0
+    assert (MockProgress(1, 0, 0, 1)
+            .compute_exit_code()) == 8
+    assert (MockProgress(1, 0, 1, 0)
+            .compute_exit_code()) == 4
+    assert (MockProgress(1, 0, 1, 1)
+            .compute_exit_code()) == 12
+    assert (MockProgress(1, 1, 0, 0)
+            .compute_exit_code()) == 2
+    assert (MockProgress(1, 1, 0, 1)
+            .compute_exit_code()) == 10
+    assert (MockProgress(1, 1, 1, 0)
+            .compute_exit_code()) == 6
+    assert (MockProgress(1, 1, 1, 1)
+            .compute_exit_code()) == 14
 
-    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockProgress(0, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockProgress(0, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockProgress(0, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockProgress(0, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockProgress(0, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockProgress(0, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockProgress(0, 1, 1, 1), Exception()) == 15
+    assert (MockProgress(0, 0, 0, 0)
+            .compute_exit_code(Exception())) == 1
+    assert (MockProgress(0, 0, 0, 1)
+            .compute_exit_code(Exception())) == 9
+    assert (MockProgress(0, 0, 1, 0)
+            .compute_exit_code(Exception())) == 5
+    assert (MockProgress(0, 0, 1, 1)
+            .compute_exit_code(Exception())) == 13
+    assert (MockProgress(0, 1, 0, 0)
+            .compute_exit_code(Exception())) == 3
+    assert (MockProgress(0, 1, 0, 1)
+            .compute_exit_code(Exception())) == 11
+    assert (MockProgress(0, 1, 1, 0)
+            .compute_exit_code(Exception())) == 7
+    assert (MockProgress(0, 1, 1, 1)
+            .compute_exit_code(Exception())) == 15
 
-    assert compute_exit_code(MockProgress(1, 0, 0, 0), Exception()) == 1
-    assert compute_exit_code(MockProgress(1, 0, 0, 1), Exception()) == 9
-    assert compute_exit_code(MockProgress(1, 0, 1, 0), Exception()) == 5
-    assert compute_exit_code(MockProgress(1, 0, 1, 1), Exception()) == 13
-    assert compute_exit_code(MockProgress(1, 1, 0, 0), Exception()) == 3
-    assert compute_exit_code(MockProgress(1, 1, 0, 1), Exception()) == 11
-    assert compute_exit_code(MockProgress(1, 1, 1, 0), Exception()) == 7
-    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception()) == 15
+    assert (MockProgress(1, 0, 0, 0)
+            .compute_exit_code(Exception())) == 1
+    assert (MockProgress(1, 0, 0, 1)
+            .compute_exit_code(Exception())) == 9
+    assert (MockProgress(1, 0, 1, 0)
+            .compute_exit_code(Exception())) == 5
+    assert (MockProgress(1, 0, 1, 1)
+            .compute_exit_code(Exception())) == 13
+    assert (MockProgress(1, 1, 0, 0)
+            .compute_exit_code(Exception())) == 3
+    assert (MockProgress(1, 1, 0, 1)
+            .compute_exit_code(Exception())) == 11
+    assert (MockProgress(1, 1, 1, 0)
+            .compute_exit_code(Exception())) == 7
+    assert (MockProgress(1, 1, 1, 1)
+            .compute_exit_code(Exception())) == 15
 
-    assert compute_exit_code(MockProgress(0, 0, 0, 0), ci=True) == 0
-    assert compute_exit_code(MockProgress(1, 1, 1, 1), ci=True) == 0
-    assert compute_exit_code(MockProgress(0, 0, 0, 0), Exception(), ci=True) == 1
-    assert compute_exit_code(MockProgress(1, 1, 1, 1), Exception(), ci=True) == 1
+    assert (MockProgress(0, 0, 0, 0)
+            .compute_exit_code(ci=True)) == 0
+    assert (MockProgress(1, 1, 1, 1)
+            .compute_exit_code(ci=True)) == 0
+    assert (MockProgress(0, 0, 0, 0)
+            .compute_exit_code(Exception(), ci=True)) == 1
+    assert (MockProgress(1, 1, 1, 1)
+            .compute_exit_code(Exception(), ci=True)) == 1
 
 
 def test_read_coverage_data(filesystem):

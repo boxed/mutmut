@@ -1,6 +1,6 @@
 from typing import List
 
-from mutmut import Context
+from mutmut.helpers.context import Context
 from mutmut.mutator.mutator import Mutator
 from mutmut.cache import filename_and_mutation_id_from_pk, update_line_numbers
 

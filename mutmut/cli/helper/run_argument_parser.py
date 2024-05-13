@@ -1,9 +1,10 @@
-from mutmut import (
-    add_mutations_by_file,
-    python_source_files,
-)
+from typing import Dict, List
+
 from mutmut.cache import filename_and_mutation_id_from_pk, update_line_numbers
-from mutmut.cli.helper.utils import check_file_exists
+from mutmut.cli.helper.utils import check_file_exists, python_source_files
+from mutmut.mutator.mutator import Mutator
+from mutmut.helpers.context import Context
+from mutmut.helpers.relativemutationid import RelativeMutationID
 
 
 class RunArgumentParser:
@@ -30,7 +31,7 @@ class RunArgumentParser:
             filename = self.argument
             check_file_exists(filename)
             update_line_numbers(filename)
-            add_mutations_by_file(self.mutations_by_file, filename, self.dict_synonyms, self.config)
+            self.add_mutations_by_file(self.mutations_by_file, filename, self.dict_synonyms)
             return
 
         filename, mutation_id = filename_and_mutation_id_from_pk(int(self.argument))
@@ -50,4 +51,33 @@ class RunArgumentParser:
             return
 
         update_line_numbers(filename)
-        add_mutations_by_file(self.mutations_by_file, filename, self.dict_synonyms, self.config)
+        self.add_mutations_by_file(self.mutations_by_file, filename, self.dict_synonyms)
+
+    def add_mutations_by_file(
+            self,
+            mutations_by_file: Dict[str, List[RelativeMutationID]],
+            filename: str,
+            dict_synonyms: List[str]
+    ):
+        with open(filename) as f:
+            source = f.read()
+        context = Context(
+            source=source,
+            filename=filename,
+            config=self.config,
+            dict_synonyms=dict_synonyms,
+        )
+
+        try:
+            mutator = Mutator(context)
+            mutations_by_file[filename] = mutator.list_mutations()
+            from mutmut.cache import register_mutants
+
+            register_mutants(mutations_by_file)
+        except Exception as e:
+            raise RuntimeError(
+                'Failed while creating mutations for {}, for line "{}"'.format(
+                    context.filename, context.current_source_line
+                )
+            ) from e
+

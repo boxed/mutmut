@@ -6,11 +6,9 @@ import sys
 
 import click
 
-from mutmut import (
-    MUTANT_STATUSES,
-    __version__,
-    config_from_file,
-)
+from mutmut import __version__
+from mutmut.helpers.progress import MUTANT_STATUSES
+from mutmut.helpers.config import config_from_file
 from mutmut.cache import (
     create_html_report,
 )
