@@ -36,3 +36,4 @@ Credits
 * Christopher J. Brody <chris.brody+brodybits@gmail.com>
 * Century-ss <hgfc7543ggfdch@gmail.com>
 * Michael Champagne <michael.champagne@elapsetech.com>
+* Florian Trudel

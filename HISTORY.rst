@@ -1,6 +1,15 @@
 Changelog
 ---------
 
+2.5.0
+~~~~~
+
+* Add cli option to specify html report directory
+
+* Fix use patch file under Windows
+
+* Improve documentation about cache issues
+
 2.4.5
 ~~~~~
 
