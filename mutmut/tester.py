@@ -23,7 +23,6 @@ from mutmut.helpers.context import Context
 from mutmut.helpers.progress import *
 from mutmut.helpers.relativemutationid import RelativeMutationID
 from mutmut.mutator.mutator import Mutator
-from mutmut.cache import update_mutant_status
 
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
@@ -71,7 +70,7 @@ def run_mutation_tests(
     t = create_worker(mp_ctx, mutants_queue, results_queue)
 
     while True:
-        if command_results(results_queue, t, config, progress):
+        if command_results(mp_ctx, mutants_queue, results_queue, t, config, progress):
             break
 
 
@@ -90,14 +89,16 @@ def create_worker(mp_ctx, mutants_queue, results_queue):
     return t
 
 
-def command_results(results_queue, t, config: Config, progress: Progress):
+def command_results(mp_ctx, mutants_queue, results_queue, t, config: Config, progress: Progress):
+    from mutmut.cache import update_mutant_status
+
     command, status, filename, mutation_id = results_queue.get()
     if command == 'end':
         t.join()
         return True
 
     elif command == 'cycle':
-        t = create_worker()
+        t = create_worker(mp_ctx, mutants_queue, results_queue)
         return False
 
     elif command == 'progress':
