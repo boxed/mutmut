@@ -137,6 +137,13 @@ def run_mutation(context: Context, callback) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
+    """
+    CodeScene analysis:
+        This function is prioritized to be refactored because of :
+        - Complex Method: cyclomatic complexity of 21, with threshold = 9 [fixed]
+        - Bumpy Road Ahead: 3 blocks with nested conditional logic, with threshold = 1 nested block per function
+        - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
+    """
     from mutmut.cache import cached_mutation_status
     cached_status = cached_mutation_status(context.filename, context.mutation_id, context.config.hash_of_tests)
 
@@ -144,6 +151,29 @@ def run_mutation(context: Context, callback) -> str:
         return cached_status
 
     config = context.config
+    # Pre Mutation
+    status = execute_pre_mutation(context, config, callback)
+    if status is not None:
+        return status
+
+    mutator = Mutator(context)
+
+    try:
+        mutator.mutate_file(backup=True)
+        # Execute Tests
+        return execute_tests_on_mutations(config, callback)
+
+    except SkipException:
+        return SKIPPED
+
+    finally:
+        move(mutator.context.filename + '.bak', mutator.context.filename)
+        config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
+        # Post Mutation
+        execute_post_mutation(config, callback)
+
+
+def execute_pre_mutation(context: Context, config: Config, callback):
     if hasattr(mutmut_config, 'pre_mutation'):
         context.current_line_index = context.mutation_id.line_number
         try:
@@ -157,44 +187,37 @@ def run_mutation(context: Context, callback) -> str:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
             callback(result)
+    return None
 
-    mutator = Mutator(context)
 
+def execute_tests_on_mutations(config: Config, callback):
+    start = time()
     try:
-
-        mutator.mutate_file(backup=True)
-
-        start = time()
-        try:
+        survived = tests_pass(config=config, callback=callback)
+        if survived and config.test_command != config._default_test_command and config.rerun_all:
+            # rerun the whole test suite to be sure the mutant can not be killed by other tests
+            config.test_command = config._default_test_command
             survived = tests_pass(config=config, callback=callback)
-            if survived and config.test_command != config._default_test_command and config.rerun_all:
-                # rerun the whole test suite to be sure the mutant can not be killed by other tests
-                config.test_command = config._default_test_command
-                survived = tests_pass(config=config, callback=callback)
-        except TimeoutError:
-            return BAD_TIMEOUT
+    except TimeoutError:
+        return BAD_TIMEOUT
 
-        time_elapsed = time() - start
-        if not survived and time_elapsed > config.test_time_base + (
-                config.baseline_time_elapsed * config.test_time_multiplier
-        ):
-            return OK_SUSPICIOUS
+    time_elapsed = time() - start
+    if not survived and time_elapsed > config.test_time_base + (
+            config.baseline_time_elapsed * config.test_time_multiplier
+    ):
+        return OK_SUSPICIOUS
 
-        if survived:
-            return BAD_SURVIVED
-        else:
-            return OK_KILLED
-    except SkipException:
-        return SKIPPED
+    if survived:
+        return BAD_SURVIVED
+    else:
+        return OK_KILLED
 
-    finally:
-        move(mutator.context.filename + '.bak', mutator.context.filename)
-        config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
 
-        if config.post_mutation:
-            result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
-            if result and not config.swallow_output:
-                callback(result)
+def execute_post_mutation(config: Config, callback):
+    if config.post_mutation:
+        result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
+        if result and not config.swallow_output:
+            callback(result)
 
 
 def hammett_tests_pass(config: Config, callback) -> bool:
