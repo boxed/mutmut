@@ -317,6 +317,13 @@ def popen_streaming_output(
         the timeout time
     :return: the return code of the executed subprocess
     """
+    """
+        CodeScene analysis:
+            This function is prioritized to be refactored because of :
+            - Complex Method: cyclomatic complexity of 13, with threshold = 9
+            - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function
+            - Deep Nested Complexity: nested complexity depth of 4, with threshold = 4
+    """
     if os.name == 'nt':  # pragma: no cover
         process = subprocess.Popen(
             cmd,
@@ -334,13 +341,6 @@ def popen_streaming_output(
         )
         stdout = os.fdopen(master)
         os.close(slave)
-
-    def kill(process_):
-        """Kill the specified process on Timer completion"""
-        try:
-            process_.kill()
-        except OSError:
-            pass
 
     # python 2-3 agnostic process timer
     timer = Timer(timeout, kill, [process])
@@ -375,6 +375,14 @@ def popen_streaming_output(
     timer.cancel()
 
     return process.returncode
+
+
+def kill(process_):
+    """Kill the specified process on Timer completion"""
+    try:
+        process_.kill()
+    except OSError:
+        pass
 
 
 def tests_pass(config: Config, callback) -> bool:
