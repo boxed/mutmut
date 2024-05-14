@@ -254,7 +254,7 @@ def hammett_tests_pass(config: Config, callback) -> bool:
         CodeScene analysis:
             This function is prioritized to be refactored because of :
             - Complex Method: cyclomatic complexity of 11, with threshold = 9 [fixed]
-            - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
+            - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2 [fixed]
     """
     # noinspection PyUnresolvedReferences
     from hammett import main_cli
@@ -322,9 +322,13 @@ def unload_modules(modules_before, config: Config):
     modules_to_force_unload = {x.partition(os.sep)[0].replace('.py', '') for x in config.paths_to_mutate}
 
     for module_name in sorted(set(sys.modules.keys()) - set(modules_before), reverse=True):
-        if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith(
-                'tests') or module_name.startswith('django'):
+        if should_unload(module_name, modules_to_force_unload):
             del sys.modules[module_name]
+
+
+def should_unload(module_name, modules_to_force_unload):
+    return any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith(
+        'tests') or module_name.startswith('django')
 
 
 def popen_streaming_output(
