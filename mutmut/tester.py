@@ -40,12 +40,6 @@ def run_mutation_tests(
         progress: Progress,
         mutations_by_file: Dict[str, List[RelativeMutationID]],
 ):
-    """
-    CodeScene analysis:
-        This function is prioritized to be refactored because of :
-        - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
-    """
-
     # Need to explicitly use the spawn method for python < 3.8 on macOS
     mp_ctx = multiprocessing.get_context('spawn')
 
@@ -154,13 +148,6 @@ def run_mutation(context: Context, callback) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
-    """
-    CodeScene analysis:
-        This function is prioritized to be refactored because of :
-        - Complex Method: cyclomatic complexity of 21, with threshold = 9 [fixed]
-        - Bumpy Road Ahead: 3 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
-        - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2 [fixed]
-    """
     from mutmut.cache import cached_mutation_status
     cached_status = cached_mutation_status(context.filename, context.mutation_id, context.config.hash_of_tests)
 
@@ -179,7 +166,7 @@ def run_mutation(context: Context, callback) -> str:
     try:
         mutator.mutate_file(backup=True)
         # Execute Tests
-        return execute_tests_on_mutations(config, callback)
+        return execute_tests_on_mutation(config, callback)
 
     except SkipException:
         return SKIPPED
@@ -210,7 +197,7 @@ def execute_config_pre_mutation(config: Config, callback):
             callback(result)
 
 
-def execute_tests_on_mutations(config: Config, callback):
+def execute_tests_on_mutation(config: Config, callback):
     start = time()
     try:
         survived = tests_pass(config=config, callback=callback)
@@ -250,12 +237,6 @@ def execute_config_post_mutation(config: Config, callback):
 
 
 def hammett_tests_pass(config: Config, callback) -> bool:
-    """
-        CodeScene analysis:
-            This function is prioritized to be refactored because of :
-            - Complex Method: cyclomatic complexity of 11, with threshold = 9 [fixed]
-            - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2 [fixed]
-    """
     # noinspection PyUnresolvedReferences
     from hammett import main_cli
     modules_before = set(sys.modules.keys())
@@ -343,13 +324,6 @@ def popen_streaming_output(
     :raises TimeoutError: if the subprocess' execution time exceeds
         the timeout time
     :return: the return code of the executed subprocess
-    """
-    """
-        CodeScene analysis:
-            This function is prioritized to be refactored because of :
-            - Complex Method: cyclomatic complexity of 13, with threshold = 9 [fixed]
-            - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
-            - Deep Nested Complexity: nested complexity depth of 4, with threshold = 4 [fixed]
     """
     if os.name == 'nt':  # pragma: no cover
         process, stdout = start_windows_process(cmd)
