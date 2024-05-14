@@ -23,6 +23,7 @@ from mutmut.helpers.context import Context
 from mutmut.helpers.progress import *
 from mutmut.helpers.relativemutationid import RelativeMutationID
 from mutmut.mutator.mutator import Mutator
+from mutmut.cache import update_mutant_status
 
 if os.getcwd() not in sys.path:
     sys.path.insert(0, os.getcwd())
@@ -40,7 +41,11 @@ def run_mutation_tests(
         progress: Progress,
         mutations_by_file: Dict[str, List[RelativeMutationID]],
 ):
-    from mutmut.cache import update_mutant_status
+    """
+    CodeScene analysis:
+        This function is prioritized to be refactored because of :
+        - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function
+    """
 
     # Need to explicitly use the spawn method for python < 3.8 on macOS
     mp_ctx = multiprocessing.get_context('spawn')
@@ -63,21 +68,7 @@ def run_mutation_tests(
     results_queue = mp_ctx.Queue(maxsize=100)
     add_to_active_queues(results_queue)
 
-    def create_worker():
-        t = mp_ctx.Process(
-            target=check_mutants,
-            name='check_mutants',
-            daemon=True,
-            kwargs=dict(
-                mutants_queue=mutants_queue,
-                results_queue=results_queue,
-                cycle_process_after=CYCLE_PROCESS_AFTER,
-            )
-        )
-        t.start()
-        return t
-
-    t = create_worker()
+    t = create_worker(mp_ctx, mutants_queue, results_queue)
 
     while True:
         command, status, filename, mutation_id = results_queue.get()
@@ -101,6 +92,21 @@ def run_mutation_tests(
 
             update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status,
                                  tests_hash=config.hash_of_tests)
+
+
+def create_worker(mp_ctx, mutants_queue, results_queue):
+    t = mp_ctx.Process(
+        target=check_mutants,
+        name='check_mutants',
+        daemon=True,
+        kwargs=dict(
+            mutants_queue=mutants_queue,
+            results_queue=results_queue,
+            cycle_process_after=CYCLE_PROCESS_AFTER,
+        )
+    )
+    t.start()
+    return t
 
 
 class SkipException(Exception):
