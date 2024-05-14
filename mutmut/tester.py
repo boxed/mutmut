@@ -322,25 +322,12 @@ def popen_streaming_output(
             This function is prioritized to be refactored because of :
             - Complex Method: cyclomatic complexity of 13, with threshold = 9
             - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function
-            - Deep Nested Complexity: nested complexity depth of 4, with threshold = 4
+            - Deep Nested Complexity: nested complexity depth of 4, with threshold = 4 [fixed]
     """
     if os.name == 'nt':  # pragma: no cover
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            shell=True,
-        )
-        stdout = process.stdout
+        process, stdout = start_windows_process(cmd)
     else:
-        master, slave = os.openpty()
-        process = subprocess.Popen(
-            shlex.split(cmd, posix=True),
-            stdout=slave,
-            stderr=slave
-        )
-        stdout = os.fdopen(master)
-        os.close(slave)
+        process, stdout = start_other_os_process(cmd)
 
     # python 2-3 agnostic process timer
     timer = Timer(timeout, kill, [process])
@@ -348,25 +335,7 @@ def popen_streaming_output(
     timer.start()
 
     while process.returncode is None:
-        try:
-            if os.name == 'nt':  # pragma: no cover
-                line = stdout.readline()
-                # windows gives readline() raw stdout as a b''
-                # need to decode it
-                line = line.decode("utf-8")
-                if line:  # ignore empty strings and None
-                    callback(line)
-            else:
-                while True:
-                    line = stdout.readline()
-                    if not line:
-                        break
-                    callback(line)
-        except OSError:
-            # This seems to happen on some platforms, including TravisCI.
-            # It seems like it's ok to just let this pass here, you just
-            # won't get as nice feedback.
-            pass
+        stream_output(stdout, callback)
         if not timer.is_alive():
             raise TimeoutError("subprocess running command '{}' timed out after {} seconds".format(cmd, timeout))
         process.poll()
@@ -377,12 +346,65 @@ def popen_streaming_output(
     return process.returncode
 
 
+def start_windows_process(cmd):
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        shell=True,
+    )
+    stdout = process.stdout
+    return process, stdout
+
+
+def start_other_os_process(cmd):
+    master, slave = os.openpty()
+    process = subprocess.Popen(
+        shlex.split(cmd, posix=True),
+        stdout=slave,
+        stderr=slave
+    )
+    stdout = os.fdopen(master)
+    os.close(slave)
+    return process, stdout
+
+
 def kill(process_):
     """Kill the specified process on Timer completion"""
     try:
         process_.kill()
     except OSError:
         pass
+
+
+def stream_output(stdout, callback):
+    try:
+        if os.name == 'nt':  # pragma: no cover
+            stream_windows_output(stdout, callback)
+        else:
+            stream_other_os_output(stdout, callback)
+    except OSError:
+        # This seems to happen on some platforms, including TravisCI.
+        # It seems like it's ok to just let this pass here, you just
+        # won't get as nice feedback.
+        pass
+
+
+def stream_windows_output(stdout, callback):
+    line = stdout.readline()
+    # windows gives readline() raw stdout as a b''
+    # need to decode it
+    line = line.decode("utf-8")
+    if line:  # ignore empty strings and None
+        callback(line)
+
+
+def stream_other_os_output(stdout, callback):
+    while True:
+        line = stdout.readline()
+        if not line:
+            break
+        callback(line)
 
 
 def tests_pass(config: Config, callback) -> bool:
