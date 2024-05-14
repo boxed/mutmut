@@ -142,7 +142,7 @@ def run_mutation(context: Context, callback) -> str:
         This function is prioritized to be refactored because of :
         - Complex Method: cyclomatic complexity of 21, with threshold = 9 [fixed]
         - Bumpy Road Ahead: 3 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
-        - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
+        - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2 [fixed]
     """
     from mutmut.cache import cached_mutation_status
     cached_status = cached_mutation_status(context.filename, context.mutation_id, context.config.hash_of_tests)
@@ -197,13 +197,22 @@ def execute_tests_on_mutations(config: Config, callback):
     start = time()
     try:
         survived = tests_pass(config=config, callback=callback)
-        if survived and config.test_command != config._default_test_command and config.rerun_all:
+        if should_rerun_tests(config, survived):
             # rerun the whole test suite to be sure the mutant can not be killed by other tests
             config.test_command = config._default_test_command
             survived = tests_pass(config=config, callback=callback)
     except TimeoutError:
         return BAD_TIMEOUT
 
+    return determine_tests_result(config, start, survived)
+
+
+def should_rerun_tests(config: Config, survived):
+    # Determines whether tests should be rerun based on the configuration and test results.
+    return survived and config.test_command != config._default_test_command and config.rerun_all
+
+
+def determine_tests_result(config: Config, start, survived):
     time_elapsed = time() - start
     if not survived and time_elapsed > config.test_time_base + (
             config.baseline_time_elapsed * config.test_time_multiplier
