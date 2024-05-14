@@ -250,6 +250,12 @@ def execute_config_post_mutation(config: Config, callback):
 
 
 def hammett_tests_pass(config: Config, callback) -> bool:
+    """
+        CodeScene analysis:
+            This function is prioritized to be refactored because of :
+            - Complex Method: cyclomatic complexity of 11, with threshold = 9
+            - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
+    """
     # noinspection PyUnresolvedReferences
     from hammett import main_cli
     modules_before = set(sys.modules.keys())
@@ -276,12 +282,7 @@ def hammett_tests_pass(config: Config, callback) -> bool:
 
     # Run tests
     try:
-        class StdOutRedirect(TextIOBase):
-            def write(self, s):
-                callback(s)
-                return len(s)
-
-        redirect = StdOutRedirect()
+        redirect = StdOutRedirect(callback)
         sys.stdout = redirect
         sys.stderr = redirect
         returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
@@ -304,6 +305,15 @@ def hammett_tests_pass(config: Config, callback) -> bool:
     return returncode == 0
 
 
+class StdOutRedirect(TextIOBase):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def write(self, s):
+        self.callback(s)
+        return len(s)
+
+
 def popen_streaming_output(
         cmd: str, callback: Callable[[str], None], timeout: Optional[float] = None
 ) -> int:
@@ -320,8 +330,8 @@ def popen_streaming_output(
     """
         CodeScene analysis:
             This function is prioritized to be refactored because of :
-            - Complex Method: cyclomatic complexity of 13, with threshold = 9
-            - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function
+            - Complex Method: cyclomatic complexity of 13, with threshold = 9 [fixed]
+            - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
             - Deep Nested Complexity: nested complexity depth of 4, with threshold = 4 [fixed]
     """
     if os.name == 'nt':  # pragma: no cover
