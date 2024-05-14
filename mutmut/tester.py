@@ -281,7 +281,10 @@ def hammett_tests_pass(config: Config, callback) -> bool:
     timer.start()
 
     # Run tests
-    returncode = run_hammett_tests(callback, main_cli, timer, timed_out, config)
+    try:
+        returncode = run_hammett_tests(callback, main_cli, timer, config)
+    except KeyboardInterrupt:
+        handle_keyboard_interrupt(timer, timed_out)
 
     unload_modules(modules_before, config)
 
@@ -297,21 +300,22 @@ class StdOutRedirect(TextIOBase):
         return len(s)
 
 
-def run_hammett_tests(callback, main_cli, timer, timed_out, config: Config):
-    try:
-        redirect = StdOutRedirect(callback)
-        sys.stdout = redirect
-        sys.stderr = redirect
-        returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
-        timer.cancel()
-        return returncode
-    except KeyboardInterrupt:
-        timer.cancel()
-        if timed_out:
-            raise TimeoutError('In process tests timed out')
-        raise
+def run_hammett_tests(callback, main_cli, timer, config: Config):
+    redirect = StdOutRedirect(callback)
+    sys.stdout = redirect
+    sys.stderr = redirect
+    returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
+    sys.stdout = sys.__stdout__
+    sys.stderr = sys.__stderr__
+    timer.cancel()
+    return returncode
+
+
+def handle_keyboard_interrupt(timer, timed_out):
+    timer.cancel()
+    if timed_out:
+        raise TimeoutError('In process tests timed out')
+    raise
 
 
 def unload_modules(modules_before, config: Config):
