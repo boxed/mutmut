@@ -141,7 +141,7 @@ def run_mutation(context: Context, callback) -> str:
     CodeScene analysis:
         This function is prioritized to be refactored because of :
         - Complex Method: cyclomatic complexity of 21, with threshold = 9 [fixed]
-        - Bumpy Road Ahead: 3 blocks with nested conditional logic, with threshold = 1 nested block per function
+        - Bumpy Road Ahead: 3 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
         - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
     """
     from mutmut.cache import cached_mutation_status
@@ -152,9 +152,10 @@ def run_mutation(context: Context, callback) -> str:
 
     config = context.config
     # Pre Mutation
-    status = execute_pre_mutation(context, config, callback)
+    status = execute_pre_mutation(context)
     if status is not None:
         return status
+    execute_config_pre_mutation(config, callback)
 
     mutator = Mutator(context)
 
@@ -170,10 +171,10 @@ def run_mutation(context: Context, callback) -> str:
         move(mutator.context.filename + '.bak', mutator.context.filename)
         config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
         # Post Mutation
-        execute_post_mutation(config, callback)
+        execute_config_post_mutation(config, callback)
 
 
-def execute_pre_mutation(context: Context, config: Config, callback):
+def execute_pre_mutation(context: Context):
     if hasattr(mutmut_config, 'pre_mutation'):
         context.current_line_index = context.mutation_id.line_number
         try:
@@ -182,12 +183,14 @@ def execute_pre_mutation(context: Context, config: Config, callback):
             return SKIPPED
         if context.skip:
             return SKIPPED
+    return None
 
+
+def execute_config_pre_mutation(config: Config, callback):
     if config.pre_mutation:
         result = subprocess.check_output(config.pre_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
             callback(result)
-    return None
 
 
 def execute_tests_on_mutations(config: Config, callback):
@@ -213,7 +216,7 @@ def execute_tests_on_mutations(config: Config, callback):
         return OK_KILLED
 
 
-def execute_post_mutation(config: Config, callback):
+def execute_config_post_mutation(config: Config, callback):
     if config.post_mutation:
         result = subprocess.check_output(config.post_mutation, shell=True).decode().strip()
         if result and not config.swallow_output:
