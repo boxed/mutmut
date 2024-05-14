@@ -44,7 +44,7 @@ def run_mutation_tests(
     """
     CodeScene analysis:
         This function is prioritized to be refactored because of :
-        - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function
+        - Bumpy Road Ahead: 2 blocks with nested conditional logic, with threshold = 1 nested block per function [fixed]
     """
 
     # Need to explicitly use the spawn method for python < 3.8 on macOS
@@ -71,27 +71,8 @@ def run_mutation_tests(
     t = create_worker(mp_ctx, mutants_queue, results_queue)
 
     while True:
-        command, status, filename, mutation_id = results_queue.get()
-        if command == 'end':
-            t.join()
+        if command_results(results_queue, t, config, progress):
             break
-
-        elif command == 'cycle':
-            t = create_worker()
-
-        elif command == 'progress':
-            if not config.swallow_output:
-                print(status, end='', flush=True)
-            elif not config.no_progress:
-                progress.print()
-
-        else:
-            assert command == 'status'
-
-            progress.register(status)
-
-            update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status,
-                                 tests_hash=config.hash_of_tests)
 
 
 def create_worker(mp_ctx, mutants_queue, results_queue):
@@ -107,6 +88,35 @@ def create_worker(mp_ctx, mutants_queue, results_queue):
     )
     t.start()
     return t
+
+
+def command_results(results_queue, t, config: Config, progress: Progress):
+    command, status, filename, mutation_id = results_queue.get()
+    if command == 'end':
+        t.join()
+        return True
+
+    elif command == 'cycle':
+        t = create_worker()
+        return False
+
+    elif command == 'progress':
+        handle_progress(status, config, progress)
+        return False
+
+    else:
+        assert command == 'status'
+        progress.register(status)
+        update_mutant_status(file_to_mutate=filename, mutation_id=mutation_id, status=status,
+                             tests_hash=config.hash_of_tests)
+        return False
+
+
+def handle_progress(status, config, progress):
+    if not config.swallow_output:
+        print(status, end='', flush=True)
+    elif not config.no_progress:
+        progress.print()
 
 
 class SkipException(Exception):
