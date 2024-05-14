@@ -253,7 +253,7 @@ def hammett_tests_pass(config: Config, callback) -> bool:
     """
         CodeScene analysis:
             This function is prioritized to be refactored because of :
-            - Complex Method: cyclomatic complexity of 11, with threshold = 9
+            - Complex Method: cyclomatic complexity of 11, with threshold = 9 [fixed]
             - Complex Conditional: 1 complex conditional with 2 branches, with threshold = 2
     """
     # noinspection PyUnresolvedReferences
@@ -281,26 +281,9 @@ def hammett_tests_pass(config: Config, callback) -> bool:
     timer.start()
 
     # Run tests
-    try:
-        redirect = StdOutRedirect(callback)
-        sys.stdout = redirect
-        sys.stderr = redirect
-        returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
-        timer.cancel()
-    except KeyboardInterrupt:
-        timer.cancel()
-        if timed_out:
-            raise TimeoutError('In process tests timed out')
-        raise
+    returncode = run_hammett_tests(callback, main_cli, timer, timed_out, config)
 
-    modules_to_force_unload = {x.partition(os.sep)[0].replace('.py', '') for x in config.paths_to_mutate}
-
-    for module_name in sorted(set(sys.modules.keys()) - set(modules_before), reverse=True):
-        if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith(
-                'tests') or module_name.startswith('django'):
-            del sys.modules[module_name]
+    unload_modules(modules_before, config)
 
     return returncode == 0
 
@@ -312,6 +295,32 @@ class StdOutRedirect(TextIOBase):
     def write(self, s):
         self.callback(s)
         return len(s)
+
+
+def run_hammett_tests(callback, main_cli, timer, timed_out, config: Config):
+    try:
+        redirect = StdOutRedirect(callback)
+        sys.stdout = redirect
+        sys.stderr = redirect
+        returncode = main_cli(shlex.split(config.test_command[len(hammett_prefix):]))
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        timer.cancel()
+        return returncode
+    except KeyboardInterrupt:
+        timer.cancel()
+        if timed_out:
+            raise TimeoutError('In process tests timed out')
+        raise
+
+
+def unload_modules(modules_before, config: Config):
+    modules_to_force_unload = {x.partition(os.sep)[0].replace('.py', '') for x in config.paths_to_mutate}
+
+    for module_name in sorted(set(sys.modules.keys()) - set(modules_before), reverse=True):
+        if any(module_name.startswith(x) for x in modules_to_force_unload) or module_name.startswith(
+                'tests') or module_name.startswith('django'):
+            del sys.modules[module_name]
 
 
 def popen_streaming_output(
