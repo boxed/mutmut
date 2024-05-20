@@ -1,9 +1,7 @@
 from time import time
 
-from mutmut.tester import (
-    popen_streaming_output,
-    print_status,
-)
+from mutmut.tester.tester import Tester
+from mutmut.helpers.progress import print_status
 from mutmut.cache import (
     cached_hash_of_tests,
 )
@@ -35,7 +33,8 @@ class TestSuiteTimer:
                 print_status('Running...')
             output.append(line)
 
-        return_code = popen_streaming_output(self.test_command, feedback)
+        tester = Tester()
+        return_code = tester.popen_streaming_output(self.test_command, feedback)
 
         return return_code, output
 
