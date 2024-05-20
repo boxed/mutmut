@@ -1,3 +1,5 @@
+import multiprocessing
+import os.path
 from io import open
 from typing import Tuple
 
@@ -168,13 +170,16 @@ class Mutator:
         self.mutate()
         return self.context.performed_mutation_ids
 
-    def mutate_file(self, backup: bool) -> Tuple[str, str]:
-        with open(self.context.filename) as f:
-            original = f.read()
-        if backup:
-            with open(self.context.filename + '.bak', 'w') as f:
-                f.write(original)
+    def mutate_file(self, backup: bool, test_lock: multiprocessing.Lock) -> Tuple[str, str]:
+        original = (f'{self.context.filename}.bak' if os.path.exists(f'{self.context.filename}.bak')
+                                                   else self.context.filename)
+        with open(original) as f:
+            original_content = f.read()
+        if backup and not os.path.exists(f'{self.context.filename}.bak'):
+            with open(f'{self.context.filename}.bak', 'w') as f:
+                f.write(original_content)
         mutated, _ = self.mutate()
-        with open(self.context.filename, 'w') as f:
+        test_lock.acquire()
+        with open(f'{self.context.filename}', 'w') as f:
             f.write(mutated)
-        return original, mutated
+        return original_content, mutated

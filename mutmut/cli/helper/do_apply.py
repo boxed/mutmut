@@ -1,3 +1,4 @@
+import multiprocessing
 from typing import List
 
 from mutmut.helpers.context import Context
@@ -24,4 +25,6 @@ def do_apply(mutation_pk: str, dict_synonyms: List[str], backup: bool):
     )
 
     mutator = Mutator(context=context)
-    mutator.mutate_file(backup=backup)
+    test_lock = multiprocessing.Lock()
+    mutator.mutate_file(backup=backup, test_lock=test_lock)
+    test_lock.release()

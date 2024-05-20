@@ -58,17 +58,19 @@ def run_mutation_tests(
     )
     queue_mutants_thread.start()
 
+    test_lock = multiprocessing.Lock()
     threads = []
     thread_range = range(2)
     for n in thread_range:
         results_queue = mp_ctx.Queue(maxsize=100)
         add_to_active_queues(results_queue)
-        threads.append((create_worker(mp_ctx, mutants_queue, results_queue), results_queue))
+        threads.append((create_worker(mp_ctx, test_lock, mutants_queue, results_queue), results_queue))
 
     while True:
         thread_status = [False] * len(threads)
         for i, (thread, results_queue) in enumerate(threads):
-            thread_result = command_results(mp_ctx, mutants_queue, results_queue, thread, config, progress)
+            thread_result = command_results(mp_ctx, test_lock, mutants_queue, results_queue, thread,
+                                            config, progress)
             thread_status[i] = thread_result
         if all(thread_status):
             break
@@ -77,7 +79,7 @@ def run_mutation_tests(
                 threads.pop(len(thread_status) - 1 - i)
 
 
-def create_worker(mp_ctx, mutants_queue, results_queue):
+def create_worker(mp_ctx, test_lock, mutants_queue, results_queue):
     t = mp_ctx.Process(
         target=check_mutants,
         name='check_mutants',
@@ -85,14 +87,15 @@ def create_worker(mp_ctx, mutants_queue, results_queue):
         kwargs=dict(
             mutants_queue=mutants_queue,
             results_queue=results_queue,
-            cycle_process_after=CYCLE_PROCESS_AFTER,
+            test_lock=test_lock,
+            cycle_process_after=CYCLE_PROCESS_AFTER
         )
     )
     t.start()
     return t
 
 
-def command_results(mp_ctx, mutants_queue, results_queue, t, config: Config, progress: Progress):
+def command_results(mp_ctx, test_lock, mutants_queue, results_queue, t, config: Config, progress: Progress):
     from mutmut.cache import update_mutant_status
 
     command, status, filename, mutation_id = results_queue.get()
@@ -101,7 +104,7 @@ def command_results(mp_ctx, mutants_queue, results_queue, t, config: Config, pro
         return True
 
     elif command == 'cycle':
-        t = create_worker(mp_ctx, mutants_queue, results_queue)
+        t = create_worker(mp_ctx, test_lock, mutants_queue, results_queue)
         return False
 
     elif command == 'progress':
@@ -127,7 +130,7 @@ class SkipException(Exception):
     pass
 
 
-def check_mutants(mutants_queue, results_queue, cycle_process_after):
+def check_mutants(mutants_queue, results_queue, test_lock, cycle_process_after):
     def feedback(line):
         results_queue.put(('progress', line, None, None))
 
@@ -141,7 +144,7 @@ def check_mutants(mutants_queue, results_queue, cycle_process_after):
                 mutants_queue.put(('end', None))
                 break
 
-            status = run_mutation(context, feedback)
+            status = run_mutation(context, feedback, test_lock)
 
             results_queue.put(('status', status, context.filename, context.mutation_id))
             count += 1
@@ -154,7 +157,7 @@ def check_mutants(mutants_queue, results_queue, cycle_process_after):
             results_queue.put(('end', None, None, None))
 
 
-def run_mutation(context: Context, callback) -> str:
+def run_mutation(context: Context, callback, test_lock) -> str:
     """
     :return: (computed or cached) status of the tested mutant, one of mutant_statuses
     """
@@ -174,7 +177,7 @@ def run_mutation(context: Context, callback) -> str:
     mutator = Mutator(context)
 
     try:
-        mutator.mutate_file(backup=True)
+        mutator.mutate_file(backup=True, test_lock=test_lock)
         # Execute Tests
         return execute_tests_on_mutation(config, callback)
 
@@ -182,7 +185,8 @@ def run_mutation(context: Context, callback) -> str:
         return SKIPPED
 
     finally:
-        move(mutator.context.filename + '.bak', mutator.context.filename)
+        move(f'{mutator.context.filename}.bak', mutator.context.filename)
+        test_lock.release()
         config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
         # Post Mutation
         execute_config_post_mutation(config, callback)
