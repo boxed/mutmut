@@ -58,14 +58,23 @@ def run_mutation_tests(
     )
     queue_mutants_thread.start()
 
-    results_queue = mp_ctx.Queue(maxsize=100)
-    add_to_active_queues(results_queue)
-
-    t = create_worker(mp_ctx, mutants_queue, results_queue)
+    threads = []
+    thread_range = range(2)
+    for n in thread_range:
+        results_queue = mp_ctx.Queue(maxsize=100)
+        add_to_active_queues(results_queue)
+        threads.append((create_worker(mp_ctx, mutants_queue, results_queue), results_queue))
 
     while True:
-        if command_results(mp_ctx, mutants_queue, results_queue, t, config, progress):
+        thread_status = [False] * len(threads)
+        for i, (thread, results_queue) in enumerate(threads):
+            thread_result = command_results(mp_ctx, mutants_queue, results_queue, thread, config, progress)
+            thread_status[i] = thread_result
+        if all(thread_status):
             break
+        for i, status in enumerate(reversed(thread_status)):
+            if status:
+                threads.pop(len(thread_status) - 1 - i)
 
 
 def create_worker(mp_ctx, mutants_queue, results_queue):
@@ -129,6 +138,7 @@ def check_mutants(mutants_queue, results_queue, cycle_process_after):
         while True:
             command, context = mutants_queue.get()
             if command == 'end':
+                mutants_queue.put(('end', None))
                 break
 
             status = run_mutation(context, feedback)
