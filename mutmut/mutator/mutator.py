@@ -101,18 +101,20 @@ class Mutator:
         return old, new
 
     def process_mutations(self, node, mutation):
-        for node_attribute, concrete_mutation in sorted(mutation.items()):
-            if self.context.exclude_line():
-                continue
+        node_attribute, concrete_mutation = mutation
 
-            old, new = self.get_old_and_new_mutation_instance(node, node_attribute, concrete_mutation)
+        if self.context.exclude_line():
+            return
 
-            new_list = self.helper.wrap_or_return_mutation_instance(new, old)
+        old, new = self.get_old_and_new_mutation_instance(node, node_attribute, concrete_mutation)
 
-            is_optimized = self.alternate_mutations(new_list, old, node, node_attribute)
+        new_list = self.helper.wrap_or_return_mutation_instance(new, old)
 
-            if is_optimized:
-                return
+        # TODO: look into why and if we need this
+        is_optimized = self.alternate_mutations(new_list, old, node, node_attribute)
+
+        if is_optimized:
+            return
 
     def alternate_mutations(self, new_list, old, node, node_attribute):
         # go through the alternate mutations in reverse as they may have

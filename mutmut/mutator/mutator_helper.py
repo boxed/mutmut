@@ -35,19 +35,19 @@ class MutatorHelper:
         self.newline = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
         self.mutations_by_type = {
-            'operator': dict(value=OperatorMutation),
-            'keyword': dict(value=KeywordMutation),
-            'number': dict(value=NumberMutation),
-            'name': dict(value=NameMutation),
-            'string': dict(value=StringMutation),
-            'fstring': dict(children=FStringMutation),
-            'argument': dict(children=ArgumentMutation),
-            'or_test': dict(children=AndOrTestMutation),
-            'and_test': dict(children=AndOrTestMutation),
-            'lambdef': dict(children=LambdaMutation),
-            'expr_stmt': dict(children=ExpressionMutation),
-            'decorator': dict(children=DecoratorMutation),
-            'annassign': dict(children=ExpressionMutation),
+            'operator': ("value", OperatorMutation),
+            'keyword': ("value", KeywordMutation),
+            'number': ("value", NumberMutation),
+            'name': ("value", NameMutation),
+            'string': ("value", StringMutation),
+            'fstring': ("children", FStringMutation),
+            'argument': ("children", ArgumentMutation),
+            'or_test': ("children", AndOrTestMutation),
+            'and_test': ("children", AndOrTestMutation),
+            'lambdef': ("children", LambdaMutation),
+            'expr_stmt': ("children", ExpressionMutation),
+            'decorator': ("children", DecoratorMutation),
+            'annassign': ("children", ExpressionMutation),
         }
 
     def is_a_dunder_whitelist_node(self, node):
