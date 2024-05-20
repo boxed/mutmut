@@ -171,11 +171,11 @@ class Mutator:
         return self.context.performed_mutation_ids
 
     def mutate_file(self, backup: bool, test_lock: multiprocessing.Lock) -> Tuple[str, str]:
-        original = (f'{self.context.filename}.bak' if os.path.exists(f'{self.context.filename}.bak')
-                                                   else self.context.filename)
+        original = (f'{self.context.filename}.bak' if os.path.isfile(f'{self.context.filename}.bak')
+                    else self.context.filename)
         with open(original) as f:
             original_content = f.read()
-        if backup and not os.path.exists(f'{self.context.filename}.bak'):
+        if backup and not os.path.isfile(f'{self.context.filename}.bak'):
             with open(f'{self.context.filename}.bak', 'w') as f:
                 f.write(original_content)
         mutated, _ = self.mutate()

@@ -7,10 +7,7 @@ from io import (
     open,
     TextIOBase,
 )
-from shutil import (
-    move,
-    copy,
-)
+from shutil import copy
 from threading import (
     Timer,
     Thread,
@@ -60,8 +57,8 @@ def run_mutation_tests(
 
     test_lock = multiprocessing.Lock()
     threads = []
-    thread_range = range(2)
-    for n in thread_range:
+    thread_range = range(4)
+    for _ in thread_range:
         results_queue = mp_ctx.Queue(maxsize=100)
         add_to_active_queues(results_queue)
         threads.append((create_worker(mp_ctx, test_lock, mutants_queue, results_queue), results_queue))
@@ -78,6 +75,15 @@ def run_mutation_tests(
             if status:
                 threads.pop(len(thread_status) - 1 - i)
 
+    # Cleanup Backup files
+    if mutations_by_file:
+        cleanup_backups(mutations_by_file.keys())
+
+
+def cleanup_backups(filenames):
+    for filename in filenames:
+        if os.path.isfile(f'{filename}.bak'):
+            os.remove(f'{filename}.bak')
 
 def create_worker(mp_ctx, test_lock, mutants_queue, results_queue):
     t = mp_ctx.Process(
@@ -185,7 +191,7 @@ def run_mutation(context: Context, callback, test_lock) -> str:
         return SKIPPED
 
     finally:
-        move(f'{mutator.context.filename}.bak', mutator.context.filename)
+        copy(f'{mutator.context.filename}.bak', mutator.context.filename)
         test_lock.release()
         config.test_command = config._default_test_command  # reset test command to its default in the case it was altered in a hook
         # Post Mutation
