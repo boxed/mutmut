@@ -8,6 +8,7 @@ class MutatorIterator(Iterator):
         self._collections = [(root_node, False)] if root_node else []
         self._current_position = 0
         self._context = context
+        self._root = root_node
 
         self.dunder_whitelist = [
             'all',

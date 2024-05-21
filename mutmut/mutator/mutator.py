@@ -39,10 +39,8 @@ class Mutator:
 
         mutator_iterator = PostOrderIterator(result, self.context)
 
-        for node, context in mutator_iterator:
-            self.context = context
+        for node in mutator_iterator:
             self.mutate_node(node)
-            mutator_iterator.update_context(self.context)
 
         mutated_source = result.get_code().replace(' not not ', ' ')
         if self.context.remove_newline_at_end:
