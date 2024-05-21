@@ -6,7 +6,7 @@ from typing import Tuple
 from parso import parse
 
 from mutmut.helpers.context import Context, ALL
-from mutmut.mutator.mutator_iterator import PostOrderIterator
+from mutmut.mutator.post_order_iterator import PostOrderIterator
 
 try:
     import mutmut_config
