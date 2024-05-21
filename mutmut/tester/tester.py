@@ -38,7 +38,8 @@ class Tester:
     def run_mutation_tests(self, config: Config, progress: Progress, test_processes: int,
                            mutations_by_file: Dict[str, List[RelativeMutationID]]):
         # Need to explicitly use the spawn method for python < 3.8 on macOS
-        mp_ctx = multiprocessing.get_context('spawn')
+        multiprocessing.set_start_method('spawn', force=True)
+        mp_ctx = multiprocessing.get_context()
 
         mutants_queue = mp_ctx.Queue(maxsize=100)
         self.queue_manager.add_to_active_queues(mutants_queue)

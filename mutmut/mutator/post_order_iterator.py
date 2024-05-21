@@ -23,7 +23,7 @@ class PostOrderIterator(MutatorIterator):
 
             if hasattr(current, 'children'):
 
-                for i, child in enumerate(reversed(current.children)):
+                for i, child in enumerate(current.children):
 
                     return_annotation_started = self._get_return_annotation_started(child, return_annotation_started)
 
@@ -43,8 +43,10 @@ class PostOrderIterator(MutatorIterator):
                     if self._is_a_dunder_whitelist_node(child):
                         continue
 
+                    if self._is_pure_annotation(child):
+                        continue
 
-                    self._collections.append((child, False))
+                    self._collections.insert(len(self._collections) - i, (child, False))
                     self._current_position += 1
 
         raise StopIteration
