@@ -32,6 +32,9 @@ class MutatorIterator(Iterator):
     def _has_next(self):
         return len(self._collections) > 0
 
+    def update_context(self, context):
+        self._context = context
+
     @staticmethod
     def _is_special_node(node):
         return node.type in ('tfpdef', 'import_from', 'import_name')

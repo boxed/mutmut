@@ -37,8 +37,12 @@ class Mutator:
             print('----------------------------------')
             raise
 
-        for node in PostOrderIterator(result, self.context):
+        mutator_iterator = PostOrderIterator(result, self.context)
+
+        for node, context in mutator_iterator:
+            self.context = context
             self.mutate_node(node)
+            mutator_iterator.update_context(self.context)
 
         mutated_source = result.get_code().replace(' not not ', ' ')
         if self.context.remove_newline_at_end:
@@ -58,9 +62,12 @@ class Mutator:
         mutation = self.helper.mutations_by_type.get(node.type)
 
         if mutation is None:
+            if len(self.context.stack) > 0:
+                self.context.stack.pop()
             return
 
         self.process_mutations(node, mutation)
+        self.context.stack.pop()
 
     def get_old_and_new_mutation_instance(self, node, node_attribute, concrete_mutation):
         old = getattr(node, node_attribute)

@@ -12,7 +12,7 @@ class PostOrderIterator(MutatorIterator):
             if visited:
                 self._collections.pop(self._current_position)
                 self._current_position -= 1
-                return current
+                return current, self._context
 
             return_annotation_started = False
 
@@ -40,6 +40,7 @@ class PostOrderIterator(MutatorIterator):
                     if self._is_a_dunder_whitelist_node(child):
                         continue
 
+                    self._context.stack.append(child)
                     self._collections.append((child, False))
                     self._current_position += 1
 
