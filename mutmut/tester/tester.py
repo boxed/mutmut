@@ -35,7 +35,7 @@ class Tester:
         self.queue_manager = QueueManager()
         self.tester_helper = TesterHelper()
 
-    def run_mutation_tests(self, config: Config, progress: Progress,
+    def run_mutation_tests(self, config: Config, progress: Progress, test_processes: int,
                            mutations_by_file: Dict[str, List[RelativeMutationID]]):
         # Need to explicitly use the spawn method for python < 3.8 on macOS
         mp_ctx = multiprocessing.get_context('spawn')
@@ -57,7 +57,7 @@ class Tester:
 
         test_lock = multiprocessing.Lock()
         threads = []
-        thread_range = range(4)
+        thread_range = range(test_processes)
         for _ in thread_range:
             results_queue = mp_ctx.Queue(maxsize=100)
             self.queue_manager.add_to_active_queues(results_queue)

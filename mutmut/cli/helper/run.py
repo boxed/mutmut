@@ -26,8 +26,9 @@ class Run:
     DEFAULT_RUNNER = 'python -m pytest -x --assert=plain'
 
     def __init__(self, argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner, tests_dir,
-                 test_time_multiplier, test_time_base, swallow_output, use_coverage, dict_synonyms, pre_mutation,
-                 post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress, ci, rerun_all):
+                 test_time_multiplier, test_time_base, test_processes, swallow_output, use_coverage, dict_synonyms,
+                 pre_mutation, post_mutation, use_patch_file, paths_to_exclude, simple_output, no_progress, ci,
+                 rerun_all):
 
         self.argument = argument
         self.paths_to_mutate = paths_to_mutate
@@ -37,6 +38,7 @@ class Run:
         self.tests_dir = tests_dir
         self.test_time_multiplier = test_time_multiplier
         self.test_time_base = test_time_base
+        self.test_processes = test_processes
         self.swallow_output = swallow_output
         self.use_coverage = use_coverage
         self.dict_synonyms = [x.strip() for x in dict_synonyms.split(',')]
@@ -340,7 +342,8 @@ class Run:
         tester = Tester()
 
         try:
-            tester.run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
+            tester.run_mutation_tests(config=config, progress=progress, test_processes=self.test_processes,
+                                      mutations_by_file=mutations_by_file)
         except Exception as e:
             traceback.print_exc()
             return progress.compute_exit_code(e)

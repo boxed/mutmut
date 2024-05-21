@@ -59,6 +59,7 @@ def version():
 @click.option('--tests-dir')
 @click.option('-m', '--test-time-multiplier', default=2.0, type=float)
 @click.option('-b', '--test-time-base', default=0.0, type=float)
+@click.option('-p', '--test-processes', default=1, type=int)
 @click.option('-s', '--swallow-output', help='turn off output capture', is_flag=True)
 @click.option('--dict-synonyms')
 @click.option('--pre-mutation')
@@ -78,7 +79,7 @@ def version():
     use_patch_file=None,
 )
 def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
-        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
+        tests_dir, test_time_multiplier, test_time_base, test_processes, swallow_output, use_coverage,
         dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
         simple_output, no_progress, ci, rerun_all):
     """
@@ -114,7 +115,7 @@ def run(argument, paths_to_mutate, disable_mutation_types, enable_mutation_types
 
     cli_run = Run(
         argument, paths_to_mutate, disable_mutation_types, enable_mutation_types, runner,
-        tests_dir, test_time_multiplier, test_time_base, swallow_output, use_coverage,
+        tests_dir, test_time_multiplier, test_time_base, test_processes, swallow_output, use_coverage,
         dict_synonyms, pre_mutation, post_mutation, use_patch_file, paths_to_exclude,
         simple_output, no_progress, ci, rerun_all
     )
