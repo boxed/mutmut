@@ -19,7 +19,7 @@ from click.testing import CliRunner
 
 from mutmut import __version__
 from mutmut.mutator.mutator_helper import MutatorHelper
-from mutmut.tester import popen_streaming_output
+from mutmut.tester.tester import Tester
 from mutmut.helpers.progress import Progress
 from mutmut.helpers.progress import MUTANT_STATUSES
 from mutmut.cli.helper.utils import python_source_files, read_coverage_data
@@ -269,8 +269,9 @@ def test_python_source_files__with_paths_to_exclude(tmpdir):
 
 def test_popen_streaming_output_timeout():
     start = time()
+    tester = Tester()
     with pytest.raises(TimeoutError):
-        popen_streaming_output(
+        tester.popen_streaming_output(
             PYTHON + ' -c "import time; time.sleep(4)"',
             lambda line: line, timeout=0.1,
         )
@@ -280,7 +281,8 @@ def test_popen_streaming_output_timeout():
 
 def test_popen_streaming_output_stream():
     mock = MagicMock()
-    popen_streaming_output(
+    tester = Tester()
+    tester.popen_streaming_output(
         PYTHON + ' -c "print(\'first\'); print(\'second\')"',
         callback=mock
     )
@@ -290,7 +292,8 @@ def test_popen_streaming_output_stream():
         mock.assert_has_calls([call('first\n'), call('second\n')])
 
     mock = MagicMock()
-    popen_streaming_output(
+    tester = Tester()
+    tester.popen_streaming_output(
         PYTHON + ' -c "import time; print(\'first\'); print(\'second\'); print(\'third\')"',
         callback=mock
     )
@@ -300,7 +303,8 @@ def test_popen_streaming_output_stream():
         mock.assert_has_calls([call('first\n'), call('second\n'), call('third\n')])
 
     mock = MagicMock()
-    popen_streaming_output(
+    tester = Tester()
+    tester.popen_streaming_output(
         PYTHON + ' -c "exit(0);"',
         callback=mock)
     mock.assert_not_called()

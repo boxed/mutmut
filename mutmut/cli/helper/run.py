@@ -18,7 +18,7 @@ from mutmut.cli.helper.test_suite_timer import TestSuiteTimer
 from mutmut.cli.helper.utils import (split_paths, get_split_paths, copy_testmon_data, stop_creating_pyc_files,
                                      read_coverage_data, read_patch_data)
 from mutmut.mutator.mutator_helper import MutatorHelper
-from mutmut.tester import run_mutation_tests, close_active_queues
+from mutmut.tester.tester import Tester
 
 
 class Run:
@@ -337,9 +337,10 @@ class Run:
         print()
         print('2. Checking mutants')
         progress = Progress(total=config.total, output_legend=self.get_output_legend(), no_progress=self.no_progress)
+        tester = Tester()
 
         try:
-            run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
+            tester.run_mutation_tests(config=config, progress=progress, mutations_by_file=mutations_by_file)
         except Exception as e:
             traceback.print_exc()
             return progress.compute_exit_code(e)
@@ -348,4 +349,4 @@ class Run:
         finally:
             print()  # make sure we end the output with a newline
             # Close all active multiprocessing queues to avoid hanging up the main process
-            close_active_queues()
+            tester.queue_manager.close_active_queues()
