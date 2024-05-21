@@ -6,6 +6,7 @@ from typing import Tuple
 from parso import parse
 
 from mutmut.helpers.context import Context, ALL
+from mutmut.mutator.mutator_iterator import PostOrderIterator
 
 try:
     import mutmut_config
@@ -35,7 +36,10 @@ class Mutator:
             print('Failed to parse {}. Internal error from parso follows.'.format(self.context.filename))
             print('----------------------------------')
             raise
-        self.mutate_list_of_nodes(result)
+
+        for node in PostOrderIterator(result, self.context):
+            self.mmutate(node)
+
         mutated_source = result.get_code().replace(' not not ', ' ')
         if self.context.remove_newline_at_end:
             assert mutated_source[-1] == '\n'
@@ -51,42 +55,12 @@ class Mutator:
         return mutated_source, len(self.context.performed_mutation_ids)
 
     def mutate_node(self, node):
-        self.context.stack.append(node)
-        try:
+        mutation = self.helper.mutations_by_type.get(node.type)
 
-            if self.helper.is_special_node(node):
-                return
+        if mutation is None:
+            return
 
-            if self.helper.is_dynamic_import_node(node):
-                return
-
-            if self.helper.should_update_line_index(node, self.context):
-                self.context.current_line_index = node.start_pos[0] - 1
-                self.context.index = 0  # indexes are unique per line, so start over here!
-
-            if self.helper.is_a_dunder_whitelist_node(node):
-                return
-
-            # Avoid mutating pure annotations
-            if self.helper.is_pure_annotation(node):
-                return
-
-            if hasattr(node, 'children'):
-                self.mutate_list_of_nodes(node)
-
-                # this is just an optimization to stop early
-                if self.stop_early():
-                    return
-
-            mutation = self.helper.mutations_by_type.get(node.type)
-
-            if mutation is None:
-                return
-
-            self.process_mutations(node, mutation)
-
-        finally:
-            self.context.stack.pop()
+        self.process_mutations(node, mutation)
 
     def get_old_and_new_mutation_instance(self, node, node_attribute, concrete_mutation):
         old = getattr(node, node_attribute)
@@ -145,22 +119,6 @@ class Mutator:
             setattr(node, node_attribute, new)
 
         self.context.index += 1
-
-    def mutate_list_of_nodes(self, node):
-        return_annotation_started = False
-
-        for child_node in node.children:
-
-            return_annotation_started = self.helper.get_return_annotation_started(child_node, return_annotation_started)
-
-            if return_annotation_started:
-                continue
-
-            self.mutate_node(child_node)
-
-            # this is just an optimization to stop early
-            if self.stop_early():
-                return
 
     def stop_early(self):
         return self.context.performed_mutation_ids and self.context.mutation_id != ALL
