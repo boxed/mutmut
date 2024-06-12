@@ -42,9 +42,13 @@ def check_mutants_stub(**kwargs):
     with patch('mutmut.run_mutation', run_mutation_stub):
         check_mutants_original(**kwargs)
 
+
 class ConfigStub:
     hash_of_tests = None
+
+
 config_stub = ConfigStub()
+
 
 def test_run_mutation_tests_thread_synchronization(monkeypatch):
     # arrange
@@ -80,9 +84,11 @@ def test_run_mutation_tests_thread_synchronization(monkeypatch):
 
     close_active_queues()
 
+
 @fixture
 def testpatches_path(testdata: Path):
     return testdata / "test_patches"
+
 
 def test_read_patch_data_new_empty_file_not_in_the_list(testpatches_path: Path):
     # arrange
@@ -95,6 +101,7 @@ def test_read_patch_data_new_empty_file_not_in_the_list(testpatches_path: Path):
     # assert
     assert not new_empty_file_name in new_empty_file_changes
 
+
 def test_read_patch_data_removed_empty_file_not_in_the_list(testpatches_path: Path):
     # arrange
     existing_empty_file_name = "existing_empty_file.txt"
@@ -106,6 +113,7 @@ def test_read_patch_data_removed_empty_file_not_in_the_list(testpatches_path: Pa
     # assert
     assert existing_empty_file_name not in remove_empty_file_changes
 
+
 def test_read_patch_data_renamed_empty_file_not_in_the_list(testpatches_path: Path):
     # arrange
     renamed_empty_file_name = "renamed_existing_empty_file.txt"
@@ -116,6 +124,7 @@ def test_read_patch_data_renamed_empty_file_not_in_the_list(testpatches_path: Pa
 
     # assert
     assert renamed_empty_file_name not in renamed_empty_file_changes
+
 
 def test_read_patch_data_added_line_is_in_the_list(testpatches_path: Path):
     # arrange
@@ -129,6 +138,7 @@ def test_read_patch_data_added_line_is_in_the_list(testpatches_path: Path):
     assert file_name in file_changes
     assert file_changes[file_name] == {3} # line is added between second and third
 
+
 def test_read_patch_data_edited_line_is_in_the_list(testpatches_path: Path):
     # arrange
     file_name = "existing_file.txt"
@@ -141,6 +151,7 @@ def test_read_patch_data_edited_line_is_in_the_list(testpatches_path: Path):
     assert file_name in file_changes
     assert file_changes[file_name] == {2} # line is added between 2nd and 3rd
 
+
 def test_read_patch_data_edited_line_in_subfolder_is_in_the_list(testpatches_path: Path):
     # arrange
     file_name = os.path.join("sub", "existing_file.txt") # unix will use "/", windows "\" to join
@@ -152,6 +163,7 @@ def test_read_patch_data_edited_line_in_subfolder_is_in_the_list(testpatches_pat
     # assert
     assert file_name in file_changes
     assert file_changes[file_name] == {2} # line is added between 2nd and 3rd
+
 
 def test_read_patch_data_renamed_file_edited_line_is_in_the_list(testpatches_path: Path):
     # arrange
@@ -166,6 +178,7 @@ def test_read_patch_data_renamed_file_edited_line_is_in_the_list(testpatches_pat
     assert original_file_name not in file_changes
     assert new_file_name in file_changes
     assert file_changes[new_file_name] == {3} # 3rd line is edited
+
 
 def test_read_patch_data_mutliple_files(testpatches_path: Path):
     # arrange
