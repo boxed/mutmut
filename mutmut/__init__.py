@@ -771,7 +771,7 @@ def run_mutation(context: Context, callback) -> str:
 
     # Check for lines flagged for no mutation
     line = context.current_source_line.strip()
-    if re.findall(r"#.*nomut.*", line):
+    if re.findall(r"#.*pragma:.*no mutate.*", line):
         return SKIPPED
 
     config = context.config
