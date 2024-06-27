@@ -769,6 +769,11 @@ def run_mutation(context: Context, callback) -> str:
     if cached_status != UNTESTED and context.config.total != 1:
         return cached_status
 
+    # Check for lines flagged for no mutation
+    line = context.current_source_line.strip()
+    if re.findall(r"#.*nomut.*", line):
+        return SKIPPED
+
     config = context.config
     if hasattr(mutmut_config, 'pre_mutation'):
         context.current_line_index = context.mutation_id.line_number

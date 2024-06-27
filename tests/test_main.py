@@ -38,6 +38,7 @@ file_to_mutate_lines = [
     "f = 3",
     "d = dict(e=f)",
     "g: int = 2",
+    "h: int = 2 # nomut",
 ]
 
 EXPECTED_MUTANTS = 14
