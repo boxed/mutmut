@@ -343,7 +343,7 @@ def operator_mutation(value, node, context, **_):
     if value in ('*', '**') and node.parent.type in ('argument', 'arglist'):
         return
 
-    if value == "|" and re.findall(r".*:.*\|.*[=.*]?", context.current_source_line):
+    if value == "|" and re.findall(r"[\s]?\w:.*\|.*[=.*]?", context.current_source_line):
         return
 
     return {
