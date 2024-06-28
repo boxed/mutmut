@@ -572,15 +572,12 @@ def mutate(context: Context) -> Tuple[str, int]:
     """
     try:
         result = parse(context.source, error_recovery=False)
-        print(result)
     except Exception:
         print('Failed to parse {}. Internal error from parso follows.'.format(context.filename))
         print('----------------------------------')
         raise
     mutate_list_of_nodes(result, context=context)
-    print(mutate_list_of_nodes)
     mutated_source = result.get_code().replace(' not not ', ' ')
-    print(mutated_source)
     if context.remove_newline_at_end:
         assert mutated_source[-1] == '\n'
         mutated_source = mutated_source[:-1]
@@ -626,26 +623,20 @@ def mutate_node(node, context: Context):
 
         mutation = mutations_by_type.get(node.type)
 
-        print(mutation)
         if mutation is None:
             return
 
-        print(mutation.items())
         for key, value in sorted(mutation.items()):
             old = getattr(node, key)
             if context.exclude_line():
                 continue
 
-            if node.type == "operator":
-                print("key", key)
-                print("value", value)
             new = value(
                 context=context,
                 node=node,
                 value=getattr(node, 'value', None),
                 children=getattr(node, 'children', None),
             )
-            print(new)
 
             if isinstance(new, list) and not isinstance(old, list):
                 # multiple mutations
