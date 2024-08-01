@@ -12,7 +12,7 @@ from typing import Tuple
 
 
 from junit_xml import TestSuite, TestCase, to_xml_report_string
-from pony.orm import Database, Required, db_session, Set, Optional, select, \
+from pony.orm import Database, Required, db_session, Set, Optional, \
     PrimaryKey, RowNotFound, ERDiagramError, OperationalError
 
 from mutmut import MUTANT_STATUSES, BAD_TIMEOUT, OK_SUSPICIOUS, BAD_SURVIVED, SKIPPED, UNTESTED, \
