@@ -180,17 +180,17 @@ def print_result_cache(show_diffs=False, dict_synonyms=None, only_this_file=None
                 else:
                     print(ranges([x.id for x in mutants]))
 
-    print_stuff('Timed out ⏰', select(x for x in Mutant if x.status == BAD_TIMEOUT))
-    print_stuff('Suspicious 🤔', select(x for x in Mutant if x.status == OK_SUSPICIOUS))
-    print_stuff('Survived 🙁', select(x for x in Mutant if x.status == BAD_SURVIVED))
-    print_stuff('Untested/skipped', select(x for x in Mutant if x.status == UNTESTED or x.status == SKIPPED))
+    print_stuff('Timed out ⏰', (x for x in Mutant.select() if x.status == BAD_TIMEOUT))
+    print_stuff('Suspicious 🤔', (x for x in Mutant.select() if x.status == OK_SUSPICIOUS))
+    print_stuff('Survived 🙁', (x for x in Mutant.select() if x.status == BAD_SURVIVED))
+    print_stuff('Untested/skipped', (x for x in Mutant.select() if x.status == UNTESTED or x.status == SKIPPED))
 
 
 @init_db
 @db_session
 def print_result_ids_cache(desired_status):
     status = MUTANT_STATUSES[desired_status]
-    mutant_query = select(x for x in Mutant if x.status == status)
+    mutant_query = (x for x in Mutant.select() if x.status == status)
     print(" ".join(str(mutant.id) for mutant in mutant_query))
 
 
@@ -235,7 +235,7 @@ def print_result_cache_junitxml(dict_synonyms, suspicious_policy, untested_polic
 @db_session
 def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
     test_cases = []
-    mutant_list = list(select(x for x in Mutant))
+    mutant_list = list((x for x in Mutant.select()))
     for filename, mutants in groupby(mutant_list, key=lambda x: x.line.sourcefile.filename):
         for mutant in mutants:
             tc = TestCase("Mutant #{}".format(mutant.id), file=filename, line=mutant.line.line_number + 1, stdout=mutant.line.line)
@@ -261,7 +261,7 @@ def create_junitxml_report(dict_synonyms, suspicious_policy, untested_policy):
 @init_db
 @db_session
 def create_html_report(dict_synonyms, directory):
-    mutants = sorted(list(select(x for x in Mutant)), key=lambda x: x.line.sourcefile.filename)
+    mutants = sorted(list((x for x in Mutant.select())), key=lambda x: x.line.sourcefile.filename)
 
     os.makedirs(directory, exist_ok=True)
 
