@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+2.5.1
+~~~~~
+
+* Python 3.12 compatibility improved
+
 2.5.0
 ~~~~~
 
