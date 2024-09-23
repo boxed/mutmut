@@ -1,12 +1,18 @@
+import itertools
+import sys
+import os
 import ast
 import gc
 import json
-import os
 import shutil
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import (
+    datetime,
+    timedelta,
+)
+from io import TextIOBase
 from os import (
     makedirs,
     walk,
@@ -15,7 +21,6 @@ from pathlib import Path
 from typing import Dict
 
 from parso import parse
-from tqdm import tqdm
 
 import mutmut
 from mutmut import guess_paths_to_mutate
@@ -115,7 +120,7 @@ def create_mutants_for_file(filename, output_path):
         module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
         json.dump(dict(
             result_by_key={
-                 '.'.join([module_name, x]): None
+                 '.'.join([module_name, x]).replace('.__init__.', '.'): None
                 for x in mutant_names
             },
         ), f)
@@ -277,6 +282,7 @@ class MutationData:
         self.key_by_pid[pid] = key
 
     def register_result(self, *, pid, exit_code):
+        assert self.key_by_pid[pid] in self.result_by_key
         self.result_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         self.save()
 
@@ -366,24 +372,54 @@ def function_name_from_key(key):
     return key.partition('__mutmut_')[0]
 
 
-def print_stats(mutation_data_by_path):
-    not_checked = set()
-    killed = set()
-    survived = set()
+spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+
+
+def status_printer():
+    """Manage the printing and in-place updating of a line of characters
+
+    .. note::
+        If the string is longer than a line, then in-place updating may not
+        work (it will print a new line at each refresh).
+    """
+    last_len = [0]
+    last_update = [datetime(1900, 1, 1)]
+    update_threshold = timedelta(seconds=0.1)
+
+    def p(s, *, force_output=False):
+        # if not force_output and (last_update[0] - datetime.now()) < update_threshold:
+        #     return
+        s = next(spinner) + ' ' + s
+        len_s = len(s)
+        output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
+        sys.__stdout__.write(output)
+        sys.__stdout__.flush()
+        last_len[0] = len_s
+    return p
+
+
+print_status = status_printer()
+
+
+def print_stats(mutation_data_by_path, force_output=False):
+    not_checked = 0
+    killed = 0
+    survived = 0
+    total = 0
     for m in mutation_data_by_path.values():
         for k, v in m.result_by_key.items():
+            total += 1
             if v is None:
-                not_checked.add(k)
+                not_checked += 1
             else:
                 if v == 0:
-                    survived.add(k)
+                    survived += 1
                 else:
-                    killed.add(k)
-    print(len(not_checked), 'not checked')
-    print('killed:', len(killed))
-    print('survived:', len(survived))
-    if killed and not survived:
-        print('% killed:', len(killed) / (len(killed) + len(survived)) * 100)
+                    killed += 1
+    skipped = 0  # TODO
+    suspicious = 0  # TODO
+    timed_out = 0  # TODO
+    print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format((total - not_checked), total, killed, timed_out, suspicious, survived, skipped), force_output=force_output)
 
 
 def run_forced_fail(runner):
@@ -396,6 +432,29 @@ def run_forced_fail(runner):
         pass
 
 
+class CatchOutput:
+    def __init__(self, callback=lambda s: None):
+        self.strings = []
+
+        class StdOutRedirect(TextIOBase):
+            def __init__(self, catcher):
+                self.catcher = catcher
+
+            def write(self, s):
+                callback(s)
+                self.catcher.strings.append(s)
+                return len(s)
+        self.redirect = StdOutRedirect(self)
+
+    def __enter__(self):
+        sys.stdout = self.redirect
+        sys.stderr = self.redirect
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+
+
 def mutmut_3():
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
@@ -405,9 +464,6 @@ def mutmut_3():
     create_mutants()
     time = datetime.now() - start
     print('mutation generation', time)
-
-    import sys
-    import os
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
@@ -419,9 +475,10 @@ def mutmut_3():
     print('running stats...')
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
     mutmut.tests_by_function = defaultdict(set)
-    if runner.run_stats():
-        print("FAILED")
-        return
+    with CatchOutput():
+        if runner.run_stats():
+            print("FAILED")
+            return
     print('    done')
 
     runner.prepare_main_test_run()
@@ -432,7 +489,8 @@ def mutmut_3():
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
     print('running forced fail test')
-    run_forced_fail(runner)
+    with CatchOutput():
+        run_forced_fail(runner)
     print('    done')
 
     runner.prepare_main_test_run()
@@ -441,8 +499,8 @@ def mutmut_3():
         pid, exit_code = os.wait()
         mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
 
-    mutation_data_by_path : Dict[str, MutationData] = {}
-    mutation_data_by_pid : Dict[int, MutationData] = {}  # many pids map to one MutationData
+    mutation_data_by_path: Dict[str, MutationData] = {}
+    mutation_data_by_pid: Dict[int, MutationData] = {}  # many pids map to one MutationData
     running_children = 0
     max_children = os.cpu_count()
 
@@ -459,16 +517,18 @@ def mutmut_3():
         m = MutationData(path=path)
         mutation_data_by_path[str(path)] = m
 
+    mutants = [
+        (m, key, result)
+        for path, m in mutation_data_by_path.items()
+        for key, result in m.result_by_key.items()
+    ]
+
     try:
         print('Running mutation testing...')
 
-        it = [
-            (m, key, result)
-            for path, m in mutation_data_by_path.items()
-            for key, result in m.result_by_key.items()
-        ]
+        for m, key, result in mutants:
+            print_stats(mutation_data_by_path)
 
-        for m, key, result in tqdm(it):
             key = key.replace('__init__.', '')
             if result is not None:
                 continue
@@ -491,7 +551,9 @@ def mutmut_3():
                     print(f'  no tests covers {function}')
                     os._exit(1)
 
-                result = runner.run_tests(key=key, tests=tests)
+                with CatchOutput():
+                    result = runner.run_tests(key=key, tests=tests)
+
                 if result != 0:
                     # TODO: write failure information to stdout?
                     pass
@@ -519,9 +581,8 @@ def mutmut_3():
 
     t = datetime.now() - start
 
-    print_stats(mutation_data_by_path)
-    print('time:', t)
-    print('number of tested mutants:', total_count)
+    print_stats(mutation_data_by_path, force_output=True)
+    print()
     print('mutations/s:', total_count / t.total_seconds())
 
 
