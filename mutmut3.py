@@ -3,6 +3,7 @@ import gc
 import json
 import os
 import shutil
+import sys
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -40,8 +41,6 @@ def walk_files():
                 yield Path(root) / filename
 
 
-
-
 class InvalidMutantException(Exception):
     pass
 
@@ -71,6 +70,7 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
 
 """
 
+
 def create_mutants():
     for path in walk_files():
         output_path = Path('mutants') / path
@@ -95,9 +95,9 @@ def create_mutants_for_file(filename, output_path):
     with open(filename) as f:
         source = f.read()
 
-
     with open(output_path, 'w') as out:
         for x, mutant_name in yield_mutants_for_module(parse(source)):
+            out.write('\n\n')
             out.write(x)
             if mutant_name:
                 mutant_names.append(mutant_name)
@@ -124,7 +124,7 @@ def create_mutants_for_file(filename, output_path):
 
 
 def build_trampoline(orig_name, mutants):
-    mutants_dict = f'{orig_name}__mutmut_mutants = {{' + ', '.join(f'{repr(m)}: {m}' for m in mutants) + '}'
+    mutants_dict = f'{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + ',\n}'
 
     return f"""
 {mutants_dict}
@@ -168,7 +168,6 @@ def yield_mutants_for_node(*, func_node, context, node):
     mutation = mutmut.mutations_by_type.get(node.type)
     if not mutation:
         return
-
 
     for key, value in sorted(mutation.items()):
         old = getattr(node, key)
@@ -281,17 +280,18 @@ class MutationData:
         self.result_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         self.save()
 
-
     def save(self):
         with open(self.meta_path, 'w') as f:
             json.dump(dict(
                 result_by_key=self.result_by_key,
             ), f)
 
+
 def unused(*_):
     pass
 
-# For pytest
+
+# For pytest. This function gets installed by pytest's plugin system
 def pytest_runtest_teardown(item, nextitem):
     unused(nextitem)
     for function in mutmut._stats:
@@ -333,17 +333,18 @@ class HammettRunner(TestRunner):
 
     def run_stats(self):
         import hammett
+        print('running hammett stats...')
 
         def post_test_callback(_name, **_):
             for function in mutmut._stats:
                 mutmut.tests_by_function[function].add(_name)
             mutmut._stats.clear()
 
-        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False)
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False, insert_cwd=False)
 
     def run_forced_fail(self):
         import hammett
-        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False)
+        return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False, insert_cwd=False)
 
     def prepare_main_test_run(self):
         import hammett
@@ -352,6 +353,7 @@ class HammettRunner(TestRunner):
             fail_fast=True,
             disable_assert_analyze=True,
             use_cache=False,
+            insert_cwd=False,
         )
 
     def run_tests(self, *, key, tests):
