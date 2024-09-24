@@ -1,5 +1,4 @@
 import itertools
-import sys
 import os
 import ast
 import gc
@@ -12,6 +11,7 @@ from datetime import (
     datetime,
     timedelta,
 )
+from difflib import unified_diff
 from io import TextIOBase
 from os import (
     makedirs,
@@ -20,12 +20,19 @@ from os import (
 from pathlib import Path
 from typing import Dict
 
+import click
 from parso import parse
 
 import mutmut
 from mutmut import guess_paths_to_mutate
 
 mutmut._stats = set()
+
+
+exit_code_to_status = {
+    1: 'killed',
+    0: 'survived',
+}
 
 
 def record_trampoline_hit(name):
@@ -270,6 +277,7 @@ def yield_mutants_for_module(node):
 
 class MutationData:
     def __init__(self, *, path):
+        self.path = path
         self.meta_path = Path('mutants') / (str(path) + '.meta')
         with open(self.meta_path) as f:
             self.meta = json.load(f)
@@ -284,6 +292,7 @@ class MutationData:
     def register_result(self, *, pid, exit_code):
         assert self.key_by_pid[pid] in self.result_by_key
         self.result_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
+        # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         self.save()
 
     def save(self):
@@ -368,7 +377,7 @@ class HammettRunner(TestRunner):
         return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
 
 
-def function_name_from_key(key):
+def orig_function_name_from_key(key):
     return key.partition('__mutmut_')[0]
 
 
@@ -455,7 +464,13 @@ class CatchOutput:
         sys.stderr = sys.__stderr__
 
 
-def mutmut_3():
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+def run():
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
 
@@ -463,7 +478,7 @@ def mutmut_3():
     print('generating mutants...')
     create_mutants()
     time = datetime.now() - start
-    print('mutation generation', time)
+    print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
@@ -506,8 +521,6 @@ def mutmut_3():
 
     start = datetime.now()
 
-    gc.freeze()
-
     total_count = 0
 
     for path in walk_files():
@@ -522,6 +535,8 @@ def mutmut_3():
         for path, m in mutation_data_by_path.items()
         for key, result in m.result_by_key.items()
     ]
+
+    gc.freeze()
 
     try:
         print('Running mutation testing...')
@@ -544,7 +559,7 @@ def mutmut_3():
             if not pid:
                 # In the child
                 os.environ['MUTANT_UNDER_TEST'] = key
-                function = function_name_from_key(key)
+                function = orig_function_name_from_key(key)
 
                 tests = mutmut.tests_by_function[function]
                 if not tests:
@@ -586,5 +601,104 @@ def mutmut_3():
     print('mutations/s:', total_count / t.total_seconds())
 
 
+@cli.command()
+def results():
+    for path in walk_files():
+        if not str(path).endswith('.py'):
+            continue
+        m = MutationData(path=path)
+        print(path)
+        for k, v in m.result_by_key.items():
+            print(f'    {k}: {exit_code_to_status[v]}')
+
+
+def read_original_ast(path):
+    with open(path) as f:
+        return parse(f.read())
+
+
+def read_original_ast_node(path, orig_function_name):
+    orig_ast = read_original_ast(path)
+
+    for node in orig_ast.children:
+        if node.type == 'funcdef' and node.name.value == orig_function_name:
+            return node
+
+    print(f'Could not find original function {orig_function_name}')
+    exit(0)
+
+
+def read_mutant_ast_node(path, orig_function_name, mutant_function_name):
+    with open(Path('mutants') / path) as f:
+        mutants_ast = parse(f.read())
+
+    for node in mutants_ast.children:
+        if node.type == 'funcdef' and node.name.value == mutant_function_name:
+            node.name.value = orig_function_name
+            return node
+
+    print(f'Could not find mutant function {mutant_function_name}')
+    exit(0)
+
+
+def find_mutant(mutant_name):
+    for path in walk_files():
+        if not str(path).endswith('.py'):
+            continue
+
+        m = MutationData(path=path)
+        if mutant_name in m.result_by_key:
+            return m
+
+    print(f'Could not find mutant {mutant_name}')
+    exit(0)
+
+
+@cli.command()
+@click.argument('mutant_name')
+def show(mutant_name):
+    m = find_mutant(mutant_name)
+    path = m.path
+
+    print(f'# {mutant_name}: {exit_code_to_status[m.result_by_key[mutant_name]]}')
+
+    orig_function_name = orig_function_name_from_key(mutant_name).partition('.')[2]
+    mutant_function_name = mutant_name.partition('.')[2]
+
+    orig_code = read_original_ast_node(path, orig_function_name).get_code().strip()
+    mutant_code = read_mutant_ast_node(path, orig_function_name, mutant_function_name).get_code().strip()
+
+    path = str(path)  # difflib requires str, not Path
+    for line in unified_diff(orig_code.split('\n'), mutant_code.split('\n'), fromfile=path, tofile=path, lineterm=''):
+        print(line)
+
+    return
+
+
+@cli.command()
+@click.argument('mutant_name')
+def apply(mutant_name):
+    m = find_mutant(mutant_name)
+    path = m.path
+
+    orig_function_name = orig_function_name_from_key(mutant_name).partition('.')[2]
+    mutant_function_name = mutant_name.partition('.')[2]
+    mutant_ast_node = read_mutant_ast_node(path, orig_function_name, mutant_function_name)
+
+    orig_ast = read_original_ast(path)
+    for node in orig_ast.children:
+        if node.type == 'funcdef' and node.name.value == orig_function_name:
+            node.children = mutant_ast_node.children
+            break
+    else:
+        print(f'Could apply mutant {orig_function_name}')
+        exit(0)
+
+    with open(path, 'w') as f:
+        f.write(orig_ast.get_code())
+
+# TODO: junitxml, html
+
+
 if __name__ == '__main__':
-    mutmut_3()
+    cli()
