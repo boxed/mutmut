@@ -6,19 +6,29 @@ import json
 import shutil
 import sys
 from collections import defaultdict
+from configparser import (
+    ConfigParser,
+    NoOptionError,
+    NoSectionError,
+)
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import (
     datetime,
     timedelta,
 )
 from difflib import unified_diff
+from functools import lru_cache
 from io import TextIOBase
 from os import (
     makedirs,
     walk,
 )
 from pathlib import Path
-from typing import Dict
+from typing import (
+    Dict,
+    List,
+)
 
 import click
 from parso import parse
@@ -39,18 +49,23 @@ def record_trampoline_hit(name):
     mutmut._stats.add(name)
 
 
-def walk_files():
+def walk_all_files():
     paths = [guess_paths_to_mutate()]
     for path in paths:
         for root, dirs, files in walk(path):
             for filename in files:
-                if filename.endswith('.pyc'):
-                    continue
-                if filename.endswith('__tests.py'):
-                    continue
-                if filename.startswith('test_.py'):
-                    continue
-                yield Path(root) / filename
+                yield root, filename
+
+
+def walk_source_files():
+    for root, filename in walk_all_files():
+        if filename.endswith('.pyc'):
+            continue
+        if filename.endswith('__tests.py'):
+            continue
+        if filename.startswith('test_.py'):
+            continue
+        yield Path(root) / filename
 
 
 class InvalidMutantException(Exception):
@@ -84,7 +99,7 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
 
 
 def create_mutants():
-    for path in walk_files():
+    for path in walk_source_files():
         output_path = Path('mutants') / path
         makedirs(output_path.parent, exist_ok=True)
 
@@ -92,6 +107,16 @@ def create_mutants():
             create_mutants_for_file(path, output_path)
         else:
             shutil.copy(path, output_path)
+
+
+def copy_also_copy_files():
+    config = read_config()
+    assert isinstance(config.also_copy, list)
+    paths = [guess_paths_to_mutate()]
+    for path in paths:
+        for pattern in config.also_copy:
+            for p in Path(path).rglob(pattern):
+                shutil.copy(p, Path('mutants') / p)
 
 
 def create_mutants_for_file(filename, output_path):
@@ -136,7 +161,7 @@ def create_mutants_for_file(filename, output_path):
 
 
 def build_trampoline(orig_name, mutants):
-    mutants_dict = f'{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + ',\n}'
+    mutants_dict = f'{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
 
     return f"""
 {mutants_dict}
@@ -328,18 +353,31 @@ class TestRunner:
         raise NotImplementedError()
 
 
+@contextmanager
+def change_cwd(path):
+    old_cwd = os.path.abspath(os.getcwd())
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(old_cwd)
+
+
 class PytestRunner(TestRunner):
     def run_stats(self):
         import pytest
-        return int(pytest.main(['-p', 'mutmut3', '-x', '-q', '--assert=plain']))
+        with change_cwd('mutants'):
+            return int(pytest.main(['-p', 'mutmut3', '-x', '-q', '--assert=plain', '--import-mode=append']))
 
     def run_tests(self, *, key, tests):
         import pytest
-        return int(pytest.main(['-x', '-q', '--assert=plain'] + list(tests)))
+        with change_cwd('mutants'):
+            return int(pytest.main(['-x', '-q', '--assert=plain', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
         import pytest
-        return int(pytest.main(['-x', '-q', '--assert=plain']))
+        with change_cwd('mutants'):
+            return int(pytest.main(['-x', '-q', '--assert=plain', '--import-mode=append']))
 
 
 class HammettRunner(TestRunner):
@@ -455,13 +493,38 @@ class CatchOutput:
                 return len(s)
         self.redirect = StdOutRedirect(self)
 
+    def stop(self):
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+
     def __enter__(self):
         sys.stdout = self.redirect
         sys.stderr = self.redirect
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
+        self.stop()
+
+
+@dataclass
+class Config:
+    also_copy: List[str]
+
+
+@lru_cache()
+def read_config():
+    config_parser = ConfigParser()
+    config_parser.read('setup.cfg')
+
+    def s(key, default):
+        try:
+            return config_parser.get('mutmut', key)
+        except (NoOptionError, NoSectionError):
+            return default
+
+    return Config(
+        also_copy=[x for x in s('also_copy', '').split('\n') if x],
+    )
 
 
 @click.group()
@@ -477,23 +540,33 @@ def run():
     start = datetime.now()
     print('generating mutants...')
     create_mutants()
+    copy_also_copy_files()
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
     sys.path.insert(0, os.path.abspath('mutants'))
 
-    runner = HammettRunner()
-    # runner = PytestRunner()
+    # TODO: config/option for runner
+    # runner = HammettRunner()
+    runner = PytestRunner()
     runner.prepare_main_test_run()
 
     # TODO: run these steps only if we have mutants to test
     print('running stats...')
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
+    os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
     mutmut.tests_by_function = defaultdict(set)
-    with CatchOutput():
-        if runner.run_stats():
-            print("FAILED")
-            return
+    # with CatchOutput() as output_catcher:
+
+    collect_stats_exit_code = runner.run_stats()
+    if collect_stats_exit_code != 0:
+        # output_catcher.stop()
+        # for l in output_catcher.strings:
+        #     print(l, end='')
+
+        print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
+
+        return
     print('    done')
 
     runner.prepare_main_test_run()
@@ -523,7 +596,7 @@ def run():
 
     total_count = 0
 
-    for path in walk_files():
+    for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
         assert path not in mutation_data_by_path
@@ -603,7 +676,7 @@ def run():
 
 @cli.command()
 def results():
-    for path in walk_files():
+    for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
         m = MutationData(path=path)
@@ -642,7 +715,7 @@ def read_mutant_ast_node(path, orig_function_name, mutant_function_name):
 
 
 def find_mutant(mutant_name):
-    for path in walk_files():
+    for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
 
