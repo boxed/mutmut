@@ -591,10 +591,8 @@ def run():
         return
     print('    done')
 
-    runner.prepare_main_test_run()
-
     if not mutmut.tests_by_function:
-        print('failed to collect stats')
+        print('failed to collect stats, no active tests found')
         return
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
