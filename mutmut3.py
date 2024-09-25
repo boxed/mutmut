@@ -90,10 +90,11 @@ def __mutmut_trampoline(orig, mutants, *args, **kwargs):
         from __main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
         return orig(*args, **kwargs)
-    prefix = orig.__module__ + '.'
-    # if not mutant_under_test.startswith(prefix):
-    #     return orig(*args, **kwargs)
-    return mutants[mutant_under_test[len(prefix):]](*args, **kwargs)
+    prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
+    if not mutant_under_test.startswith(prefix):
+        return orig(*args, **kwargs)
+    mutant_name = mutant_under_test.rpartition('.')[-1]
+    return mutants[mutant_name](*args, **kwargs)
 
 """
 
@@ -112,11 +113,13 @@ def create_mutants():
 def copy_also_copy_files():
     config = read_config()
     assert isinstance(config.also_copy, list)
-    paths = [guess_paths_to_mutate()]
-    for path in paths:
-        for pattern in config.also_copy:
-            for p in Path(path).rglob(pattern):
-                shutil.copy(p, Path('mutants') / p)
+    for path in config.also_copy:
+        path = Path(path)
+        destination = Path('mutants') / path
+        if path.is_file():
+            shutil.copy(path, destination)
+        else:
+            shutil.copytree(path, destination, dirs_exist_ok=True)
 
 
 def create_mutants_for_file(filename, output_path):
@@ -331,12 +334,11 @@ def unused(*_):
     pass
 
 
-# For pytest. This function gets installed by pytest's plugin system
-def pytest_runtest_teardown(item, nextitem):
-    unused(nextitem)
-    for function in mutmut._stats:
-        mutmut.tests_by_function[function].add(item._nodeid)
-    mutmut._stats.clear()
+def strip_prefix(s, *, prefix, strict=False):
+    if s.startswith(prefix):
+        return s[len(prefix):]
+    assert strict is False, f"String '{s}' does not start with prefix '{prefix}'"
+    return s
 
 
 class TestRunner:
@@ -363,10 +365,19 @@ def change_cwd(path):
         os.chdir(old_cwd)
 
 
+# For pytest. This function gets installed by pytest's plugin system
+def pytest_runtest_teardown(item, nextitem):
+    unused(nextitem)
+    for function in mutmut._stats:
+        mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
+    mutmut._stats.clear()
+
+
 class PytestRunner(TestRunner):
     def run_stats(self):
         import pytest
         with change_cwd('mutants'):
+            # "-p mutmut3" is used to load this module as a pytest plugin, so we get pytest_runtest_teardown called
             return int(pytest.main(['-p', 'mutmut3', '-x', '-q', '--assert=plain', '--import-mode=append']))
 
     def run_tests(self, *, key, tests):
@@ -434,8 +445,8 @@ def status_printer():
     update_threshold = timedelta(seconds=0.1)
 
     def p(s, *, force_output=False):
-        # if not force_output and (last_update[0] - datetime.now()) < update_threshold:
-        #     return
+        if not force_output and (datetime.now() - last_update[0]) < update_threshold:
+            return
         s = next(spinner) + ' ' + s
         len_s = len(s)
         output = '\r' + s + (' ' * max(last_len[0] - len_s, 0))
@@ -453,11 +464,14 @@ def print_stats(mutation_data_by_path, force_output=False):
     killed = 0
     survived = 0
     total = 0
+    no_tests = 0
     for m in mutation_data_by_path.values():
         for k, v in m.result_by_key.items():
             total += 1
             if v is None:
                 not_checked += 1
+            elif v == 33:
+                no_tests += 1
             else:
                 if v == 0:
                     survived += 1
@@ -466,7 +480,7 @@ def print_stats(mutation_data_by_path, force_output=False):
     skipped = 0  # TODO
     suspicious = 0  # TODO
     timed_out = 0  # TODO
-    print_status('{}/{}  🎉 {}  ⏰ {}  🤔 {}  🙁 {}  🔇 {}'.format((total - not_checked), total, killed, timed_out, suspicious, survived, skipped), force_output=force_output)
+    print_status(f'{(total - not_checked)}/{total}  🎉 {killed} 🫥 {no_tests}  ⏰ {timed_out}  🤔 {suspicious}  🙁 {survived}  🔇 {skipped}', force_output=force_output)
 
 
 def run_forced_fail(runner):
@@ -477,6 +491,7 @@ def run_forced_fail(runner):
             os._exit(1)
     except MutmutProgrammaticFailException:
         pass
+    os.environ['MUTANT_UNDER_TEST'] = ''
 
 
 class CatchOutput:
@@ -508,7 +523,7 @@ class CatchOutput:
 
 @dataclass
 class Config:
-    also_copy: List[str]
+    also_copy: List[Path]
 
 
 @lru_cache()
@@ -523,7 +538,14 @@ def read_config():
             return default
 
     return Config(
-        also_copy=[x for x in s('also_copy', '').split('\n') if x],
+        also_copy=[
+            Path(y)
+            for y in [
+                x
+                for x in s('also_copy', '').split('\n')
+                if x
+            ]
+        ],
     )
 
 
@@ -577,8 +599,20 @@ def run():
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
     print('running forced fail test')
-    with CatchOutput():
+    with CatchOutput() as output_catcher:
         run_forced_fail(runner)
+        assert 'MutmutProgrammaticFailException' in '\n'.join(output_catcher.strings)
+    print('    done')
+
+    print('running clean tests')
+    os.environ['MUTANT_UNDER_TEST'] = ''
+    with CatchOutput() as output_catcher:
+        clean_test_exit_code = runner.run_tests(key=None, tests=[])
+        if clean_test_exit_code != 0:
+            output_catcher.stop()
+            print(''.join(output_catcher.strings))
+            print('failed to run clean test')
+            return
     print('    done')
 
     runner.prepare_main_test_run()
@@ -590,11 +624,11 @@ def run():
     mutation_data_by_path: Dict[str, MutationData] = {}
     mutation_data_by_pid: Dict[int, MutationData] = {}  # many pids map to one MutationData
     running_children = 0
-    max_children = os.cpu_count()
+    max_children = os.cpu_count() or 4
 
     start = datetime.now()
 
-    total_count = 0
+    count_tried = 0
 
     for path in walk_source_files():
         if not str(path).endswith('.py'):
@@ -628,6 +662,12 @@ def run():
             # tests = mutmut.tests_by_function[function]
             # result = runner.run_tests(key=key, tests=tests)
 
+            function = orig_function_name_from_key(key)
+            tests = mutmut.tests_by_function[function]
+            if not tests:
+                m.result_by_key[key] = 33
+                continue
+
             pid = os.fork()
             if not pid:
                 # In the child
@@ -636,8 +676,7 @@ def run():
 
                 tests = mutmut.tests_by_function[function]
                 if not tests:
-                    print(f'  no tests covers {function}')
-                    os._exit(1)
+                    os._exit(33)
 
                 with CatchOutput():
                     result = runner.run_tests(key=key, tests=tests)
@@ -654,13 +693,13 @@ def run():
 
             if running_children >= max_children:
                 read_one_child_exit_status()
-                total_count += 1
+                count_tried += 1
                 running_children -= 1
 
         try:
             while running_children:
                 read_one_child_exit_status()
-                total_count += 1
+                count_tried += 1
                 running_children -= 1
         except ChildProcessError:
             pass
@@ -671,7 +710,8 @@ def run():
 
     print_stats(mutation_data_by_path, force_output=True)
     print()
-    print('mutations/s:', total_count / t.total_seconds())
+
+    print('mutations/s:', count_tried / t.total_seconds())
 
 
 @cli.command()
