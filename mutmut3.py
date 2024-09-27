@@ -1,8 +1,8 @@
-import itertools
-import os
 import ast
 import gc
+import itertools
 import json
+import os
 import shutil
 import sys
 from collections import defaultdict
@@ -39,9 +39,31 @@ from mutmut import guess_paths_to_mutate
 mutmut._stats = set()
 
 
-exit_code_to_status = {
+status_by_exit_code = {
     1: 'killed',
+    3: 'killed',  # internal error in pytest means a kill
     0: 'survived',
+    33: 'no tests',
+    5: 'no tests executed by test runner',
+    2: 'check was interrupted by user',
+    None: 'not checked',
+}
+
+emoji_by_status = {
+    'survived': '🙁',
+    'no tests': '🫥',
+    'no tests executed by test runner': '🫥',
+    'timeout': '⏰',
+    'suspicious': '🤔',
+    'skipped': '🔇',
+    'check was interrupted by user': '🛑',
+    'not checked': '?',
+    'killed': '🎉',
+}
+
+exit_code_to_emoji = {
+    exit_code: emoji_by_status[status]
+    for exit_code, status in status_by_exit_code.items()
 }
 
 
@@ -116,6 +138,8 @@ def copy_also_copy_files():
     for path in config.also_copy:
         path = Path(path)
         destination = Path('mutants') / path
+        if not path.exists():
+            continue
         if path.is_file():
             shutil.copy(path, destination)
         else:
@@ -459,28 +483,67 @@ def status_printer():
 print_status = status_printer()
 
 
-def print_stats(mutation_data_by_path, force_output=False):
+@dataclass
+class Stat:
+    not_checked: int
+    killed: int
+    survived: int
+    total: int
+    no_tests: int
+    skipped: int
+    suspicious: int
+    timed_out: int
+
+
+def collect_stat(m: MutationData):
     not_checked = 0
     killed = 0
     survived = 0
     total = 0
     no_tests = 0
-    for m in mutation_data_by_path.values():
-        for k, v in m.result_by_key.items():
-            total += 1
-            if v is None:
-                not_checked += 1
-            elif v == 33:
-                no_tests += 1
+    for k, v in m.result_by_key.items():
+        total += 1
+        if v is None:
+            not_checked += 1
+        elif v == 33:
+            no_tests += 1
+        else:
+            if v == 0:
+                survived += 1
             else:
-                if v == 0:
-                    survived += 1
-                else:
-                    killed += 1
+                killed += 1
     skipped = 0  # TODO
     suspicious = 0  # TODO
     timed_out = 0  # TODO
-    print_status(f'{(total - not_checked)}/{total}  🎉 {killed} 🫥 {no_tests}  ⏰ {timed_out}  🤔 {suspicious}  🙁 {survived}  🔇 {skipped}', force_output=force_output)
+    return Stat(
+        not_checked=not_checked,
+        killed=killed,
+        survived=survived,
+        total=total,
+        no_tests=no_tests,
+        skipped=skipped,
+        suspicious=suspicious,
+        timed_out=timed_out,
+    )
+
+
+def collect_stats(mutation_data_by_path):
+    stats = [collect_stat(x) for x in mutation_data_by_path.values()]
+    return Stat(
+        not_checked=sum(x.not_checked for x in stats),
+        killed=sum(x.killed for x in stats),
+        survived=sum(x.survived for x in stats),
+        total=sum(x.total for x in stats),
+        no_tests=sum(x.no_tests for x in stats),
+        skipped=sum(x.skipped for x in stats),
+        suspicious=sum(x.suspicious for x in stats),
+        timed_out=sum(x.timed_out for x in stats),
+    )
+
+
+def print_stats(mutation_data_by_path, force_output=False):
+    s = collect_stats(mutation_data_by_path)
+    print_status(f'{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timed_out}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}', force_output=force_output)
 
 
 def run_forced_fail(runner):
@@ -545,6 +608,10 @@ def read_config():
                 for x in s('also_copy', '').split('\n')
                 if x
             ]
+        ]+[
+            Path('tests/'),
+            Path('test/'),
+            Path('tests.py'),
         ],
     )
 
@@ -713,14 +780,18 @@ def run():
 
 
 @cli.command()
-def results():
+@click.option('--all', default=False)
+def results(all):
     for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
         m = MutationData(path=path)
         print(path)
         for k, v in m.result_by_key.items():
-            print(f'    {k}: {exit_code_to_status[v]}')
+            status = status_by_exit_code[v]
+            if status == 'killed' and not all:
+                continue
+            print(f'    {k}: {status}')
 
 
 def read_original_ast(path):
@@ -735,8 +806,7 @@ def read_original_ast_node(path, orig_function_name):
         if node.type == 'funcdef' and node.name.value == orig_function_name:
             return node
 
-    print(f'Could not find original function {orig_function_name}')
-    exit(0)
+    raise FileNotFoundError(f'Could not find original function {orig_function_name}')
 
 
 def read_mutant_ast_node(path, orig_function_name, mutant_function_name):
@@ -748,8 +818,7 @@ def read_mutant_ast_node(path, orig_function_name, mutant_function_name):
             node.name.value = orig_function_name
             return node
 
-    print(f'Could not find mutant function {mutant_function_name}')
-    exit(0)
+    raise FileNotFoundError(f'Could not find mutant function {mutant_function_name}')
 
 
 def find_mutant(mutant_name):
@@ -765,35 +834,47 @@ def find_mutant(mutant_name):
     exit(0)
 
 
-@cli.command()
-@click.argument('mutant_name')
-def show(mutant_name):
+def get_diff_for_mutant(mutant_name):
     m = find_mutant(mutant_name)
     path = m.path
 
-    print(f'# {mutant_name}: {exit_code_to_status[m.result_by_key[mutant_name]]}')
+    print(f'# {mutant_name}: {status_by_exit_code[m.result_by_key[mutant_name]]}')
 
-    orig_function_name = orig_function_name_from_key(mutant_name).partition('.')[2]
-    mutant_function_name = mutant_name.partition('.')[2]
+    orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
+    mutant_function_name = mutant_name.rpartition('.')[-1]
 
     orig_code = read_original_ast_node(path, orig_function_name).get_code().strip()
     mutant_code = read_mutant_ast_node(path, orig_function_name, mutant_function_name).get_code().strip()
 
     path = str(path)  # difflib requires str, not Path
-    for line in unified_diff(orig_code.split('\n'), mutant_code.split('\n'), fromfile=path, tofile=path, lineterm=''):
-        print(line)
+    return '\n'.join([
+        line
+        for line in unified_diff(orig_code.split('\n'), mutant_code.split('\n'), fromfile=path, tofile=path, lineterm='')
+    ])
 
+
+@cli.command()
+@click.argument('mutant_name')
+def show(mutant_name):
+    print(get_diff_for_mutant(mutant_name))
     return
 
 
 @cli.command()
 @click.argument('mutant_name')
 def apply(mutant_name):
+    try:
+        apply_mutant(mutant_name)
+    except FileNotFoundError as e:
+        print(e)
+
+
+def apply_mutant(mutant_name):
     m = find_mutant(mutant_name)
     path = m.path
 
-    orig_function_name = orig_function_name_from_key(mutant_name).partition('.')[2]
-    mutant_function_name = mutant_name.partition('.')[2]
+    orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
+    mutant_function_name = mutant_name.rpartition('.')[-1]
     mutant_ast_node = read_mutant_ast_node(path, orig_function_name, mutant_function_name)
 
     orig_ast = read_original_ast(path)
@@ -802,13 +883,98 @@ def apply(mutant_name):
             node.children = mutant_ast_node.children
             break
     else:
-        print(f'Could apply mutant {orig_function_name}')
-        exit(0)
+        raise FileNotFoundError(f'Could apply mutant {orig_function_name}')
 
     with open(path, 'w') as f:
         f.write(orig_ast.get_code())
 
 # TODO: junitxml, html
+
+
+@cli.command()
+def browse():
+    from textual.app import App
+    from textual.containers import Container
+    from textual.widgets import Footer
+    from textual.widgets import DataTable
+    from textual.widgets import TextArea
+
+    class ResultBrowser(App):
+        CSS_PATH = "result_browser_layout.tcss"
+        BINDINGS = [
+            ("q", "quit()", "Quit"),
+            ("a", "apply_mutation()", "Apply mutation to disk and quit"),
+        ]
+
+        cursor_type = 'row'
+        mutation_data_and_stat_by_path = None
+
+        def compose(self):
+            with Container(classes='container'):
+                yield DataTable(id='files')
+                yield DataTable(id='mutants')
+            yield TextArea(id='diff_view')
+            yield Footer()
+
+        def on_mount(self):
+            # files table
+            files_table: DataTable = self.query_one('#files')
+            files_table.cursor_type = 'row'
+            files_table.add_columns(
+                'Path',
+                *emoji_by_status.values(),
+            )
+
+            self.mutation_data_and_stat_by_path = {}
+
+            for p in walk_source_files():
+                if not str(p).endswith('.py'):
+                    continue
+                mutation_data = MutationData(path=p)
+                stat = collect_stat(mutation_data)
+
+                self.mutation_data_and_stat_by_path[p] = mutation_data, stat
+
+            for p, (mutation_data, stat) in self.mutation_data_and_stat_by_path.items():
+                files_table.add_row(str(p), stat.survived, stat.not_checked, stat.timed_out, stat.suspicious, stat.skipped, stat.killed, key=p)
+
+            # mutants table
+            mutants_table: DataTable = self.query_one('#mutants')
+            mutants_table.cursor_type = 'row'
+            mutants_table.add_columns('name', 'status')
+
+            # diff view
+            # diff_view = self.query_one('#diff_view')
+            # diff_view.language = 'diff'
+
+        def on_data_table_row_highlighted(self, event):
+            if not event.row_key.value:
+                return
+            if event.data_table.id == 'files':
+                mutants_table: DataTable = self.query_one('#mutants')
+                mutants_table.clear()
+                mutation_data, stat = self.mutation_data_and_stat_by_path[event.row_key.value]
+                for k, v in mutation_data.result_by_key.items():
+                    status = status_by_exit_code[v]
+                    if status == 'killed':
+                        continue
+                    mutants_table.add_row(k, emoji_by_status[status], key=k)
+            else:
+                assert event.data_table.id == 'mutants'
+                diff_view = self.query_one('#diff_view')
+                if event.row_key.value is None:
+                    diff_view.text = ''
+                else:
+                    diff_view.text = get_diff_for_mutant(event.row_key.value)
+
+        def action_apply_mutation(self):
+            mutants_table: DataTable = self.query_one('#mutants')
+            if mutants_table.cursor_row is None:
+                return
+            apply_mutant(mutants_table.get_row_at(mutants_table.cursor_row)[0])
+            exit(1)
+
+    ResultBrowser().run()
 
 
 if __name__ == '__main__':
