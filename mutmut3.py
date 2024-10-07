@@ -27,7 +27,6 @@ from os import (
     walk,
 )
 from pathlib import Path
-from threading import Thread
 from typing import (
     Dict,
     List,
@@ -39,7 +38,9 @@ from parso import parse
 import mutmut
 from mutmut import guess_paths_to_mutate
 
-
+# TODO: hash of test functions that invalidates stats collection and results for these
+# TODO: collect tests always: first run we collect to update the known list of tests, then we run pytest with that list for stats
+#           when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
 # TODO: when should surviving mutants be retested?
 # TODO: pragma no mutate should end up in `skipped` category
 
