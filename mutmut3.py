@@ -26,6 +26,7 @@ from os import (
     makedirs,
     walk,
 )
+from os.path import isdir
 from pathlib import Path
 from typing import (
     Dict,
@@ -36,13 +37,15 @@ import click
 from parso import parse
 
 import mutmut
-from mutmut import guess_paths_to_mutate
 
 # TODO: hash of test functions that invalidates stats collection and results for these
 # TODO: collect tests always: first run we collect to update the known list of tests, then we run pytest with that list for stats
-#           when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
+#           - when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
 # TODO: when should surviving mutants be retested?
 # TODO: pragma no mutate should end up in `skipped` category
+# TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
+# TODO: exclude mutating static typing
+
 
 mutmut._stats = set()
 
@@ -76,6 +79,32 @@ exit_code_to_emoji = {
     exit_code: emoji_by_status[status]
     for exit_code, status in status_by_exit_code.items()
 }
+
+
+def guess_paths_to_mutate():
+    """Guess the path to source code to mutate
+
+    :rtype: str
+    """
+    this_dir = os.getcwd().split(os.sep)[-1]
+    if isdir('lib'):
+        return 'lib'
+    elif isdir('src'):
+        return 'src'
+    elif isdir(this_dir):
+        return this_dir
+    elif isdir(this_dir.replace('-', '_')):
+        return this_dir.replace('-', '_')
+    elif isdir(this_dir.replace(' ', '_')):
+        return this_dir.replace(' ', '_')
+    elif isdir(this_dir.replace('-', '')):
+        return this_dir.replace('-', '')
+    elif isdir(this_dir.replace(' ', '')):
+        return this_dir.replace(' ', '')
+    raise FileNotFoundError(
+        'Could not figure out where the code to mutate is. '
+        'Please specify it on the command line using --paths-to-mutate, '
+        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
 def record_trampoline_hit(name):
@@ -295,12 +324,12 @@ def yield_mutants_for_node(*, func_node, context, node):
 
 
 class FuncContext:
-    def __init__(self, no_mutate_lines):
+    def __init__(self, no_mutate_lines=None):
         self.count = 0
         self.mutants = []
         self.stack = []
         self.dict_synonyms = {}
-        self.no_mutate_lines = no_mutate_lines
+        self.no_mutate_lines = no_mutate_lines or []
 
     def exclude_node(self, node):
         if node.start_pos[0] in self.no_mutate_lines:
