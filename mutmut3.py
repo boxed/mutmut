@@ -20,6 +20,7 @@ from datetime import (
 )
 from difflib import unified_diff
 from functools import lru_cache
+from hashlib import md5
 from io import TextIOBase
 from json import JSONDecodeError
 from os import (
@@ -38,10 +39,10 @@ from parso import parse
 
 import mutmut
 
-# TODO: hash of test functions that invalidates stats collection and results for these
+# Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
+
 # TODO: collect tests always: first run we collect to update the known list of tests, then we run pytest with that list for stats
 #           - when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
-# TODO: when should surviving mutants be retested?
 # TODO: pragma no mutate should end up in `skipped` category
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 # TODO: exclude mutating static typing
@@ -202,12 +203,17 @@ def create_mutants_for_file(filename, output_path):
 
     no_mutate_lines = pragma_no_mutate_lines(source)
 
+    hash_by_function_name = {}
+
     with open(output_path, 'w') as out:
-        for x, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
+        for x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
             out.write('\n\n')
             out.write(x)
             if mutant_name:
                 mutant_names.append(mutant_name)
+                if name_and_hash:
+                    name, hash = name_and_hash
+                    hash_by_function_name[mutant_name] = hash
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -225,6 +231,7 @@ def create_mutants_for_file(filename, output_path):
                  '.'.join([module_name, x]).replace('.__init__.', '.'): None
                 for x in mutant_names
             },
+            hash_by_function_name=hash_by_function_name,
         ), f, indent=4)
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
@@ -316,7 +323,7 @@ def yield_mutants_for_node(*, func_node, context, node):
                     try:
                         ast.parse(code)
                         context.mutants.append(func_node.name.value)
-                        yield code, func_node.name.value
+                        yield code, None, func_node.name.value
                     except (SyntaxError, IndentationError):
                         pass
 
@@ -340,9 +347,11 @@ class FuncContext:
 def yield_mutants_for_function(node, *, no_mutate_lines):
     assert node.type == 'funcdef'
 
+    hash_of_orig = md5(node.get_code().encode()).hexdigest()
+
     # noinspection PyArgumentList
     with rename(node, suffix='orig'):
-        yield node.get_code(), None
+        yield node.get_code(), (node.name.value, hash_of_orig), None
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
 
@@ -353,17 +362,17 @@ def yield_mutants_for_function(node, *, no_mutate_lines):
         finally:
             context.stack.pop()
 
-    yield build_trampoline(node.name.value, context.mutants), None
+    yield build_trampoline(node.name.value, context.mutants), None, None
 
 
 def yield_mutants_for_class(node, no_mutate_lines):
     assert node.type == 'classdef'
-    yield node.get_code(), None
+    yield node.get_code(), None, None
 
 
 def yield_mutants_for_module(node, no_mutate_lines):
-    yield trampoline_impl, None
-    yield '\n', None
+    yield trampoline_impl, None, None
+    yield '\n', None, None
     assert node.type == 'file_input'
     for child_node in node.children:
         # TODO: support methods
@@ -372,7 +381,7 @@ def yield_mutants_for_module(node, no_mutate_lines):
         elif child_node.type == 'classdef':
             yield from yield_mutants_for_class(child_node, no_mutate_lines=no_mutate_lines)
         else:
-            yield child_node.get_code(), None
+            yield child_node.get_code(), None, None
 
 
 class MutationData:
@@ -384,6 +393,7 @@ class MutationData:
 
         self.key_by_pid = {}
         self.result_by_key = self.meta.pop('result_by_key')
+        self.hash_by_function_name = self.meta.pop('hash_by_function_name')
         assert not self.meta, self.meta  # We should read all the data!
 
     def register_pid(self, *, pid, key):
@@ -736,7 +746,9 @@ def run(mutant_names, *, max_children):
     print('running clean tests')
     os.environ['MUTANT_UNDER_TEST'] = ''
     with CatchOutput() as output_catcher:
-        clean_test_exit_code = runner.run_tests(key=None, tests=[])
+        tests = tests_for_mutant_names(mutant_names)
+
+        clean_test_exit_code = runner.run_tests(key=None, tests=tests)
         if clean_test_exit_code != 0:
             output_catcher.stop()
             print(''.join(output_catcher.strings))
@@ -777,10 +789,12 @@ def run(mutant_names, *, max_children):
     ]
 
     if mutant_names:
+        mutant_name_patterns = [x for x in mutant_names if '*' in x]
+
         mutants = [
             (m, key, result)
             for m, key, result in mutants
-            if key in mutant_names
+            if key in mutant_names or any(fnmatch.fnmatch(key, p) for p in mutant_name_patterns)
         ]
 
     gc.freeze()
@@ -855,6 +869,18 @@ def run(mutant_names, *, max_children):
     print()
 
     print('mutations/s:', count_tried / t.total_seconds())
+
+
+def tests_for_mutant_names(mutant_names):
+    tests = set()
+    for mutant_name in mutant_names:
+        if '*' in mutant_name:
+            for name, tests_of_this_name in mutmut.tests_by_function.items():
+                if fnmatch.fnmatch(name, mutant_name):
+                    tests |= set(tests_of_this_name)
+        else:
+            tests |= set(mutmut.tests_by_function[orig_function_name_from_key(mutant_name)])
+    return tests
 
 
 @cli.command()
