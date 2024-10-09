@@ -29,6 +29,10 @@ from os import (
 )
 from os.path import isdir
 from pathlib import Path
+from textwrap import (
+    dedent,
+    indent,
+)
 from threading import Thread
 from typing import (
     Dict,
@@ -137,9 +141,9 @@ class MutmutProgrammaticFailException(Exception):
 
 # language=python
 trampoline_impl = """
-from inspect import signature as __signature
+from inspect import signature as _mutmut_signature
 
-def __mutmut_trampoline(orig, mutants, *args, **kwargs):
+def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
@@ -208,7 +212,6 @@ def create_mutants_for_file(filename, output_path):
 
     with open(output_path, 'w') as out:
         for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
-            out.write('\n\n')
             out.write(x)
             if mutant_name:
                 mutant_names.append(mutant_name)
@@ -238,16 +241,16 @@ def create_mutants_for_file(filename, output_path):
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
 
 
-def build_trampoline(orig_name, mutants):
+def build_trampoline(orig_name, mutants, method=False):
     mutants_dict = f'{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
 
     return f"""
 {mutants_dict}
 
-def {orig_name}(*args, **kwargs):
-    return __mutmut_trampoline({orig_name}__mutmut_orig, {orig_name}__mutmut_mutants, *args, **kwargs) 
+def {orig_name}({'self, ' if method else ''}*args, **kwargs):
+    return _mutmut_trampoline({'self.' if method else ''}{orig_name}__mutmut_orig, {'self.' if method else ''}{orig_name}__mutmut_mutants, *args, **kwargs) 
 
-{orig_name}.__signature__ = __signature({orig_name}__mutmut_orig)
+{orig_name}.__signature__ = _mutmut_signature({orig_name}__mutmut_orig)
 {orig_name}__mutmut_orig.__name__ = '{orig_name}'
 """
 
@@ -322,7 +325,7 @@ def yield_mutants_for_node(*, func_node, context, node):
                     code = func_node.get_code()
 
                     try:
-                        ast.parse(code)
+                        ast.parse(dedent(code))
                         context.mutants.append(func_node.name.value)
                         yield 'mutant', code, None, func_node.name.value
                     except (SyntaxError, IndentationError):
@@ -345,7 +348,7 @@ class FuncContext:
         return False
 
 
-def yield_mutants_for_function(node, *, no_mutate_lines):
+def yield_mutants_for_function(node, *, method=False, no_mutate_lines):
     assert node.type == 'funcdef'
 
     hash_of_orig = md5(node.get_code().encode()).hexdigest()
@@ -364,12 +367,29 @@ def yield_mutants_for_function(node, *, no_mutate_lines):
         finally:
             context.stack.pop()
 
-    yield 'trampoline', build_trampoline(node.name.value, context.mutants), None, None
+    trampoline = build_trampoline(node.name.value, context.mutants, method=method)
+    if method:
+        trampoline = indent(trampoline, '    ')
+    yield 'trampoline', trampoline, None, None
+    yield 'filler', '\n\n', None, None
 
 
 def yield_mutants_for_class(node, no_mutate_lines):
     assert node.type == 'classdef'
-    yield 'filler', node.get_code(), None, None
+    for child_node in node.children:
+        if child_node.type == 'suite':
+            yield from yield_mutants_for_class_body(child_node, no_mutate_lines=no_mutate_lines)
+        else:
+            yield 'filler', child_node.get_code(), None, None
+
+
+def yield_mutants_for_class_body(node, no_mutate_lines):
+    assert node.type == 'suite'
+    for child_node in node.children:
+        if child_node.type == 'funcdef':
+            yield from yield_mutants_for_function(child_node, method=True, no_mutate_lines=no_mutate_lines)
+        else:
+            yield 'filler', child_node.get_code(), None, None
 
 
 def yield_mutants_for_module(node, no_mutate_lines):
@@ -377,7 +397,6 @@ def yield_mutants_for_module(node, no_mutate_lines):
     yield 'filler', '\n', None, None
     assert node.type == 'file_input'
     for child_node in node.children:
-        # TODO: support methods
         if child_node.type == 'funcdef':
             yield from yield_mutants_for_function(child_node, no_mutate_lines=no_mutate_lines)
         elif child_node.type == 'classdef':

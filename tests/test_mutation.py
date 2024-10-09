@@ -183,6 +183,24 @@ def foo() -> int:
     assert not mutants
 
 
+def test_basic_class():
+    source = """
+class Foo:
+    def member(self):        
+        return 1
+    """.strip()
+
+    mutants = [
+        mutant
+        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        if type_ == 'mutant'
+    ]
+    for m in mutants:
+        print(m)
+
+    assert len(mutants) == 1
+
+
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
 
