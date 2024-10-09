@@ -207,14 +207,15 @@ def create_mutants_for_file(filename, output_path):
     hash_by_function_name = {}
 
     with open(output_path, 'w') as out:
-        for x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
+        for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
             out.write('\n\n')
             out.write(x)
             if mutant_name:
                 mutant_names.append(mutant_name)
-                if name_and_hash:
-                    name, hash = name_and_hash
-                    hash_by_function_name[mutant_name] = hash
+            if name_and_hash:
+                assert type_ == 'orig'
+                name, hash = name_and_hash
+                hash_by_function_name[name] = hash
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -231,6 +232,7 @@ def create_mutants_for_file(filename, output_path):
         for x in mutant_names
     }
     mutation_data.hash_by_function_name = hash_by_function_name
+    assert None not in hash_by_function_name
     mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
@@ -322,7 +324,7 @@ def yield_mutants_for_node(*, func_node, context, node):
                     try:
                         ast.parse(code)
                         context.mutants.append(func_node.name.value)
-                        yield code, None, func_node.name.value
+                        yield 'mutant', code, None, func_node.name.value
                     except (SyntaxError, IndentationError):
                         pass
 
@@ -348,9 +350,10 @@ def yield_mutants_for_function(node, *, no_mutate_lines):
 
     hash_of_orig = md5(node.get_code().encode()).hexdigest()
 
+    orig_name = node.name.value
     # noinspection PyArgumentList
     with rename(node, suffix='orig'):
-        yield node.get_code(), (node.name.value, hash_of_orig), None
+        yield 'orig', node.get_code(), (orig_name, hash_of_orig), None
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
 
@@ -361,17 +364,17 @@ def yield_mutants_for_function(node, *, no_mutate_lines):
         finally:
             context.stack.pop()
 
-    yield build_trampoline(node.name.value, context.mutants), None, None
+    yield 'trampoline', build_trampoline(node.name.value, context.mutants), None, None
 
 
 def yield_mutants_for_class(node, no_mutate_lines):
     assert node.type == 'classdef'
-    yield node.get_code(), None, None
+    yield 'filler', node.get_code(), None, None
 
 
 def yield_mutants_for_module(node, no_mutate_lines):
-    yield trampoline_impl, None, None
-    yield '\n', None, None
+    yield 'trampoline_impl', trampoline_impl, None, None
+    yield 'filler', '\n', None, None
     assert node.type == 'file_input'
     for child_node in node.children:
         # TODO: support methods
@@ -380,7 +383,7 @@ def yield_mutants_for_module(node, no_mutate_lines):
         elif child_node.type == 'classdef':
             yield from yield_mutants_for_class(child_node, no_mutate_lines=no_mutate_lines)
         else:
-            yield child_node.get_code(), None, None
+            yield 'filler', child_node.get_code(), None, None
 
 
 class MutationData:

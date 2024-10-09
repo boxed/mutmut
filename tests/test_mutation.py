@@ -4,6 +4,7 @@ from parso import parse
 from mutmut import array_subscript_pattern, function_call_pattern, ASTPattern
 from mutmut3 import (
     FuncContext,
+    yield_mutants_for_module,
     yield_mutants_for_node,
 )
 
@@ -158,23 +159,28 @@ def test_basic_mutations(original, expected):
     mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
     actual = [
         parse(mutant).children[0].children[-1].get_code().strip()
-        for (mutant, _) in mutants
+        for (type_, mutant, _, _) in mutants
+        if type_ == 'mutant'
     ]
     assert actual == expected
 
 
-def test_mutate_body_of_function_with_return_type_annotation():
+def test_do_not_mutate_annotations():
     source = """
 def foo() -> int:
-    return 0
+    bar: Optional[int]
+    return
     """.strip()
 
-    func_node = parse(source).children[0]
-    node = func_node.children[-1]
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
+    mutants = [
+        mutant
+        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        if type_ == 'mutant'
+    ]
+    for m in mutants:
+        print(m)
 
-    [[mutant, _]] = mutants
-    assert mutant == source.replace('0', '1').replace('foo', 'foo__mutmut_1')
+    assert not mutants
 
 
 def test_function_with_annotation():
