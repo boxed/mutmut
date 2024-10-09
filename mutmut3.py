@@ -1082,6 +1082,7 @@ def browse():
     from textual.widgets import TextArea
 
     class ResultBrowser(App):
+        loading_id = None
         CSS_PATH = "result_browser_layout.tcss"
         BINDINGS = [
             ("q", "quit()", "Quit"),
@@ -1163,11 +1164,14 @@ def browse():
                     diff_view.text = ''
                 else:
                     diff_view.text = '<loading...>'
+                    self.loading_id = event.row_key.value
 
                     def load_thread():
                         config = read_config()
                         try:
-                            diff_view.text = get_diff_for_mutant(config, event.row_key.value)
+                            d = get_diff_for_mutant(config, event.row_key.value)
+                            if event.row_key.value == self.loading_id:
+                                diff_view.text = d
                         except Exception as e:
                             diff_view.text = f'<{e}>'
 
