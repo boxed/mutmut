@@ -3,11 +3,11 @@ mutmut - python mutation tester
 
 .. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
     :target: https://travis-ci.org/boxed/mutmut
- 
+
 .. image:: https://readthedocs.org/projects/mutmut/badge/?version=latest
     :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
-    
+
 .. image:: https://codecov.io/gh/boxed/mutmut/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/boxed/mutmut
 
@@ -20,17 +20,21 @@ Some highlight features:
 - Found mutants can be applied on disk with a simple command making it very
   easy to work with the results
 - Remembers work that has been done, so you can work incrementally
-- Supports all test runners (because mutmut only needs an exit code from the
-  test command)
-- If you use the `hammett <https://github.com/boxed/hammett>` test runner
-  you can go extremely fast! There's special handling for this runner
-  that has some pretty dramatic results.
-- Can use coverage data to only do mutation testing on covered lines
-- Battle tested on real libraries by multiple companies
+- Knows which tests to execute, speeding up mutation testing
 
 
 If you need to run mutmut on a python 2 code base use mutmut `1.5.0`. Mutmut
 `1.9.0` is the last version to support python 3.4, 3.5 and 3.6.
+
+
+Wildcards for testing mutants
+-----------------------------
+
+Unix filename pattern matching style on mutants is supported: foo*
+
+
+also copy files
+---------------
 
 
 Install and run
