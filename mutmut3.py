@@ -53,6 +53,8 @@ import mutmut
 # TODO: exclude mutating static typing
 
 
+NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
+
 mutmut._stats = set()
 
 
@@ -241,29 +243,55 @@ def create_mutants_for_file(filename, output_path):
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
 
 
-def build_trampoline(orig_name, mutants, method=False):
-    mutants_dict = f'{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+def build_trampoline(orig_name, mutants, class_name=None):
+    assert orig_name not in NEVER_MUTATE_FUNCTION_NAMES
+
+    prefix = ''
+    if class_name:
+        prefix = f'_{class_name}_'
+        # Dunder as a start of a member name triggers Python name mangling, but we want OUR name mangling.
+        while prefix.startswith('__'):
+            prefix = prefix[1:]
+
+    mutants_dict = f'{prefix}{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+    access_prefix = ''
+    access_suffix = ''
+    if class_name is not None:
+        access_prefix = f'object.__getattribute__(self, "{prefix}'
+        access_suffix = '")'
 
     return f"""
 {mutants_dict}
 
-def {orig_name}({'self, ' if method else ''}*args, **kwargs):
-    return _mutmut_trampoline({'self.' if method else ''}{orig_name}__mutmut_orig, {'self.' if method else ''}{orig_name}__mutmut_mutants, *args, **kwargs) 
+def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
+    return _mutmut_trampoline({access_prefix}{orig_name}__mutmut_orig{access_suffix}, {access_prefix}{orig_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
 
-{orig_name}.__signature__ = _mutmut_signature({orig_name}__mutmut_orig)
-{orig_name}__mutmut_orig.__name__ = '{orig_name}'
+{orig_name}.__signature__ = _mutmut_signature({prefix}{orig_name}__mutmut_orig)
+{prefix}{orig_name}__mutmut_orig.__name__ = '{prefix}{orig_name}'
 """
 
 
 @contextmanager
-def rename(node, *, suffix):
+def rename(node, *, suffix, prefix):
     orig_name = node.name.value
-    node.name.value += f'__mutmut_{suffix}'
+
+    if prefix:
+        prefix = '_' + prefix + '_'
+    else:
+        prefix = ''
+
+    new_name = prefix + node.name.value + f'__mutmut_{suffix}'
+
+    # Dunder as a start of a member name triggers Python name mangling, but we want OUR name mangling.
+    while prefix and new_name.startswith('__'):
+        new_name = new_name[1:]
+
+    node.name.value = new_name
     yield
     node.name.value = orig_name
 
 
-def yield_mutants_for_node(*, func_node, context, node):
+def yield_mutants_for_node(*, func_node, class_name, context, node):
     return_annotation_started = False
 
     if hasattr(node, 'children'):
@@ -279,7 +307,7 @@ def yield_mutants_for_node(*, func_node, context, node):
 
             context.stack.append(child_node)
             try:
-                yield from yield_mutants_for_node(func_node=func_node, context=context, node=child_node)
+                yield from yield_mutants_for_node(func_node=func_node, class_name=class_name, context=context, node=child_node)
             finally:
                 context.stack.pop()
 
@@ -321,7 +349,7 @@ def yield_mutants_for_node(*, func_node, context, node):
                 context.count += 1
 
                 # noinspection PyArgumentList
-                with rename(func_node, suffix=f'{context.count}'):
+                with rename(func_node, suffix=f'{context.count}', prefix=class_name):
                     code = func_node.get_code()
 
                     try:
@@ -348,14 +376,18 @@ class FuncContext:
         return False
 
 
-def yield_mutants_for_function(node, *, method=False, no_mutate_lines):
+def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
     assert node.type == 'funcdef'
+
+    if node.name.value in NEVER_MUTATE_FUNCTION_NAMES:
+        yield 'filler', node.get_code(), None, None
+        return
 
     hash_of_orig = md5(node.get_code().encode()).hexdigest()
 
     orig_name = node.name.value
     # noinspection PyArgumentList
-    with rename(node, suffix='orig'):
+    with rename(node, suffix='orig', prefix=class_name):
         yield 'orig', node.get_code(), (orig_name, hash_of_orig), None
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
@@ -363,12 +395,12 @@ def yield_mutants_for_function(node, *, method=False, no_mutate_lines):
     for child_node in node.children:
         context.stack.append(child_node)
         try:
-            yield from yield_mutants_for_node(func_node=node, node=child_node, context=context)
+            yield from yield_mutants_for_node(func_node=node, class_name=class_name, node=child_node, context=context)
         finally:
             context.stack.pop()
 
-    trampoline = build_trampoline(node.name.value, context.mutants, method=method)
-    if method:
+    trampoline = build_trampoline(node.name.value, context.mutants, class_name=class_name)
+    if class_name is not None:
         trampoline = indent(trampoline, '    ')
     yield 'trampoline', trampoline, None, None
     yield 'filler', '\n\n', None, None
@@ -385,9 +417,11 @@ def yield_mutants_for_class(node, no_mutate_lines):
 
 def yield_mutants_for_class_body(node, no_mutate_lines):
     assert node.type == 'suite'
+    class_name = node.parent.name.value
+
     for child_node in node.children:
         if child_node.type == 'funcdef':
-            yield from yield_mutants_for_function(child_node, method=True, no_mutate_lines=no_mutate_lines)
+            yield from yield_mutants_for_function(child_node, class_name=class_name, no_mutate_lines=no_mutate_lines)
         else:
             yield 'filler', child_node.get_code(), None, None
 
