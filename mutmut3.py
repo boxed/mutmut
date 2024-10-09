@@ -971,6 +971,12 @@ def read_mutants_ast(path):
 def read_original_ast_node(ast, orig_function_name):
     target = orig_function_name + '__mutmut_orig'
     for node in ast.children:
+        if node.type == 'classdef':
+            try:
+                (body,) = [x for x in node.children if x.type == 'suite']
+                return read_original_ast_node(body, orig_function_name)
+            except FileNotFoundError:
+                pass
         if node.type == 'funcdef' and node.name.value == target:
             node.name.value = orig_function_name
             return node
@@ -980,6 +986,12 @@ def read_original_ast_node(ast, orig_function_name):
 
 def read_mutant_ast_node(ast, orig_function_name, mutant_function_name):
     for node in ast.children:
+        if node.type == 'classdef':
+            try:
+                (body,) = [x for x in node.children if x.type == 'suite']
+                return read_mutant_ast_node(body, orig_function_name, mutant_function_name)
+            except FileNotFoundError:
+                pass
         if node.type == 'funcdef' and node.name.value == mutant_function_name:
             node.name.value = orig_function_name
             return node
