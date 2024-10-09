@@ -29,6 +29,7 @@ from os import (
 )
 from os.path import isdir
 from pathlib import Path
+from threading import Thread
 from typing import (
     Dict,
     List,
@@ -223,16 +224,14 @@ def create_mutants_for_file(filename, output_path):
             print(output_path, 'has invalid syntax: ', e)
             exit(1)
 
-    meta_filename = str(output_path) + '.meta'
-    with open(meta_filename, 'w') as f:
-        module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
-        json.dump(dict(
-            result_by_key={
-                 '.'.join([module_name, x]).replace('.__init__.', '.'): None
-                for x in mutant_names
-            },
-            hash_by_function_name=hash_by_function_name,
-        ), f, indent=4)
+    mutation_data = MutationData(path=filename)
+    module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
+    mutation_data.result_by_key = {
+         '.'.join([module_name, x]).replace('.__init__.', '.'): None
+        for x in mutant_names
+    }
+    mutation_data.hash_by_function_name = hash_by_function_name
+    mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
 
@@ -388,10 +387,18 @@ class MutationData:
     def __init__(self, *, path):
         self.path = path
         self.meta_path = Path('mutants') / (str(path) + '.meta')
-        with open(self.meta_path) as f:
-            self.meta = json.load(f)
-
+        self.meta = None
         self.key_by_pid = {}
+        self.result_by_key = {}
+        self.hash_by_function_name = {}
+
+    def load(self):
+        try:
+            with open(self.meta_path) as f:
+                self.meta = json.load(f)
+        except FileNotFoundError:
+            return
+
         self.result_by_key = self.meta.pop('result_by_key')
         self.hash_by_function_name = self.meta.pop('hash_by_function_name')
         assert not self.meta, self.meta  # We should read all the data!
@@ -409,6 +416,7 @@ class MutationData:
         with open(self.meta_path, 'w') as f:
             json.dump(dict(
                 result_by_key=self.result_by_key,
+                hash_by_function_name=self.hash_by_function_name,
             ), f, indent=4)
 
 
@@ -780,6 +788,7 @@ def run(mutant_names, *, max_children):
             continue
         assert path not in mutation_data_by_path
         m = MutationData(path=path)
+        m.load()
         mutation_data_by_path[str(path)] = m
 
     mutants = [
@@ -890,7 +899,7 @@ def results(all):
         if not str(path).endswith('.py'):
             continue
         m = MutationData(path=path)
-        print(path)
+        m.load()
         for k, v in m.result_by_key.items():
             status = status_by_exit_code[v]
             if status == 'killed' and not all:
@@ -898,26 +907,23 @@ def results(all):
             print(f'    {k}: {status}')
 
 
-def read_original_ast(path):
-    with open(path) as f:
+def read_mutants_ast(path):
+    with open(Path('mutants') / path) as f:
         return parse(f.read())
 
 
-def read_original_ast_node(path, orig_function_name):
-    orig_ast = read_original_ast(path)
-
-    for node in orig_ast.children:
-        if node.type == 'funcdef' and node.name.value == orig_function_name:
+def read_original_ast_node(ast, orig_function_name):
+    target = orig_function_name + '__mutmut_orig'
+    for node in ast.children:
+        if node.type == 'funcdef' and node.name.value == target:
+            node.name.value = orig_function_name
             return node
 
-    raise FileNotFoundError(f'Could not find original function {orig_function_name}')
+    raise FileNotFoundError(f'Could not find original function {orig_function_name} ({target})')
 
 
-def read_mutant_ast_node(path, orig_function_name, mutant_function_name):
-    with open(Path('mutants') / path) as f:
-        mutants_ast = parse(f.read())
-
-    for node in mutants_ast.children:
+def read_mutant_ast_node(ast, orig_function_name, mutant_function_name):
+    for node in ast.children:
         if node.type == 'funcdef' and node.name.value == mutant_function_name:
             node.name.value = orig_function_name
             return node
@@ -931,11 +937,11 @@ def find_mutant(config, mutant_name):
             continue
 
         m = MutationData(path=path)
+        m.load()
         if mutant_name in m.result_by_key:
             return m
 
-    print(f'Could not find mutant {mutant_name}')
-    exit(0)
+    raise FileNotFoundError(f'Could not find mutant {mutant_name}')
 
 
 def get_diff_for_mutant(config, mutant_name):
@@ -947,8 +953,9 @@ def get_diff_for_mutant(config, mutant_name):
     orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
     mutant_function_name = mutant_name.rpartition('.')[-1]
 
-    orig_code = read_original_ast_node(path, orig_function_name).get_code().strip()
-    mutant_code = read_mutant_ast_node(path, orig_function_name, mutant_function_name).get_code().strip()
+    ast = read_mutants_ast(path)
+    orig_code = read_original_ast_node(ast, orig_function_name).get_code().strip()
+    mutant_code = read_mutant_ast_node(ast, orig_function_name, mutant_function_name).get_code().strip()
 
     path = str(path)  # difflib requires str, not Path
     return '\n'.join([
@@ -981,9 +988,10 @@ def apply_mutant(config, mutant_name):
 
     orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
     mutant_function_name = mutant_name.rpartition('.')[-1]
-    mutant_ast_node = read_mutant_ast_node(path, orig_function_name, mutant_function_name)
 
-    orig_ast = read_original_ast(path)
+    orig_ast = read_mutants_ast(path)
+    mutant_ast_node = read_mutant_ast_node(orig_ast, orig_function_name, mutant_function_name)
+
     for node in orig_ast.children:
         if node.type == 'funcdef' and node.name.value == orig_function_name:
             node.children = mutant_ast_node.children
@@ -1010,6 +1018,8 @@ def browse():
         BINDINGS = [
             ("q", "quit()", "Quit"),
             ("r", "retest_mutant()", "Retest mutant"),
+            ("f", "retest_function()", "Retest function"),
+            ("m", "retest_module()", "Retest module"),
             ("a", "apply_mutant()", "Apply mutant to disk"),
         ]
 
@@ -1053,6 +1063,7 @@ def browse():
                 if config.should_ignore_for_mutation(p):
                     continue
                 mutation_data = MutationData(path=p)
+                mutation_data.load()
                 stat = collect_stat(mutation_data)
 
                 self.mutation_data_and_stat_by_path[p] = mutation_data, stat
@@ -1083,28 +1094,43 @@ def browse():
                 if event.row_key.value is None:
                     diff_view.text = ''
                 else:
-                    config = read_config()
-                    diff_view.text = get_diff_for_mutant(config, event.row_key.value)
+                    diff_view.text = '<loading...>'
 
-        def action_retest_mutant(self):
+                    def load_thread():
+                        config = read_config()
+                        try:
+                            diff_view.text = get_diff_for_mutant(config, event.row_key.value)
+                        except Exception as e:
+                            diff_view.text = f'<{e}>'
+
+                    t = Thread(target=load_thread)
+                    t.start()
+
+        def retest(self, pattern):
+            with self.suspend():
+                assert sys.argv[-1] == 'browse'
+                command = ' '.join([sys.executable] + sys.argv[:-1])
+                os.system(f'{command} run {pattern}')
+                input('press enter to return to browser')
+
+            self.read_data()
+            # TODO: restore selection
+
+        def get_mutant_name_from_selection(self):
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
                 return
 
-            mutant_name = mutants_table.get_row_at(mutants_table.cursor_row)[0]
-            with self.suspend():
-                assert sys.argv[-1] == 'browse'
-                command = ' '.join([sys.executable] + sys.argv[:-1])
-                os.system(f'{command} run {mutant_name}')
-                # run([mutants_table.get_row_at(mutants_table.cursor_row)[0]])
-                input('press enter to return to browser')
+            return mutants_table.get_row_at(mutants_table.cursor_row)[0]
 
-            self.read_data()
-            # files_table: DataTable = self.query_one('#files')
-            # path = files_table.get_row_at(files_table.cursor_row)[0]
+        def action_retest_mutant(self):
+            self.retest(self.get_mutant_name_from_selection())
 
-            # status = status_by_exit_code[self.mutation_data_and_stat_by_path[path][0].result_by_key[mutant_name]]
-            # mutants_table.update_cell(mutant_name, 'status', emoji_by_status[status])
+        def action_retest_function(self):
+            self.retest(self.get_mutant_name_from_selection().rpartition('__mutmut_')[0] + '.*')
+
+        def action_retest_module(self):
+            self.retest(self.get_mutant_name_from_selection().rpartition('.')[0] + '.*')
 
         def action_apply_mutant(self):
             config = read_config()
