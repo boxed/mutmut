@@ -199,6 +199,7 @@ class Foo:
         print(m)
 
     assert len(mutants) == 1
+    assert mutants[0] == '    def _Foo_member__mutmut_1(self):        \n        return 2'
 
 
 def test_function_with_annotation():
