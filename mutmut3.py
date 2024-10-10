@@ -53,8 +53,11 @@ import mutmut
 # TODO: exclude mutating static typing
 # TODO: implement timeout
 
+# TODO: don't remove arguments to `isinstance`, as that will always fail. Same with `len`
+
 
 NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
+NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
 
 mutmut._stats = set()
 
@@ -292,11 +295,19 @@ def rename(node, *, suffix, prefix):
     node.name.value = orig_name
 
 
+sentinel = object()
+
+
 def yield_mutants_for_node(*, func_node, class_name=None, context, node):
+    # do not mutate static typing annotations
     if node.type == 'tfpdef':
-        yield 'filler', node.get_code(), None, None
         return
 
+    # Some functions should not be mutated
+    if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in NEVER_MUTATE_FUNCTION_CALLS:
+        return
+
+    # The rest
     if hasattr(node, 'children'):
         for child_node in node.children:
             context.stack.append(child_node)
@@ -305,60 +316,59 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
             finally:
                 context.stack.pop()
 
-    mutation = mutmut.mutations_by_type.get(node.type)
+    mutation = mutmut.mutation_by_ast_type.get(node.type)
     if not mutation:
         return
 
-    for key, value in sorted(mutation.items()):
-        old = getattr(node, key)
-        if context.exclude_node(node):
-            continue
+    if context.exclude_node(node):
+        return
 
-        new = value(
-            context=context,
-            node=node,
-            value=getattr(node, 'value', None),
-            children=getattr(node, 'children', None),
-        )
+    old_value = getattr(node, 'value', sentinel)
+    old_children = getattr(node, 'children', sentinel)
 
-        if isinstance(new, list) and not isinstance(old, list):
-            # multiple mutations
-            new_list = new
-        else:
-            # one mutation
-            new_list = [new]
+    for m in mutation(
+        context=context,
+        node=node,
+        value=getattr(node, 'value', None),
+        children=getattr(node, 'children', None),
+    ):
+        new_value = m.get('value', sentinel)
+        new_children = m.get('children', sentinel)
+        assert new_value is not sentinel or new_children is not sentinel
+        if new_value is not sentinel:
+            assert old_value != new_value
+            setattr(node, 'value', new_value)
+        if new_children is not sentinel:
+            assert isinstance(new_children, list)
+            assert old_children != new_children
+            setattr(node, 'children', new_children)
 
-        # go through the alternate mutations in reverse as they may have
-        # adverse effects on subsequent mutations, this ensures the last
-        # mutation applied is the original/default/legacy mutmut mutation
-        for new in reversed(new_list):
-            assert not callable(new)
-            if new is not None and new != old:
-                # TODO
-                # if hasattr(mutmut_config, 'pre_mutation_ast'):
-                #     mutmut_config.pre_mutation_ast(context=context)
-
-                setattr(node, key, new)
-
+        # noinspection PyArgumentList
+        with rename(func_node, suffix=f'{context.count}', prefix=class_name):
+            code = func_node.get_code()
+            if valid_syntax(code):
                 context.count += 1
 
-                # noinspection PyArgumentList
-                with rename(func_node, suffix=f'{context.count}', prefix=class_name):
-                    code = func_node.get_code()
+                context.mutants.append(func_node.name.value)
+                yield 'mutant', code, None, func_node.name.value
 
-                    try:
-                        ast.parse(dedent(code))
-                        context.mutants.append(func_node.name.value)
-                        yield 'mutant', code, None, func_node.name.value
-                    except (SyntaxError, IndentationError):
-                        pass
+            if old_value is not sentinel:
+                setattr(node, 'value', old_value)
+            if old_children is not sentinel:
+                setattr(node, 'children', old_children)
 
-                setattr(node, key, old)
+
+def valid_syntax(code):
+    try:
+        ast.parse(dedent(code))
+        return True
+    except (SyntaxError, IndentationError):
+        return False
 
 
 class FuncContext:
     def __init__(self, no_mutate_lines=None, dict_synonyms=None):
-        self.count = 0
+        self.count = 1
         self.mutants = []
         self.stack = []
         self.dict_synonyms = {'dict'} | (dict_synonyms or set())
@@ -372,6 +382,12 @@ class FuncContext:
     def is_inside_annassign(self):
         for node in self.stack:
             if node.type == 'annassign':
+                return True
+        return False
+
+    def is_inside_dict_synonym_call(self):
+        for node in self.stack:
+            if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in self.dict_synonyms:
                 return True
         return False
 

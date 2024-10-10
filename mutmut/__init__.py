@@ -5,7 +5,6 @@ from parso.python.tree import (
     Keyword,
     Name,
     Number,
-    Operator,
 )
 
 __version__ = '3.0.0'
@@ -188,7 +187,7 @@ def number_mutation(value, **_):
     result = repr(parsed + 1)
     if not result.endswith(suffix):
         result += suffix
-    return result
+    yield dict(value=result)
 
 
 def string_mutation(value, context, **_):
@@ -202,7 +201,7 @@ def string_mutation(value, context, **_):
         # We assume here that triple-quoted stuff are docs or other things
         # that mutation is meaningless for
         return prefix + value
-    return prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1]
+    yield dict(value=prefix + value[0] + 'XX' + value[1:-1] + 'XX' + value[-1])
 
 
 def partition_node_list(nodes, value):
@@ -217,9 +216,9 @@ def lambda_mutation(children, **_):
     pre, op, post = partition_node_list(children, value=':')
 
     if len(post) == 1 and getattr(post[0], 'value', None) == 'None':
-        return pre + [op] + [Number(value=' 0', start_pos=post[0].start_pos)]
+        yield dict(children=pre + [op] + [Number(value=' 0', start_pos=post[0].start_pos)])
     else:
-        return pre + [op] + [Keyword(value=' None', start_pos=post[0].start_pos)]
+        yield dict(children=pre + [op] + [Keyword(value=' None', start_pos=post[0].start_pos)])
 
 
 NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
@@ -235,12 +234,23 @@ def argument_mutation(children, context, **_):
 
     power_node = context.stack[stack_pos_of_power_node]
 
+    # `dict(a=1)` -> `dict(aXX=1)`
     if power_node.children[0].type == 'name' and power_node.children[0].value in context.dict_synonyms:
         c = children[0]
         if c.type == 'name':
             children = children[:]
             children[0] = Name(c.value + 'XX', start_pos=c.start_pos, prefix=c.prefix)
-            return children
+            yield dict(children=children)
+
+
+def arglist_mutation(children, node, **_):
+    for i, child_node in enumerate(children):
+        if child_node.type in ('name', 'argument'):
+            offset = 1
+            if len(children) > i+1:
+                if children[i+1].type == 'operator' and children[i+1].value == ',':
+                    offset = 2
+            yield dict(children=children[:i] + children[i + offset:])
 
 
 def keyword_mutation(value, context, **_):
@@ -250,7 +260,7 @@ def keyword_mutation(value, context, **_):
     if len(context.stack) > 1 and context.stack[-2].type == 'for_stmt':
         return
 
-    return {
+    target = {
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
@@ -260,40 +270,31 @@ def keyword_mutation(value, context, **_):
         'False': 'True',
     }.get(value)
 
-
-import_from_star_pattern = ASTPattern("""
-from _name import *
-#                 ^
-""")
+    if target is not None:
+        yield dict(value=target)
 
 
 def operator_mutation(value, node, **_):
-    if import_from_star_pattern.matches(node=node):
-        return
-
-    if value in ('*', '**') and node.parent.type == 'param':
+    if value in ('*', '**') and node.parent.type in ('param', 'argument'):
         return
 
     if value == '*' and node.parent.type == 'parameters':
         return
 
-    if value in ('*', '**') and node.parent.type in ('argument', 'arglist'):
-        return
-
-    return {
-        '+': '-',
-        '-': '+',
-        '*': '/',
-        '/': '*',
-        '//': '/',
-        '%': '/',
-        '<<': '>>',
-        '>>': '<<',
-        '&': '|',
-        '|': '&',
-        '^': '&',
-        '**': '*',
-        '~': '',
+    for op in {
+        '+': ['-'],
+        '-': ['+'],
+        '*': ['/'],
+        '/': ['*'],
+        '//': ['/'],
+        '%': ['/'],
+        '<<': ['>>'],
+        '>>': ['<<'],
+        '&': ['|'],
+        '|': ['&'],
+        '^': ['&'],
+        '**': ['*'],
+        '~': [''],
 
         '+=': ['-=', '='],
         '-=': ['+=', '='],
@@ -307,16 +308,17 @@ def operator_mutation(value, node, **_):
         '|=': ['&=', '='],
         '^=': ['&=', '='],
         '**=': ['*=', '='],
-        '~=': '=',
+        '~=': ['='],
 
-        '<': '<=',
-        '<=': '<',
-        '>': '>=',
-        '>=': '>',
-        '==': '!=',
-        '!=': '==',
-        '<>': '==',
-    }.get(value)
+        '<': ['<='],
+        '<=': ['<'],
+        '>': ['>='],
+        '>=': ['>'],
+        '==': ['!='],
+        '!=': ['=='],
+        '<>': ['=='],
+    }.get(value, []):
+        yield dict(value=op)
 
 
 def and_or_test_mutation(children, node, **_):
@@ -325,7 +327,7 @@ def and_or_test_mutation(children, node, **_):
         value={'and': ' or', 'or': ' and'}[children[1].value],
         start_pos=node.start_pos,
     )
-    return children
+    yield dict(children=children)
 
 
 def expression_mutation(children, **_):
@@ -344,27 +346,14 @@ def expression_mutation(children, **_):
         if len(children) > 2 and children[2].value == '=':
             children = children[:]  # we need to copy the list here, to not get in place mutation on the next line!
             children[1:] = handle_assignment(children[1:])
+            yield dict(children=children)
     elif children[1].type == 'operator' and children[1].value == '=':
-        children = handle_assignment(children)
-
-    return children
+        yield dict(children=handle_assignment(children))
 
 
 def decorator_mutation(children, **_):
     assert children[-1].type == 'newline'
-    return children[-1:]
-
-
-array_subscript_pattern = ASTPattern("""
-_name[_any]
-#       ^
-""")
-
-
-function_call_pattern = ASTPattern("""
-_name(_any)
-#       ^
-""")
+    yield dict(children=children[-1:])
 
 
 def name_mutation(node, value, **_):
@@ -376,43 +365,52 @@ def name_mutation(node, value, **_):
         # TODO: probably need to add a lot of things here... some builtins maybe, what more?
     }
     if value in simple_mutants:
-        return simple_mutants[value]
+        yield dict(value=simple_mutants[value])
 
-    if array_subscript_pattern.matches(node=node):
-        return 'None'
+    if node.parent.type == 'trailer' and node.parent.children[0].type == 'operator' and node.parent.children[0].value in ('(', ']'):
+        yield dict(value='None')
 
-    if function_call_pattern.matches(node=node):
-        return 'None'
+    # Mutate `b` in `a=b`, but not `a`!
+    if node.parent.type == 'argument' and node.parent.children[0] != node and node.parent.children[0].type != 'operator':
+        yield dict(value='None')
+
+    # Mutate `b` in `a=b`, but not `a`!
+    if node.parent.type == 'arglist':
+        yield dict(value='None')
+
+
+def trailer_mutation(children, **kwargs):
+    if children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and len(children) > 2:
+        yield from subscript_mutation(children=children, **kwargs)
 
 
 def subscript_mutation(children, context, **_):
-    if children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and len(children) > 2:
-        if len(children) == 3 and children[1].type == 'keyword' and children[1].value == 'None':
-            return
-        if context.is_inside_annassign():
-            return
-        return [
-            children[0],
-            Name(value='None', start_pos=children[1].start_pos),
-            children[-1],
-        ]
-    return
+    if len(children) == 3 and children[1].type == 'keyword' and children[1].value == 'None':
+        return
+    if context.is_inside_annassign():
+        return
+    yield dict(children=[
+        children[0],
+        Name(value='None', start_pos=children[1].start_pos),
+        children[-1],
+    ])
 
 
-mutations_by_type = {
-    'operator': dict(value=operator_mutation),
-    'keyword': dict(value=keyword_mutation),
-    'number': dict(value=number_mutation),
-    'name': dict(value=name_mutation),
-    'string': dict(value=string_mutation),
-    'argument': dict(children=argument_mutation),
-    'or_test': dict(children=and_or_test_mutation),
-    'and_test': dict(children=and_or_test_mutation),
-    'lambdef': dict(children=lambda_mutation),
-    'expr_stmt': dict(children=expression_mutation),
-    'decorator': dict(children=decorator_mutation),
-    'annassign': dict(children=expression_mutation),
-    'trailer': dict(children=subscript_mutation),
+mutation_by_ast_type = {
+    'operator': operator_mutation,
+    'keyword': keyword_mutation,
+    'number': number_mutation,
+    'name': name_mutation,
+    'string': string_mutation,
+    'argument': argument_mutation,
+    'arglist': arglist_mutation,
+    'or_test': and_or_test_mutation,
+    'and_test': and_or_test_mutation,
+    'lambdef': lambda_mutation,
+    'expr_stmt': expression_mutation,
+    'decorator': decorator_mutation,
+    'annassign': expression_mutation,
+    'trailer': trailer_mutation,
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes

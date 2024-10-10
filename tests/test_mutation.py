@@ -1,7 +1,6 @@
 import pytest
 from parso import parse
 
-from mutmut import array_subscript_pattern, function_call_pattern, ASTPattern
 from mutmut3 import (
     FuncContext,
     pragma_no_mutate_lines,
@@ -10,69 +9,27 @@ from mutmut3 import (
 )
 
 
-def test_matches_py3():
-    node = parse('a: Optional[int] = 7\n').children[0].children[0].children[1].children[1].children[1].children[1]
-    assert not array_subscript_pattern.matches(node=node)
-
-
-def test_matches():
-    node = parse('from foo import bar').children[0]
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
-    assert not array_subscript_pattern.matches(node=node)
-    assert not function_call_pattern.matches(node=node)
-
-    node = parse('foo[bar]\n').children[0].children[0].children[1].children[1]
-    assert array_subscript_pattern.matches(node=node)
-
-    node = parse('foo(bar)\n').children[0].children[0].children[1].children[1]
-    assert function_call_pattern.matches(node=node)
-
-
-def test_ast_pattern_for_loop():
-    p = ASTPattern(
-        """
-for x in y:
-#   ^ n  ^ match
-    pass
-    # ^ x
-""",
-        x=dict(
-            of_type='simple_stmt',
-            marker_type='any',
-        ),
-        n=dict(
-            marker_type='name',
-        ),
-        match=dict(
-            marker_type='any',
-        )
-    )
-
-    n = parse("""for a in [1, 2, 3]:
-    if foo:
-        continue
-""").children[0].children[3]
-    assert p.matches(node=n)
-
-    n = parse("""for a, b in [1, 2, 3]:
-    if foo:
-        continue
-""").children[0].children[3]
-    assert p.matches(node=n)
-
-
 @pytest.mark.parametrize(
     'original, expected', [
+        ('foo(a, *args, **kwargs)', [
+            'foo( *args, **kwargs)',
+            'foo(None, *args, **kwargs)',
+            'foo(a, **kwargs)',
+            'foo(a, *args,)',
+        ]),
         # TODO: Fix these
         # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
-        # ('a(b)', 'a(None)'),
-        # ('s[x]', 's[None]'),
+        ('a(b)', 'a(None)'),
         # ("x if a else b", "x if a else b"),
-        ("dict(a=b)", "dict(aXX=b)"),
+        ("dict(a=None)", ["dict(aXX=None)"]),
+        ("dict(a=b)", ["dict(aXX=b)", 'dict(a=None)']),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', [
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=True)))',
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(showXX=False)))',
+            'lambda **kwargs: Variable.integer(**setdefaults(None, dict(show=False)))',
+            'lambda **kwargs: Variable.integer(**setdefaults( dict(show=False)))',
+            # TODO: this mutant should exist... I guess we need to handle method calls separately from function calls?
+            # 'lambda **kwargs: Variable.integer()',
             'lambda **kwargs: None',
         ]),
         ('a: Optional[int] = None', 'a: Optional[int] = ""'),
@@ -107,6 +64,7 @@ for x in y:
         ('a and b', 'a or b'),
         ('a = b', 'a = None'),
         ('a = b = c = x', 'a = b = c = None'),
+
         # subscript
         ('a[None]', []),
         ('a[b]', 'a[None]'),
@@ -138,12 +96,11 @@ for x in y:
         ('def foo(s: str): pass', []),
         ('def foo(a, *, b): pass', []),
         ('a(None)', []),
-        ('foo(a, *args, **kwargs)', []),
         ("'''foo'''", []),  # don't mutate things we assume to be docstrings
         ("r'''foo'''", []),  # don't mutate things we assume to be docstrings
         ('(x for x in [])', []),  # don't mutate 'in' in generators
-        ("DictSynonym(a=b)", "DictSynonym(aXX=b)"),
-        ("NotADictSynonym(a=b)", []),
+        ("DictSynonym(a=b)", ["DictSynonym(aXX=b)", 'DictSynonym(a=None)']),
+        ("NotADictSynonym(a=b)", "NotADictSynonym(a=None)"),
         ('from foo import *', []),
         ('from .foo import *', []),
         ('import foo', []),
@@ -152,6 +109,8 @@ for x in y:
         ('for x in y: pass', []),
         ('def foo(a, *args, **kwargs): pass', []),
         ('import foo', []),
+        ('isinstance(a, b)', []),
+        ('len(a)', []),
     ]
 )
 def test_basic_mutations(original, expected):
@@ -161,11 +120,12 @@ def test_basic_mutations(original, expected):
     node = func_node.children[-1]
     assert node.get_code().strip() == original.strip()
     mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(dict_synonyms={'DictSynonym'}), node=node))
-    actual = [
+    actual = sorted([
         parse(mutant).children[0].children[-1].get_code().strip()
         for (type_, mutant, _, _) in mutants
         if type_ == 'mutant'
-    ]
+    ])
+    expected = sorted(expected)
     assert actual == expected
 
 
@@ -246,39 +206,18 @@ def foo():
 '''
     mutants = mutants_for_source(source)
     assert mutants == [
-        '''
-def foo__mutmut_1():    
-    dict(aXX=b, c=d)
-''',
-'''
-def foo__mutmut_2():    
-    dict(a=b, cXX=d)
-'''
+        '\ndef foo__mutmut_1():    \n    dict(a=None, c=d)\n',
+        '\ndef foo__mutmut_2():    \n    dict(aXX=b, c=d)\n',
+        '\ndef foo__mutmut_3():    \n    dict(a=b, c=None)\n',
+        '\ndef foo__mutmut_4():    \n    dict(a=b, cXX=d)\n',
+        '\ndef foo__mutmut_5():    \n    dict( c=d)\n',
+        '\ndef foo__mutmut_6():    \n    dict(a=b,)\n',
     ]
 
 
 def test_syntax_error():
     with pytest.raises(Exception):
         mutants_for_source(':!')
-
-# TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
-# def test_mutation_index():
-#     source = '''
-#
-# a = b
-# b = c + a
-# d = 4 - 1
-#
-#
-#     '''.strip()
-#     num_mutations = count_mutations(Context(source=source))
-#     mutants = [mutate(Context(source=source, mutation_id=i)) for i in range(num_mutations)]
-#     assert len(mutants) == len(set(mutants))  # no two mutants should be the same
-#
-#     # invalid mutation index should not mutate anything
-#     mutated_source, count = mutate(Context(source=source, mutation_id=num_mutations + 1))
-#     assert mutated_source.strip() == source
-#     assert count == 0
 
 
 def test_bug_github_issue_18():
