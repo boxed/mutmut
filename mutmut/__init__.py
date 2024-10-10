@@ -5,6 +5,7 @@ from parso.python.tree import (
     Keyword,
     Name,
     Number,
+    Operator,
 )
 
 __version__ = '3.0.0'
@@ -190,7 +191,10 @@ def number_mutation(value, **_):
     return result
 
 
-def string_mutation(value, **_):
+def string_mutation(value, context, **_):
+    if context.is_inside_annassign():
+        return
+
     prefix = value[:min([x for x in [value.find('"'), value.find("'")] if x != -1])]
     value = value[len(prefix):]
 
@@ -381,6 +385,20 @@ def name_mutation(node, value, **_):
         return 'None'
 
 
+def subscript_mutation(children, context, **_):
+    if children[0].type == 'operator' and children[0].value == '[' and children[-1].type == 'operator' and children[-1].value == ']' and len(children) > 2:
+        if len(children) == 3 and children[1].type == 'keyword' and children[1].value == 'None':
+            return
+        if context.is_inside_annassign():
+            return
+        return [
+            children[0],
+            Name(value='None', start_pos=children[1].start_pos),
+            children[-1],
+        ]
+    return
+
+
 mutations_by_type = {
     'operator': dict(value=operator_mutation),
     'keyword': dict(value=keyword_mutation),
@@ -394,6 +412,7 @@ mutations_by_type = {
     'expr_stmt': dict(children=expression_mutation),
     'decorator': dict(children=decorator_mutation),
     'annassign': dict(children=expression_mutation),
+    'trailer': dict(children=subscript_mutation),
 }
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes

@@ -65,17 +65,18 @@ for x in y:
 @pytest.mark.parametrize(
     'original, expected', [
         # TODO: Fix these
-        ('a: int = 1', ['a: int = 2', 'a: int = None']),
-        # ('a: Optional[int] = None', 'a: Optional[int] = ""'),
+        # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
         # ('a(b)', 'a(None)'),
-        # ('a[b]', 'a[None]'),
         # ('s[x]', 's[None]'),
         # ("x if a else b", "x if a else b"),
-        # ("dict(a=b)", "dict(aXX=b)"),
-        # ("Struct(a=b)", "Struct(aXX=b)"),
-        # ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
-        # ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
-        # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
+        ("dict(a=b)", "dict(aXX=b)"),
+        ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', [
+            'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=True)))',
+            'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(showXX=False)))',
+            'lambda **kwargs: None',
+        ]),
+        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
+        ('a: int = 1', ['a: int = 2', 'a: int = None']),
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
         ('1+1', ['2+1', '1-1', '1+2']),
@@ -106,9 +107,13 @@ for x in y:
         ('a and b', 'a or b'),
         ('a = b', 'a = None'),
         ('a = b = c = x', 'a = b = c = None'),
-        ('s[0]', 's[1]'),
-        ('s[0] = a', ['s[1] = a', 's[0] = None']),
-        ('s[1:]', 's[2:]'),
+        # subscript
+        ('a[None]', []),
+        ('a[b]', 'a[None]'),
+        ('s[0]', ['s[1]', 's[None]']),
+        ('s[0] = a', ['s[1] = a', 's[None] = a', 's[0] = None']),
+        ('s[1:]', ['s[2:]', 's[None]']),
+
         ('1j', '2j'),
         ('1.0j', '2.0j'),
         ('0o1', '2'),
@@ -132,12 +137,12 @@ for x in y:
         ('lambda: None', 'lambda: 0'),
         ('def foo(s: str): pass', []),
         ('def foo(a, *, b): pass', []),
-        ('a[None]', []),
         ('a(None)', []),
         ('foo(a, *args, **kwargs)', []),
         ("'''foo'''", []),  # don't mutate things we assume to be docstrings
         ("r'''foo'''", []),  # don't mutate things we assume to be docstrings
         ('(x for x in [])', []),  # don't mutate 'in' in generators
+        ("DictSynonym(a=b)", "DictSynonym(aXX=b)"),
         ("NotADictSynonym(a=b)", []),
         ('from foo import *', []),
         ('from .foo import *', []),
@@ -155,7 +160,7 @@ def test_basic_mutations(original, expected):
     func_node = parse(f'def fake():\n    {original}').children[0]
     node = func_node.children[-1]
     assert node.get_code().strip() == original.strip()
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
+    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(dict_synonyms={'DictSynonym'}), node=node))
     actual = [
         parse(mutant).children[0].children[-1].get_code().strip()
         for (type_, mutant, _, _) in mutants
@@ -215,8 +220,10 @@ def test_function_with_annotation():
     mutants = mutants_for_source(source)
     assert mutants == [
         'def capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
-        'def capitalize__mutmut_2(s : str):\n    return s[0].upper() - s[1:] if s else s',
-        'def capitalize__mutmut_3(s : str):\n    return s[0].upper() + s[2:] if s else s',
+        'def capitalize__mutmut_2(s : str):\n    return s[None].upper() + s[1:] if s else s',
+        'def capitalize__mutmut_3(s : str):\n    return s[0].upper() - s[1:] if s else s',
+        'def capitalize__mutmut_4(s : str):\n    return s[0].upper() + s[2:] if s else s',
+        'def capitalize__mutmut_5(s : str):\n    return s[0].upper() + s[None] if s else s'
     ]
 
 

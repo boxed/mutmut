@@ -357,16 +357,22 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
 
 
 class FuncContext:
-    def __init__(self, no_mutate_lines=None):
+    def __init__(self, no_mutate_lines=None, dict_synonyms=None):
         self.count = 0
         self.mutants = []
         self.stack = []
-        self.dict_synonyms = {'dict'}
+        self.dict_synonyms = {'dict'} | (dict_synonyms or set())
         self.no_mutate_lines = no_mutate_lines or []
 
     def exclude_node(self, node):
         if node.start_pos[0] in self.no_mutate_lines:
             return True
+        return False
+
+    def is_inside_annassign(self):
+        for node in self.stack:
+            if node.type == 'annassign':
+                return True
         return False
 
 
