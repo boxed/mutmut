@@ -28,7 +28,7 @@ class ASTPattern:
 
         self.definitions = definitions
 
-        self.module = parse(source)
+        self.module = parse(source, error_recovery=False)
 
         self.markers = []
 
@@ -87,7 +87,7 @@ class ASTPattern:
                 check_children = False  # TODO: really? or just do this for 'any'?
 
         # Check node type strictly
-        if pattern.type != node.type:
+        elif pattern.type != node.type:
             return False
 
         # Match children
@@ -222,9 +222,6 @@ NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 
 def argument_mutation(children, context, **_):
-    """
-    :type context: Context
-    """
     if len(context.stack) >= 3 and context.stack[-3].type in ('power', 'atom_expr'):
         stack_pos_of_power_node = -3
     elif len(context.stack) >= 4 and context.stack[-4].type in ('power', 'atom_expr'):
@@ -253,8 +250,8 @@ def keyword_mutation(value, context, **_):
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
-        'break': 'continue',
-        'continue': 'break',
+        # 'break': 'continue',
+        # 'continue': 'break',
         'True': 'False',
         'False': 'True',
     }.get(value)
@@ -329,7 +326,7 @@ def and_or_test_mutation(children, node, **_):
 
 def expression_mutation(children, **_):
     def handle_assignment(children):
-        mutation_index = -1  # we mutate the last value to handle multiple assignement
+        mutation_index = -1  # we mutate the last value to handle multiple assignment
         if getattr(children[mutation_index], 'value', '---') != 'None':
             x = ' None'
         else:

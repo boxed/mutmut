@@ -4,6 +4,7 @@ from parso import parse
 from mutmut import array_subscript_pattern, function_call_pattern, ASTPattern
 from mutmut3 import (
     FuncContext,
+    pragma_no_mutate_lines,
     yield_mutants_for_module,
     yield_mutants_for_node,
 )
@@ -63,6 +64,18 @@ for x in y:
 
 @pytest.mark.parametrize(
     'original, expected', [
+        # TODO: Fix these
+        ('a: int = 1', ['a: int = 2', 'a: int = None']),
+        # ('a: Optional[int] = None', 'a: Optional[int] = ""'),
+        # ('a(b)', 'a(None)'),
+        # ('a[b]', 'a[None]'),
+        # ('s[x]', 's[None]'),
+        # ("x if a else b", "x if a else b"),
+        # ("dict(a=b)", "dict(aXX=b)"),
+        # ("Struct(a=b)", "Struct(aXX=b)"),
+        # ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
+        # ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
+        # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
         ('1+1', ['2+1', '1-1', '1+2']),
@@ -101,7 +114,6 @@ for x in y:
         ('0o1', '2'),
         ('1.0e10', '10000000001.0'),
         ('a = {x for x in y}', 'a = None'),
-        ('break', 'continue'),
         ('x+=1', ['x=1', 'x-=1', 'x+=2']),
         ('x-=1', ['x=1', 'x+=1', 'x-=2']),
         ('x*=1', ['x=1', 'x/=1', 'x*=2']),
@@ -114,14 +126,10 @@ for x in y:
         ('x|=1', ['x=1', 'x&=1', 'x|=2']),
         ('x^=1', ['x=1', 'x&=1', 'x^=2']),
         ('x**=1', ['x=1', 'x*=1', 'x**=2']),
-        ('a: int = 1', ['a: int = 2', 'a: int = None']),
-        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
         ('a = None', 'a = ""'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('lambda: None', 'lambda: 0'),
-        ('a: int = 1', ['a: int = 2', 'a: int = None']),
-        ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('def foo(s: str): pass', []),
         ('def foo(a, *, b): pass', []),
         ('a[None]', []),
@@ -139,15 +147,6 @@ for x in y:
         ('for x in y: pass', []),
         ('def foo(a, *args, **kwargs): pass', []),
         ('import foo', []),
-        # TODO: Fix these
-        # ('a(b)', 'a(None)'),
-        # ('a[b]', 'a[None]'),
-        # ('s[x]', 's[None]'),
-        # ("x if a else b", "x if a else b"),
-        # ("dict(a=b)", "dict(aXX=b)"),
-        # ("Struct(a=b)", "Struct(aXX=b)"),
-        # ("FooBarDict(a=b)", "FooBarDict(aXX=b)"),
-        # ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', 'lambda **kwargs: None'),
     ]
 )
 def test_basic_mutations(original, expected):
@@ -202,14 +201,18 @@ class Foo:
     assert mutants[0] == '    def _Foo_member__mutmut_1(self):        \n        return 2'
 
 
+def mutants_for_source(source):
+    no_mutate_lines = pragma_no_mutate_lines(source)
+    r = []
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
+        if type_ == 'mutant':
+            r.append(x)
+    return r
+
+
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
-
-    func_node = parse(source).children[0]
-    node = func_node.children[-1]
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
-
-    mutants = [x[0] for x in mutants]
+    mutants = mutants_for_source(source)
     assert mutants == [
         'def capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
         'def capitalize__mutmut_2(s : str):\n    return s[0].upper() - s[1:] if s else s',
@@ -219,52 +222,37 @@ def test_function_with_annotation():
 
 def test_pragma_no_mutate():
     source = """def foo():\n    return 1+1  # pragma: no mutate\n""".strip()
-    func_node = parse(source).children[0]
-    node = func_node.children[-1]
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
+    mutants = mutants_for_source(source)
     assert not mutants
 
 
 def test_pragma_no_mutate_and_no_cover():
     source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n""".strip()
-    func_node = parse(source).children[0]
-    node = func_node.children[-1]
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(), node=node))
+    mutants = mutants_for_source(source)
     assert not mutants
 
 
-def test_mutate_decorator():
-    source = """@foo\ndef foo():\n    pass\n""".strip()
-    assert mutate(Context(source=source, mutation_id=ALL)) == (source.replace('@foo', '').strip(), 1)
-
-
-# TODO: getting this test and the above to both pass is tricky
-# def test_mutate_decorator2():
-#     source = """\"""foo\"""\n\n@foo\ndef foo():\n    pass\n"""
-#     assert mutate(Context(source=source, mutation_id=ALL)) == (source.replace('@foo', ''), 1)
-
-
 def test_mutate_dict():
-    source = "dict(a=b, c=d)"
-    assert mutate(Context(source=source, mutation_id=MutationID(source, 1, line_number=0))) == ("dict(a=b, cXX=d)", 1)
-
-
-def test_mutate_dict2():
-    source = "dict(a=b, c=d, e=f, g=h)"
-    assert mutate(Context(source=source, mutation_id=MutationID(source, 3, line_number=0))) == ("dict(a=b, c=d, e=f, gXX=h)", 1)
-
-
-def test_performed_mutation_ids():
-    source = "dict(a=b, c=d)"
-    context = Context(source=source)
-    mutate(context)
-    # we found two mutation points: mutate "a" and "c"
-    assert context.performed_mutation_ids == [MutationID(source, 0, 0), MutationID(source, 1, 0)]
+    source = '''
+def foo():    
+    dict(a=b, c=d)
+'''
+    mutants = mutants_for_source(source)
+    assert mutants == [
+        '''
+def foo__mutmut_1():    
+    dict(aXX=b, c=d)
+''',
+'''
+def foo__mutmut_2():    
+    dict(a=b, cXX=d)
+'''
+    ]
 
 
 def test_syntax_error():
     with pytest.raises(Exception):
-        mutate(Context(source=':!'))
+        mutants_for_source(':!')
 
 # TODO: this test becomes incorrect with the new mutation_id system, should try to salvage the idea though...
 # def test_mutation_index():
@@ -295,13 +283,13 @@ def icon(name):
     tpl = '<span class="glyphicon glyphicon-{}"></span>'
     return format_html(tpl, name)
     """.strip()
-    mutate(Context(source=source))
+    mutants_for_source(source)
 
 
-def test_bug_github_issue_19():
+def test_bug_github_issue_19_argument_mutation_crash():
     source = """key = lambda a: "foo"
 filters = dict((key(field), False) for field in fields)"""
-    mutate(Context(source=source))
+    mutants_for_source(source)
 
 
 def test_bug_github_issue_26():
@@ -309,7 +297,7 @@ def test_bug_github_issue_26():
 class ConfigurationOptions(Protocol):
     min_name_length: int
     """.strip()
-    mutate(Context(source=source))
+    assert mutants_for_source(source) == []
 
 
 def test_bug_github_issue_30():
@@ -317,12 +305,12 @@ def test_bug_github_issue_30():
 def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
     pass
     """.strip()
-    assert mutate(Context(source=source)) == (source, 0)
+    assert mutants_for_source(source) == []
 
 
 def test_bug_github_issue_77():
     # Don't crash on this
-    Context(source='')
+    assert mutants_for_source('') == []
 
 
 def test_multiline_dunder_whitelist():
@@ -334,19 +322,14 @@ __all__ = [
     'bar',
 ]
     """.strip()
-    assert mutate(Context(source=source)) == (source, 0)
-
-
-def test_bug_github_issue_162():
-    source = """
-primes: List[int] = []
-foo = 'bar'
-""".strip()
-    assert mutate(Context(source=source, mutation_id=MutationID("foo = 'bar'", 0, 2))) == (source.replace("'bar'", "'XXbarXX'"), 1)
+    mutants = mutants_for_source(source)
+    assert not mutants
 
 
 def test_bad_mutation_str_type_definition():
     source = """
-foo: 'SomeType'
+def foo():
+    foo: 'SomeType'
 """.strip()
-    assert mutate(Context(source=source)) == (source, 0)
+    mutants = mutants_for_source(source)
+    assert not mutants

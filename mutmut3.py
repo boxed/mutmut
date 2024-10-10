@@ -51,6 +51,7 @@ import mutmut
 # TODO: pragma no mutate should end up in `skipped` category
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 # TODO: exclude mutating static typing
+# TODO: implement timeout
 
 
 NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
@@ -213,7 +214,7 @@ def create_mutants_for_file(filename, output_path):
     hash_by_function_name = {}
 
     with open(output_path, 'w') as out:
-        for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source), no_mutate_lines):
+        for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
             out.write(x)
             if mutant_name:
                 mutant_names.append(mutant_name)
@@ -291,20 +292,13 @@ def rename(node, *, suffix, prefix):
     node.name.value = orig_name
 
 
-def yield_mutants_for_node(*, func_node, class_name, context, node):
-    return_annotation_started = False
+def yield_mutants_for_node(*, func_node, class_name=None, context, node):
+    if node.type == 'tfpdef':
+        yield 'filler', node.get_code(), None, None
+        return
 
     if hasattr(node, 'children'):
         for child_node in node.children:
-            if child_node.type == 'operator' and child_node.value == '->':
-                return_annotation_started = True
-
-            if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
-                return_annotation_started = False
-
-            if return_annotation_started:
-                continue
-
             context.stack.append(child_node)
             try:
                 yield from yield_mutants_for_node(func_node=func_node, class_name=class_name, context=context, node=child_node)
@@ -367,7 +361,7 @@ class FuncContext:
         self.count = 0
         self.mutants = []
         self.stack = []
-        self.dict_synonyms = {}
+        self.dict_synonyms = {'dict'}
         self.no_mutate_lines = no_mutate_lines or []
 
     def exclude_node(self, node):
@@ -392,7 +386,18 @@ def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
 
+    return_annotation_started = False
+
     for child_node in node.children:
+        if child_node.type == 'operator' and child_node.value == '->':
+            return_annotation_started = True
+
+        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
+            return_annotation_started = False
+
+        if return_annotation_started:
+            continue
+
         context.stack.append(child_node)
         try:
             yield from yield_mutants_for_node(func_node=node, class_name=class_name, node=child_node, context=context)
