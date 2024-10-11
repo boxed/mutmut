@@ -41,10 +41,15 @@ from typing import (
 
 import click
 from parso import parse
+from setproctitle import setproctitle
 
 import mutmut
 
+mutmut.duration_by_test = {}
+
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
+
+# TODO: only count a test for a function if the stack depth to get to the test < some configurable limit.
 
 # TODO: collect tests always: first run we collect to update the known list of tests, then we run pytest with that list for stats
 #           - when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
@@ -234,15 +239,15 @@ def create_mutants_for_file(filename, output_path):
             print(output_path, 'has invalid syntax: ', e)
             exit(1)
 
-    mutation_data = MutationData(path=filename)
+    source_file_mutation_data = SourceFileMutationData(path=filename)
     module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
-    mutation_data.result_by_key = {
+    source_file_mutation_data.exit_code_by_key = {
          '.'.join([module_name, x]).replace('.__init__.', '.'): None
         for x in mutant_names
     }
-    mutation_data.hash_by_function_name = hash_by_function_name
+    source_file_mutation_data.hash_by_function_name = hash_by_function_name
     assert None not in hash_by_function_name
-    mutation_data.save()
+    source_file_mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
 
@@ -466,13 +471,13 @@ def yield_mutants_for_module(node, no_mutate_lines):
             yield 'filler', child_node.get_code(), None, None
 
 
-class MutationData:
+class SourceFileMutationData:
     def __init__(self, *, path):
         self.path = path
         self.meta_path = Path('mutants') / (str(path) + '.meta')
         self.meta = None
         self.key_by_pid = {}
-        self.result_by_key = {}
+        self.exit_code_by_key = {}
         self.hash_by_function_name = {}
 
     def load(self):
@@ -482,7 +487,7 @@ class MutationData:
         except FileNotFoundError:
             return
 
-        self.result_by_key = self.meta.pop('result_by_key')
+        self.exit_code_by_key = self.meta.pop('exit_code_by_key')
         self.hash_by_function_name = self.meta.pop('hash_by_function_name')
         assert not self.meta, self.meta  # We should read all the data!
 
@@ -490,15 +495,15 @@ class MutationData:
         self.key_by_pid[pid] = key
 
     def register_result(self, *, pid, exit_code):
-        assert self.key_by_pid[pid] in self.result_by_key
-        self.result_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
+        assert self.key_by_pid[pid] in self.exit_code_by_key
+        self.exit_code_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         self.save()
 
     def save(self):
         with open(self.meta_path, 'w') as f:
             json.dump(dict(
-                result_by_key=self.result_by_key,
+                exit_code_by_key=self.exit_code_by_key,
                 hash_by_function_name=self.hash_by_function_name,
             ), f, indent=4)
 
@@ -541,9 +546,15 @@ def change_cwd(path):
 # For pytest. This function gets installed by pytest's plugin system
 def pytest_runtest_teardown(item, nextitem):
     unused(nextitem)
-    for function in mutmut._stats:
-        mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
-    mutmut._stats.clear()
+    if os.environ['MUTANT_UNDER_TEST'] == 'stats':
+        for function in mutmut._stats:
+            mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
+        mutmut._stats.clear()
+
+
+def pytest_runtest_makereport(item, call):
+    if os.environ['MUTANT_UNDER_TEST'] == 'stats':
+        mutmut.duration_by_test[item.nodeid] = call.duration
 
 
 class PytestRunner(TestRunner):
@@ -646,12 +657,12 @@ class Stat:
     check_was_interrupted_by_user: int
 
 
-def collect_stat(m: MutationData):
+def collect_stat(m: SourceFileMutationData):
     r = {
         k.replace(' ', '_'): 0
         for k in status_by_exit_code.values()
     }
-    for k, v in m.result_by_key.items():
+    for k, v in m.exit_code_by_key.items():
         r[status_by_exit_code[v].replace(' ', '_')] += 1
     return Stat(
         **r,
@@ -659,8 +670,8 @@ def collect_stat(m: MutationData):
     )
 
 
-def collect_stats(mutation_data_by_path):
-    stats = [collect_stat(x) for x in mutation_data_by_path.values()]
+def collect_stats(source_file_mutation_data_by_path):
+    stats = [collect_stat(x) for x in source_file_mutation_data_by_path.values()]
     return Stat(
         not_checked=sum(x.not_checked for x in stats),
         killed=sum(x.killed for x in stats),
@@ -675,8 +686,8 @@ def collect_stats(mutation_data_by_path):
     )
 
 
-def print_stats(mutation_data_by_path, force_output=False):
-    s = collect_stats(mutation_data_by_path)
+def print_stats(source_file_mutation_data_by_path, force_output=False):
+    s = collect_stats(source_file_mutation_data_by_path)
     print_status(f'{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}', force_output=force_output)
 
 
@@ -777,35 +788,13 @@ def cli():
     pass
 
 
-@cli.command()
-@click.option('--max-children', type=int)
-@click.argument('mutant_names', required=False, nargs=-1)
-def run(mutant_names, *, max_children):
-    if mutant_names:
-        assert isinstance(mutant_names, (tuple, list)), mutant_names
-
-    # TODO: run no-ops once in a while to detect if we get false negatives
-    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
-
-    start = datetime.now()
-    print('generating mutants...')
-    config = read_config()
-    create_mutants(config)
-    copy_also_copy_files(config)
-    time = datetime.now() - start
-    print(f'    done in {round(time.total_seconds()*1000)}ms', )
-
-    sys.path.insert(0, os.path.abspath('mutants'))
-
-    # TODO: config/option for runner
-    # runner = HammettRunner()
-    runner = PytestRunner()
-    runner.prepare_main_test_run()
-
-    # TODO: run these steps only if we have mutants to test
+def collect_or_load_stats(runner):
     try:
         with open('mutants/mutmut-stats.json') as f:
-            mutmut.tests_by_function = {k: set(v) for k, v in json.load(f).items()}
+            data = json.load(f)
+            mutmut.tests_by_function = {k: set(v) for k, v in data.pop('tests_by_function').items()}
+            mutmut.duration_by_test = data.pop('duration_by_test')
+            assert not data, data
     except (FileNotFoundError, JSONDecodeError):
         mutmut.tests_by_function = None
 
@@ -832,11 +821,102 @@ def run(mutant_names, *, max_children):
             return
 
         with open('mutants/mutmut-stats.json', 'w') as f:
-            json.dump({k: list(v) for k, v in mutmut.tests_by_function.items()}, f, indent=4)
+            json.dump(dict(
+                tests_by_function={k: list(v) for k, v in mutmut.tests_by_function.items()},
+                duration_by_test=mutmut.duration_by_test,
+            ), f, indent=4)
+
+
+def collect_source_file_mutation_data(*, config, mutant_names):
+    source_file_mutation_data_by_path: Dict[str, SourceFileMutationData] = {}
+
+    for path in walk_source_files():
+        if config.should_ignore_for_mutation(path):
+            continue
+        assert path not in source_file_mutation_data_by_path
+        m = SourceFileMutationData(path=path)
+        m.load()
+        source_file_mutation_data_by_path[str(path)] = m
+
+    mutants = [
+        (m, key, result)
+        for path, m in source_file_mutation_data_by_path.items()
+        for key, result in m.exit_code_by_key.items()
+    ]
+
+    if mutant_names:
+        filtered_mutants = [
+            (m, key, result)
+            for m, key, result in mutants
+            if key in mutant_names or any(fnmatch.fnmatch(key, mutant_name) for mutant_name in mutant_names)
+        ]
+        mutants = filtered_mutants
+    return mutants, source_file_mutation_data_by_path
+
+
+def estimated_worst_case_time(key):
+    tests = mutmut.tests_by_function.get(orig_function_name_from_key(key), set())
+    return sum(mutmut.duration_by_test[t] for t in tests)
+
+
+@cli.command()
+@click.argument('mutant_names', required=False, nargs=-1)
+def print_time_estimates(mutant_names):
+    assert isinstance(mutant_names, (tuple, list)), mutant_names
+    config = read_config()
+
+    runner = PytestRunner()
+    runner.prepare_main_test_run()
+
+    collect_or_load_stats(runner)
+
+    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
+
+    times_and_keys = [
+        (estimated_worst_case_time(key), key)
+        for m, key, result in mutants
+    ]
+
+    for time, key in sorted(times_and_keys):
+        if not time:
+            print(f'<no tests>', key)
+        else:
+            print(f'{int(time*1000)}ms', key)
+
+
+@cli.command()
+@click.option('--max-children', type=int)
+@click.argument('mutant_names', required=False, nargs=-1)
+def run(mutant_names, *, max_children):
+    assert isinstance(mutant_names, (tuple, list)), mutant_names
+
+    # TODO: run no-ops once in a while to detect if we get false negatives
+    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
+
+    start = datetime.now()
+    print('generating mutants...')
+    os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
+    config = read_config()
+    create_mutants(config)
+    copy_also_copy_files(config)
+    time = datetime.now() - start
+    print(f'    done in {round(time.total_seconds()*1000)}ms', )
+
+    sys.path.insert(0, os.path.abspath('mutants'))
+
+    # TODO: config/option for runner
+    # runner = HammettRunner()
+    runner = PytestRunner()
+    runner.prepare_main_test_run()
+
+    # TODO: run these steps only if we have mutants to test
+
+    collect_or_load_stats(runner)
 
     print('running clean tests')
     os.environ['MUTANT_UNDER_TEST'] = ''
     with CatchOutput() as output_catcher:
+        output_catcher.stop()
         tests = tests_for_mutant_names(mutant_names)
 
         clean_test_exit_code = runner.run_tests(key=None, tests=tests)
@@ -854,76 +934,53 @@ def run(mutant_names, *, max_children):
 
     def read_one_child_exit_status():
         pid, exit_code = os.wait()
-        mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
+        source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
 
-    mutation_data_by_path: Dict[str, MutationData] = {}
-    mutation_data_by_pid: Dict[int, MutationData] = {}  # many pids map to one MutationData
+    source_file_mutation_data_by_pid: Dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
     running_children = 0
     if max_children is None:
         max_children = os.cpu_count() or 4
 
-    start = datetime.now()
-
     count_tried = 0
 
-    for path in walk_source_files():
-        if config.should_ignore_for_mutation(path):
-            continue
-        assert path not in mutation_data_by_path
-        m = MutationData(path=path)
-        m.load()
-        mutation_data_by_path[str(path)] = m
+    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
 
-    mutants = [
-        (m, key, result)
-        for path, m in mutation_data_by_path.items()
-        for key, result in m.result_by_key.items()
-    ]
-
-    if mutant_names:
-        mutant_name_patterns = [x for x in mutant_names if '*' in x]
-
-        mutants = [
-            (m, key, result)
-            for m, key, result in mutants
-            if key in mutant_names or any(fnmatch.fnmatch(key, p) for p in mutant_name_patterns)
-        ]
+    # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
+    mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]), reverse=True)
 
     gc.freeze()
 
+    start = datetime.now()
     try:
         print('Running mutation testing...')
 
         for m, key, result in mutants:
-            print_stats(mutation_data_by_path)
+            print_stats(source_file_mutation_data_by_path)
 
             key = key.replace('__init__.', '')
             # Rerun mutant if it's explicitly mentioned, but otherwise let the result stand
             if not mutant_names and result is not None:
                 continue
 
-            # # single threaded:
-            # runner.prepare_main_test_run()
-            # os.environ['MUTANT_UNDER_TEST'] = key
-            # function = function_name_from_key(key)
-            # tests = mutmut.tests_by_function[function]
-            # result = runner.run_tests(key=key, tests=tests)
-
             function = orig_function_name_from_key(key)
             tests = mutmut.tests_by_function.get(function, [])
 
             # print(tests)
             if not tests:
-                m.result_by_key[key] = 33
+                m.exit_code_by_key[key] = 33
                 continue
 
             pid = os.fork()
             if not pid:
                 # In the child
                 os.environ['MUTANT_UNDER_TEST'] = key
+                setproctitle(f'mutmut: {key}')
                 function = orig_function_name_from_key(key)
 
                 tests = mutmut.tests_by_function[function]
+
+                # Run fast tests first
+                tests = sorted(tests, key=lambda name: mutmut.duration_by_test[name])
                 if not tests:
                     os._exit(33)
 
@@ -936,7 +993,7 @@ def run(mutant_names, *, max_children):
                 os._exit(result)
             else:
                 # in the parent
-                mutation_data_by_pid[pid] = m
+                source_file_mutation_data_by_pid[pid] = m
                 m.register_pid(pid=pid, key=key)
                 running_children += 1
 
@@ -957,10 +1014,23 @@ def run(mutant_names, *, max_children):
 
     t = datetime.now() - start
 
-    print_stats(mutation_data_by_path, force_output=True)
+    print_stats(source_file_mutation_data_by_path, force_output=True)
     print()
+    print(f'{count_tried / t.total_seconds():.2f} mutations/second')
 
-    print('mutations/s:', count_tried / t.total_seconds())
+    if mutant_names:
+        print()
+        print('Mutant results')
+        print('--------------')
+        exit_code_by_key = {}
+        # If the user gave a specific list of mutants, print result for these specifically
+        for m, key, result in mutants:
+            exit_code_by_key[key] = m.exit_code_by_key[key]
+
+        for mutant_name, exit_code in sorted(exit_code_by_key.items()):
+            print(emoji_by_status.get(status_by_exit_code.get(exit_code), '?'), mutant_name)
+
+        print()
 
 
 def tests_for_mutant_names(mutant_names):
@@ -981,9 +1051,9 @@ def results(all):
     for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
-        m = MutationData(path=path)
+        m = SourceFileMutationData(path=path)
         m.load()
-        for k, v in m.result_by_key.items():
+        for k, v in m.exit_code_by_key.items():
             status = status_by_exit_code[v]
             if status == 'killed' and not all:
                 continue
@@ -992,6 +1062,11 @@ def results(all):
 
 def read_mutants_ast(path):
     with open(Path('mutants') / path) as f:
+        return parse(f.read())
+
+
+def read_orig_ast(path):
+    with open(path) as f:
         return parse(f.read())
 
 
@@ -1031,9 +1106,9 @@ def find_mutant(config, mutant_name):
         if config.should_ignore_for_mutation(path):
             continue
 
-        m = MutationData(path=path)
+        m = SourceFileMutationData(path=path)
         m.load()
-        if mutant_name in m.result_by_key:
+        if mutant_name in m.exit_code_by_key:
             return m
 
     raise FileNotFoundError(f'Could not find mutant {mutant_name}')
@@ -1043,7 +1118,7 @@ def get_diff_for_mutant(config, mutant_name):
     m = find_mutant(config, mutant_name)
     path = m.path
 
-    print(f'# {mutant_name}: {status_by_exit_code[m.result_by_key[mutant_name]]}')
+    print(f'# {mutant_name}: {status_by_exit_code[m.exit_code_by_key[mutant_name]]}')
 
     orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
     mutant_function_name = mutant_name.rpartition('.')[-1]
@@ -1084,8 +1159,9 @@ def apply_mutant(config, mutant_name):
     orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
     mutant_function_name = mutant_name.rpartition('.')[-1]
 
-    orig_ast = read_mutants_ast(path)
-    mutant_ast_node = read_mutant_ast_node(orig_ast, orig_function_name, mutant_function_name)
+    orig_ast = read_orig_ast(path)
+    mutants_ast = read_mutants_ast(path)
+    mutant_ast_node = read_mutant_ast_node(mutants_ast, orig_function_name, mutant_function_name)
 
     for node in orig_ast.children:
         if node.type == 'funcdef' and node.name.value == orig_function_name:
@@ -1127,7 +1203,7 @@ def browse():
         ]
 
         cursor_type = 'row'
-        mutation_data_and_stat_by_path = None
+        source_file_mutation_data_and_stat_by_path = None
 
         def compose(self):
             with Container(classes='container'):
@@ -1153,22 +1229,22 @@ def browse():
 
         def read_data(self):
             config = read_config()
-            self.mutation_data_and_stat_by_path = {}
+            self.source_file_mutation_data_and_stat_by_path = {}
 
             for p in walk_source_files():
                 if config.should_ignore_for_mutation(p):
                     continue
-                mutation_data = MutationData(path=p)
-                mutation_data.load()
-                stat = collect_stat(mutation_data)
+                source_file_mutation_data = SourceFileMutationData(path=p)
+                source_file_mutation_data.load()
+                stat = collect_stat(source_file_mutation_data)
 
-                self.mutation_data_and_stat_by_path[p] = mutation_data, stat
+                self.source_file_mutation_data_and_stat_by_path[p] = source_file_mutation_data, stat
 
         def populate_files_table(self):
             files_table: DataTable = self.query_one('#files')
             files_table.clear()
 
-            for p, (mutation_data, stat) in sorted(self.mutation_data_and_stat_by_path.items()):
+            for p, (source_file_mutation_data, stat) in sorted(self.source_file_mutation_data_and_stat_by_path.items()):
                 row = [p] + [getattr(stat, k.replace(' ', '_')) for k, _ in self.columns[1:]]
                 files_table.add_row(*row, key=p)
 
@@ -1178,8 +1254,8 @@ def browse():
             if event.data_table.id == 'files':
                 mutants_table: DataTable = self.query_one('#mutants')
                 mutants_table.clear()
-                mutation_data, stat = self.mutation_data_and_stat_by_path[event.row_key.value]
-                for k, v in mutation_data.result_by_key.items():
+                source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
+                for k, v in source_file_mutation_data.exit_code_by_key.items():
                     status = status_by_exit_code[v]
                     if status == 'killed':
                         continue
