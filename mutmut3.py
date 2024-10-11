@@ -850,6 +850,7 @@ def collect_source_file_mutation_data(*, config, mutant_names):
             for m, key, result in mutants
             if key in mutant_names or any(fnmatch.fnmatch(key, mutant_name) for mutant_name in mutant_names)
         ]
+        assert filtered_mutants, 'Filtered for specific mutants, but nothing matches'
         mutants = filtered_mutants
     return mutants, source_file_mutation_data_by_path
 
@@ -913,6 +914,8 @@ def run(mutant_names, *, max_children):
 
     collect_or_load_stats(runner)
 
+    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
+
     print('running clean tests')
     os.environ['MUTANT_UNDER_TEST'] = ''
     with CatchOutput() as output_catcher:
@@ -942,8 +945,6 @@ def run(mutant_names, *, max_children):
         max_children = os.cpu_count() or 4
 
     count_tried = 0
-
-    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
 
     # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
     mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]), reverse=True)
