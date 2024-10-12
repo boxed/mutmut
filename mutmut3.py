@@ -1258,11 +1258,15 @@ def browse():
 
         def populate_files_table(self):
             files_table: DataTable = self.query_one('#files')
+            # TODO: restore selection
+            selected_row = files_table.cursor_row
             files_table.clear()
 
             for p, (source_file_mutation_data, stat) in sorted(self.source_file_mutation_data_and_stat_by_path.items()):
                 row = [p] + [getattr(stat, k.replace(' ', '_')) for k, _ in self.columns[1:]]
                 files_table.add_row(*row, key=p)
+
+            files_table.move_cursor(row=selected_row)
 
         def on_data_table_row_highlighted(self, event):
             if not event.row_key or not event.row_key.value:
@@ -1305,7 +1309,6 @@ def browse():
                 input('press enter to return to browser')
 
             self.read_data()
-            # TODO: restore selection
             self.populate_files_table()
 
         def get_mutant_name_from_selection(self):
