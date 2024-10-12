@@ -1,11 +1,13 @@
 import ast
 import fnmatch
 import gc
+import inspect
 import itertools
 import json
 import os
 import shutil
 import sys
+import traceback
 from collections import defaultdict
 from configparser import (
     ConfigParser,
@@ -71,7 +73,7 @@ status_by_exit_code = {
     1: 'killed',
     3: 'killed',  # internal error in pytest means a kill
     0: 'survived',
-    5: 'no tests executed by test runner',
+    5: 'no tests',
     2: 'check was interrupted by user',
     None: 'not checked',
     33: 'no tests',
@@ -83,7 +85,6 @@ status_by_exit_code = {
 emoji_by_status = {
     'survived': '🙁',
     'no tests': '🫥',
-    'no tests executed by test runner': '🫥',
     'timeout': '⏰',
     'suspicious': '🤔',
     'skipped': '🔇',
@@ -125,6 +126,18 @@ def guess_paths_to_mutate():
 
 
 def record_trampoline_hit(name):
+    if mutmut.config.max_stack_depth != -1:
+        f = inspect.currentframe()
+        c = mutmut.config.max_stack_depth
+        while c and f:
+            if 'pytest' in f.f_code.co_filename or 'hammett' in f.f_code.co_filename:
+                break
+            f = f.f_back
+            c -= 1
+
+        if not c:
+            return
+
     mutmut._stats.add(name)
 
 
@@ -173,20 +186,20 @@ def _mutmut_trampoline(orig, mutants, *args, **kwargs):
 """
 
 
-def create_mutants(config: 'Config'):
+def create_mutants():
     for path in walk_source_files():
         output_path = Path('mutants') / path
         makedirs(output_path.parent, exist_ok=True)
 
-        if config.should_ignore_for_mutation(path):
+        if mutmut.config.should_ignore_for_mutation(path):
             shutil.copy(path, output_path)
         else:
             create_mutants_for_file(path, output_path)
 
 
-def copy_also_copy_files(config: 'Config'):
-    assert isinstance(config.also_copy, list)
-    for path in config.also_copy:
+def copy_also_copy_files():
+    assert isinstance(mutmut.config.also_copy, list)
+    for path in mutmut.config.also_copy:
         path = Path(path)
         destination = Path('mutants') / path
         if not path.exists():
@@ -653,7 +666,6 @@ class Stat:
     skipped: int
     suspicious: int
     timeout: int
-    no_tests_executed_by_test_runner: int
     check_was_interrupted_by_user: int
 
 
@@ -681,7 +693,6 @@ def collect_stats(source_file_mutation_data_by_path):
         skipped=sum(x.skipped for x in stats),
         suspicious=sum(x.suspicious for x in stats),
         timeout=sum(x.timeout for x in stats),
-        no_tests_executed_by_test_runner=sum(x.no_tests_executed_by_test_runner for x in stats),
         check_was_interrupted_by_user=sum(x.check_was_interrupted_by_user for x in stats),
     )
 
@@ -741,6 +752,7 @@ class CatchOutput:
 class Config:
     also_copy: List[Path]
     do_not_mutate: List[str]
+    max_stack_depth: int
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -762,7 +774,7 @@ def read_config():
         except (NoOptionError, NoSectionError):
             return default
 
-    return Config(
+    mutmut.config = Config(
         do_not_mutate=[
             x
             for x in s('do_not_mutate', '').split('\n')
@@ -780,6 +792,7 @@ def read_config():
             Path('test/'),
             Path('tests.py'),
         ],
+        max_stack_depth=int(s('max_stack_depth', '-1'))
     )
 
 
@@ -827,11 +840,11 @@ def collect_or_load_stats(runner):
             ), f, indent=4)
 
 
-def collect_source_file_mutation_data(*, config, mutant_names):
+def collect_source_file_mutation_data(*, mutant_names):
     source_file_mutation_data_by_path: Dict[str, SourceFileMutationData] = {}
 
     for path in walk_source_files():
-        if config.should_ignore_for_mutation(path):
+        if mutmut.config.should_ignore_for_mutation(path):
             continue
         assert path not in source_file_mutation_data_by_path
         m = SourceFileMutationData(path=path)
@@ -864,14 +877,14 @@ def estimated_worst_case_time(key):
 @click.argument('mutant_names', required=False, nargs=-1)
 def print_time_estimates(mutant_names):
     assert isinstance(mutant_names, (tuple, list)), mutant_names
-    config = read_config()
+    read_config()
 
     runner = PytestRunner()
     runner.prepare_main_test_run()
 
     collect_or_load_stats(runner)
 
-    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
+    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     times_and_keys = [
         (estimated_worst_case_time(key), key)
@@ -897,9 +910,9 @@ def run(mutant_names, *, max_children):
     start = datetime.now()
     print('generating mutants...')
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
-    config = read_config()
-    create_mutants(config)
-    copy_also_copy_files(config)
+    read_config()
+    create_mutants()
+    copy_also_copy_files()
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
@@ -914,7 +927,7 @@ def run(mutant_names, *, max_children):
 
     collect_or_load_stats(runner)
 
-    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(config=config, mutant_names=mutant_names)
+    mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     print('running clean tests')
     os.environ['MUTANT_UNDER_TEST'] = ''
@@ -947,7 +960,7 @@ def run(mutant_names, *, max_children):
     count_tried = 0
 
     # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
-    mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]), reverse=True)
+    mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]))
 
     gc.freeze()
 
@@ -959,6 +972,7 @@ def run(mutant_names, *, max_children):
             print_stats(source_file_mutation_data_by_path)
 
             key = key.replace('__init__.', '')
+
             # Rerun mutant if it's explicitly mentioned, but otherwise let the result stand
             if not mutant_names and result is not None:
                 continue
@@ -969,6 +983,7 @@ def run(mutant_names, *, max_children):
             # print(tests)
             if not tests:
                 m.exit_code_by_key[key] = 33
+                m.save()
                 continue
 
             pid = os.fork()
@@ -1102,9 +1117,9 @@ def read_mutant_ast_node(ast, orig_function_name, mutant_function_name):
     raise FileNotFoundError(f'Could not find mutant function {mutant_function_name}')
 
 
-def find_mutant(config, mutant_name):
+def find_mutant(mutant_name):
     for path in walk_source_files():
-        if config.should_ignore_for_mutation(path):
+        if mutmut.config.should_ignore_for_mutation(path):
             continue
 
         m = SourceFileMutationData(path=path)
@@ -1115,8 +1130,8 @@ def find_mutant(config, mutant_name):
     raise FileNotFoundError(f'Could not find mutant {mutant_name}')
 
 
-def get_diff_for_mutant(config, mutant_name):
-    m = find_mutant(config, mutant_name)
+def get_diff_for_mutant(mutant_name):
+    m = find_mutant(mutant_name)
     path = m.path
 
     print(f'# {mutant_name}: {status_by_exit_code[m.exit_code_by_key[mutant_name]]}')
@@ -1138,8 +1153,8 @@ def get_diff_for_mutant(config, mutant_name):
 @cli.command()
 @click.argument('mutant_name')
 def show(mutant_name):
-    config = read_config()
-    print(get_diff_for_mutant(config, mutant_name))
+    read_config()
+    print(get_diff_for_mutant(mutant_name))
     return
 
 
@@ -1147,14 +1162,14 @@ def show(mutant_name):
 @click.argument('mutant_name')
 def apply(mutant_name):
     try:
-        config = read_config()
-        apply_mutant(config, mutant_name)
+        read_config()
+        apply_mutant(mutant_name)
     except FileNotFoundError as e:
         print(e)
 
 
-def apply_mutant(config, mutant_name):
-    m = find_mutant(config, mutant_name)
+def apply_mutant(mutant_name):
+    m = find_mutant(mutant_name)
     path = m.path
 
     orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
@@ -1229,11 +1244,11 @@ def browse():
             self.populate_files_table()
 
         def read_data(self):
-            config = read_config()
+            read_config()
             self.source_file_mutation_data_and_stat_by_path = {}
 
             for p in walk_source_files():
-                if config.should_ignore_for_mutation(p):
+                if mutmut.config.should_ignore_for_mutation(p):
                     continue
                 source_file_mutation_data = SourceFileMutationData(path=p)
                 source_file_mutation_data.load()
@@ -1273,7 +1288,7 @@ def browse():
                     def load_thread():
                         config = read_config()
                         try:
-                            d = get_diff_for_mutant(config, event.row_key.value)
+                            d = get_diff_for_mutant(event.row_key.value)
                             if event.row_key.value == self.loading_id:
                                 diff_view.text = d
                         except Exception as e:
@@ -1313,7 +1328,7 @@ def browse():
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
                 return
-            apply_mutant(config, mutants_table.get_row_at(mutants_table.cursor_row)[0])
+            apply_mutant(mutants_table.get_row_at(mutants_table.cursor_row)[0])
 
     ResultBrowser().run()
 
