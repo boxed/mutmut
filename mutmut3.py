@@ -863,7 +863,7 @@ def collect_source_file_mutation_data(*, mutant_names):
             for m, key, result in mutants
             if key in mutant_names or any(fnmatch.fnmatch(key, mutant_name) for mutant_name in mutant_names)
         ]
-        assert filtered_mutants, 'Filtered for specific mutants, but nothing matches'
+        assert filtered_mutants, f'Filtered for specific mutants, but nothing matches\n\nFilter: {mutant_names}'
         mutants = filtered_mutants
     return mutants, source_file_mutation_data_by_path
 
@@ -1286,7 +1286,7 @@ def browse():
                     self.loading_id = event.row_key.value
 
                     def load_thread():
-                        config = read_config()
+                        read_config()
                         try:
                             d = get_diff_for_mutant(event.row_key.value)
                             if event.row_key.value == self.loading_id:
@@ -1306,6 +1306,7 @@ def browse():
 
             self.read_data()
             # TODO: restore selection
+            self.populate_files_table()
 
         def get_mutant_name_from_selection(self):
             mutants_table: DataTable = self.query_one('#mutants')
@@ -1318,13 +1319,13 @@ def browse():
             self.retest(self.get_mutant_name_from_selection())
 
         def action_retest_function(self):
-            self.retest(self.get_mutant_name_from_selection().rpartition('__mutmut_')[0] + '.*')
+            self.retest(self.get_mutant_name_from_selection().rpartition('__mutmut_')[0] + '__mutmut_*')
 
         def action_retest_module(self):
             self.retest(self.get_mutant_name_from_selection().rpartition('.')[0] + '.*')
 
         def action_apply_mutant(self):
-            config = read_config()
+            read_config()
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
                 return
