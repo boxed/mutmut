@@ -1346,7 +1346,7 @@ def browse():
             with self.suspend():
                 assert sys.argv[-1] == 'browse'
                 command = ' '.join([sys.executable] + sys.argv[:-1])
-                os.system(f'{command} run {pattern}')
+                os.system(f'{command} run "{pattern}"')
                 input('press enter to return to browser')
 
             self.read_data()
