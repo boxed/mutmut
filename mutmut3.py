@@ -65,6 +65,7 @@ mutmut.duration_by_test = {}
 
 NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
 NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
+CLASS_NAME_SEPARATOR = 'ǁ'
 
 mutmut._stats = set()
 mutmut.tests_by_function = defaultdict(set)
@@ -269,52 +270,54 @@ def create_mutants_for_file(filename, output_path):
 def build_trampoline(orig_name, mutants, class_name=None):
     assert orig_name not in NEVER_MUTATE_FUNCTION_NAMES
 
-    prefix = ''
-    if class_name:
-        prefix = f'_{class_name}_'
-        # Dunder as a start of a member name triggers Python name mangling, but we want OUR name mangling.
-        while prefix.startswith('__'):
-            prefix = prefix[1:]
+    mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    mutants_dict = f'{prefix}{orig_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+    mutants_dict = f'{mangled_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
     access_prefix = ''
     access_suffix = ''
     if class_name is not None:
-        access_prefix = f'object.__getattribute__(self, "{prefix}'
+        access_prefix = f'object.__getattribute__(self, "'
         access_suffix = '")'
 
     return f"""
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    return _mutmut_trampoline({access_prefix}{orig_name}__mutmut_orig{access_suffix}, {access_prefix}{orig_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
+    return _mutmut_trampoline({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
 
-{orig_name}.__signature__ = _mutmut_signature({prefix}{orig_name}__mutmut_orig)
-{prefix}{orig_name}__mutmut_orig.__name__ = '{prefix}{orig_name}'
+{orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
+{mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
 """
 
 
 @contextmanager
-def rename(node, *, suffix, prefix):
+def rename_function_node(node, *, suffix, class_name):
     orig_name = node.name.value
 
-    if prefix:
-        prefix = '_' + prefix + '_'
-    else:
-        prefix = ''
+    mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    new_name = prefix + node.name.value + f'__mutmut_{suffix}'
-
-    # Dunder as a start of a member name triggers Python name mangling, but we want OUR name mangling.
-    while prefix and new_name.startswith('__'):
-        new_name = new_name[1:]
-
-    node.name.value = new_name
+    node.name.value = mangled_name + f'__mutmut_{suffix}'
     yield
     node.name.value = orig_name
 
 
 sentinel = object()
+
+
+def filter_funcdef_children(children):
+    # Throw away type annotation for return type
+    r = []
+    in_annotation = False
+    for c in children:
+        if c.type == 'operator':
+            if c.value == '->':
+                in_annotation = True
+            if c.value == ':':
+                in_annotation = False
+
+        if not in_annotation:
+            r.append(c)
+    return r
 
 
 def yield_mutants_for_node(*, func_node, class_name=None, context, node):
@@ -328,7 +331,10 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
 
     # The rest
     if hasattr(node, 'children'):
-        for child_node in node.children:
+        children = node.children
+        if node.type == 'funcdef':
+            children = filter_funcdef_children(children)
+        for child_node in children:
             context.stack.append(child_node)
             try:
                 yield from yield_mutants_for_node(func_node=func_node, class_name=class_name, context=context, node=child_node)
@@ -363,7 +369,7 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
             setattr(node, 'children', new_children)
 
         # noinspection PyArgumentList
-        with rename(func_node, suffix=f'{context.count}', prefix=class_name):
+        with rename_function_node(func_node, suffix=f'{context.count}', class_name=class_name):
             code = func_node.get_code()
             if valid_syntax(code):
                 context.count += 1
@@ -422,7 +428,7 @@ def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
 
     orig_name = node.name.value
     # noinspection PyArgumentList
-    with rename(node, suffix='orig', prefix=class_name):
+    with rename_function_node(node, suffix='orig', class_name=class_name):
         yield 'orig', node.get_code(), (orig_name, hash_of_orig), None
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
@@ -645,8 +651,20 @@ class HammettRunner(TestRunner):
         return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
 
 
+def mangle_function_name(*, name, class_name):
+    assert CLASS_NAME_SEPARATOR not in name
+    prefix = ''
+    if class_name:
+        assert CLASS_NAME_SEPARATOR not in class_name
+        prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
+    return f'{prefix}{name}'
+
+
 def orig_function_name_from_key(key):
-    return key.partition('__mutmut_')[0]
+    r = key.partition('__mutmut_')[0]
+    if CLASS_NAME_SEPARATOR in r:
+        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1:]
+    return r
 
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -840,7 +858,7 @@ def run_stats_collection(runner, tests=None):
         #     print(l, end='')
 
         print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
-        return
+        exit(1)
 
     print('    done')
 
@@ -852,6 +870,7 @@ def run_stats_collection(runner, tests=None):
 
 
 def collect_or_load_stats(runner):
+    did_load = False
     try:
         with open('mutants/mutmut-stats.json') as f:
             data = json.load(f)
@@ -859,18 +878,21 @@ def collect_or_load_stats(runner):
                 mutmut.tests_by_function[k] |= set(v)
             mutmut.duration_by_test = data.pop('duration_by_test')
             assert not data, data
+            did_load = True
     except (FileNotFoundError, JSONDecodeError):
+        pass
+
+    if not did_load:
         # Run full stats
         run_stats_collection(runner)
-        return
+    else:
+        # Run incremental stats
+        with CatchOutput() as output_catcher:
+            os.environ['MUTANT_UNDER_TEST'] = 'collect_new_tests'
+            new_tests = runner.collect_new_tests()
 
-    # Run incremental stats
-    with CatchOutput() as output_catcher:
-        os.environ['MUTANT_UNDER_TEST'] = 'collect_new_tests'
-        new_tests = runner.collect_new_tests()
-
-    if new_tests:
-        run_stats_collection(runner, tests=new_tests)
+        if new_tests:
+            run_stats_collection(runner, tests=new_tests)
 
 
 def save_stats():
@@ -1220,12 +1242,14 @@ def apply_mutant(mutant_name):
     mutants_ast = read_mutants_ast(path)
     mutant_ast_node = read_mutant_ast_node(mutants_ast, orig_function_name, mutant_function_name)
 
+    mutant_ast_node.name.value = orig_function_name
+
     for node in orig_ast.children:
         if node.type == 'funcdef' and node.name.value == orig_function_name:
             node.children = mutant_ast_node.children
             break
     else:
-        raise FileNotFoundError(f'Could apply mutant {orig_function_name}')
+        raise FileNotFoundError(f'Could not apply mutant {orig_function_name}')
 
     with open(path, 'w') as f:
         f.write(orig_ast.get_code())

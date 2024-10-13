@@ -2,7 +2,10 @@ import pytest
 from parso import parse
 
 from mutmut3 import (
+    CLASS_NAME_SEPARATOR,
     FuncContext,
+    mangle_function_name,
+    orig_function_name_from_key,
     pragma_no_mutate_lines,
     yield_mutants_for_module,
     yield_mutants_for_node,
@@ -163,7 +166,7 @@ class Foo:
         print(m)
 
     assert len(mutants) == 1
-    assert mutants[0] == '    def _Foo_member__mutmut_1(self):        \n        return 2'
+    assert mutants[0] == f'    def _{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}member__mutmut_1(self):        \n        return 2'
 
 
 def mutants_for_source(source):
@@ -240,16 +243,18 @@ filters = dict((key(field), False) for field in fields)"""
 
 def test_bug_github_issue_26():
     source = """
-class ConfigurationOptions(Protocol):
-    min_name_length: int
+def wrapper():
+    class ConfigurationOptions(Protocol):
+        min_name_length: int
     """.strip()
     assert mutants_for_source(source) == []
 
 
 def test_bug_github_issue_30():
     source = """
-def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
-    pass
+def wrapper():
+    def from_checker(cls: Type['BaseVisitor'], checker) -> 'BaseVisitor':
+        pass
     """.strip()
     assert mutants_for_source(source) == []
 
@@ -279,3 +284,13 @@ def foo():
 """.strip()
     mutants = mutants_for_source(source)
     assert not mutants
+
+
+def test_orig_function_name_from_key():
+    assert orig_function_name_from_key('_﹏Foo﹏bar__mutmut_1') == 'bar'
+    assert orig_function_name_from_key('bar__mutmut_1') == 'bar'
+
+
+def test_mangle_function_name():
+    assert mangle_function_name(name='bar', class_name=None) == 'bar'
+    assert mangle_function_name(name='bar', class_name='Foo') == f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar'
