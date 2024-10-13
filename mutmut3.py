@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import sys
-import traceback
+from abc import ABC
 from collections import defaultdict
 from configparser import (
     ConfigParser,
@@ -67,6 +67,7 @@ NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
 NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
 
 mutmut._stats = set()
+mutmut.tests_by_function = defaultdict(set)
 
 
 status_by_exit_code = {
@@ -532,8 +533,8 @@ def strip_prefix(s, *, prefix, strict=False):
     return s
 
 
-class TestRunner:
-    def run_stats(self):
+class TestRunner(ABC):
+    def run_stats(self, *, tests):
         raise NotImplementedError()
 
     def run_forced_fail(self):
@@ -543,6 +544,9 @@ class TestRunner:
         pass
 
     def run_tests(self, *, key, tests):
+        raise NotImplementedError()
+
+    def collect_new_tests(self):
         raise NotImplementedError()
 
 
@@ -556,26 +560,24 @@ def change_cwd(path):
         os.chdir(old_cwd)
 
 
-# For pytest. This function gets installed by pytest's plugin system
-def pytest_runtest_teardown(item, nextitem):
-    unused(nextitem)
-    if os.environ['MUTANT_UNDER_TEST'] == 'stats':
-        for function in mutmut._stats:
-            mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
-        mutmut._stats.clear()
-
-
-def pytest_runtest_makereport(item, call):
-    if os.environ['MUTANT_UNDER_TEST'] == 'stats':
-        mutmut.duration_by_test[item.nodeid] = call.duration
-
-
 class PytestRunner(TestRunner):
-    def run_stats(self):
+    def run_stats(self, *, tests):
         import pytest
+
+        class StatsCollector:
+            def pytest_runtest_teardown(self, item, nextitem):
+                unused(nextitem)
+                for function in mutmut._stats:
+                    mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
+                mutmut._stats.clear()
+
+            def pytest_runtest_makereport(self, item, call):
+                mutmut.duration_by_test[item.nodeid] = call.duration
+
+        stats_collector = StatsCollector()
+
         with change_cwd('mutants'):
-            # "-p mutmut3" is used to load this module as a pytest plugin, so we get pytest_runtest_teardown called
-            return int(pytest.main(['-p', 'mutmut3', '-x', '-q', '--import-mode=append']))
+            return int(pytest.main(['-x', '-q', '--import-mode=append'] + list(tests), plugins=[stats_collector]))
 
     def run_tests(self, *, key, tests):
         import pytest
@@ -587,12 +589,32 @@ class PytestRunner(TestRunner):
         with change_cwd('mutants'):
             return int(pytest.main(['-x', '-q', '--import-mode=append']))
 
+    def collect_new_tests(self):
+        import pytest
+
+        class NewTestsCollector:
+            def pytest_collection_modifyitems(self, items):
+                self.nodeids = {item.nodeid for item in items}
+
+        collector = NewTestsCollector()
+
+        with change_cwd('mutants'):
+            exit_code = int(pytest.main(['-x', '-q', '--collect-only'], plugins=[collector]))
+            assert exit_code == 0
+
+        old_tests = {
+            test_name
+            for _, test_names in mutmut.tests_by_function.items()
+            for test_name in test_names
+        }
+        return collector.nodeids - old_tests
+
 
 class HammettRunner(TestRunner):
     def __init__(self):
         self.hammett_kwargs = None
 
-    def run_stats(self):
+    def run_stats(self, *, tests):
         import hammett
         print('running hammett stats...')
 
@@ -682,7 +704,7 @@ def collect_stat(m: SourceFileMutationData):
     )
 
 
-def collect_stats(source_file_mutation_data_by_path):
+def calculate_summary_stats(source_file_mutation_data_by_path):
     stats = [collect_stat(x) for x in source_file_mutation_data_by_path.values()]
     return Stat(
         not_checked=sum(x.not_checked for x in stats),
@@ -698,7 +720,7 @@ def collect_stats(source_file_mutation_data_by_path):
 
 
 def print_stats(source_file_mutation_data_by_path, force_output=False):
-    s = collect_stats(source_file_mutation_data_by_path)
+    s = calculate_summary_stats(source_file_mutation_data_by_path)
     print_status(f'{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}', force_output=force_output)
 
 
@@ -801,43 +823,62 @@ def cli():
     pass
 
 
+def run_stats_collection(runner, tests=None):
+    print('running stats...')
+
+    if tests is None:
+        tests = []  # Meaning all...
+
+    os.environ['MUTANT_UNDER_TEST'] = 'stats'
+    os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
+    # with CatchOutput() as output_catcher:
+
+    collect_stats_exit_code = runner.run_stats(tests=tests)
+    if collect_stats_exit_code != 0:
+        # output_catcher.stop()
+        # for l in output_catcher.strings:
+        #     print(l, end='')
+
+        print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
+        return
+
+    print('    done')
+
+    if not mutmut.tests_by_function:
+        print('failed to collect stats, no active tests found')
+        return
+
+    save_stats()
+
+
 def collect_or_load_stats(runner):
     try:
         with open('mutants/mutmut-stats.json') as f:
             data = json.load(f)
-            mutmut.tests_by_function = {k: set(v) for k, v in data.pop('tests_by_function').items()}
+            for k, v in data.pop('tests_by_function').items():
+                mutmut.tests_by_function[k] |= set(v)
             mutmut.duration_by_test = data.pop('duration_by_test')
             assert not data, data
     except (FileNotFoundError, JSONDecodeError):
-        mutmut.tests_by_function = None
+        # Run full stats
+        run_stats_collection(runner)
+        return
 
-    if mutmut.tests_by_function is None:
-        print('running stats...')
-        os.environ['MUTANT_UNDER_TEST'] = 'stats'
-        os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
-        mutmut.tests_by_function = defaultdict(set)
-        # with CatchOutput() as output_catcher:
+    # Run incremental stats
+    with CatchOutput() as output_catcher:
+        os.environ['MUTANT_UNDER_TEST'] = 'collect_new_tests'
+        new_tests = runner.collect_new_tests()
 
-        collect_stats_exit_code = runner.run_stats()
-        if collect_stats_exit_code != 0:
-            # output_catcher.stop()
-            # for l in output_catcher.strings:
-            #     print(l, end='')
+    if new_tests:
+        run_stats_collection(runner, tests=new_tests)
 
-            print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
-            return
 
-        print('    done')
-
-        if not mutmut.tests_by_function:
-            print('failed to collect stats, no active tests found')
-            return
-
-        with open('mutants/mutmut-stats.json', 'w') as f:
-            json.dump(dict(
-                tests_by_function={k: list(v) for k, v in mutmut.tests_by_function.items()},
-                duration_by_test=mutmut.duration_by_test,
-            ), f, indent=4)
+def save_stats():
+    with open('mutants/mutmut-stats.json', 'w') as f:
+        json.dump(dict(
+            tests_by_function={k: list(v) for k, v in mutmut.tests_by_function.items()},
+            duration_by_test=mutmut.duration_by_test,
+        ), f, indent=4)
 
 
 def collect_source_file_mutation_data(*, mutant_names):
