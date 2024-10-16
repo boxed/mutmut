@@ -1,12 +1,16 @@
+from io import StringIO
+
 import pytest
 from parso import parse
 
 from mutmut3 import (
     CLASS_NAME_SEPARATOR,
     FuncContext,
+    get_diff_for_mutant,
     mangle_function_name,
-    orig_function_name_from_key,
+    orig_function_and_class_names_from_key,
     pragma_no_mutate_lines,
+    write_all_mutants_to_file,
     yield_mutants_for_module,
     yield_mutants_for_node,
 )
@@ -166,7 +170,7 @@ class Foo:
         print(m)
 
     assert len(mutants) == 1
-    assert mutants[0] == f'    def _{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}member__mutmut_1(self):        \n        return 2'
+    assert mutants[0] == f'    def x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}member__mutmut_1(self):        \n        return 2'
 
 
 def mutants_for_source(source):
@@ -287,10 +291,49 @@ def foo():
 
 
 def test_orig_function_name_from_key():
-    assert orig_function_name_from_key('_﹏Foo﹏bar__mutmut_1') == 'bar'
-    assert orig_function_name_from_key('bar__mutmut_1') == 'bar'
+    assert orig_function_and_class_names_from_key(f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__mutmut_1') == ('bar', 'Foo')
+    assert orig_function_and_class_names_from_key('bar__mutmut_1') == ('bar', None)
 
 
 def test_mangle_function_name():
     assert mangle_function_name(name='bar', class_name=None) == 'bar'
-    assert mangle_function_name(name='bar', class_name='Foo') == f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar'
+    assert mangle_function_name(name='bar', class_name='Foo') == f'x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar'
+
+
+def test_diff_ops():
+    source = """
+def foo():    
+    return 1
+
+
+class Foo:
+    def member(self):        
+        return 3
+
+    """.strip()
+
+    out = StringIO()
+    mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source)
+    assert len(mutant_names) == 2
+    mutants_source = out.getvalue()
+
+    diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path='test.py').strip()
+    diff2 = get_diff_for_mutant(mutant_name=mutant_names[1], source=mutants_source, path='test.py').strip()
+
+    assert diff1 == '''
+--- test.py
++++ test.py
+@@ -1,2 +1,2 @@
+ def foo():    
+-    return 1
++    return 2
+'''.strip()
+
+    assert diff2 == '''
+--- test.py
++++ test.py
+@@ -1,2 +1,2 @@
+ def member(self):        
+-        return 3
++        return 4
+'''.strip()

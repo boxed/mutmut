@@ -68,7 +68,7 @@ NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
 CLASS_NAME_SEPARATOR = 'ǁ'
 
 mutmut._stats = set()
-mutmut.tests_by_function = defaultdict(set)
+mutmut.tests_by_mangled_function_name = defaultdict(set)
 
 
 status_by_exit_code = {
@@ -227,24 +227,11 @@ def create_mutants_for_file(filename, output_path):
         # print('    skipped', output_path, 'already up to date')
         return
 
-    mutant_names = []
-
     with open(filename) as f:
         source = f.read()
 
-    no_mutate_lines = pragma_no_mutate_lines(source)
-
-    hash_by_function_name = {}
-
     with open(output_path, 'w') as out:
-        for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
-            out.write(x)
-            if mutant_name:
-                mutant_names.append(mutant_name)
-            if name_and_hash:
-                assert type_ == 'orig'
-                name, hash = name_and_hash
-                hash_by_function_name[name] = hash
+        mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source)
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -265,6 +252,31 @@ def create_mutants_for_file(filename, output_path):
     source_file_mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
+
+
+def ensure_ends_with_newline(source):
+    if not source.endswith('\n'):
+        return source + '\n'
+    else:
+        return source
+
+
+def write_all_mutants_to_file(*, out, source):
+    no_mutate_lines = pragma_no_mutate_lines(source)
+
+    hash_by_function_name = {}
+    mutant_names = []
+
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(ensure_ends_with_newline(source), error_recovery=False), no_mutate_lines):
+        out.write(x)
+        if mutant_name:
+            mutant_names.append(mutant_name)
+        if name_and_hash:
+            assert type_ == 'orig'
+            name, hash = name_and_hash
+            hash_by_function_name[name] = hash
+
+    return mutant_names, hash_by_function_name
 
 
 def build_trampoline(orig_name, mutants, class_name=None):
@@ -549,7 +561,7 @@ class TestRunner(ABC):
     def prepare_main_test_run(self):
         pass
 
-    def run_tests(self, *, key, tests):
+    def run_tests(self, *, mutant_name, tests):
         raise NotImplementedError()
 
     def collect_new_tests(self):
@@ -574,7 +586,7 @@ class PytestRunner(TestRunner):
             def pytest_runtest_teardown(self, item, nextitem):
                 unused(nextitem)
                 for function in mutmut._stats:
-                    mutmut.tests_by_function[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
+                    mutmut.tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
                 mutmut._stats.clear()
 
             def pytest_runtest_makereport(self, item, call):
@@ -585,7 +597,7 @@ class PytestRunner(TestRunner):
         with change_cwd('mutants'):
             return int(pytest.main(['-x', '-q', '--import-mode=append'] + list(tests), plugins=[stats_collector]))
 
-    def run_tests(self, *, key, tests):
+    def run_tests(self, *, mutant_name, tests):
         import pytest
         with change_cwd('mutants'):
             return int(pytest.main(['-x', '-q', '--import-mode=append'] + list(tests)))
@@ -610,7 +622,7 @@ class PytestRunner(TestRunner):
 
         old_tests = {
             test_name
-            for _, test_names in mutmut.tests_by_function.items()
+            for _, test_names in mutmut.tests_by_mangled_function_name.items()
             for test_name in test_names
         }
         return collector.nodeids - old_tests
@@ -626,7 +638,7 @@ class HammettRunner(TestRunner):
 
         def post_test_callback(_name, **_):
             for function in mutmut._stats:
-                mutmut.tests_by_function[function].add(_name)
+                mutmut.tests_by_mangled_function_name[function].add(_name)
             mutmut._stats.clear()
 
         return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False, insert_cwd=False)
@@ -645,9 +657,9 @@ class HammettRunner(TestRunner):
             insert_cwd=False,
         )
 
-    def run_tests(self, *, key, tests):
+    def run_tests(self, *, mutant_name, tests):
         import hammett
-        hammett.Config.workerinput = dict(workerinput=f'_{key}')
+        hammett.Config.workerinput = dict(workerinput=f'_{mutant_name}')
         return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
 
 
@@ -660,11 +672,18 @@ def mangle_function_name(*, name, class_name):
     return f'{prefix}{name}'
 
 
-def orig_function_name_from_key(key):
-    r = key.partition('__mutmut_')[0]
+def mangled_name_from_mutant_name(mutant_name):
+    assert '__mutmut_' in mutant_name
+    return mutant_name.partition('__mutmut_')[0]
+
+
+def orig_function_and_class_names_from_key(mutant_name):
+    r = mangled_name_from_mutant_name(mutant_name)
+    class_name = None
     if CLASS_NAME_SEPARATOR in r:
+        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1: r.rindex(CLASS_NAME_SEPARATOR)]
         r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1:]
-    return r
+    return r, class_name
 
 
 spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
@@ -862,7 +881,7 @@ def run_stats_collection(runner, tests=None):
 
     print('    done')
 
-    if not mutmut.tests_by_function:
+    if not mutmut.tests_by_mangled_function_name:
         print('failed to collect stats, no active tests found')
         return
 
@@ -874,8 +893,8 @@ def collect_or_load_stats(runner):
     try:
         with open('mutants/mutmut-stats.json') as f:
             data = json.load(f)
-            for k, v in data.pop('tests_by_function').items():
-                mutmut.tests_by_function[k] |= set(v)
+            for k, v in data.pop('tests_by_mangled_function_name').items():
+                mutmut.tests_by_mangled_function_name[k] |= set(v)
             mutmut.duration_by_test = data.pop('duration_by_test')
             assert not data, data
             did_load = True
@@ -898,7 +917,7 @@ def collect_or_load_stats(runner):
 def save_stats():
     with open('mutants/mutmut-stats.json', 'w') as f:
         json.dump(dict(
-            tests_by_function={k: list(v) for k, v in mutmut.tests_by_function.items()},
+            tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
             duration_by_test=mutmut.duration_by_test,
         ), f, indent=4)
 
@@ -915,9 +934,9 @@ def collect_source_file_mutation_data(*, mutant_names):
         source_file_mutation_data_by_path[str(path)] = m
 
     mutants = [
-        (m, key, result)
+        (m, mutant_name, result)
         for path, m in source_file_mutation_data_by_path.items()
-        for key, result in m.exit_code_by_key.items()
+        for mutant_name, result in m.exit_code_by_key.items()
     ]
 
     if mutant_names:
@@ -931,8 +950,8 @@ def collect_source_file_mutation_data(*, mutant_names):
     return mutants, source_file_mutation_data_by_path
 
 
-def estimated_worst_case_time(key):
-    tests = mutmut.tests_by_function.get(orig_function_name_from_key(key), set())
+def estimated_worst_case_time(mutant_name):
+    tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
     return sum(mutmut.duration_by_test[t] for t in tests)
 
 
@@ -950,8 +969,8 @@ def print_time_estimates(mutant_names):
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     times_and_keys = [
-        (estimated_worst_case_time(key), key)
-        for m, key, result in mutants
+        (estimated_worst_case_time(mutant_name), mutant_name)
+        for m, mutant_name, result in mutants
     ]
 
     for time, key in sorted(times_and_keys):
@@ -998,7 +1017,7 @@ def run(mutant_names, *, max_children):
         output_catcher.stop()
         tests = tests_for_mutant_names(mutant_names)
 
-        clean_test_exit_code = runner.run_tests(key=None, tests=tests)
+        clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
             output_catcher.stop()
             print(''.join(output_catcher.strings))
@@ -1031,40 +1050,36 @@ def run(mutant_names, *, max_children):
     try:
         print('Running mutation testing...')
 
-        for m, key, result in mutants:
+        for m, mutant_name, result in mutants:
             print_stats(source_file_mutation_data_by_path)
 
-            key = key.replace('__init__.', '')
+            mutant_name = mutant_name.replace('__init__.', '')
 
             # Rerun mutant if it's explicitly mentioned, but otherwise let the result stand
             if not mutant_names and result is not None:
                 continue
 
-            function = orig_function_name_from_key(key)
-            tests = mutmut.tests_by_function.get(function, [])
+            tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), [])
 
             # print(tests)
             if not tests:
-                m.exit_code_by_key[key] = 33
+                m.exit_code_by_key[mutant_name] = 33
                 m.save()
                 continue
 
             pid = os.fork()
             if not pid:
                 # In the child
-                os.environ['MUTANT_UNDER_TEST'] = key
-                setproctitle(f'mutmut: {key}')
-                function = orig_function_name_from_key(key)
-
-                tests = mutmut.tests_by_function[function]
+                os.environ['MUTANT_UNDER_TEST'] = mutant_name
+                setproctitle(f'mutmut: {mutant_name}')
 
                 # Run fast tests first
-                tests = sorted(tests, key=lambda name: mutmut.duration_by_test[name])
+                tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
                 if not tests:
                     os._exit(33)
 
                 with CatchOutput():
-                    result = runner.run_tests(key=key, tests=tests)
+                    result = runner.run_tests(mutant_name=mutant_name, tests=tests)
 
                 if result != 0:
                     # TODO: write failure information to stdout?
@@ -1073,7 +1088,7 @@ def run(mutant_names, *, max_children):
             else:
                 # in the parent
                 source_file_mutation_data_by_pid[pid] = m
-                m.register_pid(pid=pid, key=key)
+                m.register_pid(pid=pid, key=mutant_name)
                 running_children += 1
 
             if running_children >= max_children:
@@ -1103,8 +1118,8 @@ def run(mutant_names, *, max_children):
         print('--------------')
         exit_code_by_key = {}
         # If the user gave a specific list of mutants, print result for these specifically
-        for m, key, result in mutants:
-            exit_code_by_key[key] = m.exit_code_by_key[key]
+        for m, mutant_name, result in mutants:
+            exit_code_by_key[mutant_name] = m.exit_code_by_key[mutant_name]
 
         for mutant_name, exit_code in sorted(exit_code_by_key.items()):
             print(emoji_by_status.get(status_by_exit_code.get(exit_code), '?'), mutant_name)
@@ -1116,11 +1131,11 @@ def tests_for_mutant_names(mutant_names):
     tests = set()
     for mutant_name in mutant_names:
         if '*' in mutant_name:
-            for name, tests_of_this_name in mutmut.tests_by_function.items():
+            for name, tests_of_this_name in mutmut.tests_by_mangled_function_name.items():
                 if fnmatch.fnmatch(name, mutant_name):
                     tests |= set(tests_of_this_name)
         else:
-            tests |= set(mutmut.tests_by_function[orig_function_name_from_key(mutant_name)])
+            tests |= set(mutmut.tests_by_mangled_function_name[mangled_name_from_mutant_name(mutant_name)])
     return tests
 
 
@@ -1141,7 +1156,7 @@ def results(all):
 
 def read_mutants_ast(path):
     with open(Path('mutants') / path) as f:
-        return parse(f.read())
+        return parse(f.read(), error_recovery=False)
 
 
 def read_orig_ast(path):
@@ -1149,35 +1164,37 @@ def read_orig_ast(path):
         return parse(f.read())
 
 
-def read_original_ast_node(ast, orig_function_name):
-    target = orig_function_name + '__mutmut_orig'
+def find_ast_node(ast, function_name, orig_function_name):
+    function_name = function_name.rpartition('.')[-1]
+    orig_function_name = orig_function_name.rpartition('.')[-1]
+
     for node in ast.children:
         if node.type == 'classdef':
-            try:
-                (body,) = [x for x in node.children if x.type == 'suite']
-                return read_original_ast_node(body, orig_function_name)
-            except FileNotFoundError:
-                pass
-        if node.type == 'funcdef' and node.name.value == target:
+            (body,) = [x for x in node.children if x.type == 'suite']
+            result = find_ast_node(body, function_name=function_name, orig_function_name=orig_function_name)
+            if result:
+                return result
+        if node.type == 'funcdef' and node.name.value == function_name:
             node.name.value = orig_function_name
             return node
 
-    raise FileNotFoundError(f'Could not find original function {orig_function_name} ({target})')
+
+def read_original_ast_node(ast, mutant_name):
+    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
+    orig_name = mangled_name_from_mutant_name(mutant_name) + '__mutmut_orig'
+
+    result = find_ast_node(ast, function_name=orig_name, orig_function_name=orig_function_name)
+    if not result:
+        raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
+    return result
 
 
-def read_mutant_ast_node(ast, orig_function_name, mutant_function_name):
-    for node in ast.children:
-        if node.type == 'classdef':
-            try:
-                (body,) = [x for x in node.children if x.type == 'suite']
-                return read_mutant_ast_node(body, orig_function_name, mutant_function_name)
-            except FileNotFoundError:
-                pass
-        if node.type == 'funcdef' and node.name.value == mutant_function_name:
-            node.name.value = orig_function_name
-            return node
-
-    raise FileNotFoundError(f'Could not find mutant function {mutant_function_name}')
+def read_mutant_ast_node(ast, mutant_name):
+    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
+    result = find_ast_node(ast, function_name=mutant_name, orig_function_name=orig_function_name)
+    if not result:
+        raise FileNotFoundError(f'Could not find mutant "{mutant_name}"')
+    return result
 
 
 def find_mutant(mutant_name):
@@ -1193,18 +1210,22 @@ def find_mutant(mutant_name):
     raise FileNotFoundError(f'Could not find mutant {mutant_name}')
 
 
-def get_diff_for_mutant(mutant_name):
-    m = find_mutant(mutant_name)
-    path = m.path
+def get_diff_for_mutant(mutant_name, source=None, path=None):
+    if path is None:
+        m = find_mutant(mutant_name)
+        path = m.path
+        status = status_by_exit_code[m.exit_code_by_key[mutant_name]]
+    else:
+        status = 'not checked'
 
-    print(f'# {mutant_name}: {status_by_exit_code[m.exit_code_by_key[mutant_name]]}')
+    print(f'# {mutant_name}: {status}')
 
-    orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
-    mutant_function_name = mutant_name.rpartition('.')[-1]
-
-    ast = read_mutants_ast(path)
-    orig_code = read_original_ast_node(ast, orig_function_name).get_code().strip()
-    mutant_code = read_mutant_ast_node(ast, orig_function_name, mutant_function_name).get_code().strip()
+    if source is None:
+        ast = read_mutants_ast(path)
+    else:
+        ast = parse(source, error_recovery=False)
+    orig_code = read_original_ast_node(ast, mutant_name).get_code().strip()
+    mutant_code = read_mutant_ast_node(ast, mutant_name).get_code().strip()
 
     path = str(path)  # difflib requires str, not Path
     return '\n'.join([
@@ -1224,32 +1245,33 @@ def show(mutant_name):
 @cli.command()
 @click.argument('mutant_name')
 def apply(mutant_name):
-    try:
-        read_config()
-        apply_mutant(mutant_name)
-    except FileNotFoundError as e:
-        print(e)
+    # try:
+    read_config()
+    apply_mutant(mutant_name)
+    # except FileNotFoundError as e:
+    #     print(e)
 
 
 def apply_mutant(mutant_name):
     m = find_mutant(mutant_name)
     path = m.path
 
-    orig_function_name = orig_function_name_from_key(mutant_name).rpartition('.')[-1]
-    mutant_function_name = mutant_name.rpartition('.')[-1]
+    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
+    orig_function_name = orig_function_name.rpartition('.')[-1]
 
     orig_ast = read_orig_ast(path)
     mutants_ast = read_mutants_ast(path)
-    mutant_ast_node = read_mutant_ast_node(mutants_ast, orig_function_name, mutant_function_name)
+    mutant_ast_node = read_mutant_ast_node(mutants_ast, mutant_name=mutant_name)
 
     mutant_ast_node.name.value = orig_function_name
 
+    # TODO: this won't work for classes
     for node in orig_ast.children:
         if node.type == 'funcdef' and node.name.value == orig_function_name:
             node.children = mutant_ast_node.children
             break
     else:
-        raise FileNotFoundError(f'Could not apply mutant {orig_function_name}')
+        raise FileNotFoundError(f'Could not apply mutant {mutant_name}')
 
     with open(path, 'w') as f:
         f.write(orig_ast.get_code())
