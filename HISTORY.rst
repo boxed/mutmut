@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+3.0.1
+~~~~~
+
+* Missed a file in distribution, so `browse` command was broken.
+
 3.0.0
 ~~~~~
 
