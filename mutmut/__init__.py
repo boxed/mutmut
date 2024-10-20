@@ -4,7 +4,7 @@ from parso.python.tree import (
     Number,
 )
 
-__version__ = '3.0.1'
+__version__ = '3.0.2'
 
 
 # We have a global whitelist for constants of the pattern __all__, __version__, etc

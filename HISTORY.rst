@@ -1,6 +1,14 @@
 Changelog
 ---------
 
+3.0.2
+~~~~~
+
+* Fixed bad entrypoint definition
+
+* Ignore files that can't be parsed by `parso`
+
+
 3.0.1
 ~~~~~
 
