@@ -40,8 +40,7 @@ docs:
 	tox -e docs
 
 dist: clean
-	python setup.py sdist
-	ls -l dist
+	python -m build --no-isolation
 
 tag:
 	python setup.py tag
@@ -50,4 +49,4 @@ release-check:
 	python setup.py release_check
 
 release:
-	rm -rf dist/ build/ && python setup.py sdist && twine upload dist/*
+	rm -rf dist/ build/ && python setup.py sdist bdist_wheel && twine upload dist/*

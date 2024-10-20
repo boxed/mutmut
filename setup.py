@@ -79,6 +79,9 @@ setup(
     url='https://github.com/boxed/mutmut',
     packages=find_packages('.'),
     package_dir={'': '.'},
+    package_data={
+        'mutmut': ['*.tcss'],
+    },
     include_package_data=True,
     license="BSD",
     zip_safe=False,

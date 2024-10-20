@@ -2,5 +2,5 @@ include HISTORY.rst
 include LICENSE
 include README.rst
 include requirements.txt
-recursive-include mutmut *.tcss
 exclude tests/*.*
+recursive-include mutmut *.*
