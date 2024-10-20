@@ -43,7 +43,10 @@ from typing import (
 )
 
 import click
-from parso import parse
+from parso import (
+    parse,
+    ParserSyntaxError,
+)
 from setproctitle import setproctitle
 
 import mutmut
@@ -181,10 +184,10 @@ def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
-        from __main__ import MutmutProgrammaticFailException
+        from mutmut.__main__ import MutmutProgrammaticFailException
         raise MutmutProgrammaticFailException('Failed programmatically')      
     elif mutant_under_test == 'stats':
-        from __main__ import record_trampoline_hit
+        from mutmut.__main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
         return orig(*args, **kwargs)
     prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
@@ -239,7 +242,7 @@ def create_mutants_for_file(filename, output_path):
         source = f.read()
 
     with open(output_path, 'w') as out:
-        mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source)
+        mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -269,13 +272,20 @@ def ensure_ends_with_newline(source):
         return source
 
 
-def write_all_mutants_to_file(*, out, source):
+def write_all_mutants_to_file(*, out, source, filename):
     no_mutate_lines = pragma_no_mutate_lines(source)
 
     hash_by_function_name = {}
     mutant_names = []
 
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(ensure_ends_with_newline(source), error_recovery=False), no_mutate_lines):
+    try:
+        ast = parse(ensure_ends_with_newline(source), error_recovery=False)
+    except ParserSyntaxError:
+        print(f'Warning: unsupported syntax in {filename}, skipping')
+        out.write(source)
+        return [], {}
+
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(ast, no_mutate_lines):
         out.write(x)
         if mutant_name:
             mutant_names.append(mutant_name)
