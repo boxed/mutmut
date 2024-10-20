@@ -313,7 +313,7 @@ class Foo:
     """.strip()
 
     out = StringIO()
-    mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source)
+    mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename='filename')
     assert len(mutant_names) == 2
     mutants_source = out.getvalue()
 
