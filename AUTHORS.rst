@@ -2,7 +2,7 @@
 Credits
 =======
 
-* Anders Hovmöller <anders.hovmoller@trioptima.com>
+* Anders Hovmöller <boxed@killingar.net>
 * Felipe Pontes <felipemfpontes@gmail.com>
 * William Orr <will@worrbase.com>
 * Trevin Gandhi <trevin.gandhi@petuum.com>

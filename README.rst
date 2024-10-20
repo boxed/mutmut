@@ -1,8 +1,8 @@
 mutmut - python mutation tester
 ===============================
 
-.. image:: https://travis-ci.org/boxed/mutmut.svg?branch=master
-    :target: https://travis-ci.org/boxed/mutmut
+.. image:: https://github.com/boxed/mutmut/workflows/tests/badge.svg
+    :target: https://github.com/boxed/mutmut/actions?query=workflow%3Atests+branch%3Amaster
 
 .. image:: https://readthedocs.org/projects/mutmut/badge/?version=latest
     :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
@@ -13,7 +13,7 @@ mutmut - python mutation tester
 
 Mutmut is a mutation testing system for Python, with a strong focus on ease
 of use. If you don't know what mutation testing is try starting with
-`this article <https://hackernoon.com/mutmut-a-python-mutation-testing-system-9b9639356c78>`_.
+`this article <https://kodare.net/2016/12/01/mutmut-a-python-mutation-testing-system.html>`_.
 
 Some highlight features:
 
@@ -21,20 +21,20 @@ Some highlight features:
   easy to work with the results
 - Remembers work that has been done, so you can work incrementally
 - Knows which tests to execute, speeding up mutation testing
+- Interactive terminal based UI
+- Parallel and fast execution
 
 
-If you need to run mutmut on a python 2 code base use mutmut `1.5.0`. Mutmut
-`1.9.0` is the last version to support python 3.4, 3.5 and 3.6.
+If you want to mutate code outside of functions, you can try using mutmut 2,
+which has a different execution model than mutmut 3+.
 
 
-Wildcards for testing mutants
------------------------------
+Requirements
+------------
 
-Unix filename pattern matching style on mutants is supported: foo*
+Mutmut must be run on a system with `fork` support. This means that if you want
+to run on windows, you must run inside WSL.
 
-
-also copy files
----------------
 
 
 Install and run
@@ -47,40 +47,90 @@ You can get started with a simple:
     pip install mutmut
     mutmut run
 
-This will by default run pytest on tests in the "tests" or "test" folder and
-it will try to figure out where the code to mutate lies. Run
+This will by run pytest on tests in the "tests" or "test" folder and
+it will try to figure out where the code to mutate is.
 
-.. code-block:: console
 
-    mutmut --help
-
-for the available flags, to use other runners, etc. The recommended way to use
-mutmut if the defaults aren't working for you is to add a block in `setup.cfg`.
-Then when you come back to mutmut weeks later you don't have to figure out the
-flags again, just run `mutmut run` and it works. Like this:
 
 .. code-block:: ini
 
     [mutmut]
     paths_to_mutate=src/
-    backup=False
-    runner=python -m hammett -x
     tests_dir=tests/
-    dict_synonyms=Struct, NamedStruct
 
 You can stop the mutation run at any time and mutmut will restart where you
-left off. It's also smart enough to retest only the surviving mutants when the
-test suite changes.
+left off. It will continue where it left off, and re-test functions that were
+modified since last run.
 
-To print the results run `mutmut show`. It will give you a list of the mutants
-grouped by file. You can now look at a specific mutant diff with `mutmut show 3`,
-all mutants for a specific file with `mutmut show path/to/file.py` or all mutants
-with `mutmut show all`.
+To work with the results, use `mutmut browse` where you can see the mutants,
+retest them when you've updated your tests.
+
+You can also write a mutant to disk from the `browse` interface, or via
+`mutmut apply <mutant>`. You should **REALLY** have the file you mutate under
+source code control and committed before you apply a mutant!
 
 
-You can also write a mutant to disk with `mutmut apply 3`. You should **REALLY**
-have the file you mutate under source code control and committed before you apply
-a mutant!
+Wildcards for testing mutants
+-----------------------------
+
+Unix filename pattern matching style on mutants is supported. Example:
+
+.. code-block:: console
+
+    mutmut run "my_module*"
+    mutmut run "my_module.my_function*"
+
+In the `browse` TUI you can press `f` to retest a function, and `m` to retest
+an entire module.
+
+
+"also copy" files
+-----------------
+
+To run the full test suite some files are often needed above the tests and the
+source. You can configure to copy extra files that you need by adding
+directories and files to `also_copy` in your `setup.cfg`:
+
+.. code-block:: ini
+
+    also_copy=
+        iommi/snapshots/
+        conftest.py
+
+
+Limit stack depth
+-----------------
+
+In big code bases some functions are called incidentally by huge swaths of the
+codebase, but you really don't want tests that hit those executions to count
+for mutation testing purposes. Incidentally tested functions lead to slow
+mutation testing as hundreds of tests can be checked for things that should
+have clean and fast unit tests, and it leads to bad test suites as any
+introduced bug in those base functions will lead to many tests that fail which
+are hard to understand how they relate to the function with the change.
+
+You can configure mutmut to only count a test as being relevant for a function
+if the stack depth from the test to the function is below some limit. In your
+`setup.cfg` add:
+
+.. code-block:: ini
+
+    max_stack_depth=8
+
+A lower value will increase mutation speed and lead to more localized tests,
+but will also lead to more surviving mutants that would otherwise have been
+caught.
+
+
+Exclude files from mutation
+---------------------------
+
+You can exclude files from mutation in `setup.cfg`:
+
+.. code-block::
+
+    do_not_mutate=
+        *__tests.py
 
 
 Whitelisting
@@ -121,69 +171,10 @@ This section describes how to work with mutmut to enhance your test suite.
 1. Run mutmut with `mutmut run`. A full run is preferred but if you're just
    getting started you can exit in the middle and start working with what you
    have found so far.
-2. Show the mutants with `mutmut results`
-3. Apply a surviving mutant to disk running `mutmut apply 3` (replace 3 with
-   the relevant mutant ID from `mutmut results`)
-4. Write a new test that fails
-5. Revert the mutant on disk
-6. Rerun the new test to see that it now passes
-7. Go back to point 2.
+2. Show the mutants with `mutmut browse`
+3. Find a mutant you want to work on and write a test to try to kill it.
+4. Press `r` to rerun the mutant and see if you successfully managed to kill it.
 
-Mutmut keeps a result cache in `.mutmut-cache` so if you want to make sure you
-run a full mutmut run just delete this file.
-
-You can also tell mutmut to just check a single mutant:
-
-.. code-block:: console
-
-    mutmut run 3
-
-
-Advanced whitelisting and configuration
----------------------------------------
-
-mutmut has an advanced configuration system. You create a file called
-`mutmut_config.py`. You can define two functions there: `init()` and
-`pre_mutation(context)`. `init` gets called when mutmut starts and
-`pre_mutation` gets called before each mutant is applied and tested. You can
-mutate the `context` object as you need. You can modify the test command like
-this:
-
-.. code-block:: python
-
-    def pre_mutation(context):
-        context.config.test_command = 'python -m pytest -x ' + something_else
-
-or skip a mutant:
-
-.. code-block:: python
-
-    def pre_mutation(context):
-        if context.filename == 'foo.py':
-            context.skip = True
-
-look at the code for the `Context` class for what you can modify. Please
-open a github issue if you need help.
-
-
-JUnit XML support
------------------
-
-In order to better integrate with CI/CD systems, `mutmut` supports the
-generation of a JUnit XML report (using https://pypi.org/project/junit-xml/).
-This option is available by calling `mutmut junitxml`. In order to define how
-to deal with suspicious and untested mutants, you can use
-
-.. code-block:: console
-
-    mutmut junitxml --suspicious-policy=ignore --untested-policy=ignore
-
-The possible values for these policies are:
-
-- `ignore`: Do not include the results on the report at all
-- `skipped`: Include the mutant on the report as "skipped"
-- `error`: Include the mutant on the report as "error"
-- `failure`: Include the mutant on the report as "failure"
-
-If a failed mutant is included in the report, then the unified diff of the
-mutant will also be included for debugging purposes.
+Mutmut keeps the data of what it has done and the mutants in the `mutants/`
+directory.If  you want to make sure you run a full mutmut run you can delete
+this directory to start from scratch.

@@ -1,6 +1,6 @@
 from parso import parse
 
-from mutmut3 import (
+from mutmut.__main__ import (
     trampoline_impl,
     yield_mutants_for_module,
 )

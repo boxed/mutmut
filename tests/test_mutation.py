@@ -3,7 +3,7 @@ from io import StringIO
 import pytest
 from parso import parse
 
-from mutmut3 import (
+from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
     FuncContext,
     get_diff_for_mutant,
@@ -149,7 +149,7 @@ def foo() -> int:
         if type_ == 'mutant'
     ]
     for m in mutants:
-        print(m)
+        print(m)  # pragma: no cover
 
     assert not mutants
 

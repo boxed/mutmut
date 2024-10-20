@@ -1,6 +1,16 @@
 Changelog
 ---------
 
+3.0.0
+~~~~~
+
+* Execution model switched to mutation schemata, which enabled parallell execution.
+
+* New terminal UI
+
+* Pytest only, which enabled better integration, cutting execution time significantly.
+
+
 2.0.0
 ~~~~~
 
@@ -370,4 +380,3 @@ Thanks goes out Marcelo Da Cruz Pinto, Savo Kovačević,
 ~~~~~~~~~~~~~~~~~~
 
 * Initial version
-
