@@ -2,3 +2,4 @@ parso
 click
 junit-xml==1.8
 setproctitle
+textual
