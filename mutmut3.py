@@ -31,6 +31,7 @@ from os import (
 )
 from os.path import isdir
 from pathlib import Path
+from signal import SIGTERM
 from textwrap import (
     dedent,
     indent,
@@ -164,6 +165,13 @@ class InvalidMutantException(Exception):
 class MutmutProgrammaticFailException(Exception):
     pass
 
+
+class CollectTestsFailedException(Exception):
+    pass
+
+
+class BadTestExecutionCommandsException(Exception):
+    pass
 
 # language=python
 trampoline_impl = """
@@ -530,7 +538,12 @@ class SourceFileMutationData:
         assert self.key_by_pid[pid] in self.exit_code_by_key
         self.exit_code_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
+        del self.key_by_pid[pid]
         self.save()
+
+    def stop_children(self):
+        for pid in self.key_by_pid.keys():
+            os.kill(pid, SIGTERM)
 
     def save(self):
         with open(self.meta_path, 'w') as f:
@@ -564,7 +577,7 @@ class TestRunner(ABC):
     def run_tests(self, *, mutant_name, tests):
         raise NotImplementedError()
 
-    def collect_new_tests(self):
+    def list_all_tests(self):
         raise NotImplementedError()
 
 
@@ -578,7 +591,39 @@ def change_cwd(path):
         os.chdir(old_cwd)
 
 
+class ListAllTestsResult:
+    def __init__(self, *, ids):
+        assert isinstance(ids, set)
+        self.ids = ids
+
+    @staticmethod
+    def old_tests():
+        return {
+            test_name
+            for _, test_names in mutmut.tests_by_mangled_function_name.items()
+            for test_name in test_names
+        }
+
+    def clear_out_obsolete_test_names(self):
+        mutmut.tests_by_mangled_function_name = {
+            k: {test_name for test_name in test_names if test_name not in self.ids}
+            for k, test_names in mutmut.tests_by_mangled_function_name.items()
+        }
+        save_stats()
+
+    def new_tests(self):
+        return self.ids - self.old_tests()
+
+
 class PytestRunner(TestRunner):
+    def execute_pytest(self, params, **kwargs):
+        import pytest
+        exit_code = int(pytest.main(params, **kwargs))
+        if exit_code == 4:
+            raise BadTestExecutionCommandsException(params)
+        return exit_code
+
+
     def run_stats(self, *, tests):
         import pytest
 
@@ -595,37 +640,29 @@ class PytestRunner(TestRunner):
         stats_collector = StatsCollector()
 
         with change_cwd('mutants'):
-            return int(pytest.main(['-x', '-q', '--import-mode=append'] + list(tests), plugins=[stats_collector]))
+            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests), plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name, tests):
-        import pytest
         with change_cwd('mutants'):
-            return int(pytest.main(['-x', '-q', '--import-mode=append'] + list(tests)))
+            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
-        import pytest
         with change_cwd('mutants'):
-            return int(pytest.main(['-x', '-q', '--import-mode=append']))
+            return int(self.execute_pytest(['-x', '-q', '--import-mode=append']))
 
-    def collect_new_tests(self):
-        import pytest
-
-        class NewTestsCollector:
+    def list_all_tests(self):
+        class TestsCollector:
             def pytest_collection_modifyitems(self, items):
                 self.nodeids = {item.nodeid for item in items}
 
-        collector = NewTestsCollector()
+        collector = TestsCollector()
 
         with change_cwd('mutants'):
-            exit_code = int(pytest.main(['-x', '-q', '--collect-only'], plugins=[collector]))
-            assert exit_code == 0
+            exit_code = int(self.execute_pytest(['-x', '-q', '--collect-only'], plugins=[collector]))
+            if exit_code != 0:
+                raise CollectTestsFailedException()
 
-        old_tests = {
-            test_name
-            for _, test_names in mutmut.tests_by_mangled_function_name.items()
-            for test_name in test_names
-        }
-        return collector.nodeids - old_tests
+        return ListAllTestsResult(ids=collector.nodeids)
 
 
 class HammettRunner(TestRunner):
@@ -673,7 +710,7 @@ def mangle_function_name(*, name, class_name):
 
 
 def mangled_name_from_mutant_name(mutant_name):
-    assert '__mutmut_' in mutant_name
+    assert '__mutmut_' in mutant_name, mutant_name
     return mutant_name.partition('__mutmut_')[0]
 
 
@@ -762,9 +799,8 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
 
 
 def run_forced_fail(runner):
-    print('running forced fail test')
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    with CatchOutput() as catcher:
+    with CatchOutput(show_spinner=True, spinner_title='running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.stop()
@@ -778,8 +814,10 @@ def run_forced_fail(runner):
 
 
 class CatchOutput:
-    def __init__(self, callback=lambda s: None):
+    def __init__(self, callback=lambda s: None, show_spinner=False, spinner_title=None):
         self.strings = []
+        self.show_spinner = show_spinner
+        self.spinner_title = spinner_title or ''
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher):
@@ -787,6 +825,8 @@ class CatchOutput:
 
             def write(self, s):
                 callback(s)
+                if show_spinner:
+                    print_status(spinner_title)
                 self.catcher.strings.append(s)
                 return len(s)
         self.redirect = StdOutRedirect(self)
@@ -799,12 +839,19 @@ class CatchOutput:
         sys.stdout = self.redirect
         sys.stderr = self.redirect
 
+    def dump_output(self):
+        self.stop()
+        for l in self.strings:
+             print(l, end='')
+
     def __enter__(self):
         self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+        if self.show_spinner:
+            print()
 
 
 @dataclass
@@ -861,23 +908,17 @@ def cli():
 
 
 def run_stats_collection(runner, tests=None):
-    print('running stats...')
-
     if tests is None:
         tests = []  # Meaning all...
 
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
     os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
-    # with CatchOutput() as output_catcher:
-
-    collect_stats_exit_code = runner.run_stats(tests=tests)
-    if collect_stats_exit_code != 0:
-        # output_catcher.stop()
-        # for l in output_catcher.strings:
-        #     print(l, end='')
-
-        print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
-        exit(1)
+    with CatchOutput(show_spinner=True, spinner_title='running stats') as output_catcher:
+        collect_stats_exit_code = runner.run_stats(tests=tests)
+        if collect_stats_exit_code != 0:
+            output_catcher.dump_output()
+            print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
+            exit(1)
 
     print('    done')
 
@@ -889,6 +930,31 @@ def run_stats_collection(runner, tests=None):
 
 
 def collect_or_load_stats(runner):
+    did_load = load_stats()
+
+    if not did_load:
+        # Run full stats
+        run_stats_collection(runner)
+    else:
+        # Run incremental stats
+        with CatchOutput(show_spinner=True, spinner_title='collecting stats') as output_catcher:
+            os.environ['MUTANT_UNDER_TEST'] = 'list_all_tests'
+            try:
+                all_tests_result = runner.list_all_tests()
+            except CollectTestsFailedException:
+                output_catcher.dump_output()
+                print('Failed to collect list of tests')
+                exit(1)
+
+        all_tests_result.clear_out_obsolete_test_names()
+
+        new_tests = all_tests_result.new_tests()
+
+        if new_tests:
+            run_stats_collection(runner, tests=new_tests)
+
+
+def load_stats():
     did_load = False
     try:
         with open('mutants/mutmut-stats.json') as f:
@@ -900,18 +966,7 @@ def collect_or_load_stats(runner):
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
         pass
-
-    if not did_load:
-        # Run full stats
-        run_stats_collection(runner)
-    else:
-        # Run incremental stats
-        with CatchOutput() as output_catcher:
-            os.environ['MUTANT_UNDER_TEST'] = 'collect_new_tests'
-            new_tests = runner.collect_new_tests()
-
-        if new_tests:
-            run_stats_collection(runner, tests=new_tests)
+    return did_load
 
 
 def save_stats():
@@ -981,6 +1036,23 @@ def print_time_estimates(mutant_names):
 
 
 @cli.command()
+@click.argument('mutant_name', required=True, nargs=1)
+def tests_for_mutant(mutant_name):
+    if not load_stats():
+        print('Failed to load stats. Please run mutmut first to collect stats.')
+        exit(1)
+
+    tests = tests_for_mutant_names([mutant_name])
+    for test in sorted(tests):
+        print(test)
+
+
+def stop_all_children(mutants):
+    for m, _, _ in mutants:
+        m.stop_children()
+
+
+@cli.command()
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
@@ -990,7 +1062,7 @@ def run(mutant_names, *, max_children):
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
 
     start = datetime.now()
-    print('generating mutants...')
+    print('generating mutants')
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
     read_config()
     create_mutants()
@@ -1011,18 +1083,15 @@ def run(mutant_names, *, max_children):
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
-    print('running clean tests')
     os.environ['MUTANT_UNDER_TEST'] = ''
-    with CatchOutput() as output_catcher:
-        output_catcher.stop()
+    with CatchOutput(show_spinner=True, spinner_title='running clean tests') as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
-            output_catcher.stop()
-            print(''.join(output_catcher.strings))
+            output_catcher.dump_output()
             print('failed to run clean test')
-            return
+            exit(1)
     print('    done')
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
@@ -1048,7 +1117,7 @@ def run(mutant_names, *, max_children):
 
     start = datetime.now()
     try:
-        print('Running mutation testing...')
+        print('Running mutation testing')
 
         for m, mutant_name, result in mutants:
             print_stats(source_file_mutation_data_by_path)
@@ -1104,7 +1173,8 @@ def run(mutant_names, *, max_children):
         except ChildProcessError:
             pass
     except KeyboardInterrupt:
-        print('aborting...')
+        print('stopping')
+        stop_all_children(mutants)
 
     t = datetime.now() - start
 
@@ -1265,7 +1335,6 @@ def apply_mutant(mutant_name):
 
     mutant_ast_node.name.value = orig_function_name
 
-    # TODO: this won't work for classes
     for node in orig_ast.children:
         if node.type == 'funcdef' and node.name.value == orig_function_name:
             node.children = mutant_ast_node.children
