@@ -1,13 +1,10 @@
 name: Run tests
 
-on:
-  pull_request:
-    branches: [master]
-  workflow_dispatch:
+on: [push, pull_request]
 
 jobs:
-  check-tests:
-    name: Check if tests are passing on PR
+  tests:
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
