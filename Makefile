@@ -41,7 +41,6 @@ docs:
 
 dist: clean
 	python setup.py sdist
-	python setup.py bdist_wheel
 	ls -l dist
 
 tag:
@@ -51,4 +50,4 @@ release-check:
 	python setup.py release_check
 
 release:
-	rm -rf dist/ build/ && python setup.py sdist bdist_wheel && twine upload dist/*
+	rm -rf dist/ build/ && python setup.py sdist && twine upload dist/*

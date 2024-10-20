@@ -65,17 +65,6 @@ class ReleaseCheck(Command):
 
         print("Ok to distribute files")
 
-
-test_reqs = read_reqs('test_requirements.txt')
-extras_reqs = {
-    'pytest': [
-        item for item in test_reqs if item.startswith('pytest')],
-    'coverage': [
-        item for item in test_reqs if item.startswith('coverage')],
-    'patch': [
-        item for item in test_reqs if item.startswith('whatthepatch')],
-}
-
 running_inside_tests = any('pytest' in x[1] or 'hammett' in x[1] for x in inspect.stack())
 
 # NB: _don't_ add namespace_packages to setup(), it'll break
@@ -95,8 +84,6 @@ setup(
     zip_safe=False,
     keywords='mutmut mutant mutation test testing',
     install_requires=read_reqs('requirements.txt'),
-    extras_require=extras_reqs,
-    tests_require=test_reqs,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

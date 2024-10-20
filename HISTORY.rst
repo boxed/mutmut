@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+3.0.4
+~~~~~
+
+* Another attempt to get the pypi package to work
+
 3.0.3
 ~~~~~
 
