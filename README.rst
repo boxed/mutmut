@@ -8,8 +8,6 @@ mutmut - python mutation tester
     :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. image:: https://codecov.io/gh/boxed/mutmut/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/boxed/mutmut
 
 Mutmut is a mutation testing system for Python, with a strong focus on ease
 of use. If you don't know what mutation testing is try starting with
