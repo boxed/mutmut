@@ -117,6 +117,6 @@ setup(
             'mutmut = mutmut.pytestplugin',
         ],
     } if running_inside_tests else {
-        'console_scripts': ["mutmut = mutmut.__main__:climain"],
+        'console_scripts': ["mutmut = mutmut.__main__:cli"],
     },
 )
