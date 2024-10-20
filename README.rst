@@ -22,6 +22,8 @@ Some highlight features:
 - Interactive terminal based UI
 - Parallel and fast execution
 
+.. image:: browse_screenshot.png
+
 
 If you want to mutate code outside of functions, you can try using mutmut 2,
 which has a different execution model than mutmut 3+.
