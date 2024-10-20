@@ -147,8 +147,6 @@ whitelist lines are:
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
 
-See also `Advanced whitelisting and configuration`_
-
 
 Example mutations
 -----------------

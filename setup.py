@@ -52,15 +52,15 @@ class ReleaseCheck(Command):
 
     def run(self):
         from subprocess import check_output
-        tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().split('/')[-1]
+        tag = check_output(['git', 'describe', '--all', '--exact-match', 'HEAD']).strip().decode().split('/')[-1]
         version = read_version()
         if tag != version:
             print('Missing {} tag on release'.format(version))
             raise SystemExit(1)
 
-        current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
-        if current_branch != 'master':
-            print('Only release from master')
+        current_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode().strip()
+        if current_branch != 'main':
+            print('Only release from main')
             raise SystemExit(1)
 
         print("Ok to distribute files")
