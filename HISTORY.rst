@@ -1,6 +1,13 @@
 Changelog
 ---------
 
+3.0.3
+~~~~~
+
+* Fixed missing requirement in install package
+
+* Fixed missing file from the install package
+
 3.0.2
 ~~~~~
 
