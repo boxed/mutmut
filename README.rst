@@ -1,8 +1,8 @@
 mutmut - python mutation tester
 ===============================
 
-.. image:: https://github.com/boxed/mutmut/workflows/tests/badge.svg
-    :target: https://github.com/boxed/mutmut/actions?query=workflow%3Atests+branch%3Amaster
+.. image:: https://github.com/boxed/mutmut/actions/workflows/tests.yml/badge.svg
+    :target: https://github.com/boxed/mutmut/actions/workflows/tests.yml
 
 .. image:: https://readthedocs.org/projects/mutmut/badge/?version=latest
     :target: https://mutmut.readthedocs.io/en/latest/?badge=latest
