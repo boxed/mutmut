@@ -2,4 +2,3 @@ pytest
 mock>=2.0.0
 coverage
 whatthepatch==0.0.6
--r requirements.txt
