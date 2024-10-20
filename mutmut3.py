@@ -519,6 +519,7 @@ class SourceFileMutationData:
         self.key_by_pid = {}
         self.exit_code_by_key = {}
         self.hash_by_function_name = {}
+        self.start_time_by_pid = {}
 
     def load(self):
         try:
@@ -533,12 +534,14 @@ class SourceFileMutationData:
 
     def register_pid(self, *, pid, key):
         self.key_by_pid[pid] = key
+        self.start_time_by_pid[pid] = datetime.now()
 
     def register_result(self, *, pid, exit_code):
         assert self.key_by_pid[pid] in self.exit_code_by_key
         self.exit_code_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
+        del self.start_time_by_pid[pid]
         self.save()
 
     def stop_children(self):
