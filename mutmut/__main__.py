@@ -937,7 +937,7 @@ def run_stats_collection(runner, tests=None):
 
     if not mutmut.tests_by_mangled_function_name:
         print('failed to collect stats, no active tests found')
-        return
+        exit(1)
 
     save_stats()
 
