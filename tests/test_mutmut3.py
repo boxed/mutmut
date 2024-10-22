@@ -2,6 +2,7 @@ from parso import parse
 
 from mutmut.__main__ import (
     trampoline_impl,
+    yield_from_trampoline_impl,
     yield_mutants_for_module,
 )
 
@@ -14,7 +15,7 @@ def foo(a, b, c):
     return a + b * c
 """
 
-    expected = trampoline_impl + """
+    expected = trampoline_impl + yield_from_trampoline_impl + """
 
 a + 1
 
@@ -53,7 +54,7 @@ def foo(a: List[int]) -> int:
     return 1
 """
 
-    expected = trampoline_impl + """
+    expected = trampoline_impl + yield_from_trampoline_impl + """
 
 def x_foo__mutmut_orig(a: List[int]) -> int:
     return 1

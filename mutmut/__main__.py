@@ -197,6 +197,7 @@ def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     return mutants[mutant_name](*args, **kwargs)
 
 """
+yield_from_trampoline_impl = trampoline_impl.replace('return ', 'yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')
 
 
 def create_mutants():
@@ -297,7 +298,7 @@ def write_all_mutants_to_file(*, out, source, filename):
     return mutant_names, hash_by_function_name
 
 
-def build_trampoline(orig_name, mutants, class_name=None):
+def build_trampoline(*, orig_name, mutants, class_name, is_generator):
     assert orig_name not in NEVER_MUTATE_FUNCTION_NAMES
 
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
@@ -309,11 +310,18 @@ def build_trampoline(orig_name, mutants, class_name=None):
         access_prefix = f'object.__getattribute__(self, "'
         access_suffix = '")'
 
+    if is_generator:
+        return_or_yield_statement = 'yield from'
+        trampoline_name = '_mutmut_yield_from_trampoline'
+    else:
+        return_or_yield_statement = 'return'
+        trampoline_name = '_mutmut_trampoline'
+
     return f"""
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    return _mutmut_trampoline({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
+    {return_or_yield_statement} {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
@@ -447,6 +455,23 @@ class FuncContext:
         return False
 
 
+def is_generator(node):
+    assert node.type == 'funcdef'
+
+    def _is_generator(n):
+        if n is not node and n.type in ('funcdef', 'classdef'):
+            return False
+
+        if n.type == 'keyword' and n.value == 'yield':
+            return True
+
+        for c in getattr(n, 'children', []):
+            if _is_generator(c):
+                return True
+        return False
+    return _is_generator(node)
+
+
 def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
     assert node.type == 'funcdef'
 
@@ -481,7 +506,7 @@ def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
         finally:
             context.stack.pop()
 
-    trampoline = build_trampoline(node.name.value, context.mutants, class_name=class_name)
+    trampoline = build_trampoline(orig_name=node.name.value, mutants=context.mutants, class_name=class_name, is_generator=is_generator(node))
     if class_name is not None:
         trampoline = indent(trampoline, '    ')
     yield 'trampoline', trampoline, None, None
@@ -530,6 +555,7 @@ def yield_mutants_for_module(node, no_mutate_lines):
     yield from yield_future_imports(node)
 
     yield 'trampoline_impl', trampoline_impl, None, None
+    yield 'trampoline_impl', yield_from_trampoline_impl, None, None
     yield 'filler', '\n', None, None
     for child_node in node.children:
         if child_node.type == 'funcdef':

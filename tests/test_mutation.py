@@ -7,6 +7,7 @@ from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
     FuncContext,
     get_diff_for_mutant,
+    is_generator,
     mangle_function_name,
     orig_function_and_class_names_from_key,
     pragma_no_mutate_lines,
@@ -358,3 +359,40 @@ def foo():
     mutated_source = full_mutated_source(source)
     assert mutated_source.split('\n')[0] == 'from __future__ import annotations'
     assert mutated_source.count('from __future__') == 1
+
+
+def test_preserve_generators():
+    source = '''
+    def foo():
+        yield 1
+    '''.strip()
+    mutated_source = full_mutated_source(source)
+    assert 'yield from _mutmut_yield_from_trampoline' in mutated_source
+
+
+def test_is_generator():
+    source = '''
+    def foo():
+        yield 1
+    '''.strip()
+    assert is_generator(parse(source).children[0])
+
+    source = '''
+    def foo():
+        yield from bar()
+    '''.strip()
+    assert is_generator(parse(source).children[0])
+
+    source = '''
+    def foo():
+        return 1
+    '''.strip()
+    assert not is_generator(parse(source).children[0])
+
+    source = '''
+    def foo():
+        def bar():
+            yield 2
+        return 1
+    '''.strip()
+    assert not is_generator(parse(source).children[0])
