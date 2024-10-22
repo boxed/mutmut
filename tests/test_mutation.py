@@ -182,6 +182,14 @@ def mutants_for_source(source):
     return r
 
 
+def full_mutated_source(source):
+    no_mutate_lines = pragma_no_mutate_lines(source)
+    r = []
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
+        r.append(x)
+    return '\n'.join(r).strip()
+
+
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
     mutants = mutants_for_source(source)
@@ -337,3 +345,16 @@ class Foo:
 -        return 3
 +        return 4
 '''.strip()
+
+
+def test_from_future_still_first():
+    source = """
+from __future__ import annotations
+from collections.abc import Iterable
+
+def foo():
+    return 1
+""".strip()
+    mutated_source = full_mutated_source(source)
+    assert mutated_source.split('\n')[0] == 'from __future__ import annotations'
+    assert mutated_source.count('from __future__') == 1

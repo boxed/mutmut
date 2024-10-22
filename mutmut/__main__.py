@@ -508,15 +508,37 @@ def yield_mutants_for_class_body(node, no_mutate_lines):
             yield 'filler', child_node.get_code(), None, None
 
 
+def is_from_future_import_node(c):
+    if c.type == 'simple_stmt':
+        if c.children:
+            c2 = c.children[0]
+            if c2.type == 'import_from' and c2.children[1].type == 'name' and c2.children[1].value == '__future__':
+                return True
+    return False
+
+
+def yield_future_imports(node):
+    for c in node.children:
+        if is_from_future_import_node(c):
+            yield 'filler', c.get_code(), None, None
+
+
 def yield_mutants_for_module(node, no_mutate_lines):
+    assert node.type == 'file_input'
+
+    # First yield `from __future__`, then the rest
+    yield from yield_future_imports(node)
+
     yield 'trampoline_impl', trampoline_impl, None, None
     yield 'filler', '\n', None, None
-    assert node.type == 'file_input'
     for child_node in node.children:
         if child_node.type == 'funcdef':
             yield from yield_mutants_for_function(child_node, no_mutate_lines=no_mutate_lines)
         elif child_node.type == 'classdef':
             yield from yield_mutants_for_class(child_node, no_mutate_lines=no_mutate_lines)
+        elif is_from_future_import_node(child_node):
+            # Don't yield `from __future__` after trampoline
+            pass
         else:
             yield 'filler', child_node.get_code(), None, None
 
@@ -636,10 +658,7 @@ class PytestRunner(TestRunner):
             raise BadTestExecutionCommandsException(params)
         return exit_code
 
-
     def run_stats(self, *, tests):
-        import pytest
-
         class StatsCollector:
             def pytest_runtest_teardown(self, item, nextitem):
                 unused(nextitem)
@@ -1083,7 +1102,14 @@ def run(mutant_names, *, max_children):
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
-    sys.path.insert(0, os.path.abspath('mutants'))
+    src_path = (Path('mutants') / 'src')
+    source_path = (Path('mutants') / 'source')
+    if src_path.exists():
+        sys.path.insert(0, str(src_path.absolute()))
+    elif source_path.exists():
+        sys.path.insert(0, str(source_path.absolute))
+    else:
+        sys.path.insert(0, os.path.abspath('mutants'))
 
     # TODO: config/option for runner
     # runner = HammettRunner()
