@@ -194,11 +194,11 @@ def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
     mutants = mutants_for_source(source)
     assert mutants == [
-        'def capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
-        'def capitalize__mutmut_2(s : str):\n    return s[None].upper() + s[1:] if s else s',
-        'def capitalize__mutmut_3(s : str):\n    return s[0].upper() - s[1:] if s else s',
-        'def capitalize__mutmut_4(s : str):\n    return s[0].upper() + s[2:] if s else s',
-        'def capitalize__mutmut_5(s : str):\n    return s[0].upper() + s[None] if s else s'
+        'def x_capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
+        'def x_capitalize__mutmut_2(s : str):\n    return s[None].upper() + s[1:] if s else s',
+        'def x_capitalize__mutmut_3(s : str):\n    return s[0].upper() - s[1:] if s else s',
+        'def x_capitalize__mutmut_4(s : str):\n    return s[0].upper() + s[2:] if s else s',
+        'def x_capitalize__mutmut_5(s : str):\n    return s[0].upper() + s[None] if s else s'
     ]
 
 
@@ -221,12 +221,12 @@ def foo():
 '''
     mutants = mutants_for_source(source)
     assert mutants == [
-        '\ndef foo__mutmut_1():    \n    dict(a=None, c=d)\n',
-        '\ndef foo__mutmut_2():    \n    dict(aXX=b, c=d)\n',
-        '\ndef foo__mutmut_3():    \n    dict(a=b, c=None)\n',
-        '\ndef foo__mutmut_4():    \n    dict(a=b, cXX=d)\n',
-        '\ndef foo__mutmut_5():    \n    dict( c=d)\n',
-        '\ndef foo__mutmut_6():    \n    dict(a=b,)\n',
+        '\ndef x_foo__mutmut_1():    \n    dict(a=None, c=d)\n',
+        '\ndef x_foo__mutmut_2():    \n    dict(aXX=b, c=d)\n',
+        '\ndef x_foo__mutmut_3():    \n    dict(a=b, c=None)\n',
+        '\ndef x_foo__mutmut_4():    \n    dict(a=b, cXX=d)\n',
+        '\ndef x_foo__mutmut_5():    \n    dict( c=d)\n',
+        '\ndef x_foo__mutmut_6():    \n    dict(a=b,)\n',
     ]
 
 
@@ -300,11 +300,11 @@ def foo():
 
 def test_orig_function_name_from_key():
     assert orig_function_and_class_names_from_key(f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__mutmut_1') == ('bar', 'Foo')
-    assert orig_function_and_class_names_from_key('bar__mutmut_1') == ('bar', None)
+    assert orig_function_and_class_names_from_key('x_bar__mutmut_1') == ('bar', None)
 
 
 def test_mangle_function_name():
-    assert mangle_function_name(name='bar', class_name=None) == 'bar'
+    assert mangle_function_name(name='bar', class_name=None) == 'x_bar'
     assert mangle_function_name(name='bar', class_name='Foo') == f'x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar'
 
 

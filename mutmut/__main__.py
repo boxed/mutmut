@@ -738,6 +738,8 @@ def mangle_function_name(*, name, class_name):
     if class_name:
         assert CLASS_NAME_SEPARATOR not in class_name
         prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
+    else:
+        prefix = 'x_'
     return f'{prefix}{name}'
 
 
@@ -752,6 +754,9 @@ def orig_function_and_class_names_from_key(mutant_name):
     if CLASS_NAME_SEPARATOR in r:
         class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1: r.rindex(CLASS_NAME_SEPARATOR)]
         r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1:]
+    else:
+        assert r.startswith('x_')
+        r = r[2:]
     return r, class_name
 
 
