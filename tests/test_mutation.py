@@ -396,3 +396,14 @@ def test_is_generator():
         return 1
     '''.strip()
     assert not is_generator(parse(source).children[0])
+
+
+def test_decorated_functions_mutation():
+    source = """
+@decorator
+def foo():
+    return 1
+    """.strip()
+
+    mutants = mutants_for_source(source)
+    assert len(mutants) == 1

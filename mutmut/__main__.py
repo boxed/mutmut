@@ -314,17 +314,18 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
         access_suffix = '")'
 
     if is_generator:
-        return_or_yield_statement = 'yield from'
+        yield_statement = 'yield from'
         trampoline_name = '_mutmut_yield_from_trampoline'
     else:
-        return_or_yield_statement = 'return'
+        yield_statement = ''
         trampoline_name = '_mutmut_trampoline'
 
     return f"""
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    {return_or_yield_statement} {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs) 
+    result = {yield_statement} {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs)
+    return result 
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
