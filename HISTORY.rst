@@ -1,6 +1,18 @@
 Changelog
 ---------
 
+3.1.0
+~~~~~
+
+* Correctly handle mutation for generator functions (`yield`).
+
+* Fixed so that `from __future__` lines are always first.
+
+* If no stats are collected exit directly, as that is a breaking error for mutation testing.
+
+* Changed name mangling to make mutants less likely to trigger name-based python magic, like in pytest where functions named `test_*` have special meaning.
+
+
 3.0.5
 ~~~~~
 
