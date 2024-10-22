@@ -189,18 +189,18 @@ def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     elif mutant_under_test == 'stats':
         from mutmut.__main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
-        ret orig(*args, **kwargs)
-        return  # for the yield case
+        result = orig(*args, **kwargs)
+        return result  # for the yield case
     prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
     if not mutant_under_test.startswith(prefix):
-        ret orig(*args, **kwargs)
-        return  # for the yield case
+        result = orig(*args, **kwargs)
+        return result  # for the yield case
     mutant_name = mutant_under_test.rpartition('.')[-1]
-    ret mutants[mutant_name](*args, **kwargs)
+    result = mutants[mutant_name](*args, **kwargs)
+    return result
 
 """
-yield_from_trampoline_impl = trampoline_impl.replace('ret ', 'yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')
-trampoline_impl = trampoline_impl.replace('ret ', 'return ')
+yield_from_trampoline_impl = trampoline_impl.replace('result = ', 'result = yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')
 
 
 def create_mutants():
