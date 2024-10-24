@@ -36,6 +36,8 @@ from textwrap import (
     dedent,
     indent,
 )
+import resource 
+
 from threading import Thread
 from typing import (
     Dict,
@@ -129,9 +131,15 @@ def guess_paths_to_mutate():
         'Could not figure out where the code to mutate is. '
         'Please specify it on the command line using --paths-to-mutate, '
         'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
+  
+def limit_memory(maxsize): 
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS) 
+    resource.setrlimit(resource.RLIMIT_AS, (maxsize, hard))
 
 
 def record_trampoline_hit(name):
+    if not hasattr(mutmut,"config"):
+        return
     if mutmut.config.max_stack_depth != -1:
         f = inspect.currentframe()
         c = mutmut.config.max_stack_depth
@@ -181,8 +189,9 @@ trampoline_impl = """
 from inspect import signature as _mutmut_signature
 
 def _mutmut_trampoline(orig, mutants, *args, **kwargs):
+    __tracebackhide__ = True 
     import os
-    mutant_under_test = os.environ['MUTANT_UNDER_TEST']
+    mutant_under_test = os.environ.get('MUTANT_UNDER_TEST',"")
     if mutant_under_test == 'fail':
         from mutmut.__main__ import MutmutProgrammaticFailException
         raise MutmutProgrammaticFailException('Failed programmatically')      
@@ -259,7 +268,7 @@ def create_mutants_for_file(filename, output_path):
     source_file_mutation_data = SourceFileMutationData(path=filename)
     module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
     source_file_mutation_data.exit_code_by_key = {
-         '.'.join([module_name, x]).replace('.__init__.', '.'): None
+         '.'.join([module_name, x]).replace('.__init__.', '.').replace("src.",""): None
         for x in mutant_names
     }
     source_file_mutation_data.hash_by_function_name = hash_by_function_name
@@ -324,6 +333,7 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
+    __tracebackhide__ = True 
     result = {yield_statement} {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs)
     return result 
 
@@ -670,10 +680,10 @@ class ListAllTestsResult:
         }
 
     def clear_out_obsolete_test_names(self):
-        mutmut.tests_by_mangled_function_name = {
+        mutmut.tests_by_mangled_function_name=defaultdict(set,{
             k: {test_name for test_name in test_names if test_name not in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
-        }
+        })
         save_stats()
 
     def new_tests(self):
@@ -683,6 +693,8 @@ class ListAllTestsResult:
 class PytestRunner(TestRunner):
     def execute_pytest(self, params, **kwargs):
         import pytest
+        params+=["--rootdir=."]
+        #print(">","pytest",*params,kwargs)
         exit_code = int(pytest.main(params, **kwargs))
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
@@ -706,7 +718,7 @@ class PytestRunner(TestRunner):
 
     def run_tests(self, *, mutant_name, tests):
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
+            return int(self.execute_pytest(['-x', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
         with change_cwd('mutants'):
@@ -980,12 +992,10 @@ def run_stats_collection(runner, tests=None):
 
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
     os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
-    with CatchOutput(show_spinner=True, spinner_title='running stats') as output_catcher:
-        collect_stats_exit_code = runner.run_stats(tests=tests)
-        if collect_stats_exit_code != 0:
-            output_catcher.dump_output()
-            print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
-            exit(1)
+    collect_stats_exit_code = runner.run_stats(tests=tests)
+    if collect_stats_exit_code != 0:
+        print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
+        exit(1)
 
     print('    done')
 
@@ -1056,7 +1066,7 @@ def collect_source_file_mutation_data(*, mutant_names):
         source_file_mutation_data_by_path[str(path)] = m
 
     mutants = [
-        (m, mutant_name, result)
+        (m, mutant_name.replace("src.",""), result)
         for path, m in source_file_mutation_data_by_path.items()
         for mutant_name, result in m.exit_code_by_key.items()
     ]
@@ -1160,6 +1170,12 @@ def run(mutant_names, *, max_children):
     os.environ['MUTANT_UNDER_TEST'] = ''
     with CatchOutput(show_spinner=True, spinner_title='running clean tests') as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
+        #print(f"{mutants=}")
+        print(f"{mutant_names=}")
+        print(f"{tests=}")
+        if not tests:
+            tests=["tests"]
+        
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
@@ -1197,6 +1213,7 @@ def run(mutant_names, *, max_children):
             print_stats(source_file_mutation_data_by_path)
 
             mutant_name = mutant_name.replace('__init__.', '')
+            mutant_name = mutant_name.replace('src.', '')
 
             # Rerun mutant if it's explicitly mentioned, but otherwise let the result stand
             if not mutant_names and result is not None:
@@ -1215,6 +1232,7 @@ def run(mutant_names, *, max_children):
                 # In the child
                 os.environ['MUTANT_UNDER_TEST'] = mutant_name
                 setproctitle(f'mutmut: {mutant_name}')
+                limit_memory(1000*1000*500)
 
                 # Run fast tests first
                 tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
