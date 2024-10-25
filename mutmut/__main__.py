@@ -1445,7 +1445,9 @@ def browse():
     from textual.containers import Container
     from textual.widgets import Footer
     from textual.widgets import DataTable
-    from textual.widgets import TextArea
+    from textual.widgets import Static
+    from textual.widget import Widget
+    from rich.syntax import Syntax
 
     class ResultBrowser(App):
         loading_id = None
@@ -1472,7 +1474,8 @@ def browse():
             with Container(classes='container'):
                 yield DataTable(id='files')
                 yield DataTable(id='mutants')
-            yield TextArea(id='diff_view')
+            with Widget(id="diff_view_widget"):
+                yield Static(id='diff_view')
             yield Footer()
 
         def on_mount(self):
@@ -1531,9 +1534,9 @@ def browse():
                 assert event.data_table.id == 'mutants'
                 diff_view = self.query_one('#diff_view')
                 if event.row_key.value is None:
-                    diff_view.text = ''
+                    diff_view.update('')
                 else:
-                    diff_view.text = '<loading...>'
+                    diff_view.update('<loading...>')
                     self.loading_id = event.row_key.value
 
                     def load_thread():
@@ -1541,9 +1544,9 @@ def browse():
                         try:
                             d = get_diff_for_mutant(event.row_key.value)
                             if event.row_key.value == self.loading_id:
-                                diff_view.text = d
+                                diff_view.update(Syntax(d, "diff"))
                         except Exception as e:
-                            diff_view.text = f'<{type(e)} {e}>'
+                            diff_view.update(f"<{type(e)} {e}>")
 
                     t = Thread(target=load_thread)
                     t.start()

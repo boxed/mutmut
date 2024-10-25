@@ -24,3 +24,12 @@ DataTable:focus .datatable--cursor {
     color: black;
     background: orange;
 }
+
+#diff_view_widget{
+    height: 50%;
+ border: solid;
+ overflow-y: scroll;
+}
+
+#diff_view{
+}
