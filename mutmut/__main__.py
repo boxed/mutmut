@@ -1030,8 +1030,6 @@ def collect_or_load_stats(runner):
 
         new_tests = all_tests_result.new_tests()
 
-        assert not new_tests, new_tests
-
         if new_tests:
             run_stats_collection(runner, tests=new_tests)
 
