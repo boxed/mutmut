@@ -34,7 +34,8 @@ x_foo__mutmut_mutants = {
 }
 
 def foo(*args, **kwargs):
-    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, *args, **kwargs) 
+    result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, *args, **kwargs)
+    return result 
 
 foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig)
 x_foo__mutmut_orig.__name__ = 'x_foo'
@@ -67,7 +68,8 @@ x_foo__mutmut_mutants = {
 }
 
 def foo(*args, **kwargs):
-    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, *args, **kwargs) 
+    result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, *args, **kwargs)
+    return result 
 
 foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig)
 x_foo__mutmut_orig.__name__ = 'x_foo'
