@@ -20,3 +20,4 @@ Credits
 * Emil Stenström <emil@emilstenstrom.se>
 * Roxane Bellott <roxane.bellot@gmail.com>
 * Tomáš Chvátal <tchvatal@suse.com>
+* Frank Hoffmann <15r10nk-git@polarbit.de>
