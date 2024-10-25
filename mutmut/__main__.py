@@ -1527,7 +1527,7 @@ def browse():
                             if event.row_key.value == self.loading_id:
                                 diff_view.text = d
                         except Exception as e:
-                            diff_view.text = f'<{e}>'
+                            diff_view.text = f'<{type(e)} {e}>'
 
                     t = Thread(target=load_thread)
                     t.start()
