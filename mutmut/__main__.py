@@ -25,6 +25,7 @@ from functools import lru_cache
 from hashlib import md5
 from io import TextIOBase
 from json import JSONDecodeError
+from math import ceil
 from os import (
     makedirs,
     walk,
@@ -36,7 +37,10 @@ from textwrap import (
     dedent,
     indent,
 )
+import resource
+
 from threading import Thread
+from time import process_time
 from typing import (
     Dict,
     List,
@@ -51,7 +55,6 @@ from setproctitle import setproctitle
 
 import mutmut
 
-mutmut.duration_by_test = {}
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
@@ -71,9 +74,6 @@ NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
 NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
 CLASS_NAME_SEPARATOR = 'ǁ'
 
-mutmut._stats = set()
-mutmut.tests_by_mangled_function_name = defaultdict(set)
-
 
 status_by_exit_code = {
     1: 'killed',
@@ -86,6 +86,7 @@ status_by_exit_code = {
     34: 'skipped',
     35: 'suspicious',
     36: 'timeout',
+    152: 'timeout',  # SIGXCPU
 }
 
 emoji_by_status = {
@@ -257,7 +258,8 @@ def create_mutants_for_file(filename, output_path):
             exit(1)
 
     source_file_mutation_data = SourceFileMutationData(path=filename)
-    module_name = str(filename)[:-len(filename.suffix)].replace(os.sep, '.')
+    module_name = strip_prefix(str(filename)[:-len(filename.suffix)].replace(os.sep, '.'), prefix='src.')
+
     source_file_mutation_data.exit_code_by_key = {
          '.'.join([module_name, x]).replace('.__init__.', '.'): None
         for x in mutant_names
@@ -656,28 +658,32 @@ def change_cwd(path):
         os.chdir(old_cwd)
 
 
+def collected_test_names():
+    return {
+        test_name
+        for _, test_names in mutmut.tests_by_mangled_function_name.items()
+        for test_name in test_names
+    }
+
+
 class ListAllTestsResult:
     def __init__(self, *, ids):
         assert isinstance(ids, set)
         self.ids = ids
 
-    @staticmethod
-    def old_tests():
-        return {
-            test_name
-            for _, test_names in mutmut.tests_by_mangled_function_name.items()
-            for test_name in test_names
-        }
-
     def clear_out_obsolete_test_names(self):
+        count_before = len(mutmut.tests_by_mangled_function_name)
         mutmut.tests_by_mangled_function_name = {
             k: {test_name for test_name in test_names if test_name not in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
         }
-        save_stats()
+        count_after = len(mutmut.tests_by_mangled_function_name)
+        if count_before != count_after:
+            print(f'Removed {count_before - count_after} obsolete test names')
+            save_stats()
 
     def new_tests(self):
-        return self.ids - self.old_tests()
+        return self.ids - collected_test_names()
 
 
 class PytestRunner(TestRunner):
@@ -904,6 +910,8 @@ class CatchOutput:
         sys.stderr = sys.__stderr__
 
     def start(self):
+        if self.show_spinner:
+            print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
 
@@ -981,6 +989,8 @@ def run_stats_collection(runner, tests=None):
 
     os.environ['MUTANT_UNDER_TEST'] = 'stats'
     os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
+    start_cpu_time = process_time()
+
     with CatchOutput(show_spinner=True, spinner_title='running stats') as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
@@ -989,8 +999,10 @@ def run_stats_collection(runner, tests=None):
             exit(1)
 
     print('    done')
+    if not tests:  # again, meaning all
+        mutmut.stats_time = process_time() - start_cpu_time
 
-    if not mutmut.tests_by_mangled_function_name:
+    if not collected_test_names():
         print('failed to collect stats, no active tests found')
         exit(1)
 
@@ -1018,6 +1030,8 @@ def collect_or_load_stats(runner):
 
         new_tests = all_tests_result.new_tests()
 
+        assert not new_tests, new_tests
+
         if new_tests:
             run_stats_collection(runner, tests=new_tests)
 
@@ -1030,6 +1044,7 @@ def load_stats():
             for k, v in data.pop('tests_by_mangled_function_name').items():
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
             mutmut.duration_by_test = data.pop('duration_by_test')
+            mutmut.stats_time = data.pop('stats_time')
             assert not data, data
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
@@ -1042,6 +1057,7 @@ def save_stats():
         json.dump(dict(
             tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
             duration_by_test=mutmut.duration_by_test,
+            stats_time=mutmut.stats_time,
         ), f, indent=4)
 
 
@@ -1221,6 +1237,9 @@ def run(mutant_names, *, max_children):
                 tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
                 if not tests:
                     os._exit(33)
+
+                estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests) + 1
+                resource.setrlimit(resource.RLIMIT_CPU, (ceil(estimated_time_of_tests * 2), ceil(estimated_time_of_tests * 2)))
 
                 with CatchOutput():
                     result = runner.run_tests(mutant_name=mutant_name, tests=tests)

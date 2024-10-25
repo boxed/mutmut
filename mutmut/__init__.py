@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from parso.python.tree import (
     Keyword,
     Name,
@@ -21,6 +23,13 @@ dunder_whitelist = [
     'license',
     'copyright',
 ]
+
+duration_by_test = {}
+stats_time = None
+config = None
+
+_stats = set()
+tests_by_mangled_function_name = defaultdict(set)
 
 
 class SkipException(Exception):
