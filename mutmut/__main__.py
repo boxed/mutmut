@@ -688,6 +688,8 @@ class ListAllTestsResult:
 class PytestRunner(TestRunner):
     def execute_pytest(self, params, **kwargs):
         import pytest
+        if mutmut.config.debug:
+            params = ['-vv'] + params
         exit_code = int(pytest.main(params, **kwargs))
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
@@ -911,6 +913,8 @@ class CatchOutput:
             print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
+        if mutmut.config.debug:
+            self.stop()
 
     def dump_output(self):
         self.stop()
@@ -932,6 +936,7 @@ class Config:
     also_copy: List[Path]
     do_not_mutate: List[str]
     max_stack_depth: int
+    debug: bool
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -971,7 +976,8 @@ def read_config():
             Path('test/'),
             Path('tests.py'),
         ],
-        max_stack_depth=int(s('max_stack_depth', '-1'))
+        max_stack_depth=int(s('max_stack_depth', '-1')),
+        debug=s('debug', 'False').lower() in ('1', 't', 'true'),
     )
 
 
