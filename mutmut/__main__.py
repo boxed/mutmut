@@ -51,6 +51,7 @@ from parso import (
     parse,
     ParserSyntaxError,
 )
+from rich.text import Text
 from setproctitle import setproctitle
 
 import mutmut
@@ -1462,7 +1463,7 @@ def browse():
         columns = [
             ('path', 'Path'),
         ] + [
-            (status, emoji)
+            (status, Text(emoji, justify='right'))
             for status, emoji in emoji_by_status.items()
         ]
 
@@ -1512,7 +1513,10 @@ def browse():
             files_table.clear()
 
             for p, (source_file_mutation_data, stat) in sorted(self.source_file_mutation_data_and_stat_by_path.items()):
-                row = [p] + [getattr(stat, k.replace(' ', '_')) for k, _ in self.columns[1:]]
+                row = [p] + [
+                    Text(str(getattr(stat, k.replace(' ', '_'))), justify="right")
+                    for k, _ in self.columns[1:]
+                ]
                 files_table.add_row(*row, key=p)
 
             files_table.move_cursor(row=selected_row)
