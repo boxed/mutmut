@@ -877,8 +877,7 @@ def run_forced_fail(runner):
     with CatchOutput(show_spinner=True, spinner_title='running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:
-                catcher.stop()
-                print('\n'.join(catcher.strings))
+                catcher.dump_output()
                 print("FAILED")
                 os._exit(1)
         except MutmutProgrammaticFailException:
