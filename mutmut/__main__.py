@@ -5,10 +5,10 @@ import inspect
 import itertools
 import json
 import os
+import resource
 import shutil
 import sys
 from abc import ABC
-from collections import defaultdict
 from configparser import (
     ConfigParser,
     NoOptionError,
@@ -37,8 +37,6 @@ from textwrap import (
     dedent,
     indent,
 )
-import resource
-
 from threading import Thread
 from time import process_time
 from typing import (
@@ -55,7 +53,6 @@ from rich.text import Text
 from setproctitle import setproctitle
 
 import mutmut
-
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
@@ -698,12 +695,14 @@ class PytestRunner(TestRunner):
 
     def run_stats(self, *, tests):
         class StatsCollector:
+            # noinspection PyMethodMayBeStatic
             def pytest_runtest_teardown(self, item, nextitem):
                 unused(nextitem)
                 for function in mutmut._stats:
                     mutmut.tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix='mutants/'))
                 mutmut._stats.clear()
 
+            # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item, call):
                 mutmut.duration_by_test[item.nodeid] = call.duration
 
@@ -772,7 +771,6 @@ class HammettRunner(TestRunner):
 
 def mangle_function_name(*, name, class_name):
     assert CLASS_NAME_SEPARATOR not in name
-    prefix = ''
     if class_name:
         assert CLASS_NAME_SEPARATOR not in class_name
         prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
@@ -948,36 +946,60 @@ class Config:
         return False
 
 
-@lru_cache()
-def read_config():
+def config_reader():
+    path=Path("pyproject.toml")
+    if path.exists():
+        if sys.version_info >= (3, 11):
+            from tomllib import loads
+        else:
+            from toml import loads
+        data = loads(path.read_text("utf-8"))
+
+        try:
+            config = data["tool"]["mutmut"]
+        except KeyError:
+            pass
+        else:
+            def s(key, default):
+                try:
+                    result = config[key]
+                except KeyError:
+                    return default
+                return result
+            return s
+
     config_parser = ConfigParser()
     config_parser.read('setup.cfg')
 
     def s(key, default):
         try:
-            return config_parser.get('mutmut', key)
+            result = config_parser.get('mutmut', key)
         except (NoOptionError, NoSectionError):
             return default
+        if isinstance(default, list):
+            result = [x for x in result.split("\n") if x]
+        elif isinstance(default, int):
+            result = int(result)
+        return result
+    return s
+
+
+@lru_cache()
+def read_config():
+
+    s = config_reader()
 
     mutmut.config = Config(
-        do_not_mutate=[
-            x
-            for x in s('do_not_mutate', '').split('\n')
-            if x
-        ],
+        do_not_mutate=s('do_not_mutate', []),
         also_copy=[
             Path(y)
-            for y in [
-                x
-                for x in s('also_copy', '').split('\n')
-                if x
-            ]
+            for y in s('also_copy', [])
         ]+[
             Path('tests/'),
             Path('test/'),
             Path('tests.py'),
         ],
-        max_stack_depth=int(s('max_stack_depth', '-1')),
+        max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', 'False').lower() in ('1', 't', 'true'),
     )
 

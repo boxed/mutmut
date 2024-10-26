@@ -3,3 +3,4 @@ click
 junit-xml==1.8
 setproctitle
 textual
+toml>=0.10.2; python_version < '3.11'
