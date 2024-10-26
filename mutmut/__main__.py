@@ -659,11 +659,7 @@ def change_cwd(path):
 
 
 def collected_test_names():
-    return {
-        test_name
-        for _, test_names in mutmut.tests_by_mangled_function_name.items()
-        for test_name in test_names
-    }
+    return set(mutmut.duration_by_test.keys())
 
 
 class ListAllTestsResult:
@@ -673,7 +669,6 @@ class ListAllTestsResult:
 
     def clear_out_obsolete_test_names(self):
         count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
-        import ipdb; ipdb.set_trace()
         mutmut.tests_by_mangled_function_name = {
             k: {test_name for test_name in test_names if test_name in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
@@ -740,7 +735,7 @@ class HammettRunner(TestRunner):
 
     def run_stats(self, *, tests):
         import hammett
-        print('running hammett stats...')
+        print('Running hammett stats...')
 
         def post_test_callback(_name, **_):
             for function in mutmut._stats:
@@ -875,7 +870,7 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
 
 def run_forced_fail(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    with CatchOutput(show_spinner=True, spinner_title='running forced fail test') as catcher:
+    with CatchOutput(show_spinner=True, spinner_title='Running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
@@ -991,7 +986,7 @@ def run_stats_collection(runner, tests=None):
     os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
     start_cpu_time = process_time()
 
-    with CatchOutput(show_spinner=True, spinner_title='running stats') as output_catcher:
+    with CatchOutput(show_spinner=True, spinner_title='Running stats') as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
@@ -1145,7 +1140,7 @@ def run(mutant_names, *, max_children):
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
 
     start = datetime.now()
-    print('generating mutants')
+    print('Generating mutants')
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
     read_config()
     create_mutants()
@@ -1174,13 +1169,13 @@ def run(mutant_names, *, max_children):
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     os.environ['MUTANT_UNDER_TEST'] = ''
-    with CatchOutput(show_spinner=True, spinner_title='running clean tests') as output_catcher:
+    with CatchOutput(show_spinner=True, spinner_title='Running clean tests') as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
             output_catcher.dump_output()
-            print('failed to run clean test')
+            print('Failed to run clean test')
             exit(1)
     print('    done')
 
@@ -1266,7 +1261,7 @@ def run(mutant_names, *, max_children):
         except ChildProcessError:
             pass
     except KeyboardInterrupt:
-        print('stopping')
+        print('Stopping...')
         stop_all_children(mutants)
 
     t = datetime.now() - start
