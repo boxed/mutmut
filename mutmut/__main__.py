@@ -872,7 +872,7 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
 
 def run_forced_fail(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    with CatchOutput(show_spinner=True, spinner_title='Running forced fail test') as catcher:
+    with CatchOutput(spinner_title='Running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
@@ -885,9 +885,8 @@ def run_forced_fail(runner):
 
 
 class CatchOutput:
-    def __init__(self, callback=lambda s: None, show_spinner=False, spinner_title=None):
+    def __init__(self, callback=lambda s: None, spinner_title=None):
         self.strings = []
-        self.show_spinner = show_spinner
         self.spinner_title = spinner_title or ''
 
         class StdOutRedirect(TextIOBase):
@@ -896,7 +895,7 @@ class CatchOutput:
 
             def write(self, s):
                 callback(s)
-                if show_spinner:
+                if spinner_title:
                     print_status(spinner_title)
                 self.catcher.strings.append(s)
                 return len(s)
@@ -907,7 +906,7 @@ class CatchOutput:
         sys.stderr = sys.__stderr__
 
     def start(self):
-        if self.show_spinner:
+        if self.spinner_title:
             print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
@@ -923,7 +922,7 @@ class CatchOutput:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
-        if self.show_spinner:
+        if self.spinner_title:
             print()
 
 
@@ -988,7 +987,7 @@ def run_stats_collection(runner, tests=None):
     os.environ['PY_IGNORE_IMPORTMISMATCH'] = '1'
     start_cpu_time = process_time()
 
-    with CatchOutput(show_spinner=True, spinner_title='Running stats') as output_catcher:
+    with CatchOutput(spinner_title='Running stats') as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
@@ -1014,7 +1013,7 @@ def collect_or_load_stats(runner):
         run_stats_collection(runner)
     else:
         # Run incremental stats
-        with CatchOutput(show_spinner=True, spinner_title='Listing all tests') as output_catcher:
+        with CatchOutput(spinner_title='Listing all tests') as output_catcher:
             os.environ['MUTANT_UNDER_TEST'] = 'list_all_tests'
             try:
                 all_tests_result = runner.list_all_tests()
@@ -1144,7 +1143,7 @@ def run(mutant_names, *, max_children):
     read_config()
 
     start = datetime.now()
-    with CatchOutput(show_spinner=True, spinner_title='Generating mutants'):
+    with CatchOutput(spinner_title='Generating mutants'):
         create_mutants()
         copy_also_copy_files()
 
@@ -1172,7 +1171,7 @@ def run(mutant_names, *, max_children):
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     os.environ['MUTANT_UNDER_TEST'] = ''
-    with CatchOutput(show_spinner=True, spinner_title='Running clean tests') as output_catcher:
+    with CatchOutput(spinner_title='Running clean tests') as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
