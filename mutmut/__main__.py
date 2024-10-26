@@ -128,9 +128,15 @@ def guess_paths_to_mutate():
         'Could not figure out where the code to mutate is. '
         'Please specify it on the command line using --paths-to-mutate, '
         'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
+  
+def limit_memory(maxsize): 
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS) 
+    resource.setrlimit(resource.RLIMIT_AS, (maxsize, hard))
 
 
 def record_trampoline_hit(name):
+    if getattr(mutmut,"config",None) is None:
+        return
     if mutmut.config.max_stack_depth != -1:
         f = inspect.currentframe()
         c = mutmut.config.max_stack_depth
@@ -181,7 +187,7 @@ from inspect import signature as _mutmut_signature
 
 def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
-    mutant_under_test = os.environ['MUTANT_UNDER_TEST']
+    mutant_under_test = os.environ.get('MUTANT_UNDER_TEST',"")
     if mutant_under_test == 'fail':
         from mutmut.__main__ import MutmutProgrammaticFailException
         raise MutmutProgrammaticFailException('Failed programmatically')      
@@ -669,10 +675,10 @@ class ListAllTestsResult:
 
     def clear_out_obsolete_test_names(self):
         count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
-        mutmut.tests_by_mangled_function_name = {
+        mutmut.tests_by_mangled_function_name = defaultdict(set,{
             k: {test_name for test_name in test_names if test_name in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
-        }
+        })
         count_after = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
         if count_before != count_after:
             print(f'Removed {count_before - count_after} obsolete test names')
@@ -688,6 +694,8 @@ class PytestRunner(TestRunner):
         if mutmut.config.debug:
             params = ['-vv'] + params
             print('pytest: ', params, kwargs)
+
+        params += ["--rootdir=."]
         exit_code = int(pytest.main(params, **kwargs))
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
@@ -978,6 +986,8 @@ def config_reader():
             return default
         if isinstance(default, list):
             result = [x for x in result.split("\n") if x]
+        elif isinstance(default,bool):
+            result = result.lower() in ('1', 't', 'true')
         elif isinstance(default, int):
             result = int(result)
         return result
@@ -999,7 +1009,7 @@ def read_config():
             Path('tests.py'),
         ],
         max_stack_depth=s('max_stack_depth', -1),
-        debug=s('debug', 'False').lower() in ('1', 't', 'true'),
+        debug=s('debug', False),
     )
 
 
@@ -1097,7 +1107,7 @@ def collect_source_file_mutation_data(*, mutant_names):
         source_file_mutation_data_by_path[str(path)] = m
 
     mutants = [
-        (m, mutant_name, result)
+        (m, mutant_name.replace("src.", ""), result)
         for path, m in source_file_mutation_data_by_path.items()
         for mutant_name, result in m.exit_code_by_key.items()
     ]
@@ -1202,6 +1212,7 @@ def run(mutant_names, *, max_children):
     os.environ['MUTANT_UNDER_TEST'] = ''
     with CatchOutput(spinner_title='Running clean tests') as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
+        
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
@@ -1257,6 +1268,7 @@ def run(mutant_names, *, max_children):
                 # In the child
                 os.environ['MUTANT_UNDER_TEST'] = mutant_name
                 setproctitle(f'mutmut: {mutant_name}')
+                limit_memory(1000*1000*500)
 
                 # Run fast tests first
                 tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
