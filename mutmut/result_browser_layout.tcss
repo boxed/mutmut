@@ -25,11 +25,10 @@ DataTable:focus .datatable--cursor {
     background: orange;
 }
 
-#diff_view_widget{
+#diff_view_widget {
     height: 50%;
- border: solid;
- overflow-y: scroll;
+    overflow-y: scroll;
 }
 
-#diff_view{
+#diff_view {
 }
