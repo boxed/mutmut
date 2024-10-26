@@ -690,6 +690,7 @@ class PytestRunner(TestRunner):
         import pytest
         if mutmut.config.debug:
             params = ['-vv'] + params
+            print('pytest: ', params, kwargs)
         exit_code = int(pytest.main(params, **kwargs))
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
