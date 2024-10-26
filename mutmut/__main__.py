@@ -206,6 +206,7 @@ yield_from_trampoline_impl = trampoline_impl.replace('result = ', 'result = yiel
 
 def create_mutants():
     for path in walk_source_files():
+        print(path)
         output_path = Path('mutants') / path
         makedirs(output_path.parent, exist_ok=True)
 
@@ -218,6 +219,7 @@ def create_mutants():
 def copy_also_copy_files():
     assert isinstance(mutmut.config.also_copy, list)
     for path in mutmut.config.also_copy:
+        print('     also copying', path)
         path = Path(path)
         destination = Path('mutants') / path
         if not path.exists():
@@ -1138,13 +1140,14 @@ def run(mutant_names, *, max_children):
 
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
-
-    start = datetime.now()
-    print('Generating mutants')
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
     read_config()
-    create_mutants()
-    copy_also_copy_files()
+
+    start = datetime.now()
+    with CatchOutput(show_spinner=True, spinner_title='Generating mutants'):
+        create_mutants()
+        copy_also_copy_files()
+
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
