@@ -674,7 +674,7 @@ class ListAllTestsResult:
     def clear_out_obsolete_test_names(self):
         count_before = len(mutmut.tests_by_mangled_function_name)
         mutmut.tests_by_mangled_function_name = {
-            k: {test_name for test_name in test_names if test_name not in self.ids}
+            k: {test_name for test_name in test_names if test_name in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
         }
         count_after = len(mutmut.tests_by_mangled_function_name)
