@@ -9,6 +9,7 @@ import resource
 import shutil
 import sys
 from abc import ABC
+from collections import defaultdict
 from configparser import (
     ConfigParser,
     NoOptionError,
@@ -670,10 +671,10 @@ class ListAllTestsResult:
 
     def clear_out_obsolete_test_names(self):
         count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
-        mutmut.tests_by_mangled_function_name = {
+        mutmut.tests_by_mangled_function_name = defaultdict(set, **{
             k: {test_name for test_name in test_names if test_name in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
-        }
+        })
         count_after = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
         if count_before != count_after:
             print(f'Removed {count_before - count_after} obsolete test names')
@@ -690,10 +691,10 @@ class PytestRunner(TestRunner):
             params = ['-vv'] + params
             print('python -m pytest ', ' '.join(params))
         exit_code = int(pytest.main(params, **kwargs))
-        if exit_code == 4:
-            raise BadTestExecutionCommandsException(params)
         if mutmut.config.debug:
             print('    exit code', exit_code)
+        if exit_code == 4:
+            raise BadTestExecutionCommandsException(params)
         return exit_code
 
     def run_stats(self, *, tests):
@@ -1221,7 +1222,8 @@ def run(mutant_names, *, max_children):
     runner.prepare_main_test_run()
 
     def read_one_child_exit_status():
-        pid, exit_code = os.wait()
+        pid, wait_status = os.wait()
+        exit_code = os.waitstatus_to_exitcode(wait_status)
         if mutmut.config.debug:
             print('    worker exit code', exit_code)
         source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
