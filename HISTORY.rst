@@ -1,6 +1,20 @@
 Changelog
 ---------
 
+3.2.0
+~~~~~
+
+* Timeouts for mutants implemented.
+
+* Browser: syntax highlighting for diff view
+
+* More fixes for generators.
+
+* Fix for `src`-style layout of projects.
+
+* Fixed bug where mutmut would recollect all tests on every run, slowing down startup.
+
+
 3.1.0
 ~~~~~
 
