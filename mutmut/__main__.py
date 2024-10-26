@@ -978,7 +978,7 @@ def config_reader():
             return default
         if isinstance(default, list):
             result = [x for x in result.split("\n") if x]
-        elif isinstance(default,bool):
+        elif isinstance(default, bool):
             result = result.lower() in ('1', 't', 'true')
         elif isinstance(default, int):
             result = int(result)
