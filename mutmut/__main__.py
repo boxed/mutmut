@@ -947,16 +947,16 @@ class Config:
 
 
 def config_reader():
-    path=Path("pyproject.toml")
+    path = Path('pyproject.toml')
     if path.exists():
         if sys.version_info >= (3, 11):
             from tomllib import loads
         else:
             from toml import loads
-        data = loads(path.read_text("utf-8"))
+        data = loads(path.read_text('utf-8'))
 
         try:
-            config = data["tool"]["mutmut"]
+            config = data['tool']['mutmut']
         except KeyError:
             pass
         else:
@@ -986,7 +986,6 @@ def config_reader():
 
 @lru_cache()
 def read_config():
-
     s = config_reader()
 
     mutmut.config = Config(
