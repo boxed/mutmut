@@ -186,7 +186,6 @@ trampoline_impl = """
 from inspect import signature as _mutmut_signature
 
 def _mutmut_trampoline(orig, mutants, *args, **kwargs):
-    __tracebackhide__ = True 
     import os
     mutant_under_test = os.environ.get('MUTANT_UNDER_TEST',"")
     if mutant_under_test == 'fail':
@@ -333,7 +332,6 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    __tracebackhide__ = True 
     result = {yield_statement}{trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, *args, **kwargs)
     return result 
 
