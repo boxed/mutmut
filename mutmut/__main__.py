@@ -672,12 +672,13 @@ class ListAllTestsResult:
         self.ids = ids
 
     def clear_out_obsolete_test_names(self):
-        count_before = len(mutmut.tests_by_mangled_function_name)
+        count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
+        import ipdb; ipdb.set_trace()
         mutmut.tests_by_mangled_function_name = {
             k: {test_name for test_name in test_names if test_name in self.ids}
             for k, test_names in mutmut.tests_by_mangled_function_name.items()
         }
-        count_after = len(mutmut.tests_by_mangled_function_name)
+        count_after = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
         if count_before != count_after:
             print(f'Removed {count_before - count_after} obsolete test names')
             save_stats()
@@ -1016,7 +1017,7 @@ def collect_or_load_stats(runner):
         run_stats_collection(runner)
     else:
         # Run incremental stats
-        with CatchOutput(show_spinner=True, spinner_title='collecting stats') as output_catcher:
+        with CatchOutput(show_spinner=True, spinner_title='Listing all tests') as output_catcher:
             os.environ['MUTANT_UNDER_TEST'] = 'list_all_tests'
             try:
                 all_tests_result = runner.list_all_tests()
@@ -1030,6 +1031,7 @@ def collect_or_load_stats(runner):
         new_tests = all_tests_result.new_tests()
 
         if new_tests:
+            print(f'Found {len(new_tests)} new tests, rerunning stats collection')
             run_stats_collection(runner, tests=new_tests)
 
 
