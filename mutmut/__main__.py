@@ -986,6 +986,8 @@ def config_reader():
             return default
         if isinstance(default, list):
             result = [x for x in result.split("\n") if x]
+        elif isinstance(default,bool):
+            result = result.lower() in ('1', 't', 'true')
         elif isinstance(default, int):
             result = int(result)
         return result
@@ -1007,7 +1009,7 @@ def read_config():
             Path('tests.py'),
         ],
         max_stack_depth=s('max_stack_depth', -1),
-        debug=s('debug', 'False').lower() in ('1', 't', 'true'),
+        debug=s('debug', False),
     )
 
 
