@@ -84,6 +84,7 @@ status_by_exit_code = {
     34: 'skipped',
     35: 'suspicious',
     36: 'timeout',
+    24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
 }
 
@@ -687,10 +688,12 @@ class PytestRunner(TestRunner):
         import pytest
         if mutmut.config.debug:
             params = ['-vv'] + params
-            print('pytest: ', params, kwargs)
+            print('python -m pytest ', ' '.join(params))
         exit_code = int(pytest.main(params, **kwargs))
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
+        if mutmut.config.debug:
+            print('    exit code', exit_code)
         return exit_code
 
     def run_stats(self, *, tests):
@@ -713,7 +716,7 @@ class PytestRunner(TestRunner):
 
     def run_tests(self, *, mutant_name, tests):
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
+            return int(self.execute_pytest(['-x', '-q', '--rootdir=.', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
         with change_cwd('mutants'):
@@ -1219,6 +1222,8 @@ def run(mutant_names, *, max_children):
 
     def read_one_child_exit_status():
         pid, exit_code = os.wait()
+        if mutmut.config.debug:
+            print('    worker exit code', exit_code)
         source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
 
     source_file_mutation_data_by_pid: Dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
@@ -1266,7 +1271,8 @@ def run(mutant_names, *, max_children):
                     os._exit(33)
 
                 estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests) + 1
-                resource.setrlimit(resource.RLIMIT_CPU, (ceil(estimated_time_of_tests * 2), ceil(estimated_time_of_tests * 2)))
+                cpu_time_limit = ceil(estimated_time_of_tests * 2 + process_time()) * 10
+                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
 
                 with CatchOutput():
                     result = runner.run_tests(mutant_name=mutant_name, tests=tests)
