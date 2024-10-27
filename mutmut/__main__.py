@@ -606,7 +606,6 @@ class SourceFileMutationData:
 
     def register_result(self, *, pid, exit_code):
         assert self.key_by_pid[pid] in self.exit_code_by_key
-        self.exit_code_by_key[self.key_by_pid[pid]] = (0xFF00 & exit_code) >> 8  # The high byte contains the exit code
         self.exit_code_by_key[self.key_by_pid[pid]] = exit_code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
