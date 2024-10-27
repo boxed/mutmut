@@ -1265,8 +1265,16 @@ def run(mutant_names, *, max_children):
     try:
         print('Running mutation testing')
 
+        # Calculate times of tests
+        for m, mutant_name, result in mutants:
+            mutant_name = mutant_name.replace('__init__.', '')
+            tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), [])
+            estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests)
+            m.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
+
         Thread(target=timeout_checker(mutants), daemon=True).start()
 
+        # Now do mutation
         for m, mutant_name, result in mutants:
             print_stats(source_file_mutation_data_by_path)
 
@@ -1284,8 +1292,6 @@ def run(mutant_names, *, max_children):
                 m.save()
                 continue
 
-            estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests)
-            m.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
             pid = os.fork()
             if not pid:
                 # In the child
@@ -1297,6 +1303,7 @@ def run(mutant_names, *, max_children):
                 if not tests:
                     os._exit(33)
 
+                estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
                 cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
 
