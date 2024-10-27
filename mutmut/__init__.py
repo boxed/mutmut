@@ -165,8 +165,8 @@ def keyword_mutation(value, context, **_):
         'not': '',
         'is': 'is not',  # this will cause "is not not" sometimes, so there's a hack to fix that later
         'in': 'not in',
-        # 'break': 'continue',
-        # 'continue': 'break',
+        'break': 'continue',
+        'continue': 'break',
         'True': 'False',
         'False': 'True',
     }.get(value)

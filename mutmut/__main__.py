@@ -7,6 +7,7 @@ import json
 import os
 import resource
 import shutil
+import signal
 import sys
 from abc import ABC
 from collections import defaultdict
@@ -39,7 +40,10 @@ from textwrap import (
     indent,
 )
 from threading import Thread
-from time import process_time
+from time import (
+    process_time,
+    sleep,
+)
 from typing import (
     Dict,
     List,
@@ -87,6 +91,7 @@ status_by_exit_code = {
     36: 'timeout',
     24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
+    255: 'timeout',
 }
 
 emoji_by_status = {
@@ -579,6 +584,7 @@ def yield_mutants_for_module(node, no_mutate_lines):
 
 class SourceFileMutationData:
     def __init__(self, *, path):
+        self.estimated_time_of_tests_by_mutant = {}
         self.path = path
         self.meta_path = Path('mutants') / (str(path) + '.meta')
         self.meta = None
@@ -586,6 +592,7 @@ class SourceFileMutationData:
         self.exit_code_by_key = {}
         self.hash_by_function_name = {}
         self.start_time_by_pid = {}
+        self.estimated_time_of_tests_by_pid = {}
 
     def load(self):
         try:
@@ -598,9 +605,10 @@ class SourceFileMutationData:
         self.hash_by_function_name = self.meta.pop('hash_by_function_name')
         assert not self.meta, self.meta  # We should read all the data!
 
-    def register_pid(self, *, pid, key):
+    def register_pid(self, *, pid, key, estimated_time_of_tests):
         self.key_by_pid[pid] = key
         self.start_time_by_pid[pid] = datetime.now()
+        self.estimated_time_of_tests_by_pid[pid] = estimated_time_of_tests
 
     def register_result(self, *, pid, exit_code):
         assert self.key_by_pid[pid] in self.exit_code_by_key
@@ -1167,6 +1175,20 @@ def stop_all_children(mutants):
         m.stop_children()
 
 
+def timeout_checker(mutants):
+    def inner():
+        while True:
+            sleep(1)
+
+            now = datetime.now()
+            for m, mutant_name, result in mutants:
+                for pid, start_time in m.start_time_by_pid.items():
+                    run_time = now - start_time
+                    if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
+                        os.kill(pid, signal.SIGXCPU)
+    return inner
+
+
 @cli.command()
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
@@ -1245,6 +1267,8 @@ def run(mutant_names, *, max_children):
     try:
         print('Running mutation testing')
 
+        Thread(target=timeout_checker(mutants), daemon=True).start()
+
         for m, mutant_name, result in mutants:
             print_stats(source_file_mutation_data_by_path)
 
@@ -1262,6 +1286,8 @@ def run(mutant_names, *, max_children):
                 m.save()
                 continue
 
+            estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests)
+            m.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
             pid = os.fork()
             if not pid:
                 # In the child
@@ -1273,8 +1299,7 @@ def run(mutant_names, *, max_children):
                 if not tests:
                     os._exit(33)
 
-                estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests) + 1
-                cpu_time_limit = ceil(estimated_time_of_tests * 2 + process_time()) * 10
+                cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
 
                 with CatchOutput():
@@ -1287,7 +1312,7 @@ def run(mutant_names, *, max_children):
             else:
                 # in the parent
                 source_file_mutation_data_by_pid[pid] = m
-                m.register_pid(pid=pid, key=mutant_name)
+                m.register_pid(pid=pid, key=mutant_name, estimated_time_of_tests=estimated_time_of_tests)
                 running_children += 1
 
             if running_children >= max_children:
