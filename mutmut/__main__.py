@@ -687,6 +687,7 @@ class ListAllTestsResult:
 class PytestRunner(TestRunner):
     def execute_pytest(self, params, **kwargs):
         import pytest
+        params += ['--rootdir=.']
         if mutmut.config.debug:
             params = ['-vv'] + params
             print('python -m pytest ', ' '.join(params))
