@@ -61,16 +61,8 @@ import mutmut
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
-# TODO: only count a test for a function if the stack depth to get to the test < some configurable limit.
-
-# TODO: collect tests always: first run we collect to update the known list of tests, then we run pytest with that list for stats
-#           - when we run again, we ask for all tests, check which are new and which are gone and update by running stats collection for just these
 # TODO: pragma no mutate should end up in `skipped` category
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
-# TODO: exclude mutating static typing
-# TODO: implement timeout
-
-# TODO: don't remove arguments to `isinstance`, as that will always fail. Same with `len`
 
 
 NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
@@ -182,6 +174,8 @@ class CollectTestsFailedException(Exception):
 class BadTestExecutionCommandsException(Exception):
     pass
 
+
+# noinspection PyUnresolvedReferences
 # language=python
 trampoline_impl = """
 from inspect import signature as _mutmut_signature
@@ -693,6 +687,7 @@ class ListAllTestsResult:
 
 
 class PytestRunner(TestRunner):
+    # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params, **kwargs):
         import pytest
         params += ['--rootdir=.']
@@ -858,6 +853,7 @@ def collect_stat(m: SourceFileMutationData):
         for k in status_by_exit_code.values()
     }
     for k, v in m.exit_code_by_key.items():
+        # noinspection PyTypeChecker
         r[status_by_exit_code[v].replace(' ', '_')] += 1
     return Stat(
         **r,
@@ -916,6 +912,7 @@ class CatchOutput:
                 return len(s)
         self.redirect = StdOutRedirect(self)
 
+    # noinspection PyMethodMayBeStatic
     def stop(self):
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
@@ -930,8 +927,8 @@ class CatchOutput:
 
     def dump_output(self):
         self.stop()
-        for l in self.strings:
-             print(l, end='')
+        for line in self.strings:
+            print(line, end='')
 
     def __enter__(self):
         self.start()
@@ -965,6 +962,7 @@ def config_reader():
         if sys.version_info >= (3, 11):
             from tomllib import loads
         else:
+            # noinspection PyPackageRequirements
             from toml import loads
         data = loads(path.read_text('utf-8'))
 
@@ -1544,12 +1542,14 @@ def browse():
 
         def on_mount(self):
             # files table
+            # noinspection PyTypeChecker
             files_table: DataTable = self.query_one('#files')
             files_table.cursor_type = 'row'
             for key, label in self.columns:
                 files_table.add_column(key=key, label=label)
 
             # mutants table
+            # noinspection PyTypeChecker
             mutants_table: DataTable = self.query_one('#mutants')
             mutants_table.cursor_type = 'row'
             mutants_table.add_columns('name', 'status')
@@ -1571,6 +1571,7 @@ def browse():
                 self.source_file_mutation_data_and_stat_by_path[p] = source_file_mutation_data, stat
 
         def populate_files_table(self):
+            # noinspection PyTypeChecker
             files_table: DataTable = self.query_one('#files')
             # TODO: restore selection
             selected_row = files_table.cursor_row
@@ -1581,7 +1582,7 @@ def browse():
                     Text(str(getattr(stat, k.replace(' ', '_'))), justify="right")
                     for k, _ in self.columns[1:]
                 ]
-                files_table.add_row(*row, key=p)
+                files_table.add_row(*row, key=str(p))
 
             files_table.move_cursor(row=selected_row)
 
@@ -1589,6 +1590,7 @@ def browse():
             if not event.row_key or not event.row_key.value:
                 return
             if event.data_table.id == 'files':
+                # noinspection PyTypeChecker
                 mutants_table: DataTable = self.query_one('#mutants')
                 mutants_table.clear()
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
@@ -1599,7 +1601,8 @@ def browse():
                     mutants_table.add_row(k, emoji_by_status[status], key=k)
             else:
                 assert event.data_table.id == 'mutants'
-                diff_view = self.query_one('#diff_view')
+                # noinspection PyTypeChecker
+                diff_view: Static = self.query_one('#diff_view')
                 if event.row_key.value is None:
                     diff_view.update('')
                 else:
@@ -1629,6 +1632,7 @@ def browse():
             self.populate_files_table()
 
         def get_mutant_name_from_selection(self):
+            # noinspection PyTypeChecker
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
                 return
@@ -1646,6 +1650,7 @@ def browse():
 
         def action_apply_mutant(self):
             read_config()
+            # noinspection PyTypeChecker
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
                 return
