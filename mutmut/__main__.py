@@ -721,7 +721,7 @@ class PytestRunner(TestRunner):
 
     def run_tests(self, *, mutant_name, tests):
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--rootdir=.', '--import-mode=append'] + list(tests)))
+            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
         with change_cwd('mutants'):
@@ -1183,7 +1183,10 @@ def timeout_checker(mutants):
                 for pid, start_time in m.start_time_by_pid.items():
                     run_time = now - start_time
                     if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
-                        os.kill(pid, signal.SIGXCPU)
+                        try:
+                            os.kill(pid, signal.SIGXCPU)
+                        except ProcessLookupError:
+                            pass
     return inner_timout_checker
 
 
