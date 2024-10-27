@@ -1578,7 +1578,7 @@ def browse():
                 source_file_mutation_data.load()
                 stat = collect_stat(source_file_mutation_data)
 
-                self.source_file_mutation_data_and_stat_by_path[p] = source_file_mutation_data, stat
+                self.source_file_mutation_data_and_stat_by_path[str(p)] = source_file_mutation_data, stat
 
         def populate_files_table(self):
             # noinspection PyTypeChecker
