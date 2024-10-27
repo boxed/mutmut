@@ -1174,7 +1174,7 @@ def stop_all_children(mutants):
 
 
 def timeout_checker(mutants):
-    def inner():
+    def inner_timout_checker():
         while True:
             sleep(1)
 
@@ -1184,7 +1184,7 @@ def timeout_checker(mutants):
                     run_time = now - start_time
                     if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
                         os.kill(pid, signal.SIGXCPU)
-    return inner
+    return inner_timout_checker
 
 
 @cli.command()
