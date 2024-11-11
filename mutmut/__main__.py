@@ -50,9 +50,15 @@ from typing import (
 )
 
 import click
-from parso import (
-    parse,
-    ParserSyntaxError,
+from libcst import (
+    ClassDef,
+    FunctionDef,
+    ImportFrom,
+    Module,
+    Name,
+    parse_module,
+    SimpleStatementLine,
+    Yield,
 )
 from rich.text import Text
 from setproctitle import setproctitle
@@ -254,7 +260,7 @@ def create_mutants_for_file(filename, output_path):
     # validate no syntax errors of mutants
     with open(output_path) as f:
         try:
-            ast.parse(f.read())
+            ast.parse_module(f.read())
         except (IndentationError, SyntaxError) as e:
             print(output_path, 'has invalid syntax: ', e)
             exit(1)
@@ -286,14 +292,14 @@ def write_all_mutants_to_file(*, out, source, filename):
     hash_by_function_name = {}
     mutant_names = []
 
-    try:
-        ast = parse(ensure_ends_with_newline(source), error_recovery=False)
-    except ParserSyntaxError:
-        print(f'Warning: unsupported syntax in {filename}, skipping')
-        out.write(source)
-        return [], {}
+    # try:
+    module = parse_module(ensure_ends_with_newline(source))
+    # except ParserSyntaxError:
+    #     print(f'Warning: unsupported syntax in {filename}, skipping')
+    #     out.write(source)
+    #     return [], {}
 
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(ast, no_mutate_lines):
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(node=module, no_mutate_lines=no_mutate_lines):
         out.write(x)
         if mutant_name:
             mutant_names.append(mutant_name)
@@ -368,17 +374,20 @@ def filter_funcdef_children(children):
 
 def yield_mutants_for_node(*, func_node, class_name=None, context, node):
     # do not mutate static typing annotations
-    if node.type == 'tfpdef':
+    if type(node).__name__ == 'tfpdef':
         return
 
+
+    print(type(node).__name__)
+
     # Some functions should not be mutated
-    if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in NEVER_MUTATE_FUNCTION_CALLS:
+    if type(node).__name__ == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in NEVER_MUTATE_FUNCTION_CALLS:
         return
 
     # The rest
     if hasattr(node, 'children'):
         children = node.children
-        if node.type == 'funcdef':
+        if isinstance(node, FunctionDef):
             children = filter_funcdef_children(children)
         for child_node in children:
             context.stack.append(child_node)
@@ -387,7 +396,7 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
             finally:
                 context.stack.pop()
 
-    mutation = mutmut.mutation_by_ast_type.get(node.type)
+    mutation = mutmut.mutation_by_ast_type.get(type(node).__name__)
     if not mutation:
         return
 
@@ -416,7 +425,7 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
 
         # noinspection PyArgumentList
         with rename_function_node(func_node, suffix=f'{context.count}', class_name=class_name):
-            code = func_node.get_code()
+            code = func_module.code_for_node(node)
             if valid_syntax(code):
                 context.count += 1
 
@@ -431,7 +440,7 @@ def yield_mutants_for_node(*, func_node, class_name=None, context, node):
 
 def valid_syntax(code):
     try:
-        ast.parse(dedent(code))
+        ast.parse_module(dedent(code))
         return True
     except (SyntaxError, IndentationError):
         return False
@@ -452,25 +461,25 @@ class FuncContext:
 
     def is_inside_annassign(self):
         for node in self.stack:
-            if node.type == 'annassign':
+            if type(node).__name__ == 'annassign':
                 return True
         return False
 
     def is_inside_dict_synonym_call(self):
         for node in self.stack:
-            if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in self.dict_synonyms:
+            if type(node).__name__ == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in self.dict_synonyms:
                 return True
         return False
 
 
 def is_generator(node):
-    assert node.type == 'funcdef'
+    assert isinstance(node, FunctionDef)
 
     def _is_generator(n):
-        if n is not node and n.type in ('funcdef', 'classdef'):
+        if n is not node and isinstance(n, (FunctionDef, ClassDef)):
             return False
 
-        if n.type == 'keyword' and n.value == 'yield':
+        if isinstance(n, Yield):
             return True
 
         for c in getattr(n, 'children', []):
@@ -480,29 +489,29 @@ def is_generator(node):
     return _is_generator(node)
 
 
-def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
-    assert node.type == 'funcdef'
+def yield_mutants_for_function(*, module, node, class_name=None, no_mutate_lines):
+    assert isinstance(node, FunctionDef)
 
     if node.name.value in NEVER_MUTATE_FUNCTION_NAMES:
-        yield 'filler', node.get_code(), None, None
+        yield 'filler', module.code_for_node(node), None, None
         return
 
-    hash_of_orig = md5(node.get_code().encode()).hexdigest()
+    hash_of_orig = md5(module.code_for_node(node).encode()).hexdigest()
 
     orig_name = node.name.value
     # noinspection PyArgumentList
     with rename_function_node(node, suffix='orig', class_name=class_name):
-        yield 'orig', node.get_code(), (orig_name, hash_of_orig), None
+        yield 'orig', module.code_for_node(node), (orig_name, hash_of_orig), None
 
     context = FuncContext(no_mutate_lines=no_mutate_lines)
 
     return_annotation_started = False
 
     for child_node in node.children:
-        if child_node.type == 'operator' and child_node.value == '->':
+        if type(child_node).__name__ == 'operator' and child_node.value == '->':
             return_annotation_started = True
 
-        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
+        if return_annotation_started and type(child_node).__name__ == 'operator' and child_node.value == ':':
             return_annotation_started = False
 
         if return_annotation_started:
@@ -521,60 +530,61 @@ def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
     yield 'filler', '\n\n', None, None
 
 
-def yield_mutants_for_class(node, no_mutate_lines):
-    assert node.type == 'classdef'
+def yield_mutants_for_class(*, module, node, no_mutate_lines):
+    assert isinstance(node, ClassDef)
     for child_node in node.children:
-        if child_node.type == 'suite':
-            yield from yield_mutants_for_class_body(child_node, no_mutate_lines=no_mutate_lines)
+        if type(child_node).__name__ == 'suite':
+            yield from yield_mutants_for_class_body(module=module, node=child_node, no_mutate_lines=no_mutate_lines)
         else:
-            yield 'filler', child_node.get_code(), None, None
+            yield 'filler', module.code_for_node(child_node), None, None
 
 
-def yield_mutants_for_class_body(node, no_mutate_lines):
-    assert node.type == 'suite'
+def yield_mutants_for_class_body(*, module, node, no_mutate_lines):
+    assert type(node).__name__ == 'suite'
     class_name = node.parent.name.value
 
     for child_node in node.children:
-        if child_node.type == 'funcdef':
-            yield from yield_mutants_for_function(child_node, class_name=class_name, no_mutate_lines=no_mutate_lines)
+        if isinstance(node, FunctionDef):
+            yield from yield_mutants_for_function(module=module, node=child_node, class_name=class_name, no_mutate_lines=no_mutate_lines)
         else:
-            yield 'filler', child_node.get_code(), None, None
+            yield 'filler', module.code_for_node(child_node), None, None
 
 
 def is_from_future_import_node(c):
-    if c.type == 'simple_stmt':
+    if isinstance(c, SimpleStatementLine):
         if c.children:
             c2 = c.children[0]
-            if c2.type == 'import_from' and c2.children[1].type == 'name' and c2.children[1].value == '__future__':
+            if isinstance(c2, ImportFrom) and isinstance(c2.children[1], Name) and c2.children[1].value == '__future__':
                 return True
     return False
 
 
-def yield_future_imports(node):
+def yield_future_imports(*, module, node):
     for c in node.children:
         if is_from_future_import_node(c):
-            yield 'filler', c.get_code(), None, None
+            yield 'filler', module.code_for_node(c), None, None
 
 
-def yield_mutants_for_module(node, no_mutate_lines):
-    assert node.type == 'file_input'
+def yield_mutants_for_module(*, node, no_mutate_lines):
+    assert isinstance(node, Module)
+    module = node
 
     # First yield `from __future__`, then the rest
-    yield from yield_future_imports(node)
-
+    yield from yield_future_imports(module=module, node=node)
     yield 'trampoline_impl', trampoline_impl, None, None
     yield 'trampoline_impl', yield_from_trampoline_impl, None, None
     yield 'filler', '\n', None, None
+    assert type(node).__name__ == 'Module'
     for child_node in node.children:
-        if child_node.type == 'funcdef':
-            yield from yield_mutants_for_function(child_node, no_mutate_lines=no_mutate_lines)
-        elif child_node.type == 'classdef':
-            yield from yield_mutants_for_class(child_node, no_mutate_lines=no_mutate_lines)
+        if isinstance(child_node, FunctionDef):
+            yield from yield_mutants_for_function(module=module, node=child_node, no_mutate_lines=no_mutate_lines)
+        elif isinstance(child_node, ClassDef):
+            yield from yield_mutants_for_class(module=module, node=child_node, no_mutate_lines=no_mutate_lines)
         elif is_from_future_import_node(child_node):
             # Don't yield `from __future__` after trampoline
             pass
         else:
-            yield 'filler', child_node.get_code(), None, None
+            yield 'filler', module.code_for_node(child_node), None, None
 
 
 class SourceFileMutationData:
@@ -1390,12 +1400,12 @@ def results(all):
 
 def read_mutants_ast(path):
     with open(Path('mutants') / path) as f:
-        return parse(f.read(), error_recovery=False)
+        return parse_module(f.read())
 
 
 def read_orig_ast(path):
     with open(path) as f:
-        return parse(f.read())
+        return parse_module(f.read())
 
 
 def find_ast_node(ast, function_name, orig_function_name):
@@ -1403,12 +1413,12 @@ def find_ast_node(ast, function_name, orig_function_name):
     orig_function_name = orig_function_name.rpartition('.')[-1]
 
     for node in ast.children:
-        if node.type == 'classdef':
+        if isinstance(node, ClassDef):
             (body,) = [x for x in node.children if x.type == 'suite']
             result = find_ast_node(body, function_name=function_name, orig_function_name=orig_function_name)
             if result:
                 return result
-        if node.type == 'funcdef' and node.name.value == function_name:
+        if isinstance(node, FunctionDef) and node.name.value == function_name:
             node.name.value = orig_function_name
             return node
 
@@ -1457,9 +1467,9 @@ def get_diff_for_mutant(mutant_name, source=None, path=None):
     if source is None:
         ast = read_mutants_ast(path)
     else:
-        ast = parse(source, error_recovery=False)
-    orig_code = read_original_ast_node(ast, mutant_name).get_code().strip()
-    mutant_code = read_mutant_ast_node(ast, mutant_name).get_code().strip()
+        ast = parse_module(source)
+    orig_code = module.code_for_node(read_original_ast_node(ast, mutant_name)).strip()
+    mutant_code = module.code_for_node(read_mutant_ast_node(ast, mutant_name)).strip()
 
     path = str(path)  # difflib requires str, not Path
     return '\n'.join([
@@ -1500,14 +1510,14 @@ def apply_mutant(mutant_name):
     mutant_ast_node.name.value = orig_function_name
 
     for node in orig_ast.children:
-        if node.type == 'funcdef' and node.name.value == orig_function_name:
+        if isinstance(node, FunctionDef) and node.name.value == orig_function_name:
             node.children = mutant_ast_node.children
             break
     else:
         raise FileNotFoundError(f'Could not apply mutant {mutant_name}')
 
     with open(path, 'w') as f:
-        f.write(orig_ast.get_code())
+        f.write(orig_ast.code_for_node(orig_ast))
 
 
 # TODO: junitxml, html commands

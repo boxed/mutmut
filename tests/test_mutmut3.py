@@ -1,4 +1,4 @@
-from parso import parse
+from libcst import parse_module
 
 from mutmut.__main__ import (
     trampoline_impl,
@@ -43,8 +43,8 @@ x_foo__mutmut_orig.__name__ = 'x_foo'
 
 """
 
-    node = parse(source)
-    result = ''.join([x[1] for x in yield_mutants_for_module(node, no_mutate_lines=[])])
+    node = parse_module(source)
+    result = ''.join([x[1] for x in yield_mutants_for_module(node=node, no_mutate_lines=[])])
 
     assert result == expected
 
@@ -77,7 +77,7 @@ x_foo__mutmut_orig.__name__ = 'x_foo'
 
 """
 
-    node = parse(source)
+    node = parse_module(source)
     result = ''.join([x[1] for x in yield_mutants_for_module(node, no_mutate_lines=[])])
 
     assert result == expected

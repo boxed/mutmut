@@ -1,7 +1,7 @@
 from io import StringIO
 
 import pytest
-from parso import parse
+from libcst import parse_module
 
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
@@ -124,12 +124,13 @@ from mutmut.__main__ import (
 def test_basic_mutations(original, expected):
     if isinstance(expected, str):
         expected = [expected]
-    func_node = parse(f'def fake():\n    {original}').children[0]
+    module = parse_module(f'def fake():\n    {original}')
+    func_node = module.children[0]
     node = func_node.children[-1]
-    assert node.get_code().strip() == original.strip()
+    assert module.code_for_node(node).strip() == original.strip()
     mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(dict_synonyms={'DictSynonym'}), node=node))
     actual = sorted([
-        parse(mutant).children[0].children[-1].get_code().strip()
+        parse_module(mutant).children[0].children[-1].code_for_node().strip()
         for (type_, mutant, _, _) in mutants
         if type_ == 'mutant'
     ])
@@ -144,9 +145,10 @@ def foo() -> int:
     return
     """.strip()
 
+    module = parse_module(source)
     mutants = [
         mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        for type_, mutant, _, _ in yield_mutants_for_module(node=module, no_mutate_lines={})
         if type_ == 'mutant'
     ]
     for m in mutants:
@@ -162,9 +164,10 @@ class Foo:
         return 1
     """.strip()
 
+    module = parse_module(source)
     mutants = [
         mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        for type_, mutant, _, _ in yield_mutants_for_module(node=module, no_mutate_lines={})
         if type_ == 'mutant'
     ]
     for m in mutants:
@@ -177,7 +180,8 @@ class Foo:
 def mutants_for_source(source):
     no_mutate_lines = pragma_no_mutate_lines(source)
     r = []
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
+    module = parse_module(source)
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(node=module, no_mutate_lines=no_mutate_lines):
         if type_ == 'mutant':
             r.append(x)
     return r
@@ -186,7 +190,7 @@ def mutants_for_source(source):
 def full_mutated_source(source):
     no_mutate_lines = pragma_no_mutate_lines(source)
     r = []
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
+    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(node=parse_module(source), no_mutate_lines=no_mutate_lines):
         r.append(x)
     return '\n'.join(r).strip()
 
@@ -375,19 +379,19 @@ def test_is_generator():
     def foo():
         yield 1
     '''.strip()
-    assert is_generator(parse(source).children[0])
+    assert is_generator(parse_module(source).children[0])
 
     source = '''
     def foo():
         yield from bar()
     '''.strip()
-    assert is_generator(parse(source).children[0])
+    assert is_generator(parse_module(source).children[0])
 
     source = '''
     def foo():
         return 1
     '''.strip()
-    assert not is_generator(parse(source).children[0])
+    assert not is_generator(parse_module(source).children[0])
 
     source = '''
     def foo():
@@ -395,7 +399,7 @@ def test_is_generator():
             yield 2
         return 1
     '''.strip()
-    assert not is_generator(parse(source).children[0])
+    assert not is_generator(parse_module(source).children[0])
 
 
 # def test_decorated_functions_mutation():

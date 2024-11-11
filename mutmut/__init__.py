@@ -1,13 +1,9 @@
 from collections import defaultdict
 
-from parso.python.tree import (
-    Keyword,
-    Name,
-    Number,
-)
 
 __version__ = '3.2.0'
 
+from libcst import Name
 
 # We have a global whitelist for constants of the pattern __all__, __version__, etc
 
@@ -146,7 +142,7 @@ def argument_mutation(children, context, **_):
 
 def arglist_mutation(children, node, **_):
     for i, child_node in enumerate(children):
-        if child_node.type in ('name', 'argument'):
+        if type(child_node).__name__ in ('name', 'argument'):
             offset = 1
             if len(children) > i+1:
                 if children[i+1].type == 'operator' and children[i+1].value == ',':
