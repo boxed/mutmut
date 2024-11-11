@@ -32,7 +32,10 @@ from os import (
     makedirs,
     walk,
 )
-from os.path import isdir
+from os.path import (
+    isdir,
+    isfile,
+)
 from pathlib import Path
 from signal import SIGTERM
 from textwrap import (
@@ -111,23 +114,24 @@ def guess_paths_to_mutate():
     """
     this_dir = os.getcwd().split(os.sep)[-1]
     if isdir('lib'):
-        return 'lib'
+        return ['lib']
     elif isdir('src'):
-        return 'src'
+        return ['src']
     elif isdir(this_dir):
-        return this_dir
+        return [this_dir]
     elif isdir(this_dir.replace('-', '_')):
-        return this_dir.replace('-', '_')
+        return [this_dir.replace('-', '_')]
     elif isdir(this_dir.replace(' ', '_')):
-        return this_dir.replace(' ', '_')
+        return [this_dir.replace(' ', '_')]
     elif isdir(this_dir.replace('-', '')):
-        return this_dir.replace('-', '')
+        return [this_dir.replace('-', '')]
     elif isdir(this_dir.replace(' ', '')):
-        return this_dir.replace(' ', '')
+        return [this_dir.replace(' ', '')]
+    if isfile(this_dir + '.py'):
+        return [this_dir + '.py']
     raise FileNotFoundError(
         'Could not figure out where the code to mutate is. '
-        'Please specify it on the command line using --paths-to-mutate, '
-        'or by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
+        'Please specify it by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.')
 
 
 def record_trampoline_hit(name):
@@ -147,8 +151,7 @@ def record_trampoline_hit(name):
 
 
 def walk_all_files():
-    paths = [guess_paths_to_mutate()]
-    for path in paths:
+    for path in mutmut.config.paths_to_mutate:
         for root, dirs, files in walk(path):
             for filename in files:
                 yield root, filename
@@ -947,6 +950,7 @@ class Config:
     do_not_mutate: List[str]
     max_stack_depth: int
     debug: bool
+    paths_to_mutate: List[Path]
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -1014,6 +1018,10 @@ def read_config():
         ],
         max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', False),
+        paths_to_mutate=[
+            Path(y)
+            for y in s('paths_to_mutate', [])
+        ] or guess_paths_to_mutate()
     )
 
 
@@ -1203,6 +1211,7 @@ def run(mutant_names, *, max_children):
     read_config()
 
     start = datetime.now()
+    makedirs(Path('mutants'), exist_ok=True)
     with CatchOutput(spinner_title='Generating mutants'):
         create_mutants()
         copy_also_copy_files()
