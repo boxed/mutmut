@@ -1,6 +1,19 @@
 Changelog
 ---------
 
+3.2.1
+~~~~~
+
+* Read `paths_to_mutate` from config file
+
+* Mutate `break` to `return` to avoid timeouts
+
+* Added debug mode. Enable with `debug=True` in `setup.cfg` under `[mutmut]`
+
+* Fixed new test detection. The old code incorrectly detected new tests when there were none, creating a much slower interaction loop for fixing mutants.
+
+* And many more fixes
+
 3.2.0
 ~~~~~
 
