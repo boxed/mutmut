@@ -1385,6 +1385,7 @@ def tests_for_mutant_names(mutant_names):
 @cli.command()
 @click.option('--all', default=False)
 def results(all):
+    read_config()
     for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
@@ -1523,6 +1524,8 @@ def apply_mutant(mutant_name):
 
 @cli.command()
 def browse():
+    read_config()
+
     from textual.app import App
     from textual.containers import Container
     from textual.widgets import Footer
