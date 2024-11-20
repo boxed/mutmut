@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+3.2.2
+~~~~~
+
+* Fixed crash when running `mutmut results`
+
 3.2.1
 ~~~~~
 
