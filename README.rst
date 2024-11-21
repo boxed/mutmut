@@ -52,12 +52,6 @@ it will try to figure out where the code to mutate is.
 
 
 
-.. code-block:: ini
-
-    [mutmut]
-    paths_to_mutate=src/
-    tests_dir=tests/
-
 You can stop the mutation run at any time and mutmut will restart where you
 left off. It will continue where it left off, and re-test functions that were
 modified since last run.
@@ -68,6 +62,20 @@ retest them when you've updated your tests.
 You can also write a mutant to disk from the `browse` interface, or via
 `mutmut apply <mutant>`. You should **REALLY** have the file you mutate under
 source code control and committed before you apply a mutant!
+
+
+Configuration
+-------------
+
+In `setup.cfg` in the root of your project you can configure mutmut if you need to:
+
+.. code-block:: ini
+
+    [mutmut]
+    paths_to_mutate=src/
+    tests_dir=tests/
+
+See below for more options for configuring mutmut.
 
 
 Wildcards for testing mutants
