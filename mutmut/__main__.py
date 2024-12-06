@@ -993,7 +993,10 @@ def config_reader():
         except (NoOptionError, NoSectionError):
             return default
         if isinstance(default, list):
-            result = [x for x in result.split("\n") if x]
+            if '\n' in result:
+                result = [x for x in result.split("\n") if x]
+            else:
+                result = [result]
         elif isinstance(default, bool):
             result = result.lower() in ('1', 't', 'true')
         elif isinstance(default, int):
