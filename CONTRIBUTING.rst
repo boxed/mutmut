@@ -22,14 +22,8 @@ Running the tests
 Running your local version of Mutmut against a test codebase
 ------------------------------------------------------------
 
-If you are using a virtual environment for your codebase, make sure the Mutmut dependencies are installed:
+You can install your local version of Mutmut and run it including any changes you have made as normal.
 
 .. code-block:: console
 
-    pip install -r <path_to_mutmut_codebase>/requirements.txt
-
-Run Mutmut:
-
-.. code-block:: console
-
-    python <path_to_mutmut_codebase>/mutmut/__main__.py run
+    python -m pip install --editable <path_to_mutmut_codebase>
