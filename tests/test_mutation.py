@@ -1,8 +1,11 @@
+import os
 from io import StringIO
+from unittest.mock import Mock, patch
 
 import pytest
 from parso import parse
 
+import mutmut
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
     FuncContext,
@@ -14,6 +17,10 @@ from mutmut.__main__ import (
     write_all_mutants_to_file,
     yield_mutants_for_module,
     yield_mutants_for_node,
+    run_forced_fail_test,
+    Config,
+    MutmutProgrammaticFailException,
+    CatchOutput,
 )
 
 
@@ -407,3 +414,74 @@ def test_is_generator():
 #
 #     mutants = mutants_for_source(source)
 #     assert len(mutants) == 1
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=1)
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+
+    print()
+    print(f"out: {out}")
+    print(f"err: {err}")
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=0)
+
+    with pytest.raises(SystemExit) as error:
+        run_forced_fail_test(runner)
+
+    assert error.value.code is 1
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'FAILED: Unable to force test failures' in out
+
+
+def _default_mutmut_config():
+    return Config(
+        do_not_mutate=[],
+        also_copy=[],
+        max_stack_depth=-1,
+        debug=False,
+        paths_to_mutate=[]
+    )
+
+def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
+    runner = Mock()
+    runner.run_forced_fail = Mock(
+        return_value=return_value,
+        side_effect=side_effect
+    )
+    return runner
