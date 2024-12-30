@@ -1,8 +1,11 @@
+import os
 from io import StringIO
+from unittest.mock import Mock
 
 import pytest
 from parso import parse
 
+import mutmut
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
     FuncContext,
@@ -13,7 +16,7 @@ from mutmut.__main__ import (
     pragma_no_mutate_lines,
     write_all_mutants_to_file,
     yield_mutants_for_module,
-    yield_mutants_for_node,
+    yield_mutants_for_node, run_forced_fail_test, Config, MutmutProgrammaticFailException,
 )
 
 
@@ -407,3 +410,58 @@ def test_is_generator():
 #
 #     mutants = mutants_for_source(source)
 #     assert len(mutants) == 1
+
+
+def test_run_forced_fail_test_with_failing_test(capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=1)
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+def test_run_forced_fail_test_with_all_tests_passing(capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=0)
+
+    with pytest.raises(SystemExit) as error:
+        run_forced_fail_test(runner)
+
+    assert error.value.code is 1
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'Error: Unable to force a test failure during the forced fail test' in out
+
+
+def _default_mutmut_config():
+    return Config(
+        do_not_mutate=[],
+        also_copy=[],
+        max_stack_depth=-1,
+        debug=False,
+        paths_to_mutate=[]
+    )
+
+def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
+    runner = Mock()
+    runner.run_forced_fail = Mock(
+        return_value=return_value,
+        side_effect=side_effect
+    )
+    return runner

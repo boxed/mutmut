@@ -885,14 +885,14 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
     print_status(f'{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}', force_output=force_output)
 
 
-def run_forced_fail(runner):
+def run_forced_fail_test(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
     with CatchOutput(spinner_title='Running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
-                print("FAILED")
-                os._exit(1)
+                print("Error: Unable to force a test failure during the forced fail test")
+                raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass
     os.environ['MUTANT_UNDER_TEST'] = ''
@@ -1254,7 +1254,7 @@ def run(mutant_names, *, max_children):
     print('    done')
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
-    run_forced_fail(runner)
+    run_forced_fail_test(runner)
 
     runner.prepare_main_test_run()
 
