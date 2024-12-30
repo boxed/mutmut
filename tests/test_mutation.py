@@ -446,7 +446,7 @@ def test_run_forced_fail_test_with_all_tests_passing(capfd):
     assert error.value.code is 1
     out, err = capfd.readouterr()
     assert 'Running forced fail test' in out
-    assert 'Error: Unable to force a test failure during the forced fail test' in out
+    assert 'FAILED: Unable to force test failures' in out
 
 
 def _default_mutmut_config():
