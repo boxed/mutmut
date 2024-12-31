@@ -891,8 +891,7 @@ def run_forced_fail_test(runner):
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
-                print("\nFAILED: Unable to force test failures")
-                sleep(2)
+                print("FAILED: Unable to force test failures")
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass

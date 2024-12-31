@@ -1,6 +1,5 @@
 import os
 from io import StringIO
-from time import sleep
 from unittest.mock import Mock
 
 import pytest
@@ -420,11 +419,6 @@ def test_run_forced_fail_test_with_failing_test(capfd):
     run_forced_fail_test(runner)
 
     out, err = capfd.readouterr()
-    print(f"out: {out}")
-    print(f"err: {err}")
-    sleep(2)
-    print(f"out: {out}")
-    print(f"err: {err}")
     assert 'Running forced fail test' in out
     assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
@@ -437,11 +431,6 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(capfd):
     run_forced_fail_test(runner)
 
     out, err = capfd.readouterr()
-    print(f"out: {out}")
-    print(f"err: {err}")
-    sleep(2)
-    print(f"out: {out}")
-    print(f"err: {err}")
     assert 'Running forced fail test' in out
     assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
@@ -456,11 +445,6 @@ def test_run_forced_fail_test_with_all_tests_passing(capfd):
 
     assert error.value.code is 1
     out, err = capfd.readouterr()
-    print(f"out: {out}")
-    print(f"err: {err}")
-    sleep(2)
-    print(f"out: {out}")
-    print(f"err: {err}")
     assert 'Running forced fail test' in out
     assert 'FAILED: Unable to force test failures' in out
 
