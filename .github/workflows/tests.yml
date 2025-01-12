@@ -5,7 +5,8 @@ on: [push, pull_request]
 jobs:
   tests:
     name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    # Todo: Revert to ubuntu-latest when Python 3.7 support no longer needed
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
