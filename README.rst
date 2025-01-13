@@ -184,3 +184,8 @@ This section describes how to work with mutmut to enhance your test suite.
 Mutmut keeps the data of what it has done and the mutants in the `mutants/`
 directory.If  you want to make sure you run a full mutmut run you can delete
 this directory to start from scratch.
+
+Contributing to Mutmut
+----------------------
+
+If you wish to contribute to Mutmut, please see our `contributing guide <CONTRIBUTING.rst>`_.

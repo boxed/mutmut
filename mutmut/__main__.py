@@ -1018,6 +1018,8 @@ def read_config():
             Path('tests/'),
             Path('test/'),
             Path('tests.py'),
+            Path('setup.cfg'),
+            Path('pyproject.toml'),
         ],
         max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', False),
