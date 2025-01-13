@@ -26,7 +26,12 @@ jobs:
           pip install -r requirements.txt
           pip install -r test_requirements.txt
 
-      - name: Run tests
+      - name: Run tests TEMP
         # run: python -m pytest
         run: python -m pytest -vvv --capture=no tests/test_mutation.py::test_run_forced_fail_test_with_failing_test_TEMP
+        continue-on-error: false
+
+      - name: Run tests
+        # run: python -m pytest
+        run: python -m pytest -vvv --capture=no tests/test_mutation.py::test_run_forced_fail_test_with_failing_test
         continue-on-error: false
