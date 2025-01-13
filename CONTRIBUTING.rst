@@ -22,7 +22,7 @@ Running the tests
 Running your local version of Mutmut against a test codebase
 ------------------------------------------------------------
 
-You can install your local version of Mutmut and run it, including any changes you have, made as normal.
+You can install your local version of Mutmut and run it, including any changes you have made, as normal.
 
 .. code-block:: console
 
