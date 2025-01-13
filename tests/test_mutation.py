@@ -432,9 +432,9 @@ def test_run_forced_fail_test_with_failing_test(capfd):
 
     run_forced_fail_test(runner)
 
-    captured_output = capfd.readouterr()
-    assert 'Running forced fail test' in captured_output.out
-    assert 'done' in captured_output.out
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
 
 
