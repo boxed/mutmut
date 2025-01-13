@@ -1,6 +1,5 @@
 import os
 from io import StringIO
-from time import sleep
 from unittest.mock import Mock
 
 import pytest
@@ -432,8 +431,6 @@ def test_run_forced_fail_test_with_failing_test(capfd):
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
     run_forced_fail_test(runner)
-
-    sleep(5)
 
     out, err = capfd.readouterr()
     assert 'Running forced fail test' in out
