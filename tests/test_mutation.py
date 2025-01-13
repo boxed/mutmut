@@ -412,6 +412,20 @@ def test_is_generator():
 #     assert len(mutants) == 1
 
 
+def test_run_forced_fail_test_with_failing_test_TEMP():
+    print("temp_test_run_forced_fail_test_with_failing_test - start")
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=1)
+
+    run_forced_fail_test(runner)
+
+    # out, err = capfd.readouterr()
+    # assert 'Running forced fail test' in out
+    # assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+    print("temp_test_run_forced_fail_test_with_failing_test - end")
+
+
 def test_run_forced_fail_test_with_failing_test(capfd):
     mutmut.config = _default_mutmut_config()
     runner = _mocked_runner_run_forced_failed(return_value=1)
