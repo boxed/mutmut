@@ -897,8 +897,10 @@ def run_forced_fail_test(runner):
         except MutmutProgrammaticFailException:
             pass
         # catcher.stop()
+        print('    done - a')
+
     os.environ['MUTANT_UNDER_TEST'] = ''
-    print('    done')
+    print('    done - b')
 
 
 class CatchOutput:
