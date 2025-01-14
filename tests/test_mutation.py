@@ -434,8 +434,8 @@ def test_run_forced_fail_test_with_failing_test(capfd):
 
     out, err = capfd.readouterr()
     with capfd.disabled():
-        print(out)
-        print(err)
+        print(f"out: {out}")
+        print(f"err: {err}")
     assert 'Running forced fail test' in out
     assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
