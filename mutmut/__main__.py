@@ -1018,13 +1018,12 @@ def read_config():
         also_copy=[
             Path(y)
             for y in s('also_copy', [])
-        ]+[
+        ] + [
             Path('tests/'),
             Path('test/'),
-            Path('tests.py'),
             Path('setup.cfg'),
             Path('pyproject.toml'),
-        ],
+        ] + list(Path('.').glob('test*.py')),
         max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', False),
         paths_to_mutate=[
