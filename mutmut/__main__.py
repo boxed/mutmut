@@ -895,6 +895,7 @@ def run_forced_fail_test(runner):
                 # raise SystemExit(1)
                 os._exit(1)
         except MutmutProgrammaticFailException:
+            print('    done - c')
             pass
         # catcher.stop()
         print('    done - a')
