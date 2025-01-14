@@ -899,6 +899,7 @@ def run_forced_fail_test(runner):
             pass
         # catcher.stop()
         print('    done - a')
+        catcher.dump_output()
 
     os.environ['MUTANT_UNDER_TEST'] = ''
     print('    done - b')
