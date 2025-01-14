@@ -1,6 +1,20 @@
 Changelog
 ---------
 
+3.2.3
+~~~~~
+
+* Crash with error message on invalid imports for `src` module
+
+* Autodetect simpler project configurations with `test_*.py` in the dir directly
+
+* Handle filenames (as opposed to dirnames) in paths_to_mutate
+
+* Also copy `setup.cfg` and `pyproject.toml` by default
+
+* Handle single line `paths_to_mutate`
+
+
 3.2.2
 ~~~~~
 
