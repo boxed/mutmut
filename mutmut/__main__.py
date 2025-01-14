@@ -135,6 +135,7 @@ def guess_paths_to_mutate():
 
 
 def record_trampoline_hit(name):
+    assert not name.startswith('src.'), f'Failed trampoline hit. Module name starts with `src.`, which is invalid'
     if mutmut.config.max_stack_depth != -1:
         f = inspect.currentframe()
         c = mutmut.config.max_stack_depth
