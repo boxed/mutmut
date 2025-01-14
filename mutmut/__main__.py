@@ -8,6 +8,7 @@ import os
 import resource
 import shutil
 import signal
+import subprocess
 import sys
 from abc import ABC
 from collections import defaultdict
@@ -1656,8 +1657,7 @@ def browse():
         def retest(self, pattern):
             with self.suspend():
                 assert sys.argv[-1] == 'browse'
-                command = ' '.join([sys.executable] + sys.argv[:-1])
-                os.system(f'{command} run "{pattern}"')
+                subprocess.run([sys.executable, *sys.argv[:-1], 'run', pattern])
                 input('press enter to return to browser')
 
             self.read_data()
