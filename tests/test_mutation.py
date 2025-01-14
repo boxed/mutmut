@@ -434,6 +434,7 @@ def test_run_forced_fail_test_with_failing_test(capfd):
 
     out, err = capfd.readouterr()
     with capfd.disabled():
+        print()
         print(f"out: {out}")
         print(f"err: {err}")
     assert 'Running forced fail test' in out

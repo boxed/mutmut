@@ -895,6 +895,7 @@ def run_forced_fail_test(runner):
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass
+        catcher.stop()
     os.environ['MUTANT_UNDER_TEST'] = ''
     print('    done')
 
