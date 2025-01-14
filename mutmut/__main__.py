@@ -906,6 +906,7 @@ class CatchOutput:
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher):
+                print("In StdOutRedirect.__init__")
                 self.catcher = catcher
 
             def write(self, s):
@@ -918,27 +919,34 @@ class CatchOutput:
 
     # noinspection PyMethodMayBeStatic
     def stop(self):
+        print("In CatchOutput.stop")
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
     def start(self):
+        print("In CatchOutput.start")
         if self.spinner_title:
             print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
         if mutmut.config.debug:
+            print("Stopping because debug")
             self.stop()
 
     def dump_output(self):
+        print("In CatchOutput.dump_output")
+        print(f"self.strings: {self.strings}")
         self.stop()
         for line in self.strings:
             print(line, end='')
 
     def __enter__(self):
+        print("In CatchOutput.__enter__")
         self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        print("In CatchOutput.__exit__")
         self.stop()
         if self.spinner_title:
             print()
