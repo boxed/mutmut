@@ -152,6 +152,10 @@ def record_trampoline_hit(name):
 
 def walk_all_files():
     for path in mutmut.config.paths_to_mutate:
+        if not isdir(path):
+            if isfile(path):
+                yield '', str(path)
+                continue
         for root, dirs, files in walk(path):
             for filename in files:
                 yield root, filename
