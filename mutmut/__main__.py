@@ -894,14 +894,14 @@ def run_forced_fail_test(runner):
                 print("FAILED: Unable to force test failures")
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
-            sys.stdout.write('    done - c')
+            print('    done - c')
             pass
         # catcher.stop()
-        sys.stdout.write('    done - a')
+        print('    done - a')
         catcher.dump_output()
 
     os.environ['MUTANT_UNDER_TEST'] = ''
-    sys.stdout.write('    done - b')
+    print('    done - b')
 
 
 class CatchOutput:
