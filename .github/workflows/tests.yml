@@ -16,9 +16,13 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+
+      - run: python --version
+
+      - run: which python
 
       - name: Install dependencies
         run: |
@@ -26,6 +30,12 @@ jobs:
           pip install -r requirements.txt
           pip install -r test_requirements.txt
 
+      - name: Run tests TEMP
+        # run: python -m pytest
+        run: python -m pytest -vvv --capture=no tests/test_mutation.py::test_run_forced_fail_test_with_failing_test_TEMP
+        continue-on-error: false
+
       - name: Run tests
-        run: python -m pytest
+        # run: python -m pytest
+        run: python -m pytest -vvv --capture=no tests/test_mutation.py::test_run_forced_fail_test_with_failing_test
         continue-on-error: false
