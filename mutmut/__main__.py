@@ -902,6 +902,10 @@ def run_forced_fail_test(runner):
 
     os.environ['MUTANT_UNDER_TEST'] = ''
     print('    done - b')
+    print('111')
+    print('222')
+    print('333')
+    print()
 
 
 class CatchOutput:
