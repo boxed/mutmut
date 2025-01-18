@@ -890,19 +890,20 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
 
 def run_forced_fail_test(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    with CatchOutput(spinner_title='Running forced fail test') as catcher:
-        try:
-            print(f"runner.run_forced_fail(): {runner.run_forced_fail()}")
-            if runner.run_forced_fail() == 0:
-                # catcher.dump_output()
-                print("FAILED: Unable to force test failures")
-                raise SystemExit(1)
-        except MutmutProgrammaticFailException:
-            print('    done - c')
-            pass
-        # catcher.stop()
-        print('    done - a')
-        # catcher.dump_output()
+    # with CatchOutput(spinner_title='Running forced fail test') as catcher:
+    print("'Running forced fail test'")
+    try:
+        print(f"runner.run_forced_fail(): {runner.run_forced_fail()}")
+        if runner.run_forced_fail() == 0:
+            # catcher.dump_output()
+            print("FAILED: Unable to force test failures")
+            raise SystemExit(1)
+    except MutmutProgrammaticFailException:
+        print('    done - c')
+        pass
+    # catcher.stop()
+    print('    done - a')
+    # catcher.dump_output()
 
     os.environ['MUTANT_UNDER_TEST'] = ''
     print('    done - b')
