@@ -889,6 +889,7 @@ def run_forced_fail_test(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
     with CatchOutput(spinner_title='Running forced fail test') as catcher:
         try:
+            print(f"runner.run_forced_fail(): {runner.run_forced_fail()}")
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
                 print("FAILED: Unable to force test failures")
