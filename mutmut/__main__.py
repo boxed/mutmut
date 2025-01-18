@@ -644,6 +644,7 @@ class TestRunner(ABC):
         raise NotImplementedError()
 
     def run_forced_fail(self):
+        print("In TestRunner.run_forced_fail")
         raise NotImplementedError()
 
     def prepare_main_test_run(self):
@@ -728,6 +729,7 @@ class PytestRunner(TestRunner):
             return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
 
     def run_forced_fail(self):
+        print("In PytestRunner.run_forced_fail")
         with change_cwd('mutants'):
             return int(self.execute_pytest(['-x', '-q', '--import-mode=append']))
 
@@ -762,6 +764,7 @@ class HammettRunner(TestRunner):
         return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, post_test_callback=post_test_callback, use_cache=False, insert_cwd=False)
 
     def run_forced_fail(self):
+        print("In HammettRunner.run_forced_fail")
         import hammett
         return hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False, insert_cwd=False)
 
@@ -899,14 +902,10 @@ def run_forced_fail_test(runner):
             pass
         # catcher.stop()
         print('    done - a')
-        catcher.dump_output()
+        # catcher.dump_output()
 
     os.environ['MUTANT_UNDER_TEST'] = ''
     print('    done - b')
-    print('111')
-    print('222')
-    print('333')
-    print()
 
 
 class CatchOutput:
