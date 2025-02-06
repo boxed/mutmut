@@ -68,7 +68,7 @@ import mutmut
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 
 
-NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__'}
+NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__', '__new__'}
 NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
 CLASS_NAME_SEPARATOR = 'ǁ'
 
