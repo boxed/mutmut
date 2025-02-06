@@ -28,7 +28,7 @@ def x_foo__mutmut_1(a, b, c):
 def x_foo__mutmut_2(a, b, c):
     return a + b / c
 
-x_foo__mutmut_mutants = {
+x_foo__mutmut_mutants : ClassVar[MutantDict] = {
 'x_foo__mutmut_1': x_foo__mutmut_1, 
     'x_foo__mutmut_2': x_foo__mutmut_2
 }
@@ -63,7 +63,7 @@ def x_foo__mutmut_orig(a: List[int]) -> int:
 def x_foo__mutmut_1(a: List[int]) -> int:
     return 2
 
-x_foo__mutmut_mutants = {
+x_foo__mutmut_mutants : ClassVar[MutantDict] = {
 'x_foo__mutmut_1': x_foo__mutmut_1
 }
 
