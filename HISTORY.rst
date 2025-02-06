@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Annotate mutant dicts (and fixes compatibility with Pydantic)
+
 3.2.3
 ~~~~~
 

@@ -188,6 +188,13 @@ class BadTestExecutionCommandsException(Exception):
 # language=python
 trampoline_impl = """
 from inspect import signature as _mutmut_signature
+from typing import Annotated
+from typing import Callable
+from typing import ClassVar
+
+
+MutantDict = Annotated[dict[str, Callable], "Mutant"]
+
 
 def _mutmut_trampoline(orig, mutants, *args, **kwargs):
     import os
@@ -318,7 +325,7 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
 
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    mutants_dict = f'{mangled_name}__mutmut_mutants = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
     access_prefix = ''
     access_suffix = ''
     if class_name is not None:
