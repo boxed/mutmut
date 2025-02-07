@@ -75,6 +75,14 @@ In `setup.cfg` in the root of your project you can configure mutmut if you need 
     paths_to_mutate=src/
     tests_dir=tests/
 
+If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutmut` section:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    paths_to_mutate = [ "src/" ]
+    tests_dir = [ "tests/" ]
+
 See below for more options for configuring mutmut.
 
 
