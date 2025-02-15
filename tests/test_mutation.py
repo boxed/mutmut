@@ -418,9 +418,8 @@ def test_is_generator():
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @patch.object(CatchOutput, 'dump_output')
-@patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
-def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, capfd):
+def test_run_forced_fail_test_with_failing_test(_start, _dump_output, capfd):
     mutmut.config = _default_mutmut_config()
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
@@ -438,9 +437,8 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @patch.object(CatchOutput, 'dump_output')
-@patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
-def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
+def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _dump_output, capfd):
     mutmut.config = _default_mutmut_config()
     runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
 
@@ -454,9 +452,8 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @patch.object(CatchOutput, 'dump_output')
-@patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
-def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output, capfd):
+def test_run_forced_fail_test_with_all_tests_passing(_start, _dump_output, capfd):
     mutmut.config = _default_mutmut_config()
     runner = _mocked_runner_run_forced_failed(return_value=0)
 
