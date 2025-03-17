@@ -219,6 +219,13 @@ def _mutmut_trampoline(orig, mutants, *args, **kwargs):
 """
 yield_from_trampoline_impl = trampoline_impl.replace('result = ', 'result = yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')
 
+def copy_src_dir():
+    for root, filename in walk_all_files():
+        path = Path(root) / filename
+        print(path)
+        output_path = Path('mutants') / path
+        makedirs(output_path.parent, exist_ok=True)
+        shutil.copy(path, output_path)
 
 def create_mutants():
     for path in walk_source_files():
@@ -1230,6 +1237,7 @@ def run(mutant_names, *, max_children):
     start = datetime.now()
     makedirs(Path('mutants'), exist_ok=True)
     with CatchOutput(spinner_title='Generating mutants'):
+        copy_src_dir()
         create_mutants()
         copy_also_copy_files()
 
