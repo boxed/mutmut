@@ -261,10 +261,6 @@ def pragma_no_mutate_lines(source):
 def create_mutants_for_file(filename, output_path):
     input_stat = os.stat(filename)
 
-    # if output_path.exists() and output_path.stat().st_mtime == input_stat.st_mtime:
-    #     # print('    skipped', output_path, 'already up to date')
-    #     return
-
     with open(filename) as f:
         source = f.read()
 
@@ -1375,8 +1371,7 @@ def run(mutant_names, *, max_children):
 
     print_stats(source_file_mutation_data_by_path, force_output=True)
     print()
-    print(f'    done in {round(t.total_seconds()*1000)}ms')
-    print(f'    {count_tried / t.total_seconds():.2f} mutations/second')
+    print(f'{count_tried / t.total_seconds():.2f} mutations/second')
 
     if mutant_names:
         print()
