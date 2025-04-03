@@ -197,7 +197,7 @@ from typing import ClassVar
 MutantDict = Annotated[dict[str, Callable], "Mutant"]
 
 
-def _mutmut_trampoline(orig, mutants, call_args, call_kwargs):
+def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
     \"""Forward call to original or mutated function, depending on the environment\"""
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
@@ -214,7 +214,11 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs):
         result = orig(*call_args, **call_kwargs)
         return result  # for the yield case
     mutant_name = mutant_under_test.rpartition('.')[-1]
-    result = mutants[mutant_name](*call_args, **call_kwargs)
+    if self_arg:
+        # call to a class method where self is not bound
+        result = mutants[mutant_name](self_arg, *call_args, **call_kwargs)
+    else:
+        result = mutants[mutant_name](*call_args, **call_kwargs)
     return result
 
 """
@@ -330,9 +334,11 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
     mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
     access_prefix = ''
     access_suffix = ''
+    self_arg = ''
     if class_name is not None:
         access_prefix = f'object.__getattribute__(self, "'
         access_suffix = '")'
+        self_arg = ', self'
 
     if is_generator:
         yield_statement = 'yield from '  # note the space at the end!
@@ -345,7 +351,7 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    result = {yield_statement}{trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs)
+    result = {yield_statement}{trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
     return result 
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
