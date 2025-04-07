@@ -51,6 +51,7 @@ from time import (
 from typing import (
     Dict,
     List,
+    Union,
 )
 
 import click
@@ -1228,7 +1229,10 @@ def timeout_checker(mutants):
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
     assert isinstance(mutant_names, (tuple, list)), mutant_names
+    _run(mutant_names, max_children)
 
+# separate function, so we can call it directly from the tests
+def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
