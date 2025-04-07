@@ -25,7 +25,6 @@ from datetime import (
 )
 from difflib import unified_diff
 from functools import lru_cache
-from hashlib import md5
 from io import TextIOBase
 from json import JSONDecodeError
 from math import ceil
@@ -39,10 +38,6 @@ from os.path import (
 )
 from pathlib import Path
 from signal import SIGTERM
-from textwrap import (
-    dedent,
-    indent,
-)
 from threading import Thread
 from time import (
     process_time,
@@ -55,24 +50,20 @@ from typing import (
 )
 
 import click
-from parso import (
-    parse,
-    ParserSyntaxError,
-)
+import libcst as cst
+import libcst.matchers as m
 from rich.text import Text
 from setproctitle import setproctitle
 
 import mutmut
+from mutmut.file_mutation import mutate_file_contents
+from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
 # TODO: pragma no mutate should end up in `skipped` category
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 
-
-NEVER_MUTATE_FUNCTION_NAMES = {'__getattribute__', '__setattr__', '__new__'}
-NEVER_MUTATE_FUNCTION_CALLS = {'isinstance', 'len'}
-CLASS_NAME_SEPARATOR = 'ǁ'
 
 
 status_by_exit_code = {
@@ -182,44 +173,6 @@ class BadTestExecutionCommandsException(Exception):
     pass
 
 
-# noinspection PyUnresolvedReferences
-# language=python
-trampoline_impl = """
-from inspect import signature as _mutmut_signature
-from typing import Annotated
-from typing import Callable
-from typing import ClassVar
-
-
-MutantDict = Annotated[dict[str, Callable], "Mutant"]
-
-
-def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
-    \"""Forward call to original or mutated function, depending on the environment\"""
-    import os
-    mutant_under_test = os.environ['MUTANT_UNDER_TEST']
-    if mutant_under_test == 'fail':
-        from mutmut.__main__ import MutmutProgrammaticFailException
-        raise MutmutProgrammaticFailException('Failed programmatically')      
-    elif mutant_under_test == 'stats':
-        from mutmut.__main__ import record_trampoline_hit
-        record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
-        result = orig(*call_args, **call_kwargs)
-        return result  # for the yield case
-    prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
-    if not mutant_under_test.startswith(prefix):
-        result = orig(*call_args, **call_kwargs)
-        return result  # for the yield case
-    mutant_name = mutant_under_test.rpartition('.')[-1]
-    if self_arg:
-        # call to a class method where self is not bound
-        result = mutants[mutant_name](self_arg, *call_args, **call_kwargs)
-    else:
-        result = mutants[mutant_name](*call_args, **call_kwargs)
-    return result
-
-"""
-yield_from_trampoline_impl = trampoline_impl.replace('result = ', 'result = yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')
 
 def copy_src_dir():
     for path in mutmut.config.paths_to_mutate:
@@ -252,14 +205,6 @@ def copy_also_copy_files():
             shutil.copytree(path, destination, dirs_exist_ok=True)
 
 
-def pragma_no_mutate_lines(source):
-    return {
-        i + 1
-        for i, line in enumerate(source.split('\n'))
-        if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
-    }
-
-
 def create_mutants_for_file(filename, output_path):
     input_stat = os.stat(filename)
 
@@ -290,305 +235,14 @@ def create_mutants_for_file(filename, output_path):
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
 
-
-def ensure_ends_with_newline(source):
-    if not source.endswith('\n'):
-        return source + '\n'
-    else:
-        return source
-
-
 def write_all_mutants_to_file(*, out, source, filename):
-    no_mutate_lines = pragma_no_mutate_lines(source)
+    result, mutant_names = mutate_file_contents(filename, source)
+    out.write(result)
 
+    # TODO: function hashes are currently not used. Reimplement this when needed.
     hash_by_function_name = {}
-    mutant_names = []
-
-    try:
-        ast = parse(ensure_ends_with_newline(source), error_recovery=False)
-    except ParserSyntaxError:
-        print(f'Warning: unsupported syntax in {filename}, skipping')
-        out.write(source)
-        return [], {}
-
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(ast, no_mutate_lines):
-        out.write(x)
-        if mutant_name:
-            mutant_names.append(mutant_name)
-        if name_and_hash:
-            assert type_ == 'orig'
-            name, hash = name_and_hash
-            hash_by_function_name[name] = hash
 
     return mutant_names, hash_by_function_name
-
-
-def build_trampoline(*, orig_name, mutants, class_name, is_generator):
-    assert orig_name not in NEVER_MUTATE_FUNCTION_NAMES
-
-    mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
-
-    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
-    access_prefix = ''
-    access_suffix = ''
-    self_arg = ''
-    if class_name is not None:
-        access_prefix = f'object.__getattribute__(self, "'
-        access_suffix = '")'
-        self_arg = ', self'
-
-    if is_generator:
-        yield_statement = 'yield from '  # note the space at the end!
-        trampoline_name = '_mutmut_yield_from_trampoline'
-    else:
-        yield_statement = ''
-        trampoline_name = '_mutmut_trampoline'
-
-    return f"""
-{mutants_dict}
-
-def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    result = {yield_statement}{trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
-    return result 
-
-{orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
-{mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
-"""
-
-
-@contextmanager
-def rename_function_node(node, *, suffix, class_name):
-    orig_name = node.name.value
-
-    mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
-
-    node.name.value = mangled_name + f'__mutmut_{suffix}'
-    yield
-    node.name.value = orig_name
-
-
-sentinel = object()
-
-
-def filter_funcdef_children(children):
-    # Throw away type annotation for return type
-    r = []
-    in_annotation = False
-    for c in children:
-        if c.type == 'operator':
-            if c.value == '->':
-                in_annotation = True
-            if c.value == ':':
-                in_annotation = False
-
-        if not in_annotation:
-            r.append(c)
-    return r
-
-
-def yield_mutants_for_node(*, func_node, class_name=None, context, node):
-    # do not mutate static typing annotations
-    if node.type == 'tfpdef':
-        return
-
-    # Some functions should not be mutated
-    if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in NEVER_MUTATE_FUNCTION_CALLS:
-        return
-
-    # The rest
-    if hasattr(node, 'children'):
-        children = node.children
-        if node.type == 'funcdef':
-            children = filter_funcdef_children(children)
-        for child_node in children:
-            context.stack.append(child_node)
-            try:
-                yield from yield_mutants_for_node(func_node=func_node, class_name=class_name, context=context, node=child_node)
-            finally:
-                context.stack.pop()
-
-    mutation = mutmut.mutation_by_ast_type.get(node.type)
-    if not mutation:
-        return
-
-    if context.exclude_node(node):
-        return
-
-    old_value = getattr(node, 'value', sentinel)
-    old_children = getattr(node, 'children', sentinel)
-
-    for m in mutation(
-        context=context,
-        node=node,
-        value=getattr(node, 'value', None),
-        children=getattr(node, 'children', None),
-    ):
-        new_value = m.get('value', sentinel)
-        new_children = m.get('children', sentinel)
-        assert new_value is not sentinel or new_children is not sentinel
-        if new_value is not sentinel:
-            assert old_value != new_value
-            setattr(node, 'value', new_value)
-        if new_children is not sentinel:
-            assert isinstance(new_children, list)
-            assert old_children != new_children
-            setattr(node, 'children', new_children)
-
-        # noinspection PyArgumentList
-        with rename_function_node(func_node, suffix=f'{context.count}', class_name=class_name):
-            code = func_node.get_code()
-            if valid_syntax(code):
-                context.count += 1
-
-                context.mutants.append(func_node.name.value)
-                yield 'mutant', code, None, func_node.name.value
-
-            if old_value is not sentinel:
-                setattr(node, 'value', old_value)
-            if old_children is not sentinel:
-                setattr(node, 'children', old_children)
-
-
-def valid_syntax(code):
-    try:
-        ast.parse(dedent(code))
-        return True
-    except (SyntaxError, IndentationError):
-        return False
-
-
-class FuncContext:
-    def __init__(self, no_mutate_lines=None, dict_synonyms=None):
-        self.count = 1
-        self.mutants = []
-        self.stack = []
-        self.dict_synonyms = {'dict'} | (dict_synonyms or set())
-        self.no_mutate_lines = no_mutate_lines or []
-
-    def exclude_node(self, node):
-        if node.start_pos[0] in self.no_mutate_lines:
-            return True
-        return False
-
-    def is_inside_annassign(self):
-        for node in self.stack:
-            if node.type == 'annassign':
-                return True
-        return False
-
-
-def is_generator(node):
-    assert node.type == 'funcdef'
-
-    def _is_generator(n):
-        if n is not node and n.type in ('funcdef', 'classdef'):
-            return False
-
-        if n.type == 'keyword' and n.value == 'yield':
-            return True
-
-        for c in getattr(n, 'children', []):
-            if _is_generator(c):
-                return True
-        return False
-    return _is_generator(node)
-
-
-def yield_mutants_for_function(node, *, class_name=None, no_mutate_lines):
-    assert node.type == 'funcdef'
-
-    if node.name.value in NEVER_MUTATE_FUNCTION_NAMES:
-        yield 'filler', node.get_code(), None, None
-        return
-
-    hash_of_orig = md5(node.get_code().encode()).hexdigest()
-
-    orig_name = node.name.value
-    # noinspection PyArgumentList
-    with rename_function_node(node, suffix='orig', class_name=class_name):
-        yield 'orig', node.get_code(), (orig_name, hash_of_orig), None
-
-    context = FuncContext(no_mutate_lines=no_mutate_lines)
-
-    return_annotation_started = False
-
-    for child_node in node.children:
-        if child_node.type == 'operator' and child_node.value == '->':
-            return_annotation_started = True
-
-        if return_annotation_started and child_node.type == 'operator' and child_node.value == ':':
-            return_annotation_started = False
-
-        if return_annotation_started:
-            continue
-
-        context.stack.append(child_node)
-        try:
-            yield from yield_mutants_for_node(func_node=node, class_name=class_name, node=child_node, context=context)
-        finally:
-            context.stack.pop()
-
-    trampoline = build_trampoline(orig_name=node.name.value, mutants=context.mutants, class_name=class_name, is_generator=is_generator(node))
-    if class_name is not None:
-        trampoline = indent(trampoline, '    ')
-    yield 'trampoline', trampoline, None, None
-    yield 'filler', '\n\n', None, None
-
-
-def yield_mutants_for_class(node, no_mutate_lines):
-    assert node.type == 'classdef'
-    for child_node in node.children:
-        if child_node.type == 'suite':
-            yield from yield_mutants_for_class_body(child_node, no_mutate_lines=no_mutate_lines)
-        else:
-            yield 'filler', child_node.get_code(), None, None
-
-
-def yield_mutants_for_class_body(node, no_mutate_lines):
-    assert node.type == 'suite'
-    class_name = node.parent.name.value
-
-    for child_node in node.children:
-        if child_node.type == 'funcdef':
-            yield from yield_mutants_for_function(child_node, class_name=class_name, no_mutate_lines=no_mutate_lines)
-        else:
-            yield 'filler', child_node.get_code(), None, None
-
-
-def is_from_future_import_node(c):
-    if c.type == 'simple_stmt':
-        if c.children:
-            c2 = c.children[0]
-            if c2.type == 'import_from' and c2.children[1].type == 'name' and c2.children[1].value == '__future__':
-                return True
-    return False
-
-
-def yield_future_imports(node):
-    for c in node.children:
-        if is_from_future_import_node(c):
-            yield 'filler', c.get_code(), None, None
-
-
-def yield_mutants_for_module(node, no_mutate_lines):
-    assert node.type == 'file_input'
-
-    # First yield `from __future__`, then the rest
-    yield from yield_future_imports(node)
-
-    yield 'trampoline_impl', trampoline_impl, None, None
-    yield 'trampoline_impl', yield_from_trampoline_impl, None, None
-    yield 'filler', '\n', None, None
-    for child_node in node.children:
-        if child_node.type == 'funcdef':
-            yield from yield_mutants_for_function(child_node, no_mutate_lines=no_mutate_lines)
-        elif child_node.type == 'classdef':
-            yield from yield_mutants_for_class(child_node, no_mutate_lines=no_mutate_lines)
-        elif is_from_future_import_node(child_node):
-            # Don't yield `from __future__` after trampoline
-            pass
-        else:
-            yield 'filler', child_node.get_code(), None, None
 
 
 class SourceFileMutationData:
@@ -790,16 +444,6 @@ class HammettRunner(TestRunner):
         import hammett
         hammett.Config.workerinput = dict(workerinput=f'_{mutant_name}')
         return hammett.main_run_tests(**self.hammett_kwargs, tests=tests)
-
-
-def mangle_function_name(*, name, class_name):
-    assert CLASS_NAME_SEPARATOR not in name
-    if class_name:
-        assert CLASS_NAME_SEPARATOR not in class_name
-        prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
-    else:
-        prefix = 'x_'
-    return f'{prefix}{name}'
 
 
 def mangled_name_from_mutant_name(mutant_name):
@@ -1417,47 +1061,38 @@ def results(all):
             print(f'    {k}: {status}')
 
 
-def read_mutants_ast(path):
+def read_mutants_module(path) -> cst.Module:
     with open(Path('mutants') / path) as f:
-        return parse(f.read(), error_recovery=False)
+        return cst.parse_module(f.read())
 
 
-def read_orig_ast(path):
+def read_orig_module(path) -> cst.Module:
     with open(path) as f:
-        return parse(f.read())
+        return cst.parse_module(f.read())
 
 
-def find_ast_node(ast, function_name, orig_function_name):
-    function_name = function_name.rpartition('.')[-1]
-    orig_function_name = orig_function_name.rpartition('.')[-1]
-
-    for node in ast.children:
-        if node.type == 'classdef':
-            (body,) = [x for x in node.children if x.type == 'suite']
-            result = find_ast_node(body, function_name=function_name, orig_function_name=orig_function_name)
-            if result:
-                return result
-        if node.type == 'funcdef' and node.name.value == function_name:
-            node.name.value = orig_function_name
-            return node
+def find_function(module: cst.Module, name: str) -> Union[cst.FunctionDef, None]:
+    name = name.split('.')[-1]
+    return next(iter(m.findall(module, m.FunctionDef(m.Name(name)))), None) # type: ignore
 
 
-def read_original_ast_node(ast, mutant_name):
-    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
+def read_original_function(module: cst.Module, mutant_name: str):
+    orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
     orig_name = mangled_name_from_mutant_name(mutant_name) + '__mutmut_orig'
 
-    result = find_ast_node(ast, function_name=orig_name, orig_function_name=orig_function_name)
+    result = find_function(module, orig_name)
     if not result:
         raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
-    return result
+    return result.with_changes(name = cst.Name(orig_function_name))
 
 
-def read_mutant_ast_node(ast, mutant_name):
-    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
-    result = find_ast_node(ast, function_name=mutant_name, orig_function_name=orig_function_name)
+def read_mutant_function(module: cst.Module, mutant_name: str):
+    orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
+
+    result = find_function(module, mutant_name)
     if not result:
-        raise FileNotFoundError(f'Could not find mutant "{mutant_name}"')
-    return result
+        raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
+    return result.with_changes(name = cst.Name(orig_function_name))
 
 
 def find_mutant(mutant_name):
@@ -1484,11 +1119,11 @@ def get_diff_for_mutant(mutant_name, source=None, path=None):
     print(f'# {mutant_name}: {status}')
 
     if source is None:
-        ast = read_mutants_ast(path)
+        module = read_mutants_module(path)
     else:
-        ast = parse(source, error_recovery=False)
-    orig_code = read_original_ast_node(ast, mutant_name).get_code().strip()
-    mutant_code = read_mutant_ast_node(ast, mutant_name).get_code().strip()
+        module = cst.parse_module(source)
+    orig_code = cst.Module([read_original_function(module, mutant_name)]).code.strip()
+    mutant_code = cst.Module([read_mutant_function(module, mutant_name)]).code.strip()
 
     path = str(path)  # difflib requires str, not Path
     return '\n'.join([
@@ -1516,27 +1151,25 @@ def apply(mutant_name):
 
 
 def apply_mutant(mutant_name):
-    m = find_mutant(mutant_name)
-    path = m.path
+    path = find_mutant(mutant_name).path
 
     orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
     orig_function_name = orig_function_name.rpartition('.')[-1]
 
-    orig_ast = read_orig_ast(path)
-    mutants_ast = read_mutants_ast(path)
-    mutant_ast_node = read_mutant_ast_node(mutants_ast, mutant_name=mutant_name)
+    orig_module = read_orig_module(path)
+    mutants_module = read_mutants_module(path)
 
-    mutant_ast_node.name.value = orig_function_name
+    mutant_function = read_mutant_function(mutants_module, mutant_name)
+    mutant_function = mutant_function.with_changes(name=cst.Name(orig_function_name))
 
-    for node in orig_ast.children:
-        if node.type == 'funcdef' and node.name.value == orig_function_name:
-            node.children = mutant_ast_node.children
-            break
-    else:
+    original_function = find_function(orig_module, orig_function_name)
+    if not original_function:
         raise FileNotFoundError(f'Could not apply mutant {mutant_name}')
 
+    new_module: cst.Module = orig_module.deep_replace(original_function, mutant_function) # type: ignore
+
     with open(path, 'w') as f:
-        f.write(orig_ast.get_code())
+        f.write(new_module.code)
 
 
 # TODO: junitxml, html commands

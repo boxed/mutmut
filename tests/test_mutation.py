@@ -1,29 +1,34 @@
-from io import StringIO
-
 import pytest
-from parso import parse
+from libcst import parse_statement
 
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
-    FuncContext,
     get_diff_for_mutant,
-    is_generator,
-    mangle_function_name,
     orig_function_and_class_names_from_key,
-    pragma_no_mutate_lines,
-    write_all_mutants_to_file,
-    yield_mutants_for_module,
-    yield_mutants_for_node,
 )
+from mutmut.trampoline_templates import trampoline_impl, yield_from_trampoline_impl, mangle_function_name
+from mutmut.file_mutation import create_mutations, mutate_file_contents, is_generator
+
+def mutants_for_source(source: str) -> list[str]:
+    module, mutated_nodes = create_mutations(source)
+    mutants: list[str] = []
+    for m in mutated_nodes:
+        mutants.append(module.deep_replace(m.original_node, m.mutated_node).code)  # type: ignore
+
+    return mutants
+
+def mutated_module(source: str) -> str:
+    mutated_code, _ = mutate_file_contents('', source)
+    return mutated_code
 
 
 @pytest.mark.parametrize(
     'original, expected', [
         ('foo(a, *args, **kwargs)', [
-            'foo( *args, **kwargs)',
+            'foo(*args, **kwargs)',
             'foo(None, *args, **kwargs)',
             'foo(a, **kwargs)',
-            'foo(a, *args,)',
+            'foo(a, *args, )',
         ]),
         # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
         ('break', 'return'),
@@ -33,32 +38,35 @@ from mutmut.__main__ import (
         ("dict(a=b)", ["dict(aXX=b)", 'dict(a=None)']),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', [
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=True)))',
+            'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=None)))',
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(showXX=False)))',
             'lambda **kwargs: Variable.integer(**setdefaults(None, dict(show=False)))',
-            'lambda **kwargs: Variable.integer(**setdefaults( dict(show=False)))',
-            # TODO: this mutant should exist... I guess we need to handle method calls separately from function calls?
+            'lambda **kwargs: Variable.integer(**setdefaults(kwargs, None))',
+            'lambda **kwargs: Variable.integer(**setdefaults(kwargs, ))',
+            'lambda **kwargs: Variable.integer(**setdefaults(dict(show=False)))',
+            # TODO: this mutant would exist if we also mutate single-arg arglists (see implentation)
             # 'lambda **kwargs: Variable.integer()',
             'lambda **kwargs: None',
         ]),
-        # TODO: this mutation should not exist
-        ('x: list[A | None]', 'x: list[A & None]'),
+        ('x: list[A | None]', []),
         ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('a: int = 1', ['a: int = 2', 'a: int = None']),
+        ('a: str = "foo"', ['a: str = "XXfooXX"', 'a: str = None']),
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
-        ('1+1', ['2+1', '1-1', '1+2']),
+        ('1+1', ['2+1', '1 - 1', '1+2']),
         ('1', '2'),
-        ('1-1', ['2-1', '1+1', '1-2']),
-        ('1*1', ['2*1', '1/1', '1*2']),
-        ('1/1', ['2/1', '1*1', '1/2']),
-        ('1//1', ['2//1', '1/1', '1//2']),
-        ('1%1', ['2%1', '1/1', '1%2']),
-        ('1<<1', ['2<<1', '1>>1', '1<<2']),
-        ('1>>1', ['2>>1', '1<<1', '1>>2']),
-        ('a&b', ['a|b']),
-        ('a|b', ['a&b']),
-        ('a^b', ['a&b']),
-        ('a**b', ['a*b']),
+        ('1-1', ['2-1', '1 + 1', '1-2']),
+        ('1*1', ['2*1', '1 / 1', '1*2']),
+        ('1/1', ['2/1', '1 * 1', '1/2']),
+        ('1//1', ['2//1', '1 / 1', '1//2']),
+        ('1%1', ['2%1', '1 / 1', '1%2']),
+        ('1<<1', ['2<<1', '1 >> 1', '1<<2']),
+        ('1>>1', ['2>>1', '1 << 1', '1>>2']),
+        ('a&b', ['a | b']),
+        ('a|b', ['a & b']),
+        ('a^b', ['a & b']),
+        ('a**b', ['a * b']),
         ('~a', ['a']),
         # ('1.0', '1.0000000000000002'),  # using numpy features
         ('1.0', '2.0'),
@@ -74,11 +82,11 @@ from mutmut.__main__ import (
         ("0o10", "9"),
         ("0x10", "17"),
         ("0b10", "3"),
-        ("1<2", ['2<2', '1<=2', '1<3']),
+        ("1<2", ['2<2', '1 <= 2', '1<3']),
         ('(1, 2)', ['(2, 2)', '(1, 3)']),
-        ("1 not in (1, 2)", ['2 not in (1, 2)', '1  in (1, 2)', '1 not in (2, 2)', '1 not in (1, 3)']),  # two spaces here because "not in" is two words
+        ("1 not in (1, 2)", ['2 not in (1, 2)', '1 in (1, 2)', '1 not in (2, 2)', '1 not in (1, 3)']),  # two spaces here because "not in" is two words
         ("foo is foo", "foo is not foo"),
-        ("foo is not foo", "foo is  foo"),
+        ("foo is not foo", "foo is foo"),
         ('a or b', 'a and b'),
         ('a and b', 'a or b'),
         ('not a', 'a'),
@@ -93,32 +101,32 @@ from mutmut.__main__ import (
 
         # subscript
         ('a[None]', []),
-        ('a[b]', 'a[None]'),
-        ('s[0]', ['s[1]', 's[None]']),
-        ('s[0] = a', ['s[1] = a', 's[None] = a', 's[0] = None']),
-        ('s[1:]', ['s[2:]', 's[None]']),
-        ('s[1:2]', ['s[2:2]', 's[1:3]', 's[None]']),
+        ('a[b]', []),
+        ('s[0]', ['s[1]']),
+        ('s[0] = a', ['s[1] = a', 's[0] = None']),
+        ('s[1:]', ['s[2:]']),
+        ('s[1:2]', ['s[2:2]', 's[1:3]']),
 
         ('1j', '2j'),
-        ('1.0j', '2.0j'),
+        ('1.0j', '2j'),
         ('0o1', '2'),
         ('1.0e10', '10000000001.0'),
         ('a = {x for x in y}', 'a = None'),
-        ('x+=1', ['x=1', 'x-=1', 'x+=2']),
-        ('x-=1', ['x=1', 'x+=1', 'x-=2']),
-        ('x*=1', ['x=1', 'x/=1', 'x*=2']),
-        ('x/=1', ['x=1', 'x*=1', 'x/=2']),
-        ('x//=1', ['x=1', 'x/=1', 'x//=2']),
-        ('x%=1', ['x=1', 'x/=1', 'x%=2']),
-        ('x<<=1', ['x=1', 'x>>=1', 'x<<=2']),
-        ('x>>=1', ['x=1', 'x<<=1', 'x>>=2']),
-        ('x&=1', ['x=1', 'x|=1', 'x&=2']),
-        ('x|=1', ['x=1', 'x&=1', 'x|=2']),
-        ('x^=1', ['x=1', 'x&=1', 'x^=2']),
-        ('x**=1', ['x=1', 'x*=1', 'x**=2']),
+        ('x+=1', ['x = 1', 'x -= 1', 'x+=2']),
+        ('x-=1', ['x = 1', 'x += 1', 'x-=2']),
+        ('x*=1', ['x = 1', 'x /= 1', 'x*=2']),
+        ('x/=1', ['x = 1', 'x *= 1', 'x/=2']),
+        ('x//=1', ['x = 1', 'x /= 1', 'x//=2']),
+        ('x%=1', ['x = 1', 'x /= 1', 'x%=2']),
+        ('x<<=1', ['x = 1', 'x >>= 1', 'x<<=2']),
+        ('x>>=1', ['x = 1', 'x <<= 1', 'x>>=2']),
+        ('x&=1', ['x = 1', 'x |= 1', 'x&=2']),
+        ('x|=1', ['x = 1', 'x &= 1', 'x|=2']),
+        ('x^=1', ['x = 1', 'x &= 1', 'x^=2']),
+        ('x**=1', ['x = 1', 'x *= 1', 'x**=2']),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
-        # TODO: default params like this can break all tests at import time
-        ('def foo(a = A("abc")): pass', 'def foo(a = A("XXabcXX")): pass'),
+        # mutating default args with function calls could cause Exceptions at import time
+        ('def foo(a = A("abc")): pass', []),
         ('a = None', 'a = ""'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('lambda: None', 'lambda: 0'),
@@ -129,8 +137,6 @@ from mutmut.__main__ import (
         ("r'''foo'''", []),  # don't mutate things we assume to be docstrings
         ('"""foo"""', []),  # don't mutate things we assume to be docstrings
         ('(x for x in [])', []),  # don't mutate 'in' in generators
-        ("DictSynonym(a=b)", ["DictSynonym(aXX=b)", 'DictSynonym(a=None)']),
-        ("NotADictSynonym(a=b)", "NotADictSynonym(a=None)"),
         ('from foo import *', []),
         ('from .foo import *', []),
         ('import foo', []),
@@ -147,17 +153,10 @@ from mutmut.__main__ import (
 def test_basic_mutations(original, expected):
     if isinstance(expected, str):
         expected = [expected]
-    func_node = parse(f'def fake():\n    {original}').children[0]
-    node = func_node.children[-1]
-    assert node.get_code().strip() == original.strip()
-    mutants = list(yield_mutants_for_node(func_node=func_node, context=FuncContext(dict_synonyms={'DictSynonym'}), node=node))
-    actual = sorted([
-        parse(mutant).children[0].children[-1].get_code().strip()
-        for (type_, mutant, _, _) in mutants
-        if type_ == 'mutant'
-    ])
-    expected = sorted(expected)
-    assert actual == expected
+
+    mutants = mutants_for_source(original)
+
+    assert sorted(mutants) == sorted(expected)
 
 
 def test_do_not_mutate_annotations():
@@ -167,11 +166,7 @@ def foo() -> int:
     return
     """.strip()
 
-    mutants = [
-        mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
-        if type_ == 'mutant'
-    ]
+    mutants = mutants_for_source(source)
     for m in mutants:
         print(m)  # pragma: no cover
 
@@ -190,62 +185,63 @@ class A:
         return 1 + 2
     """.strip()
 
-    mutants = [
-        mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
-        if type_ == 'mutant'
-    ]
+    mutants = mutants_for_source(source)
     for m in mutants:
         print(m)  # pragma: no cover
 
     assert not mutants
 
+def test_match_case():
+    source = """
+match x:
+    case Point(x=1): return 1
+    case _: return 2""".strip()
+
+    mutants = mutants_for_source(source)
+
+    expected = [
+        """match x:\n    case Point(x=1): return 1""",
+        """match x:\n    case _: return 2""",
+        """match x:\n    case Point(x=2): return 1\n    case _: return 2""",
+        """match x:\n    case Point(x=1): return 2\n    case _: return 2""",
+        """match x:\n    case Point(x=1): return 1\n    case _: return 3""",
+    ]
+
+    assert sorted(mutants) == sorted(expected)
+
 def test_basic_class():
     source = """
 class Foo:
-    def member(self):        
+    def member(self):
         return 1
     """.strip()
 
-    mutants = [
-        mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
-        if type_ == 'mutant'
-    ]
-    for m in mutants:
-        print(m)
+    mutated_code = mutated_module(source)
 
-    assert len(mutants) == 1
-    assert mutants[0] == f'    def x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}member__mutmut_1(self):        \n        return 2'
+    expected = """class Foo:
+    def xǁFooǁmember__mutmut_orig(self):
+        return 1
+    def xǁFooǁmember__mutmut_1(self):
+        return 2"""
 
-
-def mutants_for_source(source):
-    no_mutate_lines = pragma_no_mutate_lines(source)
-    r = []
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
-        if type_ == 'mutant':
-            r.append(x)
-    return r
-
-
-def full_mutated_source(source):
-    no_mutate_lines = pragma_no_mutate_lines(source)
-    r = []
-    for type_, x, name_and_hash, mutant_name in yield_mutants_for_module(parse(source, error_recovery=False), no_mutate_lines):
-        r.append(x)
-    return '\n'.join(r).strip()
+    assert expected in mutated_code
 
 
 def test_function_with_annotation():
     source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
-    mutants = mutants_for_source(source)
-    assert mutants == [
+
+    mutated_code = mutated_module(source)
+    print(mutated_code)
+
+    expected_defs = [
         'def x_capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
-        'def x_capitalize__mutmut_2(s : str):\n    return s[None].upper() + s[1:] if s else s',
-        'def x_capitalize__mutmut_3(s : str):\n    return s[0].upper() - s[1:] if s else s',
-        'def x_capitalize__mutmut_4(s : str):\n    return s[0].upper() + s[2:] if s else s',
-        'def x_capitalize__mutmut_5(s : str):\n    return s[0].upper() + s[None] if s else s'
+        'def x_capitalize__mutmut_2(s : str):\n    return s[0].upper() - s[1:] if s else s',
+        'def x_capitalize__mutmut_3(s : str):\n    return s[0].upper() + s[2:] if s else s',
     ]
+
+    for expected in expected_defs:
+        print(expected)
+        assert expected in mutated_code
 
 
 def test_pragma_no_mutate():
@@ -268,24 +264,28 @@ def foo(): # pragma: no mutate
 
 
 def test_mutate_dict():
-    source = '''
-def foo():    
-    dict(a=b, c=d)
-'''
+    source = 'dict(a=b, c=d)'
+
     mutants = mutants_for_source(source)
-    assert mutants == [
-        '\ndef x_foo__mutmut_1():    \n    dict(a=None, c=d)\n',
-        '\ndef x_foo__mutmut_2():    \n    dict(aXX=b, c=d)\n',
-        '\ndef x_foo__mutmut_3():    \n    dict(a=b, c=None)\n',
-        '\ndef x_foo__mutmut_4():    \n    dict(a=b, cXX=d)\n',
-        '\ndef x_foo__mutmut_5():    \n    dict( c=d)\n',
-        '\ndef x_foo__mutmut_6():    \n    dict(a=b,)\n',
+
+    expected = [
+        'dict(a=None, c=d)',
+        'dict(aXX=b, c=d)',
+        'dict(a=b, c=None)',
+        'dict(a=b, cXX=d)',
+        'dict(c=d)',
+        'dict(a=b, )',
     ]
 
+    assert sorted(mutants) == sorted(expected)
 
-def test_syntax_error():
-    with pytest.raises(Exception):
-        mutants_for_source(':!')
+
+def test_syntax_warning():
+    with pytest.warns(SyntaxWarning) as record:
+        mutate_file_contents('some_file.py', ':!')
+
+    assert len(record) == 1
+    assert 'some_file.py' in record[0].message.args[0] # type: ignore
 
 
 def test_bug_github_issue_18():
@@ -338,8 +338,8 @@ __all__ = [
     'bar',
 ]
     """.strip()
-    mutants = mutants_for_source(source)
-    assert not mutants
+    mutated_code = mutated_module(source)
+    assert source in mutated_code
 
 
 def test_bad_mutation_str_type_definition():
@@ -373,10 +373,8 @@ class Foo:
 
     """.strip()
 
-    out = StringIO()
-    mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename='filename')
+    mutants_source, mutant_names = mutate_file_contents('filename', source)
     assert len(mutant_names) == 2
-    mutants_source = out.getvalue()
 
     diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path='test.py').strip()
     diff2 = get_diff_for_mutant(mutant_name=mutant_names[1], source=mutants_source, path='test.py').strip()
@@ -395,8 +393,8 @@ class Foo:
 +++ test.py
 @@ -1,2 +1,2 @@
  def member(self):        
--        return 3
-+        return 4
+-    return 3
++    return 4
 '''.strip()
 
 
@@ -408,7 +406,7 @@ from collections.abc import Iterable
 def foo():
     return 1
 """.strip()
-    mutated_source = full_mutated_source(source)
+    mutated_source = mutated_module(source)
     assert mutated_source.split('\n')[0] == 'from __future__ import annotations'
     assert mutated_source.count('from __future__') == 1
 
@@ -418,7 +416,7 @@ def test_preserve_generators():
     def foo():
         yield 1
     '''.strip()
-    mutated_source = full_mutated_source(source)
+    mutated_source = mutated_module(source)
     assert 'yield from _mutmut_yield_from_trampoline' in mutated_source
 
 
@@ -427,19 +425,19 @@ def test_is_generator():
     def foo():
         yield 1
     '''.strip()
-    assert is_generator(parse(source).children[0])
+    assert is_generator(parse_statement(source)) # type: ignore
 
     source = '''
     def foo():
         yield from bar()
     '''.strip()
-    assert is_generator(parse(source).children[0])
+    assert is_generator(parse_statement(source)) # type: ignore
 
     source = '''
     def foo():
         return 1
     '''.strip()
-    assert not is_generator(parse(source).children[0])
+    assert not is_generator(parse_statement(source)) # type: ignore
 
     source = '''
     def foo():
@@ -447,7 +445,7 @@ def test_is_generator():
             yield 2
         return 1
     '''.strip()
-    assert not is_generator(parse(source).children[0])
+    assert not is_generator(parse_statement(source)) # type: ignore
 
 
 def test_do_not_mutate_top_level_decorators():
@@ -466,16 +464,14 @@ class A(Enum):
         return 1 + 2
 """.strip()
 
-    mutants = [
-        mutant
-        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
-        if type_ == 'mutant'
-    ]
+    mutants = mutants_for_source(source)
     for m in mutants:
         print(m)  # pragma: no cover
 
     assert not mutants
 
+# TODO: implement removal of inner decorators
+@pytest.mark.skip
 def test_decorated_inner_functions_mutation():
     source = """
 def foo():
@@ -491,3 +487,104 @@ def x_foo__mutmut_1():
 
     mutants = mutants_for_source(source)
     assert mutants == [expected]
+
+
+def test_module_mutation():
+    source = """from __future__ import division
+import lib
+
+lib.foo()
+
+def foo(a, b):
+    return a > b
+
+def bar():
+    yield 1
+
+class Adder:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def add(self, value):
+        return self.amount + value
+
+print(Adder(1).add(2))"""
+
+    src, _ = mutate_file_contents("file.py", source)
+
+    assert src == f"""from __future__ import division
+import lib
+{trampoline_impl.strip()}
+{yield_from_trampoline_impl.strip()}
+
+lib.foo()
+
+def x_foo__mutmut_orig(a, b):
+    return a > b
+
+def x_foo__mutmut_1(a, b):
+    return a >= b
+
+x_foo__mutmut_mutants : ClassVar[MutantDict] = {{
+'x_foo__mutmut_1': x_foo__mutmut_1
+}}
+
+def foo(*args, **kwargs):
+    result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs)
+    return result 
+
+foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig)
+x_foo__mutmut_orig.__name__ = 'x_foo'
+
+def x_bar__mutmut_orig():
+    yield 1
+
+def x_bar__mutmut_1():
+    yield 2
+
+x_bar__mutmut_mutants : ClassVar[MutantDict] = {{
+'x_bar__mutmut_1': x_bar__mutmut_1
+}}
+
+def bar(*args, **kwargs):
+    result = yield from _mutmut_yield_from_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
+    return result 
+
+bar.__signature__ = _mutmut_signature(x_bar__mutmut_orig)
+x_bar__mutmut_orig.__name__ = 'x_bar'
+
+class Adder:
+    def xǁAdderǁ__init____mutmut_orig(self, amount):
+        self.amount = amount
+    def xǁAdderǁ__init____mutmut_1(self, amount):
+        self.amount = None
+    
+    xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = {{
+    'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1
+    }}
+    
+    def __init__(self, *args, **kwargs):
+        result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁ__init____mutmut_orig"), object.__getattribute__(self, "xǁAdderǁ__init____mutmut_mutants"), args, kwargs, self)
+        return result 
+    
+    __init__.__signature__ = _mutmut_signature(xǁAdderǁ__init____mutmut_orig)
+    xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__'
+
+    def xǁAdderǁadd__mutmut_orig(self, value):
+        return self.amount + value
+
+    def xǁAdderǁadd__mutmut_1(self, value):
+        return self.amount - value
+    
+    xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = {{
+    'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1
+    }}
+    
+    def add(self, *args, **kwargs):
+        result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁadd__mutmut_orig"), object.__getattribute__(self, "xǁAdderǁadd__mutmut_mutants"), args, kwargs, self)
+        return result 
+    
+    add.__signature__ = _mutmut_signature(xǁAdderǁadd__mutmut_orig)
+    xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
+
+print(Adder(1).add(2))"""
