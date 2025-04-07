@@ -170,10 +170,6 @@ def walk_source_files():
             yield Path(root) / filename
 
 
-class InvalidMutantException(Exception):
-    pass
-
-
 class MutmutProgrammaticFailException(Exception):
     pass
 
@@ -477,12 +473,6 @@ class FuncContext:
     def is_inside_annassign(self):
         for node in self.stack:
             if node.type == 'annassign':
-                return True
-        return False
-
-    def is_inside_dict_synonym_call(self):
-        for node in self.stack:
-            if node.type == 'atom_expr' and node.children[0].type == 'name' and node.children[0].value in self.dict_synonyms:
                 return True
         return False
 

@@ -9,49 +9,12 @@ from parso.python.tree import (
 __version__ = '3.2.3'
 
 
-# We have a global whitelist for constants of the pattern __all__, __version__, etc
-
-dunder_whitelist = [
-    'all',
-    'version',
-    'title',
-    'package_name',
-    'author',
-    'description',
-    'email',
-    'version',
-    'license',
-    'copyright',
-]
-
 duration_by_test = {}
 stats_time = None
 config = None
 
 _stats = set()
 tests_by_mangled_function_name = defaultdict(set)
-
-
-class SkipException(Exception):
-    pass
-
-
-UNTESTED = 'untested'
-OK_KILLED = 'ok_killed'
-OK_SUSPICIOUS = 'ok_suspicious'
-BAD_TIMEOUT = 'bad_timeout'
-BAD_SURVIVED = 'bad_survived'
-SKIPPED = 'skipped'
-
-
-mutant_statuses = [
-    UNTESTED,
-    OK_KILLED,
-    OK_SUSPICIOUS,
-    BAD_TIMEOUT,
-    BAD_SURVIVED,
-    SKIPPED,
-]
 
 
 def number_mutation(value, **_):
@@ -120,9 +83,6 @@ def lambda_mutation(children, **_):
         yield dict(children=pre + [op] + [Number(value=' 0', start_pos=post[0].start_pos)])
     else:
         yield dict(children=pre + [op] + [Keyword(value=' None', start_pos=post[0].start_pos)])
-
-
-NEWLINE = {'formatting': [], 'indent': '', 'type': 'endl', 'value': ''}
 
 
 def argument_mutation(children, context, **_):
