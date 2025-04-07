@@ -209,6 +209,7 @@ def operator_mutation(value, node, **_):
         '|=': ['&=', '='],
         '^=': ['&=', '='],
         '**=': ['*=', '='],
+        # NOTE ~= does not exist, because ~ is a unary operator
         '~=': ['='],
 
         '<': ['<='],
@@ -217,6 +218,7 @@ def operator_mutation(value, node, **_):
         '>=': ['>'],
         '==': ['!='],
         '!=': ['=='],
+        # NOTE <> does not exist in Python 3
         '<>': ['=='],
     }.get(value, []):
         yield dict(value=op)

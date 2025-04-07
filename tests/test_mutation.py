@@ -25,10 +25,10 @@ from mutmut.__main__ import (
             'foo(a, **kwargs)',
             'foo(a, *args,)',
         ]),
-        # TODO: Fix these
         # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
+        ('break', 'return'),
+        ('continue', 'break'),
         ('a(b)', 'a(None)'),
-        # ("x if a else b", "x if a else b"),
         ("dict(a=None)", ["dict(aXX=None)"]),
         ("dict(a=b)", ["dict(aXX=b)", 'dict(a=None)']),
         ('lambda **kwargs: Variable.integer(**setdefaults(kwargs, dict(show=False)))', [
@@ -40,6 +40,8 @@ from mutmut.__main__ import (
             # 'lambda **kwargs: Variable.integer()',
             'lambda **kwargs: None',
         ]),
+        # TODO: this mutation should not exist
+        ('x: list[A | None]', 'x: list[A & None]'),
         ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('a: int = 1', ['a: int = 2', 'a: int = None']),
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
@@ -49,6 +51,15 @@ from mutmut.__main__ import (
         ('1-1', ['2-1', '1+1', '1-2']),
         ('1*1', ['2*1', '1/1', '1*2']),
         ('1/1', ['2/1', '1*1', '1/2']),
+        ('1//1', ['2//1', '1/1', '1//2']),
+        ('1%1', ['2%1', '1/1', '1%2']),
+        ('1<<1', ['2<<1', '1>>1', '1<<2']),
+        ('1>>1', ['2>>1', '1<<1', '1>>2']),
+        ('a&b', ['a|b']),
+        ('a|b', ['a&b']),
+        ('a^b', ['a&b']),
+        ('a**b', ['a*b']),
+        ('~a', ['a']),
         # ('1.0', '1.0000000000000002'),  # using numpy features
         ('1.0', '2.0'),
         ('0.1', '1.1'),
@@ -58,11 +69,11 @@ from mutmut.__main__ import (
         ('"foo"', '"XXfooXX"'),
         ("'foo'", "'XXfooXX'"),
         ("u'foo'", "u'XXfooXX'"),
-        ("0", "1"),
-        ("0o0", "1"),
-        ("0.", "1.0"),
-        ("0x0", "1"),
-        ("0b0", "1"),
+        ("10", "11"),
+        ("10.", "11.0"),
+        ("0o10", "9"),
+        ("0x10", "17"),
+        ("0b10", "3"),
         ("1<2", ['2<2', '1<=2', '1<3']),
         ('(1, 2)', ['(2, 2)', '(1, 3)']),
         ("1 not in (1, 2)", ['2 not in (1, 2)', '1  in (1, 2)', '1 not in (2, 2)', '1 not in (1, 3)']),  # two spaces here because "not in" is two words
@@ -70,6 +81,13 @@ from mutmut.__main__ import (
         ("foo is not foo", "foo is  foo"),
         ('a or b', 'a and b'),
         ('a and b', 'a or b'),
+        ('not a', 'a'),
+        ('a < b', ['a <= b']),
+        ('a <= b', ['a < b']),
+        ('a > b', ['a >= b']),
+        ('a >= b', ['a > b']),
+        ('a == b', ['a != b']),
+        ('a != b', ['a == b']),
         ('a = b', 'a = None'),
         ('a = b = c = x', 'a = b = c = None'),
 
@@ -79,6 +97,7 @@ from mutmut.__main__ import (
         ('s[0]', ['s[1]', 's[None]']),
         ('s[0] = a', ['s[1] = a', 's[None] = a', 's[0] = None']),
         ('s[1:]', ['s[2:]', 's[None]']),
+        ('s[1:2]', ['s[2:2]', 's[1:3]', 's[None]']),
 
         ('1j', '2j'),
         ('1.0j', '2.0j'),
@@ -98,6 +117,8 @@ from mutmut.__main__ import (
         ('x^=1', ['x=1', 'x&=1', 'x^=2']),
         ('x**=1', ['x=1', 'x*=1', 'x**=2']),
         ('def foo(s: Int = 1): pass', 'def foo(s: Int = 2): pass'),
+        # TODO: default params like this can break all tests at import time
+        ('def foo(a = A("abc")): pass', 'def foo(a = A("XXabcXX")): pass'),
         ('a = None', 'a = ""'),
         ('lambda **kwargs: None', 'lambda **kwargs: 0'),
         ('lambda: None', 'lambda: 0'),
@@ -106,6 +127,7 @@ from mutmut.__main__ import (
         ('a(None)', []),
         ("'''foo'''", []),  # don't mutate things we assume to be docstrings
         ("r'''foo'''", []),  # don't mutate things we assume to be docstrings
+        ('"""foo"""', []),  # don't mutate things we assume to be docstrings
         ('(x for x in [])', []),  # don't mutate 'in' in generators
         ("DictSynonym(a=b)", ["DictSynonym(aXX=b)", 'DictSynonym(a=None)']),
         ("NotADictSynonym(a=b)", "NotADictSynonym(a=None)"),
@@ -119,6 +141,7 @@ from mutmut.__main__ import (
         ('import foo', []),
         ('isinstance(a, b)', []),
         ('len(a)', []),
+        ('deepcopy(obj)', ['copy(obj)', 'deepcopy(None)']),
     ]
 )
 def test_basic_mutations(original, expected):
@@ -154,6 +177,28 @@ def foo() -> int:
 
     assert not mutants
 
+def test_do_not_mutate_specific_functions():
+    source = """
+class A:
+    def __new__():
+        return 1 + 2
+
+    def __getattribute__():
+        return 1 + 2
+
+    def __setattr__():
+        return 1 + 2
+    """.strip()
+
+    mutants = [
+        mutant
+        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        if type_ == 'mutant'
+    ]
+    for m in mutants:
+        print(m)  # pragma: no cover
+
+    assert not mutants
 
 def test_basic_class():
     source = """
@@ -213,6 +258,13 @@ def test_pragma_no_mutate_and_no_cover():
     source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n""".strip()
     mutants = mutants_for_source(source)
     assert not mutants
+
+def test_pragma_no_mutate_on_function_definition():
+    source = """
+def foo(): # pragma: no mutate
+    return 1+1"""
+    mutants = mutants_for_source(source)
+    assert mutants
 
 
 def test_mutate_dict():
@@ -398,12 +450,44 @@ def test_is_generator():
     assert not is_generator(parse(source).children[0])
 
 
-# def test_decorated_functions_mutation():
-#     source = """
-# @decorator
-# def foo():
-#     return 1
-#     """.strip()
-#
-#     mutants = mutants_for_source(source)
-#     assert len(mutants) == 1
+def test_do_not_mutate_top_level_decorators():
+    # Modifying top-level decorators could influence all mutations
+    # because they are executed at import time
+    source = """
+@some_decorator(a = 2)
+def foo():
+    x = 1 + 2
+    return x
+
+@unique
+class A(Enum):
+    @property
+    def x(self):
+        return 1 + 2
+""".strip()
+
+    mutants = [
+        mutant
+        for type_, mutant, _, _ in yield_mutants_for_module(parse(source), {})
+        if type_ == 'mutant'
+    ]
+    for m in mutants:
+        print(m)  # pragma: no cover
+
+    assert not mutants
+
+def test_decorated_inner_functions_mutation():
+    source = """
+def foo():
+    @decorator
+    def inner():
+        pass""".strip()
+
+    expected = """
+def x_foo__mutmut_1():
+
+    def inner():
+        pass""".strip()
+
+    mutants = mutants_for_source(source)
+    assert mutants == [expected]
