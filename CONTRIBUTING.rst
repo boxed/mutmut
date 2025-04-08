@@ -19,6 +19,10 @@ Running the tests
 
     pytest
 
+This also runs E2E tests that verify that `mutmut run` produces the same output as before. If your code changes should change the output of `mutmut run` and this test fails, try to delete the `snapshots/*.json` files (as described in the test errors).
+
+If pytest terminates before reporting the test failures, it likely hit a case where mutmut calls `os._exit(...)`. Try looking at these calls first for troubleshooting.
+
 Running your local version of Mutmut against a test codebase
 ------------------------------------------------------------
 

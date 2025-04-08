@@ -1,0 +1,1 @@
+This project will be E2E tested. It mainly serves as a "canary" that alerts you when code changes affect which mutants survive.

@@ -1,3 +1,6 @@
+# Mutant files
+e2e_projects/**/mutants
+
 *.py[cod]
 examples/db.sqlite3
 venv
