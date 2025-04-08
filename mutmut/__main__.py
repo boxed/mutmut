@@ -4,6 +4,7 @@ import gc
 import inspect
 import itertools
 import json
+from multiprocessing import Pool
 import os
 import resource
 import shutil
@@ -180,15 +181,18 @@ def copy_src_dir():
         shutil.copytree(path, output_path, dirs_exist_ok=True)
 
 def create_mutants():
-    for path in walk_source_files():
-        print(path)
-        output_path = Path('mutants') / path
-        makedirs(output_path.parent, exist_ok=True)
+    with Pool() as p:
+        p.map(create_file_mutants, walk_source_files())
 
-        if mutmut.config.should_ignore_for_mutation(path):
-            shutil.copy(path, output_path)
-        else:
-            create_mutants_for_file(path, output_path)
+def create_file_mutants(path: Path):
+    print(path)
+    output_path = Path('mutants') / path
+    makedirs(output_path.parent, exist_ok=True)
+
+    if mutmut.config.should_ignore_for_mutation(path):
+        shutil.copy(path, output_path)
+    else:
+        create_mutants_for_file(path, output_path)
 
 
 def copy_also_copy_files():
