@@ -180,8 +180,8 @@ def copy_src_dir():
         output_path = Path('mutants') / path
         shutil.copytree(path, output_path, dirs_exist_ok=True)
 
-def create_mutants():
-    with Pool() as p:
+def create_mutants(max_children: int):
+    with Pool(processes=max_children) as p:
         p.map(create_file_mutants, walk_source_files())
 
 def create_file_mutants(path: Path):
@@ -877,11 +877,14 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
     read_config()
 
+    if max_children is None:
+        max_children = os.cpu_count() or 4
+
     start = datetime.now()
     makedirs(Path('mutants'), exist_ok=True)
     with CatchOutput(spinner_title='Generating mutants'):
         copy_src_dir()
-        create_mutants()
+        create_mutants(max_children)
         copy_also_copy_files()
 
     time = datetime.now() - start
@@ -932,9 +935,6 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
 
     source_file_mutation_data_by_pid: Dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
     running_children = 0
-    if max_children is None:
-        max_children = os.cpu_count() or 4
-
     count_tried = 0
 
     # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
