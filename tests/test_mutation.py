@@ -1,10 +1,17 @@
+import os
+from unittest.mock import Mock, patch
 import pytest
 from libcst import parse_statement
 
+import mutmut
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
+    run_forced_fail_test,
+    Config,
+    MutmutProgrammaticFailException,
+    CatchOutput,
 )
 from mutmut.trampoline_templates import trampoline_impl, yield_from_trampoline_impl, mangle_function_name
 from mutmut.file_mutation import create_mutations, mutate_file_contents, is_generator
@@ -447,6 +454,76 @@ def test_is_generator():
     '''.strip()
     assert not is_generator(parse_statement(source)) # type: ignore
 
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=1)
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+
+    print()
+    print(f"out: {out}")
+    print(f"err: {err}")
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
+
+    run_forced_fail_test(runner)
+
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'done' in out
+    assert os.environ['MUTANT_UNDER_TEST'] is ''
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, 'dump_output')
+@patch.object(CatchOutput, 'stop')
+@patch.object(CatchOutput, 'start')
+def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output, capfd):
+    mutmut.config = _default_mutmut_config()
+    runner = _mocked_runner_run_forced_failed(return_value=0)
+
+    with pytest.raises(SystemExit) as error:
+        run_forced_fail_test(runner)
+
+    assert error.value.code is 1
+    out, err = capfd.readouterr()
+    assert 'Running forced fail test' in out
+    assert 'FAILED: Unable to force test failures' in out
+
+
+def _default_mutmut_config():
+    return Config(
+        do_not_mutate=[],
+        also_copy=[],
+        max_stack_depth=-1,
+        debug=False,
+        paths_to_mutate=[]
+    )
+
+def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
+    runner = Mock()
+    runner.run_forced_fail = Mock(
+        return_value=return_value,
+        side_effect=side_effect
+    )
+    return runner
 
 def test_do_not_mutate_top_level_decorators():
     # Modifying top-level decorators could influence all mutations
