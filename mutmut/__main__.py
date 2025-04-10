@@ -1179,7 +1179,8 @@ def apply_mutant(mutant_name):
 # TODO: junitxml, html commands
 
 @cli.command()
-def browse():
+@click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
+def browse(show_killed):
     read_config()
 
     from textual.app import App
@@ -1275,9 +1276,8 @@ def browse():
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
                 for k, v in source_file_mutation_data.exit_code_by_key.items():
                     status = status_by_exit_code[v]
-                    if status == 'killed':
-                        continue
-                    mutants_table.add_row(k, emoji_by_status[status], key=k)
+                    if status != 'killed' or show_killed:
+                        mutants_table.add_row(k, emoji_by_status[status], key=k)
             else:
                 assert event.data_table.id == 'mutants'
                 # noinspection PyTypeChecker
@@ -1302,8 +1302,9 @@ def browse():
 
         def retest(self, pattern):
             with self.suspend():
-                assert sys.argv[-1] == 'browse'
-                subprocess.run([sys.executable, *sys.argv[:-1], 'run', pattern])
+                browse_index = sys.argv.index('browse')
+                initial_args = sys.argv[:browse_index]
+                subprocess.run([sys.executable, *initial_args, 'run', pattern])
                 input('press enter to return to browser')
 
             self.read_data()
