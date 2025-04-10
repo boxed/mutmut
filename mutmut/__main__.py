@@ -690,6 +690,7 @@ def read_config():
 
 
 @click.group()
+@click.version_option(mutmut.__version__)
 def cli():
     pass
 
