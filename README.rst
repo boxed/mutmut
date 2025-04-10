@@ -174,7 +174,7 @@ Example mutations
 - break is changed to continue and vice versa
 
 In general the idea is that the mutations should be as subtle as possible.
-See `__init__.py` for the full list.
+See `node_mutation.py` for the full list and `test_mutation.py` for tests describing them.
 
 
 Workflow

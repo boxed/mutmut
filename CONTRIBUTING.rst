@@ -31,3 +31,8 @@ You can install your local version of Mutmut and run it, including any changes y
 .. code-block:: console
 
     python -m pip install --editable <path_to_mutmut_codebase>
+
+Documentation about mutmut's architecture
+-----------------------------------------
+
+Please see ARCHITECTURE.rst for more details on how mutmut works.
