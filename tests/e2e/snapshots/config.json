@@ -1,0 +1,15 @@
+{
+  "mutants/config_pkg/__init__.py.meta": {
+    "config_pkg.x_hello__mutmut_1": 1
+  },
+  "mutants/config_pkg/math.py.meta": {
+    "config_pkg.math.x_add__mutmut_1": 0,
+    "config_pkg.math.x_call_depth_two__mutmut_1": 1,
+    "config_pkg.math.x_call_depth_two__mutmut_2": 1,
+    "config_pkg.math.x_call_depth_three__mutmut_1": 1,
+    "config_pkg.math.x_call_depth_three__mutmut_2": 1,
+    "config_pkg.math.x_call_depth_four__mutmut_1": 33,
+    "config_pkg.math.x_call_depth_four__mutmut_2": 33,
+    "config_pkg.math.x_call_depth_five__mutmut_1": 33
+  }
+}

@@ -460,7 +460,7 @@ def test_is_generator():
 @patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
 def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, capfd):
-    mutmut.config = _default_mutmut_config()
+    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
     run_forced_fail_test(runner)
@@ -480,7 +480,7 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
 @patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
 def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
-    mutmut.config = _default_mutmut_config()
+    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
 
     run_forced_fail_test(runner)
@@ -496,7 +496,7 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
 @patch.object(CatchOutput, 'stop')
 @patch.object(CatchOutput, 'start')
 def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output, capfd):
-    mutmut.config = _default_mutmut_config()
+    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(return_value=0)
 
     with pytest.raises(SystemExit) as error:
@@ -507,15 +507,6 @@ def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output
     assert 'Running forced fail test' in out
     assert 'FAILED: Unable to force test failures' in out
 
-
-def _default_mutmut_config():
-    return Config(
-        do_not_mutate=[],
-        also_copy=[],
-        max_stack_depth=-1,
-        debug=False,
-        paths_to_mutate=[]
-    )
 
 def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
     runner = Mock()

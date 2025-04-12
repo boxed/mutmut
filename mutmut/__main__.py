@@ -25,7 +25,6 @@ from datetime import (
     timedelta,
 )
 from difflib import unified_diff
-from functools import lru_cache
 from io import TextIOBase
 from json import JSONDecodeError
 from math import ceil
@@ -665,11 +664,14 @@ def config_reader():
     return s
 
 
-@lru_cache()
-def read_config():
+def ensure_config_loaded():
+    if mutmut.config is None:
+        mutmut.config = load_config()
+
+def load_config():
     s = config_reader()
 
-    mutmut.config = Config(
+    return Config(
         do_not_mutate=s('do_not_mutate', []),
         also_copy=[
             Path(y)
@@ -687,6 +689,7 @@ def read_config():
             for y in s('paths_to_mutate', [])
         ] or guess_paths_to_mutate()
     )
+
 
 
 @click.group()
@@ -809,7 +812,7 @@ def estimated_worst_case_time(mutant_name):
 @click.argument('mutant_names', required=False, nargs=-1)
 def print_time_estimates(mutant_names):
     assert isinstance(mutant_names, (tuple, list)), mutant_names
-    read_config()
+    ensure_config_loaded()
 
     runner = PytestRunner()
     runner.prepare_main_test_run()
@@ -876,7 +879,7 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
-    read_config()
+    ensure_config_loaded()
 
     if max_children is None:
         max_children = os.cpu_count() or 4
@@ -1054,7 +1057,7 @@ def tests_for_mutant_names(mutant_names):
 @cli.command()
 @click.option('--all', default=False)
 def results(all):
-    read_config()
+    ensure_config_loaded()
     for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
@@ -1141,7 +1144,7 @@ def get_diff_for_mutant(mutant_name, source=None, path=None):
 @cli.command()
 @click.argument('mutant_name')
 def show(mutant_name):
-    read_config()
+    ensure_config_loaded()
     print(get_diff_for_mutant(mutant_name))
     return
 
@@ -1150,7 +1153,7 @@ def show(mutant_name):
 @click.argument('mutant_name')
 def apply(mutant_name):
     # try:
-    read_config()
+    ensure_config_loaded()
     apply_mutant(mutant_name)
     # except FileNotFoundError as e:
     #     print(e)
@@ -1183,7 +1186,7 @@ def apply_mutant(mutant_name):
 @cli.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
 def browse(show_killed):
-    read_config()
+    ensure_config_loaded()
 
     from textual.app import App
     from textual.containers import Container
@@ -1240,7 +1243,7 @@ def browse(show_killed):
             self.populate_files_table()
 
         def read_data(self):
-            read_config()
+            ensure_config_loaded()
             self.source_file_mutation_data_and_stat_by_path = {}
 
             for p in walk_source_files():
@@ -1291,7 +1294,7 @@ def browse(show_killed):
                     self.loading_id = event.row_key.value
 
                     def load_thread():
-                        read_config()
+                        ensure_config_loaded()
                         try:
                             d = get_diff_for_mutant(event.row_key.value)
                             if event.row_key.value == self.loading_id:
@@ -1330,7 +1333,7 @@ def browse(show_killed):
             self.retest(self.get_mutant_name_from_selection().rpartition('.')[0] + '.*')
 
         def action_apply_mutant(self):
-            read_config()
+            ensure_config_loaded()
             # noinspection PyTypeChecker
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:

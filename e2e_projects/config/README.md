@@ -1,0 +1,1 @@
+This project uses most/all of the mutmut configuration in pyproject.toml.

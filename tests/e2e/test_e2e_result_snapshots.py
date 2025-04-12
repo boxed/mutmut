@@ -2,9 +2,10 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any
 import mutmut
-from mutmut.__main__ import _run, walk_source_files, SourceFileMutationData, read_config
+from mutmut.__main__ import _run, walk_source_files, SourceFileMutationData, ensure_config_loaded
 
 
 @contextmanager
@@ -19,7 +20,7 @@ def change_cwd(path):
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files"""
     with change_cwd(project_path):
-        read_config()
+        ensure_config_loaded()
 
         stats = {}
         for p in walk_source_files():
@@ -43,6 +44,9 @@ def asserts_results_did_not_change(project: str):
     """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
     project_path = Path("..").parent / "e2e_projects" / project
 
+    mutants_path = project_path / "mutants"
+    shutil.rmtree(mutants_path, ignore_errors=True)
+
     # mutmut run
     with change_cwd(project_path):
         _run([], None)
@@ -64,4 +68,9 @@ def asserts_results_did_not_change(project: str):
 
 
 def test_my_lib_result_snapshot():
+    mutmut._reset_globals()
     asserts_results_did_not_change("my_lib")
+
+def test_config_result_snapshot():
+    mutmut._reset_globals()
+    asserts_results_did_not_change("config")
