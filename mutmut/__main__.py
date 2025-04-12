@@ -170,7 +170,9 @@ class CollectTestsFailedException(Exception):
 
 
 class BadTestExecutionCommandsException(Exception):
-    pass
+    def __init__(self, pytest_args: list[str]) -> None:
+        msg = f'Failed to run pytest with args: {pytest_args}. If your config sets debug=true, the original pytest error should be above.'
+        super().__init__(msg)
 
 
 
@@ -364,7 +366,7 @@ class ListAllTestsResult:
 
 class PytestRunner(TestRunner):
     # noinspection PyMethodMayBeStatic
-    def execute_pytest(self, params, **kwargs):
+    def execute_pytest(self, params: list[str], **kwargs):
         import pytest
         params += ['--rootdir=.']
         if mutmut.config.debug:
@@ -898,14 +900,18 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
-    src_path = (Path('mutants') / 'src')
-    source_path = (Path('mutants') / 'source')
-    if src_path.exists():
-        sys.path.insert(0, str(src_path.absolute()))
-    elif source_path.exists():
-        sys.path.insert(0, str(source_path.absolute))
-    else:
-        sys.path.insert(0, os.path.abspath('mutants'))
+    # ensure that the mutated source code can be imported by the tests
+    source_code_paths = [Path('.'), Path('src'), Path('source')]
+    for path in source_code_paths:
+        mutated_path = Path('mutants') / path
+        if mutated_path.exists():
+            sys.path.insert(0, str(mutated_path.absolute()))
+
+    # ensure that the original code CANNOT be imported by the tests
+    for path in source_code_paths:
+        for i in range(len(sys.path)):
+            while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
+                del sys.path[i]
 
     # TODO: config/option for runner
     # runner = HammettRunner()
