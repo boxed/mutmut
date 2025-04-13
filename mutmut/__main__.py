@@ -395,15 +395,15 @@ class PytestRunner(TestRunner):
         stats_collector = StatsCollector()
 
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests), plugins=[stats_collector]))
+            return int(self.execute_pytest(['-x', '-q'] + list(tests), plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name, tests):
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--import-mode=append'] + list(tests)))
+            return int(self.execute_pytest(['-x', '-q'] + list(tests)))
 
     def run_forced_fail(self):
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q', '--import-mode=append']))
+            return int(self.execute_pytest(['-x', '-q']))
 
     def list_all_tests(self):
         class TestsCollector:
