@@ -551,7 +551,6 @@ def print_stats(source_file_mutation_data_by_path, force_output=False):
 
 def run_forced_fail_test(runner):
     os.environ['MUTANT_UNDER_TEST'] = 'fail'
-    print("'Running forced fail test'")
     with CatchOutput(spinner_title='Running forced fail test') as catcher:
         try:
             if runner.run_forced_fail() == 0:

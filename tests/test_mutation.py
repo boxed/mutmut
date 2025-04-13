@@ -484,7 +484,6 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
     print()
     print(f"out: {out}")
     print(f"err: {err}")
-    assert 'Running forced fail test' in out
     assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
 
@@ -500,7 +499,6 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
     run_forced_fail_test(runner)
 
     out, err = capfd.readouterr()
-    assert 'Running forced fail test' in out
     assert 'done' in out
     assert os.environ['MUTANT_UNDER_TEST'] is ''
 
@@ -518,7 +516,6 @@ def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output
 
     assert error.value.code is 1
     out, err = capfd.readouterr()
-    assert 'Running forced fail test' in out
     assert 'FAILED: Unable to force test failures' in out
 
 
