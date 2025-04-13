@@ -84,7 +84,7 @@ class OuterFunctionVisitor(cst.CSTVisitor):
 
     def on_visit(self, node: cst.CSTNode):
         self.provider.set_metadata(node, self.top_level_node)
-        return super().on_visit(node)
+        return True
 
 
 class MutationVisitor(cst.CSTVisitor):
@@ -108,7 +108,7 @@ class MutationVisitor(cst.CSTVisitor):
             self._create_mutations(node)
 
         # continue to mutate children
-        return super().on_visit(node)
+        return True
 
     def _create_mutations(self, node: cst.CSTNode):
         for t, operator in self._operators:
