@@ -241,7 +241,7 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
         mutant_name = f'{mangled_name}_{i+1}'
         mutant_names.append(mutant_name)
         mutated_method = function.with_changes(name=cst.Name(mutant_name))
-        mutated_method = mutated_method.deep_replace(mutant.original_node, mutant.mutated_node)
+        mutated_method = deep_replace(mutated_method, mutant.original_node, mutant.mutated_node)
         nodes.append(mutated_method) # type: ignore
 
     # trampoline that forwards the calls
@@ -299,3 +299,25 @@ def pragma_no_mutate_lines(source: str) -> set[int]:
         for i, line in enumerate(source.split('\n'))
         if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
     }
+
+def deep_replace(tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode) -> cst.CSTNode:
+    """Like the CSTNode.deep_replace method, except that we only replace up to one occurence of old_node."""
+    return tree.visit(ChildReplacementTransformer(old_node, new_node)) # type: ignore
+
+class ChildReplacementTransformer(cst.CSTTransformer):
+    def __init__(self, old_node: cst.CSTNode, new_node: cst.CSTNode):
+        self.old_node = old_node
+        self.new_node = new_node
+        self.replaced_node = False
+
+    def on_visit(self, node: cst.CSTNode) -> bool:
+        # If the node is one we are about to replace, we shouldn't
+        # recurse down it, that would be a waste of time.
+        # Also, we stop recursion when we already replaced the node.
+        return not (self.replaced_node or node is self.old_node)
+
+    def on_leave(self, original_node: cst.CSTNode, updated_node: cst.CSTNode) -> cst.CSTNode:
+        if original_node is self.old_node:
+            self.replaced_node = True
+            return self.new_node
+        return updated_node
