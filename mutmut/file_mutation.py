@@ -173,8 +173,8 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
     :param mutations: Mutations that should be applied.
     :return: Mutated code and list of mutation names"""
 
-    # add original imports (in particular __future__ imports)
-    result: list[MODULE_STATEMENT] = get_leading_import_statements(module.body)
+    # copy start of the module (in particular __future__ imports)
+    result: list[MODULE_STATEMENT] = get_statements_until_func_or_class(module.body)
     mutation_names: list[str] = []
 
     # statements we still need to potentially mutate and add to the result
@@ -252,17 +252,16 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
     return nodes, mutant_names
 
 
-def get_leading_import_statements(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
-    """Get all `import ...` and `from ... import ...` statements at the start of the module"""
-    leading_import_statements = []
+def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
+    """Get all statements until we encounter the first function or class definition"""
+    result = []
 
     for stmt in statements:
-        if m.matches(stmt, m.SimpleStatementLine([m.AtLeastN(matcher=m.Import() | m.ImportFrom(), n=1)])):
-            leading_import_statements.append(stmt)
-        else:
-            break
+        if m.matches(stmt, m.FunctionDef() | m.ClassDef()):
+            return result
+        result.append(stmt)
 
-    return leading_import_statements
+    return result
 
 def group_by_top_level_node(mutations: Sequence[Mutation]) -> Mapping[cst.CSTNode, Sequence[Mutation]]:
     grouped: dict[cst.CSTNode, list[Mutation]] = defaultdict(list)

@@ -16,9 +16,10 @@ a + 1
 def foo(a, b, c):
     return a + b * c
 """
+    trampolines = trampoline_impl.removesuffix('\n\n') + yield_from_trampoline_impl.removesuffix('\n\n')
 
-    expected = trampoline_impl.removesuffix('\n\n') + yield_from_trampoline_impl.removesuffix('\n\n') + """
-a + 1
+    expected = f"""
+a + 1{trampolines}
 
 def x_foo__mutmut_orig(a, b, c):
     return a + b * c
@@ -29,10 +30,10 @@ def x_foo__mutmut_1(a, b, c):
 def x_foo__mutmut_2(a, b, c):
     return a + b / c
 
-x_foo__mutmut_mutants : ClassVar[MutantDict] = {
+x_foo__mutmut_mutants : ClassVar[MutantDict] = {{
 'x_foo__mutmut_1': x_foo__mutmut_1, 
     'x_foo__mutmut_2': x_foo__mutmut_2
-}
+}}
 
 def foo(*args, **kwargs):
     result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs)

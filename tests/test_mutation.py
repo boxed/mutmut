@@ -417,6 +417,20 @@ def foo():
     assert mutated_source.split('\n')[0] == 'from __future__ import annotations'
     assert mutated_source.count('from __future__') == 1
 
+def test_from_future_with_docstring_still_first():
+    source = """
+'''This documents the module'''
+from __future__ import annotations
+from collections.abc import Iterable
+
+def foo():
+    return 1
+""".strip()
+    mutated_source = mutated_module(source)
+    assert mutated_source.split('\n')[0] == "'''This documents the module'''"
+    assert mutated_source.split('\n')[1] == 'from __future__ import annotations'
+    assert mutated_source.count('from __future__') == 1
+
 
 def test_preserve_generators():
     source = '''
@@ -582,10 +596,10 @@ print(Adder(1).add(2))"""
 
     assert src == f"""from __future__ import division
 import lib
-{trampoline_impl.strip()}
-{yield_from_trampoline_impl.strip()}
 
 lib.foo()
+{trampoline_impl.strip()}
+{yield_from_trampoline_impl.strip()}
 
 def x_foo__mutmut_orig(a, b):
     return a > b
