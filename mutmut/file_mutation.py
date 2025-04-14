@@ -74,6 +74,9 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider):
                     # mark all nodes inside the class method to belong to this method
                     method.visit(OuterFunctionVisitor(self, method))
 
+        # no need to recurse, we already visited all function and class method children
+        return False
+
 
 class OuterFunctionVisitor(cst.CSTVisitor):
     """Mark all nodes as children of `top_level_node`."""
