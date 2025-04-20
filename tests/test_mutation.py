@@ -9,7 +9,6 @@ from mutmut.__main__ import (
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
     run_forced_fail_test,
-    Config,
     MutmutProgrammaticFailException,
     CatchOutput,
 )
@@ -667,3 +666,40 @@ class Adder:
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
 
 print(Adder(1).add(2))"""
+
+@pytest.mark.parametrize("original, want_patterns", [
+    (
+        "re.compile(r'\\d+')",
+        [
+            "re.compile(r'\\d*')",              # + → *
+            "re.compile(r'\\d{1,}')",           # + → {1,}
+            "re.compile(r'[0-9]+')",            # \d → [0-9]
+        ],
+    ),
+    (
+        "re.search(r'[abc]+')",
+        [
+            "re.search(r'[abc]*')",             # + → *
+            "re.search(r'[cba]+')",             # [abc] → [cba]
+        ],
+    ),
+    (
+        "re.match(r'\\w{1,}')",
+        [
+            "re.match(r'\\w+')",                # {1,} → +
+            "re.match(r'[A-Za-z0-9_]{1,}')"     # \w → [A-Za-z0-9_]
+        ],
+    ),
+])
+def test_regex_mutations_loose(original, want_patterns):
+    mutants = mutants_for_source(original)
+    # remove the generic "foo(None)" from operator_arg_removal
+    # and the SimpleString "XX…" from operator_string
+    filtered = [
+        m for m in mutants
+        if "(None)" not in m 
+        and "XX" not in m
+    ]
+
+    for want in want_patterns:
+        assert want in filtered, f"expected {want!r} in {filtered}"

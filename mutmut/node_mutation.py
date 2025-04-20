@@ -1,4 +1,5 @@
-"""This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
+"""This module contains the mutations for individual nodes, e.g. replacing a != b with a == b."""
+import re
 from typing import Any, Union
 from collections.abc import Callable, Iterable, Sequence
 import libcst as cst
@@ -107,11 +108,57 @@ def operator_keywords(
 
 
 def operator_name(node: cst.Name) -> Iterable[cst.CSTNode]:
-    name_mappings = {
+    name_mappings = {    
         "True": "False",
         "False": "True",
         "deepcopy": "copy",
-        # TODO: probably need to add a lot of things here... some builtins maybe, what more?
+        "copy": "deepcopy",
+
+        # common aggregates
+        "len": "sum",
+        "sum": "len",
+        "min": "max",
+        "max": "min",
+
+        # boolean checks
+        "all": "any",
+        "any": "all",
+
+        # ordering
+        "sorted":  "reversed",
+        "reversed": "sorted",
+
+        # repr vs. str
+        "str": "repr",
+        "repr": "str",
+
+        # numeric types
+        "int": "float",
+        "float": "int",
+
+        # sequences vs. tuples
+        "list": "tuple",
+        "tuple": "list",
+
+        # set types
+        "set":  "frozenset",
+        "frozenset": "set",
+
+        # byte types
+        "bytes": "bytearray",
+        "bytearray": "bytes",
+
+        # (optionally) mapping/filtering
+        "map": "filter",
+        "filter": "map",
+
+        # character/ordinal conversions
+        "chr": "ord",
+        "ord": "chr",
+
+        # dict ↔ set might be fun… however, beware lol
+        # "dict":       "set",
+        # "set":        "dict",
     }
     if node.value in name_mappings:
         yield node.with_changes(value=name_mappings[node.value])
@@ -186,6 +233,85 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
         for i in range(len(node.cases)):
             yield node.with_changes(cases=[*node.cases[:i], *node.cases[i+1:]])
 
+def _mutate_regex(inner: str) -> list[str]:
+    """
+    Generate ‘nasty’ variants of a regex body:
+     - swap + ↔ *
+     - turn `{1,}` ↔ +
+     - turn `\d` ↔ `[0-9]` and `\w` ↔ `[A-Za-z0-9_]`
+     - reverse the contents of any simple [...] class
+    """
+    muts: list[str] = []
+    # + <-> *
+    if "+" in inner:
+        muts.append(inner.replace("+", "*"))
+    if "*" in inner:
+        muts.append(inner.replace("*", "+"))
+    # {1,} -> +  and  + -> {1,}
+    if re.search(r"\{1,\}", inner):
+        muts.append(re.sub(r"\{1,\}", "+", inner))
+    if "+" in inner:
+        muts.append(re.sub(r"\+", "{1,}", inner))
+    # digit class ↔ shorthand
+    if "\\d" in inner:
+        muts.append(inner.replace("\\d", "[0-9]"))
+    if "[0-9]" in inner:
+        muts.append(inner.replace("[0-9]", "\\d"))
+    # word class ↔ shorthand
+    if "\\w" in inner:
+        muts.append(inner.replace("\\w", "[A-Za-z0-9_]"))
+    if "[A-Za-z0-9_]" in inner:
+        muts.append(inner.replace("[A-Za-z0-9_]", "\\w"))
+    # reverse simple character classes
+    for mobj in re.finditer(r"\[([^\]]+)\]", inner):
+        content = mobj.group(1)
+        rev = content[::-1]
+        orig = f"[{content}]"
+        mutated = f"[{rev}]"
+        muts.append(inner.replace(orig, mutated))
+    # dedupe, preserve order
+    return list(dict.fromkeys(muts))
+
+
+def operator_regex(node: cst.Call) -> Iterable[cst.CSTNode]:
+    """
+    Look for calls like re.compile(r'…'), re.match, re.search, etc.,
+    extract the first SimpleString arg, apply _mutate_regex, and yield
+    one mutant per new pattern.
+    """
+    if not m.matches(
+        node,
+        m.Call(
+            func=m.Attribute(
+                value=m.Name("re"),
+                attr=m.MatchIfTrue(
+                    lambda t: t.value
+                    in ("compile", "match", "search", "fullmatch", "findall")
+                ),
+            ),
+            args=[m.Arg(value=m.SimpleString())],
+        ),
+    ):
+        return
+
+    arg = node.args[0]
+    lit: cst.SimpleString = arg.value  # type: ignore
+    raw = lit.value  # e.g. r'\d+\w*'
+    # strip off leading r/R
+    prefix = ""
+    body = raw
+    if raw[:2].lower() == "r'" or raw[:2].lower() == 'r"':
+        prefix, body = raw[0], raw[1:]
+    quote = body[0]
+    inner = body[1:-1]
+
+    for mutated_inner in _mutate_regex(inner):
+        new_raw = f"{prefix}{quote}{mutated_inner}{quote}"
+        new_lit = lit.with_changes(value=new_raw)
+        new_arg = arg.with_changes(value=new_lit)
+        yield node.with_changes(args=[new_arg, *node.args[1:]])
+
+
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
     (cst.BaseNumber, operator_number),
@@ -197,6 +323,7 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.UnaryOperation, operator_remove_unary_ops),
     (cst.Call, operator_dict_arguments),
     (cst.Call, operator_arg_removal),
+    (cst.Call, operator_regex),
     (cst.Lambda, operator_lambda),
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),
@@ -212,5 +339,3 @@ def _simple_mutation_mapping(
     if mutated_node_type:
         yield mutated_node_type()
 
-
-# TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
