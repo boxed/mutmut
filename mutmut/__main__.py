@@ -4,7 +4,7 @@ import gc
 import inspect
 import itertools
 import json
-from multiprocessing import Pool
+from multiprocessing import Pool, set_start_method
 import os
 import resource
 import shutil
@@ -876,6 +876,9 @@ def timeout_checker(mutants):
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
+    # used to copy the global mutmut.config to subprocesses
+    set_start_method('fork')
+
     assert isinstance(mutant_names, (tuple, list)), mutant_names
     _run(mutant_names, max_children)
 
