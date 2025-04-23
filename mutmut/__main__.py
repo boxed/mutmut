@@ -65,7 +65,6 @@ from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 
 
-
 status_by_exit_code = {
     1: 'killed',
     3: 'killed',  # internal error in pytest means a kill
@@ -81,6 +80,7 @@ status_by_exit_code = {
     24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
     255: 'timeout',
+    -11: 'segfault',
 }
 
 emoji_by_status = {
@@ -92,6 +92,7 @@ emoji_by_status = {
     'check was interrupted by user': '🛑',
     'not checked': '?',
     'killed': '🎉',
+    'segfault': '💥',
 }
 
 exit_code_to_emoji = {
