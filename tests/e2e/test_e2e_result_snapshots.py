@@ -17,6 +17,7 @@ def change_cwd(path):
     finally:
         os.chdir(old_cwd)
 
+
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files"""
     with change_cwd(project_path):
@@ -32,13 +33,16 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
 
         return stats
 
+
 def read_json_file(path: Path):
     with open(path, 'r') as file:
         return json.load(file)
 
+
 def write_json_file(path: Path, data: Any):
     with open(path, 'w') as file:
         json.dump(data, file, indent=2)
+
 
 def asserts_results_did_not_change(project: str):
     """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
@@ -66,10 +70,10 @@ def asserts_results_did_not_change(project: str):
         write_json_file(snapshot_path, results)
 
 
-
 def test_my_lib_result_snapshot():
     mutmut._reset_globals()
     asserts_results_did_not_change("my_lib")
+
 
 def test_config_result_snapshot():
     mutmut._reset_globals()

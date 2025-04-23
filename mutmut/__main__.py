@@ -545,6 +545,7 @@ def calculate_summary_stats(source_file_mutation_data_by_path):
         suspicious=sum(x.suspicious for x in stats),
         timeout=sum(x.timeout for x in stats),
         check_was_interrupted_by_user=sum(x.check_was_interrupted_by_user for x in stats),
+        segfault=sum(x.segfault for x in stats),
     )
 
 
@@ -676,6 +677,7 @@ def config_reader():
 def ensure_config_loaded():
     if mutmut.config is None:
         mutmut.config = load_config()
+
 
 def load_config():
     s = config_reader()
