@@ -176,7 +176,6 @@ class BadTestExecutionCommandsException(Exception):
         super().__init__(msg)
 
 
-
 def copy_src_dir():
     for path in mutmut.config.paths_to_mutate:
         output_path: Path = Path('mutants') / path
@@ -186,9 +185,11 @@ def copy_src_dir():
             output_path.parent.mkdir(exist_ok=True, parents=True)
             shutil.copyfile(path, output_path)
 
+
 def create_mutants(max_children: int):
     with Pool(processes=max_children) as p:
         p.map(create_file_mutants, walk_source_files())
+
 
 def create_file_mutants(path: Path):
     print(path)
@@ -244,6 +245,7 @@ def create_mutants_for_file(filename, output_path):
     source_file_mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
+
 
 def write_all_mutants_to_file(*, out, source, filename):
     result, mutant_names = mutate_file_contents(filename, source)
@@ -514,6 +516,7 @@ class Stat:
     suspicious: int
     timeout: int
     check_was_interrupted_by_user: int
+    segfault: int
 
 
 def collect_stat(m: SourceFileMutationData):
