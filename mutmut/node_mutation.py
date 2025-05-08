@@ -45,6 +45,8 @@ def operator_string(
         ]
 
         for mut_func in supported_str_mutations:
+            if mut_func(value[1:-1]) == value[1:-1]: # because mutant which do nothing is useless
+                continue
             yield node.with_changes(value=f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}")
 
 
