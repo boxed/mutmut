@@ -37,7 +37,18 @@ def operator_string(
             # that mutation is meaningless for
             return
 
-        yield node.with_changes(value=f"{prefix}{value[0]}XX{value[1:-1]}XX{value[-1]}")
+        supported_str_mutations: list[Callable[[str], str]] = [
+            lambda x: "XX" + x + "XX",
+            lambda x: x.lower(),
+            lambda x: x.upper(),
+            lambda x: x.capitalize(),
+        ]
+
+        for mut_func in supported_str_mutations:
+            new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"
+            if new_value == value:
+                continue
+            yield node.with_changes(value=new_value)
 
 
 def operator_lambda(
