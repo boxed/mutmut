@@ -261,15 +261,15 @@ class Foo:
 
 
 def test_function_with_annotation():
-    source = "def capitalize(s : str):\n    return s[0].upper() + s[1:] if s else s\n".strip()
+    source = "def capitalize(s : str):\n    return s[0].title() + s[1:] if s else s\n".strip()
 
     mutated_code = mutated_module(source)
     print(mutated_code)
 
     expected_defs = [
-        'def x_capitalize__mutmut_1(s : str):\n    return s[1].upper() + s[1:] if s else s',
-        'def x_capitalize__mutmut_2(s : str):\n    return s[0].upper() - s[1:] if s else s',
-        'def x_capitalize__mutmut_3(s : str):\n    return s[0].upper() + s[2:] if s else s',
+        'def x_capitalize__mutmut_1(s : str):\n    return s[1].title() + s[1:] if s else s',
+        'def x_capitalize__mutmut_2(s : str):\n    return s[0].title() - s[1:] if s else s',
+        'def x_capitalize__mutmut_3(s : str):\n    return s[0].title() + s[2:] if s else s',
     ]
 
     for expected in expected_defs:
