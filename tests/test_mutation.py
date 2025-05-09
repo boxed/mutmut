@@ -40,6 +40,32 @@ def mutated_module(source: str) -> str:
         # ('break', 'continue'),  # probably a bad idea. Can introduce infinite loops.
         ('break', 'return'),
         ('continue', 'break'),
+        ('a.lower()', 'a.upper()'),
+        ('a.upper()', 'a.lower()'),
+        ('a.lstrip("!")', ['a.rstrip("!")', 'a.lstrip("XX!XX")', 'a.lstrip(None)']),
+        ('a.rstrip("!")', ['a.lstrip("!")', 'a.rstrip("XX!XX")', 'a.rstrip(None)']),
+        ('a.find("!")', ['a.rfind("!")', 'a.find("XX!XX")', 'a.find(None)']),
+        ('a.rfind("!")', ['a.find("!")', 'a.rfind("XX!XX")', 'a.rfind(None)']),
+        ('a.ljust(10, "+")', [
+            'a.ljust("+")', 'a.ljust(10, "XX+XX")',
+            'a.ljust(10, )', 'a.ljust(10, None)',
+            'a.ljust(11, "+")', 'a.ljust(None, "+")',
+            'a.rjust(10, "+")'
+        ]),
+        ('a.rjust(10, "+")', [
+            'a.ljust(10, "+")', 'a.rjust("+")',
+            'a.rjust(10, "XX+XX")', 'a.rjust(10, )',
+            'a.rjust(10, None)', 'a.rjust(11, "+")',
+            'a.rjust(None, "+")'
+        ]),
+        ('a.index("+")', ['a.rindex("+")', 'a.index("XX+XX")', 'a.index(None)']),
+        ('a.rindex("+")', ['a.index("+")', 'a.rindex("XX+XX")', 'a.rindex(None)']),
+        ('a.split()', 'a.rsplit()'),
+        ('a.rsplit()', 'a.split()'),
+        ('a.removeprefix("+")', ['a.removesuffix("+")', 'a.removeprefix("XX+XX")', 'a.removeprefix(None)']),
+        ('a.removesuffix("+")', ['a.removeprefix("+")', 'a.removesuffix("XX+XX")', 'a.removesuffix(None)']),
+        ('a.partition("++")', ['a.rpartition("++")', 'a.partition("XX++XX")', 'a.partition(None)']),
+        ('a.rpartition("++")', ['a.partition("++")', 'a.rpartition("XX++XX")', 'a.rpartition(None)']),
         ('a(b)', 'a(None)'),
         ("dict(a=None)", ["dict(aXX=None)"]),
         ("dict(a=b)", ["dict(aXX=b)", 'dict(a=None)']),
