@@ -42,6 +42,8 @@ def mutated_module(source: str) -> str:
         ('continue', 'break'),
         ('a.lower()', 'a.upper()'),
         ('a.upper()', 'a.lower()'),
+        ('a.b.lower()', 'a.b.upper()'),
+        ('a.b.upper()', 'a.b.lower()'),
         ('a.lstrip("!")', ['a.rstrip("!")', 'a.lstrip("XX!XX")', 'a.lstrip(None)']),
         ('a.rstrip("!")', ['a.lstrip("!")', 'a.rstrip("XX!XX")', 'a.rstrip(None)']),
         ('a.find("!")', ['a.rfind("!")', 'a.find("XX!XX")', 'a.find(None)']),
