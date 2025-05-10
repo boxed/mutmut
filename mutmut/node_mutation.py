@@ -122,7 +122,8 @@ def operator_string_methods_swap(
 
      for old_call, new_call in supported_str_methods_swap:
          if m.matches(node.func, m.Attribute(value=m.DoNotCare(),  attr=m.Name(value=old_call))):
-             yield node.with_changes(func=cst.Attribute(value=node.func.value, attr=cst.Name(value=new_call)))
+            func_name = cst.ensure_type(node.func, cst.Attribute).attr
+            yield node.with_deep_changes(func_name, value=new_call)
 
 
 def operator_remove_unary_ops(
