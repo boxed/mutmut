@@ -96,6 +96,36 @@ def operator_arg_removal(
             yield node.with_changes(args=[*node.args[:i], *node.args[i + 1 :]])
 
 
+supported_str_methods_swap = [
+         ("lower", "upper"),
+         ("upper", "lower"),
+         ("lstrip", "rstrip"),
+         ("rstrip", "lstrip"),
+         ("find", "rfind"),
+         ("rfind", "find"),
+         ("ljust", "rjust"),
+         ("rjust", "ljust"),
+         ("index", "rindex"),
+         ("rindex", "index"),
+         ("split", "rsplit"),
+         ("rsplit", "split"),
+         ("removeprefix", "removesuffix"),
+         ("removesuffix", "removeprefix"),
+         ("partition", "rpartition"),
+         ("rpartition", "partition")
+     ]
+
+def operator_string_methods_swap(
+     node: cst.Call
+ ) -> Iterable[cst.Call]:
+     """try to swap string method to opposite e.g. a.lower() -> a.upper()"""
+
+     for old_call, new_call in supported_str_methods_swap:
+         if m.matches(node.func, m.Attribute(value=m.DoNotCare(),  attr=m.Name(value=old_call))):
+            func_name = cst.ensure_type(node.func, cst.Attribute).attr
+            yield node.with_deep_changes(func_name, value=new_call)
+
+
 def operator_remove_unary_ops(
     node: cst.UnaryOperation
 ) -> Iterable[cst.BaseExpression]:
@@ -208,6 +238,7 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.UnaryOperation, operator_remove_unary_ops),
     (cst.Call, operator_dict_arguments),
     (cst.Call, operator_arg_removal),
+    (cst.Call, operator_string_methods_swap),
     (cst.Lambda, operator_lambda),
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),
