@@ -150,7 +150,7 @@ You can exclude files from mutation in `setup.cfg`:
 
 
 Enable debug output (increase verbosity)
----------------------------
+----------------------------------------
 
 By default, mutmut "swallows" all the test output etc. so that you get a nice clean output.
 
