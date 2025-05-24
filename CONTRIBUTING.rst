@@ -29,7 +29,7 @@ Running your local version of Mutmut against a test codebase
 You can install your local version of Mutmut and run it, including any changes you have made, as normal.
 
 Codebases using pip
-^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: console
 
