@@ -1,4 +1,5 @@
-"""This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
+"""This module contains the mutations for individual nodes, e.g. replacing a != b with a == b."""
+import re
 from typing import Any, Union
 from collections.abc import Callable, Iterable, Sequence
 import libcst as cst
@@ -148,11 +149,31 @@ def operator_keywords(
 
 
 def operator_name(node: cst.Name) -> Iterable[cst.CSTNode]:
-    name_mappings = {
+    name_mappings = {    
         "True": "False",
         "False": "True",
         "deepcopy": "copy",
-        # TODO: probably need to add a lot of things here... some builtins maybe, what more?
+        "copy": "deepcopy",
+
+        # boolean checks
+        "all": "any",
+        "any": "all",
+
+        # ordering
+        "sorted":  "reversed",
+        "reversed": "sorted",
+
+        # enums
+        "Enum": "StrEnum",
+        "StrEnum": "Enum",
+        "IntEnum": "Enum",
+
+        # Removed problematic mappings that create equivalent mutants:
+        # - len <-> sum: often equivalent for single collections
+        # - min <-> max: often equivalent for single element collections  
+        # - int <-> float: often equivalent for whole numbers
+        # - bytes <-> bytearray: equivalent unless mutation methods called
+        # - map <-> filter: low testing value, replaced with function call mutations
     }
     if node.value in name_mappings:
         yield node.with_changes(value=name_mappings[node.value])
@@ -227,6 +248,180 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
         for i in range(len(node.cases)):
             yield node.with_changes(cases=[*node.cases[:i], *node.cases[i+1:]])
 
+def _mutate_regex(inner: str) -> list[str]:
+    r"""
+    Generate 'nasty' variants of a regex body:
+     - swap + ↔ * and ? ↔ *
+     - turn `{0,1}` ↔ ?
+     - turn `\d` ↔ `[0-9]` and `\w` ↔ `[A-Za-z0-9_]`
+     - reverse the contents of any simple [...] class
+    """
+    muts: list[str] = []
+    # + <-> *
+    if "+" in inner:
+        muts.append(inner.replace("+", "*"))
+    if "*" in inner:
+        muts.append(inner.replace("*", "+"))
+    # ? <-> *
+    if "?" in inner:
+        muts.append(inner.replace("?", "*"))
+    if "*" in inner:
+        muts.append(inner.replace("*", "?"))
+    # {0,1} -> ?  and  ? -> {0,1}
+    if re.search(r"\{0,1\}", inner):
+        muts.append(re.sub(r"\{0,1\}", "?", inner))
+    if "?" in inner:
+        muts.append(re.sub(r"\?", "{0,1}", inner))
+    
+    # Skip {1,} ↔ + mutations as they are equivalent
+    # Instead, create more meaningful mutations:
+    # {1,} -> {2,} (require at least 2 instead of 1)
+    if re.search(r"\{1,\}", inner):
+        muts.append(re.sub(r"\{1,\}", "{2,}", inner))
+        muts.append(re.sub(r"\{1,\}", "{0,}", inner))  # equivalent to *
+    
+    # digit class ↔ shorthand
+    if "\\d" in inner:
+        muts.append(inner.replace("\\d", "[0-9]"))
+    if "[0-9]" in inner:
+        muts.append(inner.replace("[0-9]", "\\d"))
+    # word class ↔ shorthand
+    if "\\w" in inner:
+        muts.append(inner.replace("\\w", "[A-Za-z0-9_]"))
+    if "[A-Za-z0-9_]" in inner:
+        muts.append(inner.replace("[A-Za-z0-9_]", "\\w"))
+    # reverse simple character classes
+    for mobj in re.finditer(r"\[([^\]]+)\]", inner):
+        content = mobj.group(1)
+        rev = content[::-1]
+        orig = f"[{content}]"
+        mutated = f"[{rev}]"
+        muts.append(inner.replace(orig, mutated))
+    # dedupe, preserve order
+    return list(dict.fromkeys(muts))
+
+
+def operator_regex(node: cst.Call) -> Iterable[cst.CSTNode]:
+    """
+    Look for calls like re.compile(r'…'), re.match, re.search, etc.,
+    extract the first SimpleString arg, apply _mutate_regex, and yield
+    one mutant per new pattern.
+    """
+    if not m.matches(
+        node,
+        m.Call(
+            func=m.Attribute(
+                value=m.Name("re"),
+                attr=m.MatchIfTrue(
+                    lambda t: t.value
+                    in ("compile", "match", "search", "fullmatch", "findall")
+                ),
+            ),
+            args=[m.Arg(value=m.SimpleString())],
+        ),
+    ):
+        return
+
+    arg = node.args[0]
+    lit: cst.SimpleString = arg.value  # type: ignore
+    raw = lit.value  # e.g. r'\d+\w*'
+    # strip off leading r/R
+    prefix = ""
+    body = raw
+    if raw[:2].lower() == "r'" or raw[:2].lower() == 'r"':
+        prefix, body = raw[0], raw[1:]
+    quote = body[0]
+    inner = body[1:-1]
+
+    for mutated_inner in _mutate_regex(inner):
+        new_raw = f"{prefix}{quote}{mutated_inner}{quote}"
+        new_lit = lit.with_changes(value=new_raw)
+        new_arg = arg.with_changes(value=new_lit)
+        yield node.with_changes(args=[new_arg, *node.args[1:]])
+
+
+def operator_function_call_mutations(node: cst.Call) -> Iterable[cst.CSTNode]:
+    """
+    Generate more meaningful mutations for common functions:
+    - len(...) -> len(...) + 1
+    - sum(...) -> sum(...) + 1  
+    - min(...) -> min(...) + 1
+    - max(...) -> max(...) + 1
+    - map(fn, arr) -> list(arr)
+    - filter(fn, arr) -> list(arr)
+    """
+    if not isinstance(node.func, cst.Name):
+        return
+        
+    func_name = node.func.value
+    
+    # Arithmetic mutations for aggregate functions
+    if func_name in ("len", "sum", "min", "max") and node.args:
+        # Create function_call + 1
+        yield cst.BinaryOperation(
+            left=node,
+            operator=cst.Add(),
+            right=cst.Integer("1")
+        )
+        
+        # Also try function_call - 1 for diversity
+        yield cst.BinaryOperation(
+            left=node,
+            operator=cst.Subtract(), 
+            right=cst.Integer("1")
+        )
+    
+    # Replace map/filter with list comprehensions or simpler forms
+    elif func_name == "map" and len(node.args) >= 2:
+        # map(fn, arr) -> list(arr) - ignores the function, just returns the iterable as list
+        second_arg = node.args[1]
+        yield cst.Call(
+            func=cst.Name("list"),
+            args=[second_arg]
+        )
+        
+    elif func_name == "filter" and len(node.args) >= 2:
+        # filter(fn, arr) -> list(arr) - ignores the predicate, returns all items
+        second_arg = node.args[1] 
+        yield cst.Call(
+            func=cst.Name("list"),
+            args=[second_arg]
+        )
+
+
+def operator_chr_ord(node: cst.Call) -> Iterable[cst.CSTNode]:
+    """Adjust chr/ord calls slightly instead of swapping names."""
+    if isinstance(node.func, cst.Name) and node.args:
+        name = node.func.value
+        first_arg = node.args[0]
+        if name == "chr":
+            incr = cst.BinaryOperation(
+                left=first_arg.value,
+                operator=cst.Add(),
+                right=cst.Integer("1"),
+            )
+            yield node.with_changes(args=[first_arg.with_changes(value=incr), *node.args[1:]])
+        elif name == "ord":
+            new_call = node
+            yield cst.BinaryOperation(left=new_call, operator=cst.Add(), right=cst.Integer("1"))
+
+
+def operator_enum_attribute(node: cst.Attribute) -> Iterable[cst.CSTNode]:
+    """Swap common Enum base classes."""
+    if not m.matches(node.value, m.Name("enum")):
+        return
+
+    attr = node.attr
+    if not isinstance(attr, cst.Name):
+        return
+
+    if attr.value == "Enum":
+        yield node.with_changes(attr=cst.Name("StrEnum"))
+        yield node.with_changes(attr=cst.Name("IntEnum"))
+    elif attr.value in {"StrEnum", "IntEnum"}:
+        yield node.with_changes(attr=cst.Name("Enum"))
+
+
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
     (cst.BaseNumber, operator_number),
@@ -239,6 +434,10 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.Call, operator_dict_arguments),
     (cst.Call, operator_arg_removal),
     (cst.Call, operator_string_methods_swap),
+    (cst.Call, operator_function_call_mutations),
+    (cst.Call, operator_chr_ord),
+    (cst.Call, operator_regex),
+    (cst.Attribute, operator_enum_attribute),
     (cst.Lambda, operator_lambda),
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),
@@ -254,5 +453,3 @@ def _simple_mutation_mapping(
     if mutated_node_type:
         yield mutated_node_type()
 
-
-# TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes

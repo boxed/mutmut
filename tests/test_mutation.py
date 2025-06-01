@@ -9,7 +9,6 @@ from mutmut.__main__ import (
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
     run_forced_fail_test,
-    Config,
     MutmutProgrammaticFailException,
     CatchOutput,
 )
@@ -513,7 +512,7 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
     print(f"out: {out}")
     print(f"err: {err}")
     assert 'done' in out
-    assert os.environ['MUTANT_UNDER_TEST'] is ''
+    assert os.environ['MUTANT_UNDER_TEST'] == ''
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
@@ -528,7 +527,7 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
 
     out, err = capfd.readouterr()
     assert 'done' in out
-    assert os.environ['MUTANT_UNDER_TEST'] is ''
+    assert os.environ['MUTANT_UNDER_TEST'] == ''
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
@@ -542,7 +541,7 @@ def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output
     with pytest.raises(SystemExit) as error:
         run_forced_fail_test(runner)
 
-    assert error.value.code is 1
+    assert error.value.code == 1
     out, err = capfd.readouterr()
     assert 'FAILED: Unable to force test failures' in out
 
@@ -695,3 +694,250 @@ class Adder:
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
 
 print(Adder(1).add(2))"""
+
+@pytest.mark.parametrize("original, want_patterns", [
+    (
+        "re.compile(r'\\d+')",
+        [
+            "re.compile(r'\\d*')",              # + → *
+            "re.compile(r'[0-9]+')",            # \d → [0-9]
+        ],
+    ),
+    (
+        "re.search(r'[abc]+')",
+        [
+            "re.search(r'[abc]*')",             # + → *
+            "re.search(r'[cba]+')",             # [abc] → [cba]
+        ],
+    ),
+    (
+        "re.match(r'\\w{1,}')",
+        [
+            "re.match(r'[A-Za-z0-9_]{1,}')"     # \w → [A-Za-z0-9_]
+        ],
+    ),
+    (
+        "re.match(r'foo?')",
+        [
+            "re.match(r'foo*')",            # ? → *
+            "re.match(r'foo{0,1}')",       # ? → {0,1}
+        ],
+    ),
+    (
+        "re.search(r'bar{0,1}')",
+        [
+            "re.search(r'bar?')",          # {0,1} → ?
+        ],
+    ),
+])
+def test_regex_mutations_loose(original, want_patterns):
+    mutants = mutants_for_source(original)
+    for want in want_patterns:
+        assert want in mutants, f"expected {want!r} in {mutants}"
+
+
+@pytest.mark.parametrize(
+    'original, want_patterns', [
+    # Test lines 257, 262 - * to + and * to ? mutations
+    (
+        "re.compile(r'abc*def')",
+        [
+            "re.compile(r'abc+def')",          # line 257: * → +
+            "re.compile(r'abc?def')",          # line 262: * → ?
+        ],
+    ),
+    # Test line 272 - [0-9] to \d mutation
+    (
+        "re.search(r'[0-9]+test')",
+        [
+            "re.search(r'\\d+test')",          # line 272: [0-9] → \d
+            "re.search(r'[0-9]*test')",        # + → *
+        ],
+    ),
+    # Test line 277 - [A-Za-z0-9_] to \w mutation
+    (
+        "re.match(r'[A-Za-z0-9_]+word')",
+        [
+            "re.match(r'\\w+word')",           # line 277: [A-Za-z0-9_] → \w
+            "re.match(r'[A-Za-z0-9_]*word')",  # + → *
+        ],
+    ),
+    # Test complex patterns that hit multiple mutation lines
+    (
+        "re.compile(r'start[0-9]*[A-Za-z0-9_]+end')",
+        [
+            "re.compile(r'start[0-9]+[A-Za-z0-9_]+end')",    # * → +
+            "re.compile(r'start[0-9]?[A-Za-z0-9_]+end')",    # * → ?
+            "re.compile(r'start\\d*[A-Za-z0-9_]+end')",      # [0-9] → \d
+            "re.compile(r'start[0-9]*\\w+end')",             # [A-Za-z0-9_] → \w
+            "re.compile(r'start[0-9]*[A-Za-z0-9_]*end')",    # + → *
+        ],
+    ),
+])
+def test_regex_mutations_additional_coverage(original, want_patterns):
+    """Test additional regex mutation patterns for complete line coverage"""
+    mutants = mutants_for_source(original)
+    for want in want_patterns:
+        assert want in mutants, f"expected {want!r} in {mutants}"
+
+
+@pytest.mark.parametrize(
+    'original, want_patterns', [
+    # Test operator_subscript with Index (simple subscripts)
+    (
+        "x = s[5]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[6]",                        # subscript index mutation s[5] → s[6]
+        ],
+    ),
+    # Test operator_subscript with Slice - lower bound only
+    (
+        "x = s[3:]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[4:]",                       # slice start mutation s[3:] → s[4:]
+        ],
+    ),
+    # Test operator_subscript with Slice - upper bound only
+    (
+        "x = s[:5]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[:6]",                       # slice stop mutation s[:5] → s[:6]
+        ],
+    ),
+    # Test operator_subscript with Slice - both bounds
+    (
+        "x = s[2:8]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[3:8]",                      # slice start mutation s[2:8] → s[3:8]
+            "x = s[2:9]",                      # slice stop mutation s[2:8] → s[2:9]
+        ],
+    ),
+    # Test operator_subscript with Slice - step (should not mutate step)
+    (
+        "x = s[1:5:2]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[2:5:2]",                    # slice start mutation s[1:5:2] → s[2:5:2]
+            "x = s[1:6:2]",                    # slice stop mutation s[1:5:2] → s[1:6:2]
+        ],
+    ),
+    # Test operator_subscript_assignment - subscript assignments
+    (
+        "s[3] = value",
+        [
+            "s[4] = value",                    # subscript index mutation s[3] → s[4]
+            "s[3] = None",                     # value mutation value → None
+        ],
+    ),
+    # Test operator_subscript_assignment with slice assignments
+    (
+        "s[1:4] = values",
+        [
+            "s[2:4] = values",                 # slice start mutation s[1:4] → s[2:4]
+            "s[1:5] = values",                 # slice stop mutation s[1:4] → s[1:5]
+            "s[1:4] = None",                   # value mutation values → None
+        ],
+    ),
+    # Test edge case: subscript with non-integer index (should not mutate)
+    (
+        "x = s[key]",
+        [
+            "x = None",                        # assignment mutation only
+        ],
+    ),
+    # Test edge case: slice with non-integer bounds (should not mutate slice)
+    (
+        "x = s[start:end]",
+        [
+            "x = None",                        # assignment mutation only
+        ],
+    ),
+    # Test operator_subscript_assignment with None value (should not add None mutation)
+    (
+        "s[0] = None",
+        [
+            "s[1] = None",                     # subscript index mutation only, no value→None
+        ],
+    ),
+    # Test edge case: full slice (no bounds to mutate)
+    (
+        "x = s[:]",
+        [
+            "x = None",                        # assignment mutation only
+        ],
+    ),
+    # Test edge case: slice with step (step should be mutated by number operator, not subscript)
+    (
+        "x = s[::2]",
+        [
+            "x = None",                        # assignment mutation
+            "x = s[::3]",                      # step mutation by number operator
+        ],
+    ),
+])
+def test_subscript_mutations_comprehensive(original, want_patterns):
+    """Test comprehensive operator_subscript and operator_subscript_assignment coverage"""
+    mutants = mutants_for_source(original)
+    for want in want_patterns:
+        assert want in mutants, f"expected {want!r} in {mutants}"
+
+
+@pytest.mark.parametrize(
+    'original, expected_count', [
+    # Test cst.Index with non-integer - should not yield any subscript mutations
+    ("x = s[key]", 1),          # Only assignment mutation: x = None
+    # Test cst.Slice with non-integer bounds - should not yield slice mutations  
+    ("x = s[start:end]", 1),    # Only assignment mutation: x = None
+    # Test neither Index nor Slice - tuple subscript
+    ("x = s[a, b]", 1),         # Only assignment mutation: x = None
+])
+def test_operator_subscript_edge_cases(original, expected_count):
+    """Test edge cases where operator_subscript should not mutate subscripts"""
+    mutants = mutants_for_source(original)
+    assert len(mutants) == expected_count, f"expected {expected_count} mutations, got {len(mutants)}: {mutants}"
+    # All should have the assignment mutation x = None
+    assert "x = None" in mutants, f"expected 'x = None' in {mutants}"
+
+
+@pytest.mark.parametrize(
+    'original, expected_mutations', [
+    # Test specific branches of operator_subscript for complete coverage
+    
+    # cst.Index with non-integer - should NOT enter the isinstance(node.slice.value, cst.Integer) branch
+    ("x = s[variable]", ["x = None"]),
+    
+    # cst.Slice with None lower bound - should NOT enter the slice_node.lower check  
+    ("x = s[:5]", ["x = None", "x = s[:6]"]),
+    
+    # cst.Slice with None upper bound - should NOT enter the slice_node.upper check
+    ("x = s[3:]", ["x = None", "x = s[4:]"]),
+    
+    # cst.Slice with both None bounds - should NOT enter either bound check
+    ("x = s[:]", ["x = None"]),
+    
+    # cst.Slice with non-integer lower but integer upper
+    ("x = s[start:10]", ["x = None", "x = s[start:11]"]),
+    
+    # cst.Slice with integer lower but non-integer upper  
+    ("x = s[5:end]", ["x = None", "x = s[6:end]"]),
+    
+    # cst.Slice with both non-integer bounds
+    ("x = s[start:end]", ["x = None"]),
+    
+    # Complex subscript that's neither Index nor Slice (tuple subscript)
+    ("x = arr[i, j]", ["x = None"]),
+])
+def test_operator_subscript_branch_coverage(original, expected_mutations):
+    """Test specific branches in operator_subscript for complete code coverage"""
+    mutants = mutants_for_source(original)
+    
+    # Check that we got the expected number of mutations
+    assert len(mutants) == len(expected_mutations), f"Expected {len(expected_mutations)} mutations, got {len(mutants)}: {mutants}"
+    
+    # Check that all expected mutations are present
+    for expected in expected_mutations:
+        assert expected in mutants, f"Expected mutation '{expected}' not found in {mutants}"

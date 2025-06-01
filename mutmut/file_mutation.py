@@ -12,7 +12,7 @@ from mutmut.trampoline_templates import build_trampoline, mangle_function_name, 
 from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
 
 NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
-NEVER_MUTATE_FUNCTION_CALLS = { "len", "isinstance" }
+NEVER_MUTATE_FUNCTION_CALLS = { "isinstance", "len" }
 
 @dataclass
 class Mutation:
