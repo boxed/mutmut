@@ -154,7 +154,9 @@ Enable debug output (increase verbosity)
 
 By default, mutmut "swallows" all the test output etc. so that you get a nice clean output.
 
-If you want to see all the detail to aid with debugging, you can set `debug` to `true` in your congiguration
+If you want to see all the detail to aid with debugging, you can set `debug` to `true` in your configuration.
+Note that not all displayed errors are necessarily bad. In particular test runs of the mutated code will lead
+to failing tests.
 
 .. code-block::
 
