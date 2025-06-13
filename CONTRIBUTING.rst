@@ -28,9 +28,21 @@ Running your local version of Mutmut against a test codebase
 
 You can install your local version of Mutmut and run it, including any changes you have made, as normal.
 
+Codebases using pip
+^^^^^^^^^^^^^^^^^^^
+
 .. code-block:: console
 
     python -m pip install --editable <path_to_mutmut_codebase>
+
+Codebases using Poetry
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: console
+
+    poetry add --group dev --editable <path_to_mutmut_codebase>
+    # Install dependecies in your Poetry environment
+    pip install -r <path_to_mutmut_codebase>/requirements.txt
 
 Documentation about mutmut's architecture
 -----------------------------------------
