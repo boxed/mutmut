@@ -107,13 +107,16 @@ supported_str_methods_swap = [
          ("rjust", "ljust"),
          ("index", "rindex"),
          ("rindex", "index"),
-         ("split", "rsplit"),
-         ("rsplit", "split"),
          ("removeprefix", "removesuffix"),
          ("removesuffix", "removeprefix"),
          ("partition", "rpartition"),
          ("rpartition", "partition")
-     ]
+]
+
+supported_unsymmetrical_str_methods_swap = [
+    ("split", "rsplit"),
+    ("rsplit", "split")
+]
 
 def operator_string_methods_swap(
      node: cst.Call
@@ -124,6 +127,62 @@ def operator_string_methods_swap(
          if m.matches(node.func, m.Attribute(value=m.DoNotCare(),  attr=m.Name(value=old_call))):
             func_name = cst.ensure_type(node.func, cst.Attribute).attr
             yield node.with_deep_changes(func_name, value=new_call)
+
+def unsymmetrical_string_methods_swap(
+    node: cst.Call
+) -> Iterable[cst.Call]:
+    """Try to handle specific mutations of string, which useful only in specific args combination."""
+
+    for old_call, new_call in supported_unsymmetrical_str_methods_swap:
+        if m.matches(node.func, m.Attribute(value=m.DoNotCare(), attr=m.Name(value=old_call))):
+            if old_call in {"split", "rsplit"}:
+                # split() -> split()                                        # not len(node.args)
+                # rsplit() -> rsplit()                                      # not len(node.args)
+                # split(" ") -> split(" ")                                  # len(node.args) == 1 & maxsplit not in args
+                # rsplit(" ") -> rsplit(" ")                                # len(node.args) == 1 & maxsplit not in args
+                # split(sep=" ") -> split(sep=" ")                          # len(node.args) == 1 & maxsplit not in args
+                # rsplit(sep=" ") -> rsplit(sep=" ")                        # len(node.args) == 1 & maxsplit not in args
+                # split(maxsplit=-1) -> split(maxsplit=-1)                  # maxsplit=-1 in args
+                # rsplit(maxsplit=-1) -> rsplit(maxsplit=-1)                # maxsplit=-1 in args
+                # split(" ", maxsplit=-1) -> split(" ", maxsplit=-1)        # maxsplit=-1 in args
+                # rsplit(" ", maxsplit=-1) -> rsplit(" ", maxsplit=-1)      # maxsplit=-1 in args
+
+                # split(maxsplit=1) -> rsplit(maxsplit=1)                   # maxsplit in args and maxsplit != -1
+                # rsplit(maxsplit=1) -> split(maxsplit=1)                   # maxsplit in args and maxsplit != -1
+
+                # split(" ", 1) -> rsplit(" ", 1)                           # len(node.args) == 2 & maxsplit not in args
+                # rsplit(" ", 1) -> split(" ", 1)                           # len(node.args) == 2 & maxsplit not in args
+
+                # split(" ", maxsplit=1) -> rsplit(" ", maxsplit=1)         # maxsplit in args and maxsplit != -1
+                # rsplit(" ", maxsplit=1) -> split(" ", maxsplit=1)         # maxsplit in args and maxsplit != -1
+                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword}
+
+                maxsplit_val = None
+                for a in node.args:
+                    if a.keyword and a.keyword.value == "maxsplit":
+                        if any([isinstance(child, cst.Minus) for child in a.value.children]):
+                            maxsplit_val = int(a.value.expression.value) * -1
+                            break
+                        if any([isinstance(child, cst.Plus) for child in a.value.children]):
+                            maxsplit_val = int(a.value.expression.value)
+                            break
+                        maxsplit_val = a.value.evaluated_value
+
+
+                if (
+                        not len(node.args) or
+                        (len(node.args) == 1 and "maxsplit" not in key_args) or
+                        ("maxsplit" in key_args and maxsplit_val == -1)
+                ):
+                    continue
+
+                if (
+                        (len(node.args) == 2 and "maxsplit" not in key_args) or
+                        ("maxsplit" in key_args and maxsplit_val != -1)
+                ):
+                    func_name = cst.ensure_type(node.func, cst.Attribute).attr
+                    yield node.with_deep_changes(func_name, value=new_call)
+
 
 
 def operator_remove_unary_ops(
@@ -239,6 +298,7 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.Call, operator_dict_arguments),
     (cst.Call, operator_arg_removal),
     (cst.Call, operator_string_methods_swap),
+    (cst.Call, unsymmetrical_string_methods_swap),
     (cst.Lambda, operator_lambda),
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),

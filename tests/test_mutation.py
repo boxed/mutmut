@@ -62,8 +62,43 @@ def mutated_module(source: str) -> str:
         ]),
         ('a.index("+")', ['a.rindex("+")', 'a.index("XX+XX")', 'a.index(None)']),
         ('a.rindex("+")', ['a.index("+")', 'a.rindex("XX+XX")', 'a.rindex(None)']),
-        ('a.split()', 'a.rsplit()'),
-        ('a.rsplit()', 'a.split()'),
+        ('a.split()', []),
+        ('a.rsplit()', []),
+        ('a.split(" ")', ['a.split("XX XX")', 'a.split(None)']),
+        ('a.rsplit(" ")', ['a.rsplit("XX XX")', 'a.rsplit(None)']),
+        ('a.split(sep="")', ['a.split(sep="XXXX")', 'a.split(sep=None)']),
+        ('a.rsplit(sep="")', ['a.rsplit(sep="XXXX")', 'a.rsplit(sep=None)']),
+        ('a.split(maxsplit=-1)', ['a.split(maxsplit=+1)', 'a.split(maxsplit=-2)', 'a.split(maxsplit=None)']),
+        ('a.rsplit(maxsplit=-1)', ['a.rsplit(maxsplit=+1)', 'a.rsplit(maxsplit=-2)', 'a.rsplit(maxsplit=None)']),
+        ('a.split(" ", maxsplit=-1)', [
+            'a.split(" ", )', 'a.split(" ", maxsplit=+1)', 'a.split(" ", maxsplit=-2)',
+            'a.split(" ", maxsplit=None)', 'a.split("XX XX", maxsplit=-1)', 'a.split(None, maxsplit=-1)',
+            'a.split(maxsplit=-1)'
+        ]),
+        ('a.rsplit(" ", maxsplit=-1)', [
+            'a.rsplit(" ", )', 'a.rsplit(" ", maxsplit=+1)', 'a.rsplit(" ", maxsplit=-2)',
+            'a.rsplit(" ", maxsplit=None)', 'a.rsplit("XX XX", maxsplit=-1)', 'a.rsplit(None, maxsplit=-1)',
+            'a.rsplit(maxsplit=-1)'
+        ]),
+        ('a.split(maxsplit=1)', ['a.split(maxsplit=2)', 'a.split(maxsplit=None)', 'a.rsplit(maxsplit=1)']),
+        ('a.rsplit(maxsplit=1)', ['a.rsplit(maxsplit=2)', 'a.rsplit(maxsplit=None)', 'a.split(maxsplit=1)']),
+        ('a.split(" ", 1)', [
+            'a.rsplit(" ", 1)', 'a.split(" ", )', 'a.split(" ", 2)', 'a.split(" ", None)',
+            'a.split("XX XX", 1)', 'a.split(1)', 'a.split(None, 1)'
+        ]),
+        ('a.rsplit(" ", 1)', [
+            'a.rsplit(" ", )', 'a.rsplit(" ", 2)', 'a.rsplit(" ", None)', 'a.rsplit("XX XX", 1)',
+            'a.rsplit(1)', 'a.rsplit(None, 1)', 'a.split(" ", 1)'
+        ]),
+        ('a.split(" ", maxsplit=1)', [
+            'a.rsplit(" ", maxsplit=1)', 'a.split(" ", )', 'a.split(" ", maxsplit=2)', 'a.split(" ", maxsplit=None)',
+            'a.split("XX XX", maxsplit=1)', 'a.split(None, maxsplit=1)', 'a.split(maxsplit=1)'
+        ]),
+        ('a.rsplit(" ", maxsplit=1)', [
+            'a.rsplit(" ", )', 'a.rsplit(" ", maxsplit=2)', 'a.rsplit(" ", maxsplit=None)',
+            'a.rsplit("XX XX", maxsplit=1)', 'a.rsplit(None, maxsplit=1)', 'a.rsplit(maxsplit=1)',
+            'a.split(" ", maxsplit=1)'
+        ]),
         ('a.removeprefix("+")', ['a.removesuffix("+")', 'a.removeprefix("XX+XX")', 'a.removeprefix(None)']),
         ('a.removesuffix("+")', ['a.removeprefix("+")', 'a.removesuffix("XX+XX")', 'a.removesuffix(None)']),
         ('a.partition("++")', ['a.rpartition("++")', 'a.partition("XX++XX")', 'a.partition(None)']),
