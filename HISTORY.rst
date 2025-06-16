@@ -1,10 +1,39 @@
 Changelog
 ---------
 
-Unreleased
-~~~~~~~~~~
+3.3.0
+~~~~~
+
+* Python 3.13 compatibility!
+
+* New argument `--show-killed` for `mutmut browse`
+
+* Fix to avoid accidentally importing the un-mutated original code
+
+* Handle segfault for mutant subprocesses
+
+* Added mutations for string literals
+
+* Added mutations for common string methods
+
+* Faster mutant generation via subprocesses
+
+* Fix `self` parameter for mutated class methods
+
+* Fix trampoline generation for function calls with 'orig' or 'mutants' as argument names.
+
+* Copy full source directory before creating mutants
+
+* Improved error message when forced fail test fails
+
+* Fixed issue with spaces in the python executable path
+
+* Do not mutate `__new__`
 
 * Annotate mutant dicts (and fixes compatibility with Pydantic)
+
+* Replaced parso with LibCST
+
 
 3.2.3
 ~~~~~

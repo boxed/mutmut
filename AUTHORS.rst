@@ -21,3 +21,9 @@ Credits
 * Roxane Bellott <roxane.bellot@gmail.com>
 * Tomáš Chvátal <tchvatal@suse.com>
 * Frank Hoffmann <15r10nk-git@polarbit.de>
+* Éloi Rivard <eloi@yaal.coop>
+* Isidro Arias <isidroariass@hotmail.es>
+* Will Gibson
+* Dominic Amato <dominic.a.amato@gmail.com>
+* A_A
+* Luzin Boris <borisluzin2004@gmail.com>
