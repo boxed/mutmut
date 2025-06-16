@@ -68,17 +68,21 @@ def mutated_module(source: str) -> str:
         ('a.rsplit(" ")', ['a.rsplit("XX XX")', 'a.rsplit(None)']),
         ('a.split(sep="")', ['a.split(sep="XXXX")', 'a.split(sep=None)']),
         ('a.rsplit(sep="")', ['a.rsplit(sep="XXXX")', 'a.rsplit(sep=None)']),
-        ('a.split(maxsplit=-1)', ['a.split(maxsplit=+1)', 'a.split(maxsplit=-2)', 'a.split(maxsplit=None)']),
-        ('a.rsplit(maxsplit=-1)', ['a.rsplit(maxsplit=+1)', 'a.rsplit(maxsplit=-2)', 'a.rsplit(maxsplit=None)']),
+        ('a.split(maxsplit=-1)', [
+            'a.rsplit(maxsplit=-1)', 'a.split(maxsplit=+1)', 'a.split(maxsplit=-2)', 'a.split(maxsplit=None)'
+        ]),
+        ('a.rsplit(maxsplit=-1)', [
+            'a.split(maxsplit=-1)', 'a.rsplit(maxsplit=+1)', 'a.rsplit(maxsplit=-2)', 'a.rsplit(maxsplit=None)'
+        ]),
         ('a.split(" ", maxsplit=-1)', [
             'a.split(" ", )', 'a.split(" ", maxsplit=+1)', 'a.split(" ", maxsplit=-2)',
             'a.split(" ", maxsplit=None)', 'a.split("XX XX", maxsplit=-1)', 'a.split(None, maxsplit=-1)',
-            'a.split(maxsplit=-1)'
+            'a.split(maxsplit=-1)', 'a.rsplit(" ", maxsplit=-1)'
         ]),
         ('a.rsplit(" ", maxsplit=-1)', [
             'a.rsplit(" ", )', 'a.rsplit(" ", maxsplit=+1)', 'a.rsplit(" ", maxsplit=-2)',
             'a.rsplit(" ", maxsplit=None)', 'a.rsplit("XX XX", maxsplit=-1)', 'a.rsplit(None, maxsplit=-1)',
-            'a.rsplit(maxsplit=-1)'
+            'a.rsplit(maxsplit=-1)', 'a.split(" ", maxsplit=-1)'
         ]),
         ('a.split(maxsplit=1)', ['a.split(maxsplit=2)', 'a.split(maxsplit=None)', 'a.rsplit(maxsplit=1)']),
         ('a.rsplit(maxsplit=1)', ['a.rsplit(maxsplit=2)', 'a.rsplit(maxsplit=None)', 'a.split(maxsplit=1)']),
