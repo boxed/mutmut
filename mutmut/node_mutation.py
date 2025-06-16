@@ -137,7 +137,7 @@ def unsymmetrical_string_methods_swap(
             if old_call in {"split", "rsplit"}:
                 # The logic of this "if" operator described here:
                 # https://github.com/boxed/mutmut/pull/394#issuecomment-2977890188
-                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword}
+                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword} # sep or maxsplit or nothing
                 if len(node.args) == 2 or "maxsplit" in key_args:
                     func_name = cst.ensure_type(node.func, cst.Attribute).attr
                     yield node.with_deep_changes(func_name, value=new_call)
