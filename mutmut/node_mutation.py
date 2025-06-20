@@ -96,7 +96,7 @@ def operator_arg_removal(
             yield node.with_changes(args=[*node.args[:i], *node.args[i + 1 :]])
 
 
-supported_str_methods_swap = [
+supported_symmetric_str_methods_swap = [
          ("lower", "upper"),
          ("upper", "lower"),
          ("lstrip", "rstrip"),
@@ -107,23 +107,41 @@ supported_str_methods_swap = [
          ("rjust", "ljust"),
          ("index", "rindex"),
          ("rindex", "index"),
-         ("split", "rsplit"),
-         ("rsplit", "split"),
          ("removeprefix", "removesuffix"),
          ("removesuffix", "removeprefix"),
          ("partition", "rpartition"),
          ("rpartition", "partition")
-     ]
+]
 
-def operator_string_methods_swap(
+supported_unsymmetrical_str_methods_swap = [
+    ("split", "rsplit"),
+    ("rsplit", "split")
+]
+
+def operator_symmetric_string_methods_swap(
      node: cst.Call
  ) -> Iterable[cst.Call]:
      """try to swap string method to opposite e.g. a.lower() -> a.upper()"""
 
-     for old_call, new_call in supported_str_methods_swap:
+     for old_call, new_call in supported_symmetric_str_methods_swap:
          if m.matches(node.func, m.Attribute(value=m.DoNotCare(),  attr=m.Name(value=old_call))):
             func_name = cst.ensure_type(node.func, cst.Attribute).attr
             yield node.with_deep_changes(func_name, value=new_call)
+
+def operator_unsymmetrical_string_methods_swap(
+    node: cst.Call
+) -> Iterable[cst.Call]:
+    """Try to handle specific mutations of string, which useful only in specific args combination."""
+    for old_call, new_call in supported_unsymmetrical_str_methods_swap:
+        if m.matches(node.func, m.Attribute(attr=m.Name(value=old_call))):
+            if old_call in {"split", "rsplit"}:
+                # The logic of this "if" operator described here:
+                # https://github.com/boxed/mutmut/pull/394#issuecomment-2977890188
+                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword} # sep or maxsplit or nothing
+                if len(node.args) == 2 or "maxsplit" in key_args:
+                    func_name = cst.ensure_type(node.func, cst.Attribute).attr
+                    yield node.with_deep_changes(func_name, value=new_call)
+
 
 
 def operator_remove_unary_ops(
@@ -238,7 +256,8 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.UnaryOperation, operator_remove_unary_ops),
     (cst.Call, operator_dict_arguments),
     (cst.Call, operator_arg_removal),
-    (cst.Call, operator_string_methods_swap),
+    (cst.Call, operator_symmetric_string_methods_swap),
+    (cst.Call, operator_unsymmetrical_string_methods_swap),
     (cst.Lambda, operator_lambda),
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),
