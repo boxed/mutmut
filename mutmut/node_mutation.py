@@ -1,4 +1,5 @@
 """This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
+import re
 from typing import Any, Union
 from collections.abc import Callable, Iterable, Sequence
 import libcst as cst
@@ -10,6 +11,8 @@ OPERATORS_TYPE = Sequence[
         Callable[[Any], Iterable[cst.CSTNode]],
     ]
 ]
+
+CHARACTER_AFTER_BACKSLASH = re.compile(r"\\([A-Z])")
 
 def operator_number(
     node: cst.BaseNumber
@@ -40,7 +43,7 @@ def operator_string(
         supported_str_mutations: list[Callable[[str], str]] = [
             lambda x: "XX" + x + "XX",
             lambda x: x.lower(),
-            lambda x: x.upper(),
+            lambda x: CHARACTER_AFTER_BACKSLASH.sub(lambda match: f"\\{match.group(1).lower()}", x.upper()),
             lambda x: x.capitalize(),
         ]
 

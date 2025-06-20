@@ -126,6 +126,7 @@ def mutated_module(source: str) -> str:
         ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('a: int = 1', ['a: int = 2', 'a: int = None']),
         ('a: str = "FoO"', ['a: str = "XXFoOXX"', 'a: str = "foo"', 'a: str = "FOO"', 'a: str = "Foo"', 'a: str = None']),
+        ('a: str = "Fo\\t"', ['a: str = "XXFo\\tXX"', 'a: str = "fo\\t"', 'a: str = "FO\\t"', 'a: str = None']),
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
         ('1+1', ['2+1', '1 - 1', '1+2']),
