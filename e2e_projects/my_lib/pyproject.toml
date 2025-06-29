@@ -17,4 +17,4 @@ dev = [
 ]
 
 [tool.mutmut]
-debug = true
+debug = false
