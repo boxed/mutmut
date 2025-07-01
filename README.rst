@@ -64,6 +64,9 @@ You can also write a mutant to disk from the `browse` interface, or via
 source code control and committed before you apply a mutant!
 
 
+If during the installation you get an error for the `libcst` dependency mentioning the lack of a rust compiler on your system, it is because your architecture does not have a prebuilt binary for `libcst` and it requires both `rustc` and `cargo` from the [rust toolchain](https://www.rust-lang.org/tools/install) to be built. This is known for at least the `x86_64-darwin` architecture.
+
+
 Configuration
 -------------
 
