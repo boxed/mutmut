@@ -176,6 +176,8 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
     :param mutations: Mutations that should be applied.
     :return: Mutated code and list of mutation names"""
 
+    # mutations = mutations[0:10]
+
     # copy start of the module (in particular __future__ imports)
     result: list[MODULE_STATEMENT] = get_statements_until_func_or_class(module.body)
     mutation_names: list[str] = []

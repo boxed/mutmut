@@ -78,3 +78,6 @@ def test_my_lib_result_snapshot():
 def test_config_result_snapshot():
     mutmut._reset_globals()
     asserts_results_did_not_change("config")
+
+if __name__ == '__main__':
+    test_my_lib_result_snapshot()
