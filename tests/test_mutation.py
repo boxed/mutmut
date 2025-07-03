@@ -284,6 +284,19 @@ match x:
 
     assert sorted(mutants) == sorted(expected)
 
+def test_mach_case_does_not_mutate_bitor():
+    source = """
+def concat():
+    match x:
+        case A() | B():
+            pass
+"""
+
+    mutants = mutants_for_source(source)
+
+    assert sorted(mutants) == []
+
+
 def test_basic_class():
     source = """
 class Foo:
@@ -309,8 +322,8 @@ def test_function_with_annotation():
     print(mutated_code)
 
     expected_defs = [
-        'def x_capitalize__mutmut_1(s : str):\n    return s[1].title() + s[1:] if s else s',
-        'def x_capitalize__mutmut_2(s : str):\n    return s[0].title() - s[1:] if s else s',
+        'def x_capitalize__mutmut_1(s : str):\n    return s[0].title() - s[1:] if s else s',
+        'def x_capitalize__mutmut_2(s : str):\n    return s[1].title() + s[1:] if s else s',
         'def x_capitalize__mutmut_3(s : str):\n    return s[0].title() + s[2:] if s else s',
     ]
 
