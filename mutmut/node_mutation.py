@@ -1,6 +1,6 @@
 """This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
 import re
-from typing import Any, Union
+from typing import Any, Union, cast
 from collections.abc import Callable, Iterable, Sequence
 import libcst as cst
 import libcst.matchers as m
@@ -218,7 +218,11 @@ _operator_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
 def operator_swap_op(
     node: cst.CSTNode
 ) -> Iterable[cst.CSTNode]:
-    yield from _simple_mutation_mapping(node, _operator_mapping)
+    if m.matches(node, m.BinaryOperation() | m.UnaryOperation() | m.BooleanOperation() | m.ComparisonTarget() | m.AugAssign()):
+        typed_node = cast(Union[cst.BinaryOperation, cst.UnaryOperation, cst.BooleanOperation, cst.ComparisonTarget, cst.AugAssign], node)
+        operator = typed_node.operator
+        for new_operator in _simple_mutation_mapping(operator, _operator_mapping):
+            yield node.with_changes(operator=new_operator)
 
 
 def operator_augmented_assignment(
