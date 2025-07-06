@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.mutmut]
-debug = true
+debug = false
 paths_to_mutate = [ "config_pkg/" ]
 do_not_mutate = [ "*ignore*" ]
 also_copy = [ "data" ]

@@ -29,18 +29,18 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
-            stats[str(data.meta_path)] = data.exit_code_by_key
+            stats[str(data.meta_path.as_posix())] = data.exit_code_by_key
 
         return stats
 
 
 def read_json_file(path: Path):
-    with open(path, 'r') as file:
+    with open(path, 'r', encoding='utf-8') as file:
         return json.load(file)
 
 
 def write_json_file(path: Path, data: Any):
-    with open(path, 'w') as file:
+    with open(path, 'w', encoding='utf-8') as file:
         json.dump(data, file, indent=2)
 
 
@@ -78,3 +78,6 @@ def test_my_lib_result_snapshot():
 def test_config_result_snapshot():
     mutmut._reset_globals()
     asserts_results_did_not_change("config")
+
+if __name__ == '__main__':
+    test_my_lib_result_snapshot()

@@ -1,12 +1,16 @@
+import platform
+from mutmut.custom_process_pool import Task
+from mutmut.custom_process_pool import CustomProcessPool
 import ast
 import fnmatch
 import gc
 import inspect
 import itertools
 import json
-from multiprocessing import Pool, set_start_method
+from multiprocessing import JoinableQueue, Pool, Process, Queue, set_start_method
+import multiprocessing
+import multiprocessing.connection
 import os
-import resource
 import shutil
 import signal
 import subprocess
@@ -45,7 +49,9 @@ from time import (
 )
 from typing import (
     Dict,
+    Generic,
     List,
+    TypeVar,
     Union,
 )
 
@@ -68,7 +74,7 @@ from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 status_by_exit_code = {
     1: 'killed',
     3: 'killed',  # internal error in pytest means a kill
-    -24: 'killed',
+    -24: 'timeout',  # SIGXCPU (via timeout handler thread)
     0: 'survived',
     5: 'no tests',
     2: 'check was interrupted by user',
@@ -187,12 +193,16 @@ def copy_src_dir():
 
 
 def create_mutants(max_children: int):
-    with Pool(processes=max_children) as p:
+    with Pool(processes=max_children, initializer=_setup_globals, initargs=_get_global_args()) as p:
         p.map(create_file_mutants, walk_source_files())
 
+def _get_global_args():
+    return (mutmut.config, )
+
+def _setup_globals(config):
+    mutmut.config = config
 
 def create_file_mutants(path: Path):
-    print(path)
     output_path = Path('mutants') / path
     makedirs(output_path.parent, exist_ok=True)
 
@@ -219,14 +229,14 @@ def copy_also_copy_files():
 def create_mutants_for_file(filename, output_path):
     input_stat = os.stat(filename)
 
-    with open(filename) as f:
+    with open(filename, encoding='utf-8') as f:
         source = f.read()
 
-    with open(output_path, 'w') as out:
+    with open(output_path, 'w', encoding='utf-8') as out:
         mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
 
     # validate no syntax errors of mutants
-    with open(output_path) as f:
+    with open(output_path, encoding='utf-8') as f:
         try:
             ast.parse(f.read())
         except (IndentationError, SyntaxError) as e:
@@ -271,7 +281,7 @@ class SourceFileMutationData:
 
     def load(self):
         try:
-            with open(self.meta_path) as f:
+            with open(self.meta_path, encoding='utf-8') as f:
                 self.meta = json.load(f)
         except FileNotFoundError:
             return
@@ -298,7 +308,7 @@ class SourceFileMutationData:
             os.kill(pid, SIGTERM)
 
     def save(self):
-        with open(self.meta_path, 'w') as f:
+        with open(self.meta_path, 'w', encoding='utf-8') as f:
             json.dump(dict(
                 exit_code_by_key=self.exit_code_by_key,
                 hash_by_function_name=self.hash_by_function_name,
@@ -367,6 +377,8 @@ class ListAllTestsResult:
         return self.ids - collected_test_names()
 
 
+_pytest_initialized = False
+
 class PytestRunner(TestRunner):
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs):
@@ -380,6 +392,10 @@ class PytestRunner(TestRunner):
             print('    exit code', exit_code)
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
+
+        global _pytest_initialized
+        _pytest_initialized = True
+
         return exit_code
 
     def run_stats(self, *, tests):
@@ -489,6 +505,9 @@ def status_printer():
     last_len = [0]
     last_update = [datetime(1900, 1, 1)]
     update_threshold = timedelta(seconds=0.1)
+
+    # support the spinner chars on windows
+    sys.__stdout__.reconfigure(encoding='utf-8')
 
     def p(s, *, force_output=False):
         if not force_output and (datetime.now() - last_update[0]) < update_threshold:
@@ -764,7 +783,7 @@ def collect_or_load_stats(runner):
 def load_stats():
     did_load = False
     try:
-        with open('mutants/mutmut-stats.json') as f:
+        with open('mutants/mutmut-stats.json', encoding='utf-8') as f:
             data = json.load(f)
             for k, v in data.pop('tests_by_mangled_function_name').items():
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
@@ -778,7 +797,7 @@ def load_stats():
 
 
 def save_stats():
-    with open('mutants/mutmut-stats.json', 'w') as f:
+    with open('mutants/mutmut-stats.json', 'w', encoding='utf-8') as f:
         json.dump(dict(
             tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
             duration_by_test=mutmut.duration_by_test,
@@ -868,9 +887,10 @@ def timeout_checker(mutants):
 
             now = datetime.now()
             for m, mutant_name, result in mutants:
+                # TODO: this is not multiprocessing safe
                 for pid, start_time in m.start_time_by_pid.items():
                     run_time = now - start_time
-                    if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
+                    if run_time.total_seconds() > 100 + (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
                         try:
                             os.kill(pid, signal.SIGXCPU)
                         except ProcessLookupError:
@@ -882,8 +902,10 @@ def timeout_checker(mutants):
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
-    # used to copy the global mutmut.config to subprocesses
-    set_start_method('fork')
+    if platform.system() == 'Windows':
+        set_start_method('spawn')
+    else:
+        set_start_method('fork')
 
     assert isinstance(mutant_names, (tuple, list)), mutant_names
     _run(mutant_names, max_children)
@@ -948,14 +970,9 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
 
     runner.prepare_main_test_run()
 
-    def read_one_child_exit_status():
-        pid, wait_status = os.wait()
-        exit_code = os.waitstatus_to_exitcode(wait_status)
-        if mutmut.config.debug:
-            print('    worker exit code', exit_code)
-        source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
+    running_processes: set[Process] = set()
 
-    source_file_mutation_data_by_pid: Dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
+    source_file_mutation_data_by_pid: dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
     running_children = 0
     count_tried = 0
 
@@ -975,7 +992,10 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
             estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests)
             m.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
 
-        Thread(target=timeout_checker(mutants), daemon=True).start()
+        # TODO: implement timeout for windows + unix
+        # Thread(target=timeout_checker(mutants), daemon=True).start()
+
+        args: list[tuple[TestRunner, SourceFileMutationData, str, list[str], Config]] = []
 
         # Now do mutation
         for m, mutant_name, result in mutants:
@@ -988,62 +1008,40 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
                 continue
 
             tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), [])
+            # Run fast tests first
+            tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
 
-            # print(tests)
             if not tests:
                 m.exit_code_by_key[mutant_name] = 33
                 m.save()
                 continue
 
-            pid = os.fork()
-            if not pid:
-                # In the child
-                os.environ['MUTANT_UNDER_TEST'] = mutant_name
-                setproctitle(f'mutmut: {mutant_name}')
+            args.append((runner, m, mutant_name, tests, mutmut.config))
+            source_file_mutation_data_by_pid[mutant_name] = m
+            m.register_pid(pid=mutant_name, key=mutant_name, estimated_time_of_tests=estimated_time_of_tests)
 
-                # Run fast tests first
-                tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
-                if not tests:
-                    os._exit(33)
-
-                estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
-                cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
-                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
-
-                with CatchOutput():
-                    result = runner.run_tests(mutant_name=mutant_name, tests=tests)
-
-                if result != 0:
-                    # TODO: write failure information to stdout?
-                    pass
-                os._exit(result)
-            else:
-                # in the parent
-                source_file_mutation_data_by_pid[pid] = m
-                m.register_pid(pid=pid, key=mutant_name, estimated_time_of_tests=estimated_time_of_tests)
-                running_children += 1
-
-            if running_children >= max_children:
-                read_one_child_exit_status()
-                count_tried += 1
-                running_children -= 1
-
-        try:
-            while running_children:
-                read_one_child_exit_status()
-                count_tried += 1
-                running_children -= 1
-        except ChildProcessError:
-            pass
+        tasks: list[Task] = []
+        for arg in args:
+            tasks.append(Task(id=arg[2], args=arg, timeout_seconds=1000))
+        pool = CustomProcessPool(tasks, _test_mutation, max_children)
+        done = 0
+        for finished_task in pool.run():
+            done += 1
+            # print(f'Finished {done} tasks')
+            if finished_task.error:
+                print(finished_task)
+            # print(finished_task)
+            source_file_mutation_data_by_pid[finished_task.id].register_result(pid=finished_task.id, exit_code=finished_task.result)
+            print_stats(source_file_mutation_data_by_path)
     except KeyboardInterrupt:
+        pool.shutdown()
         print('Stopping...')
-        stop_all_children(mutants)
 
     t = datetime.now() - start
 
     print_stats(source_file_mutation_data_by_path, force_output=True)
     print()
-    print(f'{count_tried / t.total_seconds():.2f} mutations/second')
+    print(f'{len(tasks) / t.total_seconds():.2f} mutations/second')
 
     if mutant_names:
         print()
@@ -1059,6 +1057,42 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
 
         print()
 
+
+def _test_mutation(task: Task):
+    args: tuple[TestRunner, SourceFileMutationData, str, list[str], Config] = task.args
+    runner, m, mutant_name, tests, config = args
+    try:
+        mutmut.config = config
+
+        # ensure that we imported all files at least once per process
+        # before we set MUTANT_UNDER_TEST (so everything that runs at import
+        # time is not mutated)
+        if not _pytest_initialized:
+            with CatchOutput():
+                runner.list_all_tests()
+
+        os.environ['MUTANT_UNDER_TEST'] = mutant_name
+        setproctitle(f'mutmut: {mutant_name}')
+
+        if not tests:
+            result = 33
+        else:
+            # TODO: implement timeout for windows + unix
+            # estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
+            # cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
+            # import resource
+            # resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
+
+            with CatchOutput():
+                result = runner.run_tests(mutant_name=mutant_name, tests=tests)
+        
+        return result
+        # os._exit(result)
+    except Exception as e:
+        with open(f'error.{mutant_name}.log', 'w', encoding='utf-8') as log:
+            log.write(str(e))
+            log.flush()
+        return -24
 
 def tests_for_mutant_names(mutant_names):
     tests = set()
@@ -1089,12 +1123,12 @@ def results(all):
 
 
 def read_mutants_module(path) -> cst.Module:
-    with open(Path('mutants') / path) as f:
+    with open(Path('mutants') / path, encoding='utf-8') as f:
         return cst.parse_module(f.read())
 
 
 def read_orig_module(path) -> cst.Module:
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         return cst.parse_module(f.read())
 
 
@@ -1195,7 +1229,7 @@ def apply_mutant(mutant_name):
 
     new_module: cst.Module = orig_module.deep_replace(original_function, mutant_function) # type: ignore
 
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         f.write(new_module.code)
 
 
