@@ -4,13 +4,13 @@ on: [push, pull_request]
 
 jobs:
   tests:
-    name: Test Python ${{ matrix.python-version }}
-    # Todo: Revert to ubuntu-latest when Python 3.7 support no longer needed
-    runs-on: ubuntu-22.04
+    name: Test ${{ matrix.os }} - ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.13", "3.12", "3.11", "3.10", "3.9"]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v3

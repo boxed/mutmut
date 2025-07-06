@@ -21,6 +21,6 @@ def test_max_stack_depth():
 def test_data_exists():
     path = (Path("data") / "data.json").resolve()
     assert path.exists()
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         data = json.load(f)
         assert data['comment'] == 'this should be copied to the mutants folder'
