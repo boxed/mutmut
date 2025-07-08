@@ -1,4 +1,5 @@
-from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences
+from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences, simple_consumer, async_consumer
+import pytest
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
 
@@ -34,3 +35,13 @@ def test_fibonacci():
 
 def test_escape_sequences():
     assert escape_sequences().lower() == "foofoo\\\'\"\a\b\f\n\r\t\v\111\x10\N{ghost}\u1234\U0001F51F".lower()
+
+def test_simple_consumer():
+    # only verifying length, should report surviving mutants for the contents
+    assert len(simple_consumer()) == 10
+
+@pytest.mark.asyncio
+async def test_async_consumer():
+    result = await async_consumer()
+    assert result == list(range(10))
+
