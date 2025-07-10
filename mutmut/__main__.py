@@ -397,16 +397,34 @@ class PytestRunner(TestRunner):
 
         stats_collector = StatsCollector()
 
+        pytest_args = ['-x', '-q']
+        if tests:
+            pytest_args += list(tests)
+        else:
+            tests_dir = getattr(mutmut.config, 'tests_dir', None)
+            if tests_dir:
+                pytest_args.append(tests_dir)
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q'] + list(tests), plugins=[stats_collector]))
+            return int(self.execute_pytest(pytest_args, plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name, tests):
+        pytest_args = ['-x', '-q']
+        if tests:
+            pytest_args += list(tests)
+        else:
+            tests_dir = getattr(mutmut.config, 'tests_dir', None)
+            if tests_dir:
+                pytest_args.append(tests_dir)
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q'] + list(tests)))
+            return int(self.execute_pytest(pytest_args))
 
     def run_forced_fail(self):
+        pytest_args = ['-x', '-q']
+        tests_dir = getattr(mutmut.config, 'tests_dir', None)
+        if tests_dir:
+            pytest_args.append(tests_dir)
         with change_cwd('mutants'):
-            return int(self.execute_pytest(['-x', '-q']))
+            return int(self.execute_pytest(pytest_args))
 
     def list_all_tests(self):
         class TestsCollector:
@@ -415,8 +433,13 @@ class PytestRunner(TestRunner):
 
         collector = TestsCollector()
 
+        tests_dir = getattr(mutmut.config, 'tests_dir', None)
+        pytest_args = ['-x', '-q', '--collect-only']
+        if tests_dir:
+            pytest_args.append(tests_dir)
+
         with change_cwd('mutants'):
-            exit_code = int(self.execute_pytest(['-x', '-q', '--collect-only'], plugins=[collector]))
+            exit_code = int(self.execute_pytest(pytest_args, plugins=[collector]))
             if exit_code != 0:
                 raise CollectTestsFailedException()
 
@@ -620,6 +643,7 @@ class Config:
     max_stack_depth: int
     debug: bool
     paths_to_mutate: List[Path]
+    tests_dir: str = None
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -698,7 +722,8 @@ def load_config():
         paths_to_mutate=[
             Path(y)
             for y in s('paths_to_mutate', [])
-        ] or guess_paths_to_mutate()
+        ] or guess_paths_to_mutate(),
+        tests_dir=s('tests_dir', None),
     )
 
 
