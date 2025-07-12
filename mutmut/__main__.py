@@ -1014,7 +1014,8 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
 
                 estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
                 cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
-                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
+                # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
+                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit + 1))
 
                 with CatchOutput():
                     result = runner.run_tests(mutant_name=mutant_name, tests=tests)
