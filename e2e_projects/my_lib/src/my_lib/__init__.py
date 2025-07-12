@@ -58,3 +58,8 @@ class Point:
     @property
     def coords(self):
         return self.x, self.y
+
+
+def escape_sequences():
+    return "foo" \
+           "FOO\\\'\"\a\b\f\n\r\t\v\111\x10\N{ghost}\u1234\U0001F51F"
