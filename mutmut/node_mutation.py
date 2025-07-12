@@ -12,7 +12,8 @@ OPERATORS_TYPE = Sequence[
     ]
 ]
 
-CHARACTER_AFTER_BACKSLASH = re.compile(r"\\([A-Z])")
+# pattern to match (nearly) all chars in a string that are not part of an escape sequence
+NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
 
 def operator_number(
     node: cst.BaseNumber
@@ -42,9 +43,9 @@ def operator_string(
 
         supported_str_mutations: list[Callable[[str], str]] = [
             lambda x: "XX" + x + "XX",
-            lambda x: x.lower(),
-            lambda x: CHARACTER_AFTER_BACKSLASH.sub(lambda match: f"\\{match.group(1).lower()}", x.upper()),
-            lambda x: x.capitalize(),
+            # do not modify escape sequences, as this could break python syntax
+            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
+            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
         ]
 
         for mut_func in supported_str_mutations:

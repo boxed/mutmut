@@ -1,4 +1,4 @@
-from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci
+from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
 
@@ -31,3 +31,6 @@ def test_point_from_coords():
 def test_fibonacci():
     assert fibonacci(1) == 1
     assert cached_fibonacci(1) == 1
+
+def test_escape_sequences():
+    assert escape_sequences().lower() == "foofoo\\\'\"\a\b\f\n\r\t\v\111\x10\N{ghost}\u1234\U0001F51F".lower()

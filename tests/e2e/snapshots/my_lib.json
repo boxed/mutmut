@@ -40,6 +40,11 @@
     "my_lib.x\u01c1Point\u01c1to_origin__mutmut_1": 1,
     "my_lib.x\u01c1Point\u01c1to_origin__mutmut_2": 1,
     "my_lib.x\u01c1Point\u01c1to_origin__mutmut_3": 0,
-    "my_lib.x\u01c1Point\u01c1to_origin__mutmut_4": 0
+    "my_lib.x\u01c1Point\u01c1to_origin__mutmut_4": 0,
+    "my_lib.x_escape_sequences__mutmut_1": 1,
+    "my_lib.x_escape_sequences__mutmut_2": 0,
+    "my_lib.x_escape_sequences__mutmut_3": 1,
+    "my_lib.x_escape_sequences__mutmut_4": 0,
+    "my_lib.x_escape_sequences__mutmut_5": 0
   }
 }
