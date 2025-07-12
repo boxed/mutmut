@@ -4,7 +4,7 @@ import gc
 import inspect
 import itertools
 import json
-from multiprocessing import Pool, set_start_method
+from multiprocessing import Pool, set_start_method, Lock
 import os
 import resource
 import shutil
@@ -77,6 +77,7 @@ status_by_exit_code = {
     34: 'skipped',
     35: 'suspicious',
     36: 'timeout',
+    -24: 'timeout',  # SIGXCPU
     24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
     255: 'timeout',
@@ -282,7 +283,8 @@ class SourceFileMutationData:
 
     def register_pid(self, *, pid, key, estimated_time_of_tests):
         self.key_by_pid[pid] = key
-        self.start_time_by_pid[pid] = datetime.now()
+        with START_TIMES_BY_PID_LOCK:
+            self.start_time_by_pid[pid] = datetime.now()
         self.estimated_time_of_tests_by_pid[pid] = estimated_time_of_tests
 
     def register_result(self, *, pid, exit_code):
@@ -290,7 +292,8 @@ class SourceFileMutationData:
         self.exit_code_by_key[self.key_by_pid[pid]] = exit_code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
-        del self.start_time_by_pid[pid]
+        with START_TIMES_BY_PID_LOCK:
+            del self.start_time_by_pid[pid]
         self.save()
 
     def stop_children(self):
@@ -860,6 +863,9 @@ def stop_all_children(mutants):
     for m, _, _ in mutants:
         m.stop_children()
 
+# used to copy the global mutmut.config to subprocesses
+set_start_method('fork')
+START_TIMES_BY_PID_LOCK = Lock()
 
 def timeout_checker(mutants):
     def inner_timout_checker():
@@ -868,7 +874,10 @@ def timeout_checker(mutants):
 
             now = datetime.now()
             for m, mutant_name, result in mutants:
-                for pid, start_time in m.start_time_by_pid.items():
+                # copy dict inside lock, so it is not modified by another process while we iterate it
+                with START_TIMES_BY_PID_LOCK:
+                    start_times_by_pid = dict(m.start_time_by_pid)
+                for pid, start_time in start_times_by_pid.items():
                     run_time = now - start_time
                     if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
                         try:
@@ -882,9 +891,6 @@ def timeout_checker(mutants):
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
-    # used to copy the global mutmut.config to subprocesses
-    set_start_method('fork')
-
     assert isinstance(mutant_names, (tuple, list)), mutant_names
     _run(mutant_names, max_children)
 
