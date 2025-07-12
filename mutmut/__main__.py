@@ -1105,16 +1105,24 @@ def read_orig_module(path) -> cst.Module:
         return cst.parse_module(f.read())
 
 
-def find_function(module: cst.Module, name: str) -> Union[cst.FunctionDef, None]:
+def find_top_level_function_or_method(module: cst.Module, name: str) -> Union[cst.FunctionDef, None]:
     name = name.split('.')[-1]
-    return next(iter(m.findall(module, m.FunctionDef(m.Name(name)))), None) # type: ignore
+    for child in module.body:
+        if isinstance(child, cst.FunctionDef) and child.name.value == name:
+            return child
+        if isinstance(child, cst.ClassDef) and isinstance(child.body, cst.IndentedBlock):
+            for method in child.body.body:
+                if isinstance(method, cst.FunctionDef) and method.name.value == name:
+                    return method
+
+    return None
 
 
 def read_original_function(module: cst.Module, mutant_name: str):
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
     orig_name = mangled_name_from_mutant_name(mutant_name) + '__mutmut_orig'
 
-    result = find_function(module, orig_name)
+    result = find_top_level_function_or_method(module, orig_name)
     if not result:
         raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
     return result.with_changes(name = cst.Name(orig_function_name))
@@ -1123,7 +1131,7 @@ def read_original_function(module: cst.Module, mutant_name: str):
 def read_mutant_function(module: cst.Module, mutant_name: str):
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
 
-    result = find_function(module, mutant_name)
+    result = find_top_level_function_or_method(module, mutant_name)
     if not result:
         raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
     return result.with_changes(name = cst.Name(orig_function_name))
@@ -1196,7 +1204,7 @@ def apply_mutant(mutant_name):
     mutant_function = read_mutant_function(mutants_module, mutant_name)
     mutant_function = mutant_function.with_changes(name=cst.Name(orig_function_name))
 
-    original_function = find_function(orig_module, orig_function_name)
+    original_function = find_top_level_function_or_method(orig_module, orig_function_name)
     if not original_function:
         raise FileNotFoundError(f'Could not apply mutant {mutant_name}')
 
@@ -1270,6 +1278,7 @@ def browse(show_killed):
         def read_data(self):
             ensure_config_loaded()
             self.source_file_mutation_data_and_stat_by_path = {}
+            self.path_by_name = {}
 
             for p in walk_source_files():
                 if mutmut.config.should_ignore_for_mutation(p):
@@ -1279,6 +1288,8 @@ def browse(show_killed):
                 stat = collect_stat(source_file_mutation_data)
 
                 self.source_file_mutation_data_and_stat_by_path[str(p)] = source_file_mutation_data, stat
+                for name in source_file_mutation_data.exit_code_by_key:
+                    self.path_by_name[name] = p
 
         def populate_files_table(self):
             # noinspection PyTypeChecker
@@ -1317,11 +1328,12 @@ def browse(show_killed):
                 else:
                     diff_view.update('<loading...>')
                     self.loading_id = event.row_key.value
+                    path = self.path_by_name.get(event.row_key.value)
 
                     def load_thread():
                         ensure_config_loaded()
                         try:
-                            d = get_diff_for_mutant(event.row_key.value)
+                            d = get_diff_for_mutant(event.row_key.value, path=path)
                             if event.row_key.value == self.loading_id:
                                 diff_view.update(Syntax(d, "diff"))
                         except Exception as e:
