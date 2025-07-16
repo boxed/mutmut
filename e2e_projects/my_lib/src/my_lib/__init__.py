@@ -26,6 +26,29 @@ def fibonacci(n: int) -> int:
         return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 
+async def async_consumer():
+    results = []
+    async for i in async_generator():
+        results.append(i)
+    return results
+
+async def async_generator():
+    for i in range(10):
+        yield i
+
+def simple_consumer():
+    generator = double_generator()
+    next(generator) # skip the initial yield
+    results = []
+    for i in range(10):
+        results.append(generator.send(i))
+    return results
+
+def double_generator():
+    while True:
+        x = yield
+        yield x * 2
+
 @cache
 def cached_fibonacci(n: int) -> int:
     if n <= 1:
@@ -58,3 +81,8 @@ class Point:
     @property
     def coords(self):
         return self.x, self.y
+
+
+def escape_sequences():
+    return "foo" \
+           "FOO\\\'\"\a\b\f\n\r\t\v\111\x10\N{ghost}\u1234\U0001F51F"

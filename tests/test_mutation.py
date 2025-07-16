@@ -13,8 +13,8 @@ from mutmut.__main__ import (
     MutmutProgrammaticFailException,
     CatchOutput,
 )
-from mutmut.trampoline_templates import trampoline_impl, yield_from_trampoline_impl, mangle_function_name
-from mutmut.file_mutation import create_mutations, mutate_file_contents, is_generator
+from mutmut.trampoline_templates import trampoline_impl, mangle_function_name
+from mutmut.file_mutation import create_mutations, mutate_file_contents
 
 def mutants_for_source(source: str) -> list[str]:
     module, mutated_nodes = create_mutations(source)
@@ -125,8 +125,9 @@ def mutated_module(source: str) -> str:
         ('x: list[A | None]', []),
         ('a: Optional[int] = None', 'a: Optional[int] = ""'),
         ('a: int = 1', ['a: int = 2', 'a: int = None']),
-        ('a: str = "FoO"', ['a: str = "XXFoOXX"', 'a: str = "foo"', 'a: str = "FOO"', 'a: str = "Foo"', 'a: str = None']),
-        ('a: str = "Fo\\t"', ['a: str = "XXFo\\tXX"', 'a: str = "fo\\t"', 'a: str = "FO\\t"', 'a: str = None']),
+        ('a: str = "FoO"', ['a: str = "XXFoOXX"', 'a: str = "foo"', 'a: str = "FOO"', 'a: str = None']),
+        (r'a: str = "Fo\t"', [r'a: str = "XXFo\tXX"', r'a: str = "FO\t"', r'a: str = "fo\t"', 'a: str = None']),
+        (r'a: str = "Fo\N{ghost} \U11223344"', [r'a: str = "XXFo\N{ghost} \U11223344XX"', r'a: str = "FO\N{GHOST} \U11223344"', r'a: str = "fo\N{ghost} \U11223344"', 'a: str = None']),
         ('lambda: 0', ['lambda: 1', 'lambda: None']),
         ("1 in (1, 2)", ['2 in (1, 2)', '1 not in (1, 2)', '1 in (2, 2)', '1 in (1, 3)']),
         ('1+1', ['2+1', '1 - 1', '1+2']),
@@ -149,9 +150,9 @@ def mutated_module(source: str) -> str:
         ('1e-3', '1.001'),
         ('True', 'False'),
         ('False', 'True'),
-        ('"FoO"', ['"XXFoOXX"', '"foo"', '"FOO"', '"Foo"']),
-        ("'FoO'", ["'XXFoOXX'", "'foo'", "'FOO'", "'Foo'"]),
-        ("u'FoO'", ["u'XXFoOXX'", "u'foo'", "u'FOO'", "u'Foo'"]),
+        ('"FoO"', ['"XXFoOXX"', '"foo"', '"FOO"']),
+        ("'FoO'", ["'XXFoOXX'", "'foo'", "'FOO'"]),
+        ("u'FoO'", ["u'XXFoOXX'", "u'foo'", "u'FOO'"]),
         ("10", "11"),
         ("10.", "11.0"),
         ("0o10", "9"),
@@ -513,43 +514,6 @@ def foo():
     assert mutated_source.count('from __future__') == 1
 
 
-def test_preserve_generators():
-    source = '''
-    def foo():
-        yield 1
-    '''.strip()
-    mutated_source = mutated_module(source)
-    assert 'yield from _mutmut_yield_from_trampoline' in mutated_source
-
-
-def test_is_generator():
-    source = '''
-    def foo():
-        yield 1
-    '''.strip()
-    assert is_generator(parse_statement(source)) # type: ignore
-
-    source = '''
-    def foo():
-        yield from bar()
-    '''.strip()
-    assert is_generator(parse_statement(source)) # type: ignore
-
-    source = '''
-    def foo():
-        return 1
-    '''.strip()
-    assert not is_generator(parse_statement(source)) # type: ignore
-
-    source = '''
-    def foo():
-        def bar():
-            yield 2
-        return 1
-    '''.strip()
-    assert not is_generator(parse_statement(source)) # type: ignore
-
-
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @patch.object(CatchOutput, 'dump_output')
 @patch.object(CatchOutput, 'stop')
@@ -677,7 +641,6 @@ import lib
 
 lib.foo()
 {trampoline_impl.strip()}
-{yield_from_trampoline_impl.strip()}
 
 def x_foo__mutmut_orig(a, b):
     return a > b
@@ -707,7 +670,7 @@ x_bar__mutmut_mutants : ClassVar[MutantDict] = {{
 }}
 
 def bar(*args, **kwargs):
-    result = yield from _mutmut_yield_from_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
+    result = _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
     return result 
 
 bar.__signature__ = _mutmut_signature(x_bar__mutmut_orig)

@@ -1,7 +1,4 @@
-from mutmut.trampoline_templates import (
-    trampoline_impl,
-    yield_from_trampoline_impl,
-)
+from mutmut.trampoline_templates import trampoline_impl
 from mutmut.file_mutation import mutate_file_contents
 
 def mutated_module(source: str) -> str:
@@ -16,7 +13,7 @@ a + 1
 def foo(a, b, c):
     return a + b * c
 """
-    trampolines = trampoline_impl.removesuffix('\n\n') + yield_from_trampoline_impl.removesuffix('\n\n')
+    trampolines = trampoline_impl.removesuffix('\n\n')
 
     expected = f"""
 a + 1{trampolines}
@@ -54,7 +51,7 @@ def foo(a: List[int]) -> int:
     return 1
 """
 
-    expected = trampoline_impl.removesuffix('\n\n') + yield_from_trampoline_impl.removesuffix('\n\n') + """
+    expected = trampoline_impl.removesuffix('\n\n') + """
 def x_foo__mutmut_orig(a: List[int]) -> int:
     return 1
 def x_foo__mutmut_1(a: List[int]) -> int:

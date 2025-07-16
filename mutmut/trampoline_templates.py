@@ -1,6 +1,6 @@
 CLASS_NAME_SEPARATOR = 'ǁ'
 
-def build_trampoline(*, orig_name, mutants, class_name, is_generator):
+def build_trampoline(*, orig_name, mutants, class_name):
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
     mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
@@ -12,18 +12,13 @@ def build_trampoline(*, orig_name, mutants, class_name, is_generator):
         access_suffix = '")'
         self_arg = ', self'
 
-    if is_generator:
-        yield_statement = 'yield from '  # note the space at the end!
-        trampoline_name = '_mutmut_yield_from_trampoline'
-    else:
-        yield_statement = ''
-        trampoline_name = '_mutmut_trampoline'
+    trampoline_name = '_mutmut_trampoline'
 
     return f"""
 {mutants_dict}
 
 def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    result = {yield_statement}{trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
+    result = {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
     return result 
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
@@ -62,11 +57,11 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
         from mutmut.__main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
         result = orig(*call_args, **call_kwargs)
-        return result  # for the yield case
+        return result
     prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
     if not mutant_under_test.startswith(prefix):
         result = orig(*call_args, **call_kwargs)
-        return result  # for the yield case
+        return result
     mutant_name = mutant_under_test.rpartition('.')[-1]
     if self_arg:
         # call to a class method where self is not bound
@@ -76,4 +71,3 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
     return result
 
 """
-yield_from_trampoline_impl = trampoline_impl.replace('result = ', 'result = yield from ').replace('_mutmut_trampoline', '_mutmut_yield_from_trampoline')

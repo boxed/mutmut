@@ -8,7 +8,7 @@ import warnings
 import libcst as cst
 from libcst.metadata import PositionProvider, MetadataWrapper
 import libcst.matchers as m
-from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl, yield_from_trampoline_impl
+from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
 from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
 
 NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
@@ -165,8 +165,6 @@ MODULE_STATEMENT = Union[cst.SimpleStatementLine, cst.BaseCompoundStatement]
 # convert str trampoline implementations to CST nodes with some whitespace
 trampoline_impl_cst = list(cst.parse_module(trampoline_impl).body)
 trampoline_impl_cst[-1] = trampoline_impl_cst[-1].with_changes(leading_lines = [cst.EmptyLine(), cst.EmptyLine()])
-yield_from_trampoline_impl_cst = list(cst.parse_module(yield_from_trampoline_impl).body)
-yield_from_trampoline_impl_cst[-1] = yield_from_trampoline_impl_cst[-1].with_changes(leading_lines = [cst.EmptyLine(), cst.EmptyLine()])
 
 
 def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation]) -> tuple[str, Sequence[str]]:
@@ -185,7 +183,6 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
 
     # trampoline functions
     result.extend(trampoline_impl_cst)
-    result.extend(yield_from_trampoline_impl_cst)
 
     mutations_within_function = group_by_top_level_node(mutations)
 
@@ -234,7 +231,6 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
 
     name = function.name.value
     mangled_name = mangle_function_name(name=name, class_name=class_name) + '__mutmut'
-    _is_generator = is_generator(function)
 
     # copy of original function
     nodes.append(function.with_changes(name=cst.Name(mangled_name + '_orig')))
@@ -248,7 +244,7 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
         nodes.append(mutated_method) # type: ignore
 
     # trampoline that forwards the calls
-    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name, is_generator=_is_generator)).body)
+    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
     trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
     nodes.extend(trampoline)
 
@@ -273,28 +269,6 @@ def group_by_top_level_node(mutations: Sequence[Mutation]) -> Mapping[cst.CSTNod
             grouped[m.contained_by_top_level_function].append(m)
 
     return grouped
-
-def is_generator(function: cst.FunctionDef) -> bool:
-    """Return True if the function has yield statement(s)."""
-    visitor = IsGeneratorVisitor(function)
-    function.visit(visitor)
-    return visitor.is_generator
-
-class IsGeneratorVisitor(cst.CSTVisitor):
-    """Check if a function is a generator.
-    We do so by checking if any child is a Yield statement, but not looking into inner function definitions."""
-    def __init__(self, original_function: cst.FunctionDef):
-        self.is_generator = False
-        self.original_function: cst.FunctionDef = original_function
-
-    def visit_FunctionDef(self, node):
-        # do not recurse into inner function definitions
-        if self.original_function != node:
-            return False
-
-    def visit_Yield(self, node):
-        self.is_generator = True
-        return False
 
 def pragma_no_mutate_lines(source: str) -> set[int]:
     return {

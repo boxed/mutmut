@@ -4,7 +4,7 @@ import gc
 import inspect
 import itertools
 import json
-from multiprocessing import Pool, set_start_method
+from multiprocessing import Pool, set_start_method, Lock
 import os
 import resource
 import shutil
@@ -77,6 +77,7 @@ status_by_exit_code = {
     34: 'skipped',
     35: 'suspicious',
     36: 'timeout',
+    -24: 'timeout',  # SIGXCPU
     24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
     255: 'timeout',
@@ -282,7 +283,8 @@ class SourceFileMutationData:
 
     def register_pid(self, *, pid, key, estimated_time_of_tests):
         self.key_by_pid[pid] = key
-        self.start_time_by_pid[pid] = datetime.now()
+        with START_TIMES_BY_PID_LOCK:
+            self.start_time_by_pid[pid] = datetime.now()
         self.estimated_time_of_tests_by_pid[pid] = estimated_time_of_tests
 
     def register_result(self, *, pid, exit_code):
@@ -290,7 +292,8 @@ class SourceFileMutationData:
         self.exit_code_by_key[self.key_by_pid[pid]] = exit_code
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
-        del self.start_time_by_pid[pid]
+        with START_TIMES_BY_PID_LOCK:
+            del self.start_time_by_pid[pid]
         self.save()
 
     def stop_children(self):
@@ -885,6 +888,9 @@ def stop_all_children(mutants):
     for m, _, _ in mutants:
         m.stop_children()
 
+# used to copy the global mutmut.config to subprocesses
+set_start_method('fork')
+START_TIMES_BY_PID_LOCK = Lock()
 
 def timeout_checker(mutants):
     def inner_timout_checker():
@@ -893,7 +899,10 @@ def timeout_checker(mutants):
 
             now = datetime.now()
             for m, mutant_name, result in mutants:
-                for pid, start_time in m.start_time_by_pid.items():
+                # copy dict inside lock, so it is not modified by another process while we iterate it
+                with START_TIMES_BY_PID_LOCK:
+                    start_times_by_pid = dict(m.start_time_by_pid)
+                for pid, start_time in start_times_by_pid.items():
                     run_time = now - start_time
                     if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
                         try:
@@ -907,9 +916,6 @@ def timeout_checker(mutants):
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
 def run(mutant_names, *, max_children):
-    # used to copy the global mutmut.config to subprocesses
-    set_start_method('fork')
-
     assert isinstance(mutant_names, (tuple, list)), mutant_names
     _run(mutant_names, max_children)
 
@@ -1033,7 +1039,8 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
 
                 estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
                 cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
-                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit))
+                # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
+                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit + 1))
 
                 with CatchOutput():
                     result = runner.run_tests(mutant_name=mutant_name, tests=tests)
@@ -1123,16 +1130,24 @@ def read_orig_module(path) -> cst.Module:
         return cst.parse_module(f.read())
 
 
-def find_function(module: cst.Module, name: str) -> Union[cst.FunctionDef, None]:
+def find_top_level_function_or_method(module: cst.Module, name: str) -> Union[cst.FunctionDef, None]:
     name = name.split('.')[-1]
-    return next(iter(m.findall(module, m.FunctionDef(m.Name(name)))), None) # type: ignore
+    for child in module.body:
+        if isinstance(child, cst.FunctionDef) and child.name.value == name:
+            return child
+        if isinstance(child, cst.ClassDef) and isinstance(child.body, cst.IndentedBlock):
+            for method in child.body.body:
+                if isinstance(method, cst.FunctionDef) and method.name.value == name:
+                    return method
+
+    return None
 
 
 def read_original_function(module: cst.Module, mutant_name: str):
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
     orig_name = mangled_name_from_mutant_name(mutant_name) + '__mutmut_orig'
 
-    result = find_function(module, orig_name)
+    result = find_top_level_function_or_method(module, orig_name)
     if not result:
         raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
     return result.with_changes(name = cst.Name(orig_function_name))
@@ -1141,7 +1156,7 @@ def read_original_function(module: cst.Module, mutant_name: str):
 def read_mutant_function(module: cst.Module, mutant_name: str):
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
 
-    result = find_function(module, mutant_name)
+    result = find_top_level_function_or_method(module, mutant_name)
     if not result:
         raise FileNotFoundError(f'Could not find original function "{orig_function_name}"')
     return result.with_changes(name = cst.Name(orig_function_name))
@@ -1214,7 +1229,7 @@ def apply_mutant(mutant_name):
     mutant_function = read_mutant_function(mutants_module, mutant_name)
     mutant_function = mutant_function.with_changes(name=cst.Name(orig_function_name))
 
-    original_function = find_function(orig_module, orig_function_name)
+    original_function = find_top_level_function_or_method(orig_module, orig_function_name)
     if not original_function:
         raise FileNotFoundError(f'Could not apply mutant {mutant_name}')
 
@@ -1288,6 +1303,7 @@ def browse(show_killed):
         def read_data(self):
             ensure_config_loaded()
             self.source_file_mutation_data_and_stat_by_path = {}
+            self.path_by_name = {}
 
             for p in walk_source_files():
                 if mutmut.config.should_ignore_for_mutation(p):
@@ -1297,6 +1313,8 @@ def browse(show_killed):
                 stat = collect_stat(source_file_mutation_data)
 
                 self.source_file_mutation_data_and_stat_by_path[str(p)] = source_file_mutation_data, stat
+                for name in source_file_mutation_data.exit_code_by_key:
+                    self.path_by_name[name] = p
 
         def populate_files_table(self):
             # noinspection PyTypeChecker
@@ -1335,11 +1353,12 @@ def browse(show_killed):
                 else:
                     diff_view.update('<loading...>')
                     self.loading_id = event.row_key.value
+                    path = self.path_by_name.get(event.row_key.value)
 
                     def load_thread():
                         ensure_config_loaded()
                         try:
-                            d = get_diff_for_mutant(event.row_key.value)
+                            d = get_diff_for_mutant(event.row_key.value, path=path)
                             if event.row_key.value == self.loading_id:
                                 diff_view.update(Syntax(d, "diff"))
                         except Exception as e:
