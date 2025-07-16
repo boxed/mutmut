@@ -12,3 +12,6 @@ def call_depth_four():
 
 def call_depth_five():
     return 5
+
+def func_with_no_tests():
+    return 420
