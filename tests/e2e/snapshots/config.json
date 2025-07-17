@@ -12,6 +12,7 @@
     "config_pkg.math.x_call_depth_three__mutmut_2": 1,
     "config_pkg.math.x_call_depth_four__mutmut_1": 33,
     "config_pkg.math.x_call_depth_four__mutmut_2": 33,
-    "config_pkg.math.x_call_depth_five__mutmut_1": 33
+    "config_pkg.math.x_call_depth_five__mutmut_1": 33,
+    "config_pkg.math.x_func_with_no_tests__mutmut_1": 33
   }
 }
