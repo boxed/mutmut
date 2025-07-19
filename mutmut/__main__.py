@@ -47,7 +47,9 @@ from typing import (
     Dict,
     List,
     Union,
+    Optional,
 )
+import warnings
 
 import click
 import libcst as cst
@@ -177,6 +179,13 @@ class BadTestExecutionCommandsException(Exception):
         super().__init__(msg)
 
 
+class InvalidGeneratedSyntaxException(Exception):
+    def __init__(self, file: Union[Path, str]) -> None:
+        super().__init__(f'Mutmut generated invalid python syntax for {file}. '
+                          'If the original file has valid python syntax, please file an issue '
+                          'with a minimal reproducible example file.')
+
+
 def copy_src_dir():
     for path in mutmut.config.paths_to_mutate:
         output_path: Path = Path('mutants') / path
@@ -186,21 +195,33 @@ def copy_src_dir():
             output_path.parent.mkdir(exist_ok=True, parents=True)
             shutil.copyfile(path, output_path)
 
+@dataclass
+class FileMutationResult:
+    """Dataclass to transfer warnings and errors from child processes to the parent"""
+    warnings: list[Warning]
+    error: Optional[Exception] = None
 
 def create_mutants(max_children: int):
     with Pool(processes=max_children) as p:
-        p.map(create_file_mutants, walk_source_files())
+        for result in p.imap_unordered(create_file_mutants, walk_source_files()):
+            for warning in result.warnings:
+                warnings.warn(warning)
+            if result.error:
+                raise result.error
 
+def create_file_mutants(path: Path) -> FileMutationResult:
+    try:
+        print(path)
+        output_path = Path('mutants') / path
+        makedirs(output_path.parent, exist_ok=True)
 
-def create_file_mutants(path: Path):
-    print(path)
-    output_path = Path('mutants') / path
-    makedirs(output_path.parent, exist_ok=True)
-
-    if mutmut.config.should_ignore_for_mutation(path):
-        shutil.copy(path, output_path)
-    else:
-        create_mutants_for_file(path, output_path)
+        if mutmut.config.should_ignore_for_mutation(path):
+            shutil.copy(path, output_path)
+            return FileMutationResult(warnings=[])
+        else:
+            return create_mutants_for_file(path, output_path)
+    except Exception as e:
+        return FileMutationResult(warnings=[], error=e)
 
 
 def copy_also_copy_files():
@@ -216,23 +237,30 @@ def copy_also_copy_files():
         else:
             shutil.copytree(path, destination, dirs_exist_ok=True)
 
-
-def create_mutants_for_file(filename, output_path):
+def create_mutants_for_file(filename, output_path) -> FileMutationResult:
     input_stat = os.stat(filename)
+    warnings: list[Warning] = []
 
     with open(filename) as f:
         source = f.read()
 
     with open(output_path, 'w') as out:
-        mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
+        try:
+            mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
+        except cst.ParserSyntaxError as e:
+            # if libcst cannot parse it, then copy the source without any mutations
+            warnings.append(SyntaxWarning(f'Unsupported syntax in {filename} ({str(e)}), skipping'))
+            out.write(source)
+            mutant_names, hash_by_function_name = [], {}
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
         try:
             ast.parse(f.read())
         except (IndentationError, SyntaxError) as e:
-            print(output_path, 'has invalid syntax: ', e)
-            exit(1)
+            invalid_syntax_error = InvalidGeneratedSyntaxException(output_path)
+            invalid_syntax_error.__cause__ = e
+            return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
     source_file_mutation_data = SourceFileMutationData(path=filename)
     module_name = strip_prefix(str(filename)[:-len(filename.suffix)].replace(os.sep, '.'), prefix='src.')
@@ -246,6 +274,7 @@ def create_mutants_for_file(filename, output_path):
     source_file_mutation_data.save()
 
     os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
+    return FileMutationResult(warnings=warnings)
 
 
 def write_all_mutants_to_file(*, out, source, filename):

@@ -1,5 +1,7 @@
 # Mutant files
 e2e_projects/**/mutants
+/mutants
+tests/data/**/*.py.meta
 
 *.py[cod]
 examples/db.sqlite3

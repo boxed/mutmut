@@ -25,11 +25,7 @@ def mutate_file_contents(filename: str, code: str) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
     :return: A tuple of (mutated code, list of mutant function names)"""
-    try:
-        module, mutations = create_mutations(code)
-    except cst.ParserSyntaxError as e:
-        warnings.warn(SyntaxWarning(f'Unsupported syntax in {filename} ({str(e)}), skipping'))
-        return code, []
+    module, mutations = create_mutations(code)
 
     return combine_mutations_to_source(module, mutations)
 

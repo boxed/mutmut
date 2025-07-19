@@ -1,7 +1,7 @@
 import os
 from unittest.mock import Mock, patch
 import pytest
-from libcst import parse_statement
+import libcst as cst
 
 import mutmut
 from mutmut.__main__ import (
@@ -369,12 +369,9 @@ def test_mutate_dict():
     assert sorted(mutants) == sorted(expected)
 
 
-def test_syntax_warning():
-    with pytest.warns(SyntaxWarning) as record:
+def test_syntax_error():
+    with pytest.raises(cst.ParserSyntaxError):
         mutate_file_contents('some_file.py', ':!')
-
-    assert len(record) == 1
-    assert 'some_file.py' in record[0].message.args[0] # type: ignore
 
 
 def test_bug_github_issue_18():
