@@ -904,7 +904,7 @@ def timeout_checker(mutants):
                     start_times_by_pid = dict(m.start_time_by_pid)
                 for pid, start_time in start_times_by_pid.items():
                     run_time = now - start_time
-                    if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 4:
+                    if run_time.total_seconds() > (m.estimated_time_of_tests_by_mutant[mutant_name] + 1) * 15:
                         try:
                             os.kill(pid, signal.SIGXCPU)
                         except ProcessLookupError:
@@ -1038,7 +1038,7 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
                     os._exit(33)
 
                 estimated_time_of_tests = m.estimated_time_of_tests_by_mutant[mutant_name]
-                cpu_time_limit = ceil((estimated_time_of_tests + 1) * 2 + process_time()) * 10
+                cpu_time_limit = ceil((estimated_time_of_tests + 1) * 30 + process_time())
                 # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit + 1))
 
