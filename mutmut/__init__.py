@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-__version__ = '3.3.0'
+__version__ = '3.3.1'
 
 
 duration_by_test = {}

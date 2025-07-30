@@ -1,6 +1,22 @@
 Changelog
 ---------
 
+3.3.1
+~~~~~
+
+* Increased threshold for mutant timeouts
+
+* Added `tests_dir` config. Accepts a single entry or a list of directories.
+
+* Async generators fixes
+
+* Fixed bad mutations for certain string escape sequences
+
+* Performance fixes
+
+* Various internal bug fixes
+
+
 3.3.0
 ~~~~~
 
