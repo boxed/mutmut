@@ -627,6 +627,8 @@ class CatchOutput:
     def __init__(self, callback=lambda s: None, spinner_title=None):
         self.strings = []
         self.spinner_title = spinner_title or ''
+        if mutmut.config is not None and mutmut.config.debug:
+            self.spinner_title += '\n'
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher):
