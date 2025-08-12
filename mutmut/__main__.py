@@ -137,7 +137,8 @@ def record_trampoline_hit(name):
         f = inspect.currentframe()
         c = mutmut.config.max_stack_depth
         while c and f:
-            if 'pytest' in f.f_code.co_filename or 'hammett' in f.f_code.co_filename:
+            filename = f.f_code.co_filename
+            if 'pytest' in filename or 'hammett' in filename or 'unittest' in filename:
                 break
             f = f.f_back
             c -= 1
