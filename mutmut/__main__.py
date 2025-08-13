@@ -689,7 +689,10 @@ class Config:
         return False
 
 
-def config_reader():
+def config_reader(cli_overrides=None):
+    if cli_overrides is None:
+        cli_overrides = {}
+
     path = Path('pyproject.toml')
     if path.exists():
         if sys.version_info >= (3, 11):
@@ -705,6 +708,9 @@ def config_reader():
             pass
         else:
             def s(key, default):
+                # try CLI overrides first
+                if key in cli_overrides and cli_overrides[key] is not None:
+                    return cli_overrides[key]
                 try:
                     result = config[key]
                 except KeyError:
@@ -716,6 +722,9 @@ def config_reader():
     config_parser.read('setup.cfg')
 
     def s(key, default):
+        # try CLI overrides first
+        if key in cli_overrides and cli_overrides[key] is not None:
+            return cli_overrides[key]
         try:
             result = config_parser.get('mutmut', key)
         except (NoOptionError, NoSectionError):
@@ -733,13 +742,13 @@ def config_reader():
     return s
 
 
-def ensure_config_loaded():
+def ensure_config_loaded(cli_overrides=None):
     if mutmut.config is None:
-        mutmut.config = load_config()
+        mutmut.config = load_config(cli_overrides)
 
 
-def load_config():
-    s = config_reader()
+def load_config(cli_overrides=None):
+    s = config_reader(cli_overrides)
 
     return Config(
         do_not_mutate=s('do_not_mutate', []),
@@ -765,8 +774,36 @@ def load_config():
 
 @click.group()
 @click.version_option(mutmut.__version__)
-def cli():
-    pass
+@click.option('--debug', is_flag=True, help='Enable debug mode')
+@click.option('--paths-to-mutate', multiple=True, help='Paths to mutate')
+@click.option('--tests-dir', multiple=True, help='Directory with tests')
+@click.pass_context
+def cli(ctx, debug, paths_to_mutate, tests_dir):
+    ctx.ensure_object(dict)
+
+    cli_overrides = {}
+    if debug:
+        cli_overrides['debug'] = True
+    if paths_to_mutate:
+        split_paths = []
+        for path in paths_to_mutate:
+            if ',' in path:
+                split_paths.extend(p.strip() for p in path.split(','))
+            else:
+                split_paths.append(path)
+        cli_overrides['paths_to_mutate'] = split_paths
+    if tests_dir:
+        # Support comma-separated values  
+        split_tests = []
+        for test_dir in tests_dir:
+            if ',' in test_dir:
+                split_tests.extend(t.strip() for t in test_dir.split(','))
+            else:
+                split_tests.append(test_dir)
+        cli_overrides['tests_dir'] = split_tests
+
+    ctx.obj['cli_overrides'] = cli_overrides
+
 
 
 def run_stats_collection(runner, tests=None):
@@ -881,9 +918,11 @@ def estimated_worst_case_time(mutant_name):
 
 @cli.command()
 @click.argument('mutant_names', required=False, nargs=-1)
-def print_time_estimates(mutant_names):
+@click.pass_context
+def print_time_estimates(ctx, mutant_names):
     assert isinstance(mutant_names, (tuple, list)), mutant_names
-    ensure_config_loaded()
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    ensure_config_loaded(cli_overrides)
 
     runner = PytestRunner()
     runner.prepare_main_test_run()
@@ -947,16 +986,18 @@ def timeout_checker(mutants):
 @cli.command()
 @click.option('--max-children', type=int)
 @click.argument('mutant_names', required=False, nargs=-1)
-def run(mutant_names, *, max_children):
+@click.pass_context
+def run(ctx, mutant_names, *, max_children):
     assert isinstance(mutant_names, (tuple, list)), mutant_names
-    _run(mutant_names, max_children)
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    _run(mutant_names, max_children, cli_overrides)
 
 # separate function, so we can call it directly from the tests
-def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
+def _run(mutant_names: Union[tuple, list], max_children: Union[None, int], cli_overrides=None):
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
-    ensure_config_loaded()
+    ensure_config_loaded(cli_overrides)
 
     if max_children is None:
         max_children = os.cpu_count() or 4
@@ -1138,8 +1179,10 @@ def tests_for_mutant_names(mutant_names):
 
 @cli.command()
 @click.option('--all', default=False)
-def results(all):
-    ensure_config_loaded()
+@click.pass_context
+def results(ctx, all):
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    ensure_config_loaded(cli_overrides)
     for path in walk_source_files():
         if not str(path).endswith('.py'):
             continue
@@ -1233,17 +1276,20 @@ def get_diff_for_mutant(mutant_name, source=None, path=None):
 
 @cli.command()
 @click.argument('mutant_name')
-def show(mutant_name):
-    ensure_config_loaded()
+@click.pass_context
+def show(ctx, mutant_name):
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    ensure_config_loaded(cli_overrides)
     print(get_diff_for_mutant(mutant_name))
     return
 
 
 @cli.command()
 @click.argument('mutant_name')
-def apply(mutant_name):
-    # try:
-    ensure_config_loaded()
+@click.pass_context
+def apply(ctx, mutant_name):
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    ensure_config_loaded(cli_overrides)
     apply_mutant(mutant_name)
     # except FileNotFoundError as e:
     #     print(e)
@@ -1275,8 +1321,10 @@ def apply_mutant(mutant_name):
 
 @cli.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
-def browse(show_killed):
-    ensure_config_loaded()
+@click.pass_context
+def browse(ctx, show_killed):
+    cli_overrides = ctx.obj.get('cli_overrides', {})
+    ensure_config_loaded(cli_overrides)
 
     from textual.app import App
     from textual.containers import Container
@@ -1333,7 +1381,7 @@ def browse(show_killed):
             self.populate_files_table()
 
         def read_data(self):
-            ensure_config_loaded()
+            ensure_config_loaded(cli_overrides)
             self.source_file_mutation_data_and_stat_by_path = {}
             self.path_by_name = {}
 
@@ -1388,7 +1436,7 @@ def browse(show_killed):
                     path = self.path_by_name.get(event.row_key.value)
 
                     def load_thread():
-                        ensure_config_loaded()
+                        ensure_config_loaded(cli_overrides)
                         try:
                             d = get_diff_for_mutant(event.row_key.value, path=path)
                             if event.row_key.value == self.loading_id:
@@ -1427,7 +1475,7 @@ def browse(show_killed):
             self.retest(self.get_mutant_name_from_selection().rpartition('.')[0] + '.*')
 
         def action_apply_mutant(self):
-            ensure_config_loaded()
+            ensure_config_loaded(cli_overrides)
             # noinspection PyTypeChecker
             mutants_table: DataTable = self.query_one('#mutants')
             if mutants_table.cursor_row is None:
