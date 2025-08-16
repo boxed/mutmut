@@ -441,7 +441,7 @@ class PytestRunner(TestRunner):
             return int(self.execute_pytest(pytest_args, plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name, tests):
-        pytest_args = ['-x', '-q']
+        pytest_args = ['-x', '-q', '-p no:randomly', '-p no:random-order']
         if tests:
             pytest_args += list(tests)
         else:
