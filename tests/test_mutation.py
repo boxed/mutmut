@@ -118,7 +118,7 @@ def mutated_module(source: str) -> str:
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, None))',
             'lambda **kwargs: Variable.integer(**setdefaults(kwargs, ))',
             'lambda **kwargs: Variable.integer(**setdefaults(dict(show=False)))',
-            # TODO: this mutant would exist if we also mutate single-arg arglists (see implentation)
+            # TODO: this mutant would exist if we also mutate single-arg arglists (see implementation)
             # 'lambda **kwargs: Variable.integer()',
             'lambda **kwargs: None',
         ]),

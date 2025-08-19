@@ -274,7 +274,7 @@ def pragma_no_mutate_lines(source: str) -> set[int]:
     }
 
 def deep_replace(tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode) -> cst.CSTNode:
-    """Like the CSTNode.deep_replace method, except that we only replace up to one occurence of old_node."""
+    """Like the CSTNode.deep_replace method, except that we only replace up to one occurrence of old_node."""
     return tree.visit(ChildReplacementTransformer(old_node, new_node)) # type: ignore
 
 class ChildReplacementTransformer(cst.CSTTransformer):
