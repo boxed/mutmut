@@ -143,7 +143,7 @@ Changelog
 3.0.0
 ~~~~~
 
-* Execution model switched to mutation schemata, which enabled parallell execution.
+* Execution model switched to mutation schemata, which enabled parallel execution.
 
 * New terminal UI
 

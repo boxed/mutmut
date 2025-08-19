@@ -925,7 +925,7 @@ set_start_method('fork')
 START_TIMES_BY_PID_LOCK = Lock()
 
 def timeout_checker(mutants):
-    def inner_timout_checker():
+    def inner_timeout_checker():
         while True:
             sleep(1)
 
@@ -941,7 +941,7 @@ def timeout_checker(mutants):
                             os.kill(pid, signal.SIGXCPU)
                         except ProcessLookupError:
                             pass
-    return inner_timout_checker
+    return inner_timeout_checker
 
 
 @cli.command()
