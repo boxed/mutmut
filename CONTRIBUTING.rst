@@ -41,7 +41,7 @@ Codebases using Poetry
 .. code-block:: console
 
     poetry add --group dev --editable <path_to_mutmut_codebase>
-    # Install dependecies in your Poetry environment
+    # Install dependencies in your Poetry environment
     pip install -r <path_to_mutmut_codebase>/requirements.txt
 
 Documentation about mutmut's architecture
