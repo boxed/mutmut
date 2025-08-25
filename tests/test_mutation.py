@@ -1,28 +1,28 @@
 import os
 from unittest.mock import Mock, patch
-import pytest
+
 import libcst as cst
+import pytest
 
 import mutmut
 from mutmut.__main__ import (
     CLASS_NAME_SEPARATOR,
+    CatchOutput,
+    MutmutProgrammaticFailException,
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
     run_forced_fail_test,
-    Config,
-    MutmutProgrammaticFailException,
-    CatchOutput,
 )
-from mutmut.trampoline_templates import trampoline_impl, mangle_function_name
 from mutmut.file_mutation import create_mutations, mutate_file_contents
+from mutmut.trampoline_templates import mangle_function_name, trampoline_impl
+
 
 def mutants_for_source(source: str) -> list[str]:
     module, mutated_nodes = create_mutations(source)
-    mutants: list[str] = []
-    for m in mutated_nodes:
-        mutants.append(module.deep_replace(m.original_node, m.mutated_node).code)  # type: ignore
+    mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants
+
 
 def mutated_module(source: str) -> str:
     mutated_code, _ = mutate_file_contents('', source)
@@ -220,7 +220,6 @@ def mutated_module(source: str) -> str:
         ('foo.bar', []),
         ('for x in y: pass', []),
         ('def foo(a, *args, **kwargs): pass', []),
-        ('import foo', []),
         ('isinstance(a, b)', []),
         ('len(a)', []),
         ('deepcopy(obj)', ['copy(obj)', 'deepcopy(None)']),
@@ -248,6 +247,7 @@ def foo() -> int:
 
     assert not mutants
 
+
 def test_do_not_mutate_specific_functions():
     source = """
 class A:
@@ -267,6 +267,7 @@ class A:
 
     assert not mutants
 
+
 def test_match_case():
     source = """
 match x:
@@ -284,6 +285,7 @@ match x:
     ]
 
     assert sorted(mutants) == sorted(expected)
+
 
 def test_mach_case_does_not_mutate_bitor():
     source = """
@@ -343,6 +345,7 @@ def test_pragma_no_mutate_and_no_cover():
     source = """def foo():\n    return 1+1  # pragma: no cover, no mutate\n""".strip()
     mutants = mutants_for_source(source)
     assert not mutants
+
 
 def test_pragma_no_mutate_on_function_definition():
     source = """
@@ -438,7 +441,8 @@ def foo():
 
 
 def test_orig_function_name_from_key():
-    assert orig_function_and_class_names_from_key(f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__mutmut_1') == ('bar', 'Foo')
+    assert orig_function_and_class_names_from_key(
+        f'_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__mutmut_1') == ('bar', 'Foo')
     assert orig_function_and_class_names_from_key('x_bar__mutmut_1') == ('bar', None)
 
 
@@ -496,6 +500,7 @@ def foo():
     assert mutated_source.split('\n')[0] == 'from __future__ import annotations'
     assert mutated_source.count('from __future__') == 1
 
+
 def test_from_future_with_docstring_still_first():
     source = """
 '''This documents the module'''
@@ -527,7 +532,7 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
     print(f"out: {out}")
     print(f"err: {err}")
     assert 'done' in out
-    assert os.environ['MUTANT_UNDER_TEST'] is ''
+    assert not os.environ['MUTANT_UNDER_TEST']
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
@@ -540,9 +545,9 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
 
     run_forced_fail_test(runner)
 
-    out, err = capfd.readouterr()
+    out, _ = capfd.readouterr()
     assert 'done' in out
-    assert os.environ['MUTANT_UNDER_TEST'] is ''
+    assert not os.environ['MUTANT_UNDER_TEST']
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
@@ -556,8 +561,8 @@ def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output
     with pytest.raises(SystemExit) as error:
         run_forced_fail_test(runner)
 
-    assert error.value.code is 1
-    out, err = capfd.readouterr()
+    assert error.value.code == 1
+    out, _ = capfd.readouterr()
     assert 'FAILED: Unable to force test failures' in out
 
 
@@ -568,6 +573,7 @@ def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
         side_effect=side_effect
     )
     return runner
+
 
 def test_do_not_mutate_top_level_decorators():
     # Modifying top-level decorators could influence all mutations
@@ -590,6 +596,7 @@ class A(Enum):
         print(m)  # pragma: no cover
 
     assert not mutants
+
 
 # TODO: implement removal of inner decorators
 @pytest.mark.skip
