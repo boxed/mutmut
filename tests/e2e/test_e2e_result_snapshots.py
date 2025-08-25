@@ -11,7 +11,7 @@ from mutmut.__main__ import SourceFileMutationData, _run, ensure_config_loaded, 
 
 @contextmanager
 def change_cwd(path):
-    old_cwd = os.path.abspath(os.getcwd())
+    old_cwd = Path(Path.cwd()).resolve()
     os.chdir(path)
     try:
         yield

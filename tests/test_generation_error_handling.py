@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -8,7 +7,7 @@ import mutmut.__main__
 from mutmut.__main__ import InvalidGeneratedSyntaxException, create_mutants
 
 source_dir = Path(__file__).parent / 'data' / 'test_generation'
-source_dir = source_dir.relative_to(os.getcwd())
+source_dir = source_dir.relative_to(Path.cwd())
 
 
 class MockConfig:
