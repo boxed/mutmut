@@ -1,16 +1,19 @@
 from pathlib import Path
-from mutmut.__main__ import create_mutants, Config, InvalidGeneratedSyntaxException
-import mutmut.__main__
-import mutmut
+
 import pytest
-import os
+
+import mutmut
+import mutmut.__main__
+from mutmut.__main__ import InvalidGeneratedSyntaxException, create_mutants
 
 source_dir = Path(__file__).parent / 'data' / 'test_generation'
-source_dir = source_dir.relative_to(os.getcwd())
+source_dir = source_dir.relative_to(Path.cwd())
+
 
 class MockConfig:
     def should_ignore_for_mutation(self, path: Path) -> bool:
         return False
+
 
 def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
     mutmut._reset_globals()

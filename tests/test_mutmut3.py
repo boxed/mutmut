@@ -1,5 +1,6 @@
-from mutmut.trampoline_templates import trampoline_impl
 from mutmut.file_mutation import mutate_file_contents
+from mutmut.trampoline_templates import trampoline_impl
+
 
 def mutated_module(source: str) -> str:
     mutated_code, _ = mutate_file_contents('', source)

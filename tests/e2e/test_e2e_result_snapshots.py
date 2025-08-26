@@ -1,16 +1,17 @@
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
 import shutil
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
+
 import mutmut
-from mutmut.__main__ import _run, walk_source_files, SourceFileMutationData, ensure_config_loaded
+from mutmut.__main__ import SourceFileMutationData, _run, ensure_config_loaded, walk_source_files
 
 
 @contextmanager
 def change_cwd(path):
-    old_cwd = os.path.abspath(os.getcwd())
+    old_cwd = Path(Path.cwd()).resolve()
     os.chdir(path)
     try:
         yield
@@ -25,7 +26,7 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
 
         stats = {}
         for p in walk_source_files():
-            if mutmut.config.should_ignore_for_mutation(p): # type: ignore
+            if mutmut.config.should_ignore_for_mutation(p):  # type: ignore
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
