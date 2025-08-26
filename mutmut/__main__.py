@@ -418,6 +418,10 @@ class PytestRunner(TestRunner):
     def run_stats(self, *, tests):
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
+            def pytest_runtest_logstart(self, nodeid, location):
+                mutmut.duration_by_test[nodeid] = 0
+
+            # noinspection PyMethodMayBeStatic
             def pytest_runtest_teardown(self, item, nextitem):
                 unused(nextitem)
                 for function in mutmut._stats:
@@ -426,7 +430,7 @@ class PytestRunner(TestRunner):
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item, call):
-                mutmut.duration_by_test[item.nodeid] = call.duration
+                mutmut.duration_by_test[item.nodeid] += call.duration
 
         stats_collector = StatsCollector()
 
