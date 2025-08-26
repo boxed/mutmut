@@ -426,7 +426,7 @@ class PytestRunner(TestRunner):
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item, call):
-                mutmut.duration_by_test[item.nodeid] = call.duration
+                mutmut.duration_by_test[item.nodeid] += call.duration
 
         stats_collector = StatsCollector()
 
