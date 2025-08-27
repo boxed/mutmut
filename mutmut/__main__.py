@@ -84,6 +84,7 @@ status_by_exit_code = {
     152: 'timeout',  # SIGXCPU
     255: 'timeout',
     -11: 'segfault',
+    -9: 'segfault',
 }
 
 emoji_by_status = {
