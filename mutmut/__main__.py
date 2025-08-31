@@ -1124,7 +1124,7 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
             exit_code_by_key[mutant_name] = m.exit_code_by_key[mutant_name]
 
         for mutant_name, exit_code in sorted(exit_code_by_key.items()):
-            print(emoji_by_status.get(status_by_exit_code.get(exit_code), '?'), mutant_name)
+            print(emoji_by_status.get(status_by_exit_code[exit_code], '?'), mutant_name)
 
         print()
 
