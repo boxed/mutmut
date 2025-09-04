@@ -962,6 +962,10 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     os.environ['MUTANT_UNDER_TEST'] = 'mutant_generation'
     ensure_config_loaded()
+    if isinstance(mutant_names, tuple) and 1 == len(mutant_names):
+        bits = mutant_names[0].split(' ')
+        if 1 < len(bits):
+            mutant_names = bits
 
     if max_children is None:
         max_children = os.cpu_count() or 4
