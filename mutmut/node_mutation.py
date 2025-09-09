@@ -31,6 +31,7 @@ def operator_string(
 ) -> Iterable[cst.BaseString]:
     if isinstance(node, cst.SimpleString):
         value = node.value
+        old_value = value
         prefix = value[
             : min([x for x in [value.find('"'), value.find("'")] if x != -1])
         ]
@@ -51,6 +52,8 @@ def operator_string(
         for mut_func in supported_str_mutations:
             new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"
             if new_value == value:
+                continue
+            if new_value == old_value:
                 continue
             yield node.with_changes(value=new_value)
 

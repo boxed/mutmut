@@ -437,8 +437,6 @@ def test_bug_github_issue_435():
         "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', text)\n\n        return self.parser.parse(text), text",
         "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, )\n\n        return self.parser.parse(text), text",
         "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'XX[\\w\\-]  [\\w\\-]XX', dashrepl, text)\n\n        return self.parser.parse(text), text",
-        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, text)\n\n        return self.parser.parse(text), text",
-        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, text)\n\n        return self.parser.parse(text), text",
         "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, text)\n\n        return self.parser.parse(None), text"
     ]
     assert sorted(mutants) == sorted(expected)
