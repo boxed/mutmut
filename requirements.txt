@@ -5,3 +5,4 @@ textual
 # We use the tomlib builtin for Python 3.11 and newer
 toml>=0.10.2; python_version < '3.11'
 pytest
+coverage
