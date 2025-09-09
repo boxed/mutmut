@@ -418,6 +418,30 @@ def test_bug_github_issue_77():
     assert mutants_for_source('') == []
 
 
+def test_bug_github_issue_435():
+    source = """
+    def parse(self, text: str) -> tuple[Tree[Token], str]:
+        text = re.sub(r'[\w\-]  [\w\-]', dashrepl, text)
+
+        return self.parser.parse(text), text
+    """.strip()
+
+    mutants = mutants_for_source(source)
+
+    expected = [
+        'def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = None\n\n        return self.parser.parse(text), text',
+        'def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(None, dashrepl, text)\n\n        return self.parser.parse(text), text',
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', None, text)\n\n        return self.parser.parse(text), text",
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, None)\n\n        return self.parser.parse(text), text",
+        'def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(dashrepl, text)\n\n        return self.parser.parse(text), text',
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', text)\n\n        return self.parser.parse(text), text",
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, )\n\n        return self.parser.parse(text), text",
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'XX[\\w\\-]  [\\w\\-]XX', dashrepl, text)\n\n        return self.parser.parse(text), text",
+        "def parse(self, text: str) -> tuple[Tree[Token], str]:\n        text = re.sub(r'[\\w\\-]  [\\w\\-]', dashrepl, text)\n\n        return self.parser.parse(None), text"
+    ]
+    assert sorted(mutants) == sorted(expected)
+
+
 def test_multiline_dunder_whitelist():
     source = """
 __all__ = [
