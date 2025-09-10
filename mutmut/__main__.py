@@ -684,6 +684,7 @@ class Config:
     debug: bool
     paths_to_mutate: List[Path]
     tests_dir: List[str] = None
+    mutate_only_covered_lines: bool = False
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -759,6 +760,7 @@ def load_config():
         ] + list(Path('.').glob('test*.py')),
         max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', False),
+        mutate_only_covered_lines=s('mutate_only_covered_lines', False),
         paths_to_mutate=[
             Path(y)
             for y in s('paths_to_mutate', [])
