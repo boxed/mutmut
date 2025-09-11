@@ -3,6 +3,7 @@
 from collections import defaultdict
 from collections.abc import Iterable, Sequence, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Union
 import warnings
 import libcst as cst
@@ -21,17 +22,17 @@ class Mutation:
     contained_by_top_level_function: Union[cst.FunctionDef, None]
 
 
-def mutate_file_contents(filename: str, code: str) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
     :return: A tuple of (mutated code, list of mutant function names)"""
-    module, mutations = create_mutations(code)
+    module, mutations = create_mutations(code, covered_lines)
 
     return combine_mutations_to_source(module, mutations)
 
-
 def create_mutations(
-    code: str
+    code: str,
+    covered_lines: set[int] | None = None
 ) -> tuple[cst.Module, list[Mutation]]:
     """Parse the code and create mutations."""
     ignored_lines = pragma_no_mutate_lines(code)
@@ -39,7 +40,7 @@ def create_mutations(
     module = cst.parse_module(code)
 
     metadata_wrapper = MetadataWrapper(module)
-    visitor = MutationVisitor(mutation_operators, ignored_lines)
+    visitor = MutationVisitor(mutation_operators, ignored_lines, covered_lines)
     module = metadata_wrapper.visit(visitor)
 
     return module, visitor.mutations
@@ -94,10 +95,11 @@ class MutationVisitor(cst.CSTVisitor):
 
     METADATA_DEPENDENCIES = (PositionProvider, OuterFunctionProvider)
 
-    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int]):
+    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: set[int] | None = None):
         self.mutations: list[Mutation] = []
         self._operators = operators
         self._ignored_lines = ignore_lines
+        self._covered_lines = covered_lines
 
     def on_visit(self, node):
         if self._skip_node_and_children(node):
@@ -121,12 +123,18 @@ class MutationVisitor(cst.CSTVisitor):
                     self.mutations.append(mutation)
 
     def _should_mutate_node(self, node: cst.CSTNode):
-        # do not mutate nodes with a pragma: no mutate comment
         # currently, the position metadata does not always exist
         # (see https://github.com/Instagram/LibCST/issues/1322)
         position = self.get_metadata(PositionProvider,node, None)
-        if position and position.start.line in self._ignored_lines:
-            return False
+        if position:
+            # do not mutate nodes with a pragma: no mutate comment
+            if position.start.line in self._ignored_lines:
+                return False
+
+            # do not mutate nodes that are not covered
+            if self._covered_lines is not None and not position.start.line in self._covered_lines:
+                return False
+
         return True
 
     def _skip_node_and_children(self, node: cst.CSTNode):

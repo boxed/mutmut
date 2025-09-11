@@ -298,7 +298,7 @@ def create_mutants_for_file(filename, output_path) -> FileMutationResult:
 
 
 def write_all_mutants_to_file(*, out, source, filename):
-    result, mutant_names = mutate_file_contents(filename, source)
+    result, mutant_names = mutate_file_contents(filename, source, get_covered_lines_for_file(filename, mutmut._covered_lines))
     out.write(result)
 
     # TODO: function hashes are currently not used. Reimplement this when needed.
