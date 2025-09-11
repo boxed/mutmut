@@ -1,0 +1,24 @@
+[project]
+name = "mutate_only_covered_lines"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = []
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.mutmut]
+debug = true
+mutate_only_covered_lines = true
+
+[tool.pytest]
+asyncio_default_fixture_loop_scope = "function"

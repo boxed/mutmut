@@ -1,0 +1,7 @@
+{
+  "mutants/src/mutate_only_covered_lines/__init__.py.meta": {
+    "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_1": 1,
+    "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_2": 1,
+    "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_3": 1
+  }
+}
