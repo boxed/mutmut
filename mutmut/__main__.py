@@ -225,6 +225,19 @@ def create_file_mutants(path: Path) -> FileMutationResult:
     except Exception as e:
         return FileMutationResult(warnings=[], error=e)
 
+def setup_source_paths():
+    # ensure that the mutated source code can be imported by the tests
+    source_code_paths = [Path('.'), Path('src'), Path('source')]
+    for path in source_code_paths:
+        mutated_path = Path('mutants') / path
+        if mutated_path.exists():
+            sys.path.insert(0, str(mutated_path.absolute()))
+
+    # ensure that the original code CANNOT be imported by the tests
+    for path in source_code_paths:
+        for i in range(len(sys.path)):
+            while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
+                del sys.path[i]
 
 def copy_also_copy_files():
     assert isinstance(mutmut.config.also_copy, list)
@@ -978,18 +991,7 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
 
-    # ensure that the mutated source code can be imported by the tests
-    source_code_paths = [Path('.'), Path('src'), Path('source')]
-    for path in source_code_paths:
-        mutated_path = Path('mutants') / path
-        if mutated_path.exists():
-            sys.path.insert(0, str(mutated_path.absolute()))
-
-    # ensure that the original code CANNOT be imported by the tests
-    for path in source_code_paths:
-        for i in range(len(sys.path)):
-            while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
-                del sys.path[i]
+    setup_source_paths()
 
     # TODO: config/option for runner
     # runner = HammettRunner()
