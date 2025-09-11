@@ -58,6 +58,7 @@ from rich.text import Text
 from setproctitle import setproctitle
 
 import mutmut
+from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
 from mutmut.file_mutation import mutate_file_contents
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 
@@ -238,6 +239,10 @@ def setup_source_paths():
         for i in range(len(sys.path)):
             while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
                 del sys.path[i]
+
+def store_lines_covered_by_tests():
+    if mutmut.config.mutate_only_covered_lines:
+        mutmut._covered_lines = gather_coverage(PytestRunner(), list(walk_source_files()))
 
 def copy_also_copy_files():
     assert isinstance(mutmut.config.also_copy, list)
@@ -985,13 +990,13 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     makedirs(Path('mutants'), exist_ok=True)
     with CatchOutput(spinner_title='Generating mutants'):
         copy_src_dir()
-        create_mutants(max_children)
         copy_also_copy_files()
+        setup_source_paths()
+        store_lines_covered_by_tests()            
+        create_mutants(max_children)
 
     time = datetime.now() - start
     print(f'    done in {round(time.total_seconds()*1000)}ms', )
-
-    setup_source_paths()
 
     # TODO: config/option for runner
     # runner = HammettRunner()
