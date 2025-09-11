@@ -17,8 +17,8 @@ from mutmut.file_mutation import create_mutations, mutate_file_contents
 from mutmut.trampoline_templates import mangle_function_name, trampoline_impl
 
 
-def mutants_for_source(source: str) -> list[str]:
-    module, mutated_nodes = create_mutations(source)
+def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
+    module, mutated_nodes = create_mutations(source, covered_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants
@@ -353,6 +353,20 @@ def foo(): # pragma: no mutate
     return 1+1"""
     mutants = mutants_for_source(source)
     assert mutants
+
+
+def test_mutate_only_covered_lines_none():
+    source = """def foo():\n    return 1+1\n""".strip()
+    mutants = mutants_for_source(source, covered_lines=set())
+    assert not mutants
+
+
+def test_mutate_only_covered_lines_all():
+    source = """def foo():\n    return 1+1\n""".strip()
+    mutants_expected = mutants_for_source(source)
+    mutants = mutants_for_source(source, covered_lines=set([1, 2]))
+    assert mutants
+    assert mutants == mutants_expected
 
 
 def test_mutate_dict():
