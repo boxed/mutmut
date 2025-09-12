@@ -1,4 +1,5 @@
 import os
+from typing import Union
 from unittest.mock import Mock, patch
 
 import libcst as cst
@@ -17,7 +18,7 @@ from mutmut.file_mutation import create_mutations, mutate_file_contents
 from mutmut.trampoline_templates import mangle_function_name, trampoline_impl
 
 
-def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
+def mutants_for_source(source: str, covered_lines: Union[set[int], None] = None) -> list[str]:
     module, mutated_nodes = create_mutations(source, covered_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 

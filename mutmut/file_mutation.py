@@ -22,7 +22,7 @@ class Mutation:
     contained_by_top_level_function: Union[cst.FunctionDef, None]
 
 
-def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(filename: str, code: str, covered_lines: Union[set[int], None] = None) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
     :return: A tuple of (mutated code, list of mutant function names)"""
@@ -32,7 +32,7 @@ def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | Non
 
 def create_mutations(
     code: str,
-    covered_lines: set[int] | None = None
+    covered_lines: Union[set[int], None] = None
 ) -> tuple[cst.Module, list[Mutation]]:
     """Parse the code and create mutations."""
     ignored_lines = pragma_no_mutate_lines(code)
@@ -95,7 +95,7 @@ class MutationVisitor(cst.CSTVisitor):
 
     METADATA_DEPENDENCIES = (PositionProvider, OuterFunctionProvider)
 
-    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: set[int] | None = None):
+    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: Union[set[int], None] = None):
         self.mutations: list[Mutation] = []
         self._operators = operators
         self._ignored_lines = ignore_lines
