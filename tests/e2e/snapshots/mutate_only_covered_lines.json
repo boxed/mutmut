@@ -2,6 +2,19 @@
   "mutants/src/mutate_only_covered_lines/__init__.py.meta": {
     "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_1": 1,
     "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_2": 1,
-    "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_3": 1
+    "mutate_only_covered_lines.x_hello_mutate_only_covered_lines__mutmut_3": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_1": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_2": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_3": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_4": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_5": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_6": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_7": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_8": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_9": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_10": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_11": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_12": 1,
+    "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_13": 1
   }
 }
