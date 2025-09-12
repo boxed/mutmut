@@ -152,6 +152,21 @@ You can exclude files from mutation in `setup.cfg`:
         *__tests.py
 
 
+Enable coverage.py filtering of lines to mutate
+-----------------------------------------------
+
+By default, mutmut will mutate only functions that are called. But, if you would like a finer grained (line-level)
+check for coverage, mutmut can use coverage.py to do that.
+
+If you only want to mutate lines that are called (according to coverage.py), you can set
+`mutate_only_covered_lines_multiline` to `true` in your configuration. The default value is `false`.
+
+
+.. code-block::
+
+    mutate_only_covered_lines_multiline=true
+
+
 Enable debug output (increase verbosity)
 ----------------------------------------
 
