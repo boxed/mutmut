@@ -4,6 +4,9 @@ def hello_mutate_only_covered_lines(simple_branch: bool) -> str:
     else:
         return "Hello from mutate_only_covered_lines! (false)"
 
+def function_with_pragma() -> int:
+    return 1 # pragma: no mutate
+
 def mutate_only_covered_lines_multiline(simple_branch: bool) -> str:
     x = (
         "Foo"
