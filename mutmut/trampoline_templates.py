@@ -63,7 +63,7 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
         result = orig(*call_args, **call_kwargs)
         return result
     mutant_name = mutant_under_test.rpartition('.')[-1]
-    if self_arg:
+    if self_arg is not None:
         # call to a class method where self is not bound
         result = mutants[mutant_name](self_arg, *call_args, **call_kwargs)
     else:

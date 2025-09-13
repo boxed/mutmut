@@ -74,6 +74,9 @@ class Point:
     def ignored(self):
         self.foo = 'bar' # pragma: no mutate
 
+    def __len__(self):
+        return 0
+
     @staticmethod
     def from_coords(coords) -> 'Point':
         return Point(coords[0], coords[1])
