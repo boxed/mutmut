@@ -159,12 +159,12 @@ By default, mutmut will mutate only functions that are called. But, if you would
 check for coverage, mutmut can use coverage.py to do that.
 
 If you only want to mutate lines that are called (according to coverage.py), you can set
-`mutate_only_covered_lines_multiline` to `true` in your configuration. The default value is `false`.
+`mutate_only_covered_lines` to `true` in your configuration. The default value is `false`.
 
 
 .. code-block::
 
-    mutate_only_covered_lines_multiline=true
+    mutate_only_covered_lines=true
 
 
 Enable debug output (increase verbosity)
