@@ -2,6 +2,7 @@ import coverage
 import importlib
 import sys
 from pathlib import Path
+import json
 
 
 # Returns a set of lines that are covered in this file gvein the covered_lines dict
@@ -39,12 +40,16 @@ def gather_coverage(runner, source_files):
     # The CoverageData object is a wrapper around sqlite, and this
     # will make it more efficient to access the data
     covered_lines = {}
+    coverage_data = cov.get_data()
 
     for filename in source_files:
         abs_filename = str((mutants_path / filename).absolute())
-        lines = cov.get_data().lines(abs_filename)
-        if lines is not None:
-            covered_lines[abs_filename] = set(lines)
+        lines = coverage_data.lines(abs_filename)
+        if lines is None:
+            raise Exception(f'Could not collect coverage for file {abs_filename}. '
+                             'Please create a MRE and file an issue.'
+                            f'Collected coverage from following files: {coverage_data.measured_files()}')
+        covered_lines[abs_filename] = list(lines)
 
     _unload_modules_not_in(modules)
 
