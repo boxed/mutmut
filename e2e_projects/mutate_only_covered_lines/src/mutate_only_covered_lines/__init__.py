@@ -12,6 +12,18 @@ def mutate_only_covered_lines_multiline(simple_branch: bool) -> str:
         "Foo"
         "Bar" # coverage.py incorrectly reports this line as not covered. If that changes, tests will break
     )
+    n = 1 \
+        + 2
+    # should mutate keys and values
+    d = {
+        'a': 1,
+        'b': 2,
+    }
+    # should mutate function call parameters
+    e = dict(
+        a=1,
+        b=2,
+    )
     if simple_branch:
         y = [
             i * 2
