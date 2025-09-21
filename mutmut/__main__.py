@@ -420,13 +420,22 @@ class ListAllTestsResult:
 
 
 class PytestRunner(TestRunner):
+    def __init__(self):
+        self._pytest_add_cli_args: List[str] = mutmut.config.pytest_add_cli_args
+        self._pytest_add_cli_args_test_selection: List[str] = mutmut.config.pytest_add_cli_args_test_selection
+
+        # tests_dir is a special case of a test selection option,
+        # so also use pytest_add_cli_args_test_selection for the implementation
+        self._pytest_add_cli_args_test_selection += mutmut.config.tests_dir
+
+
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs):
         import pytest
-        params += ['--rootdir=.']
+        params = ['--rootdir=.'] + params + self._pytest_add_cli_args
         if mutmut.config.debug:
             params = ['-vv'] + params
-            print('python -m pytest ', ' '.join(params))
+            print('python -m pytest ', ' '.join([f'"{param}"' for param in params]))
         exit_code = int(pytest.main(params, **kwargs))
         if mutmut.config.debug:
             print('    exit code', exit_code)
@@ -457,9 +466,7 @@ class PytestRunner(TestRunner):
         if tests:
             pytest_args += list(tests)
         else:
-            tests_dir = mutmut.config.tests_dir
-            if tests_dir:
-                pytest_args += tests_dir
+            pytest_args += self._pytest_add_cli_args_test_selection
         with change_cwd('mutants'):
             return int(self.execute_pytest(pytest_args, plugins=[stats_collector]))
 
@@ -468,38 +475,39 @@ class PytestRunner(TestRunner):
         if tests:
             pytest_args += list(tests)
         else:
-            tests_dir = mutmut.config.tests_dir
-            if tests_dir:
-                pytest_args += tests_dir
+            pytest_args += self._pytest_add_cli_args_test_selection
         with change_cwd('mutants'):
             return int(self.execute_pytest(pytest_args))
 
     def run_forced_fail(self):
-        pytest_args = ['-x', '-q']
-        tests_dir = mutmut.config.tests_dir
-        if tests_dir:
-            pytest_args += tests_dir
+        pytest_args = ['-x', '-q'] + self._pytest_add_cli_args_test_selection
         with change_cwd('mutants'):
             return int(self.execute_pytest(pytest_args))
 
     def list_all_tests(self):
         class TestsCollector:
+            def __init__(self):
+                self.collected_nodeids = set()
+                self.deselected_nodeids = set()
+
             def pytest_collection_modifyitems(self, items):
-                self.nodeids = {item.nodeid for item in items}
+                self.collected_nodeids |= {item.nodeid for item in items}
+
+            def pytest_deselected(self, items):
+                self.deselected_nodeids |= {item.nodeid for item in items}
 
         collector = TestsCollector()
 
         tests_dir = mutmut.config.tests_dir
-        pytest_args = ['-x', '-q', '--collect-only']
-        if tests_dir:
-            pytest_args += tests_dir
+        pytest_args = ['-x', '-q', '--collect-only'] + self._pytest_add_cli_args_test_selection
 
         with change_cwd('mutants'):
             exit_code = int(self.execute_pytest(pytest_args, plugins=[collector]))
             if exit_code != 0:
                 raise CollectTestsFailedException()
 
-        return ListAllTestsResult(ids=collector.nodeids)
+        selected_nodeids = collector.collected_nodeids - collector.deselected_nodeids
+        return ListAllTestsResult(ids=selected_nodeids)
 
 
 class HammettRunner(TestRunner):
@@ -701,8 +709,10 @@ class Config:
     max_stack_depth: int
     debug: bool
     paths_to_mutate: List[Path]
-    tests_dir: List[str] = None
-    mutate_only_covered_lines: bool = False
+    pytest_add_cli_args: List[str]
+    pytest_add_cli_args_test_selection: List[str]
+    tests_dir: List[str]
+    mutate_only_covered_lines: bool
 
     def should_ignore_for_mutation(self, path):
         if not str(path).endswith('.py'):
@@ -739,7 +749,7 @@ def config_reader():
     config_parser = ConfigParser()
     config_parser.read('setup.cfg')
 
-    def s(key, default):
+    def s(key: str, default):
         try:
             result = config_parser.get('mutmut', key)
         except (NoOptionError, NoSectionError):
@@ -784,6 +794,8 @@ def load_config():
             for y in s('paths_to_mutate', [])
         ] or guess_paths_to_mutate(),
         tests_dir=s('tests_dir', []),
+        pytest_add_cli_args=s('pytest_add_cli_args', []),
+        pytest_add_cli_args_test_selection=s('pytest_add_cli_args_test_selection', []),
     )
 
 
