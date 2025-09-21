@@ -29,3 +29,11 @@ do_not_mutate = [ "*ignore*" ]
 also_copy = [ "data" ]
 max_stack_depth=8 # Includes frames by mutmut, see https://github.com/boxed/mutmut/issues/378
 tests_dir = [ "tests/main/" ]
+# verify that we can override options with pytest_add_cli_args
+pytest_add_cli_args = ["-o", "xfail_strict=False"]
+# verify test exclusion (-m 'not fail') and test inclusion (-k=test_include)
+pytest_add_cli_args_test_selection = [ "-m", "not fail", "-k=test_include"]
+
+[tool.pytest.ini_options]
+xfail_strict = true
+markers = [ "fail: tests that should be ignored with mutmut" ]

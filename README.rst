@@ -67,6 +67,20 @@ source code control and committed before you apply a mutant!
 If during the installation you get an error for the `libcst` dependency mentioning the lack of a rust compiler on your system, it is because your architecture does not have a prebuilt binary for `libcst` and it requires both `rustc` and `cargo` from the [rust toolchain](https://www.rust-lang.org/tools/install) to be built. This is known for at least the `x86_64-darwin` architecture.
 
 
+Wildcards for testing mutants
+-----------------------------
+
+Unix filename pattern matching style on mutants is supported. Example:
+
+.. code-block:: console
+
+    mutmut run "my_module*"
+    mutmut run "my_module.my_function*"
+
+In the `browse` TUI you can press `f` to retest a function, and `m` to retest
+an entire module.
+
+
 Configuration
 -------------
 
@@ -89,22 +103,8 @@ If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutm
 See below for more options for configuring mutmut.
 
 
-Wildcards for testing mutants
------------------------------
-
-Unix filename pattern matching style on mutants is supported. Example:
-
-.. code-block:: console
-
-    mutmut run "my_module*"
-    mutmut run "my_module.my_function*"
-
-In the `browse` TUI you can press `f` to retest a function, and `m` to retest
-an entire module.
-
-
 "also copy" files
------------------
+~~~~~~~~~~~~~~~~~
 
 To run the full test suite some files are often needed above the tests and the
 source. You can configure to copy extra files that you need by adding
@@ -118,7 +118,7 @@ directories and files to `also_copy` in your `setup.cfg`:
 
 
 Limit stack depth
------------------
+~~~~~~~~~~~~~~~~~
 
 In big code bases some functions are called incidentally by huge swaths of the
 codebase, but you really don't want tests that hit those executions to count
@@ -142,7 +142,7 @@ caught.
 
 
 Exclude files from mutation
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can exclude files from mutation in `setup.cfg`:
 
@@ -153,7 +153,7 @@ You can exclude files from mutation in `setup.cfg`:
 
 
 Enable coverage.py filtering of lines to mutate
------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, mutmut will mutate only functions that are called. But, if you would like a finer grained (line-level)
 check for coverage, mutmut can use coverage.py to do that.
@@ -168,7 +168,7 @@ If you only want to mutate lines that are called (according to coverage.py), you
 
 
 Enable debug output (increase verbosity)
-----------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, mutmut "swallows" all the test output etc. so that you get a nice clean output.
 
@@ -182,7 +182,7 @@ to failing tests.
 
 
 Whitelisting
-------------
+~~~~~~~~~~~~
 
 You can mark lines like this:
 
@@ -196,6 +196,27 @@ whitelist lines are:
 - The version string on your library. You really shouldn't have a test for this :P
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
+
+
+Modifying pytest arguments
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can add and override pytest arguments:
+
+.. code-block:: python
+
+    # for CLI args that select or deselect tests, use `pytest_add_cli_args_test_selection`
+    pytest_add_cli_args_test_selection = [ "-m", "not fail", "-k=test_include"]
+
+    # for other CLI args, use `pytest_add_cli_args`
+    pytest_add_cli_args = ["-p", "no:some_plugin"] # disable a plugin
+    pytest_add_cli_args = ["-o", "xfail_strict=False"] # overrides xfail_strict from your normal config
+
+    # if you want to ignore the normal pytest configuration
+    # you can specify a diferent pytest ini file to be used
+    pytest_add_cli_args = ["-c", "mutmut_pytest.ini"]
+    also_copy = ["mutmut_pytest.ini"]
+
 
 
 Example mutations
