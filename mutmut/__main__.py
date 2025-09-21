@@ -435,7 +435,7 @@ class PytestRunner(TestRunner):
         params = ['--rootdir=.'] + params + self._pytest_add_cli_args
         if mutmut.config.debug:
             params = ['-vv'] + params
-            print('python -m pytest ', ' '.join(params))
+            print('python -m pytest ', ' '.join([f'"{param}"' for param in params]))
         exit_code = int(pytest.main(params, **kwargs))
         if mutmut.config.debug:
             print('    exit code', exit_code)
@@ -486,8 +486,15 @@ class PytestRunner(TestRunner):
 
     def list_all_tests(self):
         class TestsCollector:
+            def __init__(self):
+                self.collected_nodeids = set()
+                self.deselected_nodeids = set()
+
             def pytest_collection_modifyitems(self, items):
-                self.nodeids = {item.nodeid for item in items}
+                self.collected_nodeids |= {item.nodeid for item in items}
+
+            def pytest_deselected(self, items):
+                self.deselected_nodeids |= {item.nodeid for item in items}
 
         collector = TestsCollector()
 
@@ -499,7 +506,8 @@ class PytestRunner(TestRunner):
             if exit_code != 0:
                 raise CollectTestsFailedException()
 
-        return ListAllTestsResult(ids=collector.nodeids)
+        selected_nodeids = collector.collected_nodeids - collector.deselected_nodeids
+        return ListAllTestsResult(ids=selected_nodeids)
 
 
 class HammettRunner(TestRunner):
