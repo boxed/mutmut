@@ -90,7 +90,7 @@ In `setup.cfg` in the root of your project you can configure mutmut if you need 
 
     [mutmut]
     paths_to_mutate=src/
-    tests_dir=tests/
+    pytest_add_cli_args_test_selection=tests/
 
 If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutmut` section:
 
@@ -98,7 +98,7 @@ If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutm
 
     [tool.mutmut]
     paths_to_mutate = [ "src/" ]
-    tests_dir = [ "tests/" ]
+    pytest_add_cli_args_test_selection= [ "tests/" ]
 
 See below for more options for configuring mutmut.
 
@@ -206,7 +206,7 @@ You can add and override pytest arguments:
 .. code-block:: python
 
     # for CLI args that select or deselect tests, use `pytest_add_cli_args_test_selection`
-    pytest_add_cli_args_test_selection = [ "-m", "not fail", "-k=test_include"]
+    pytest_add_cli_args_test_selection = ["-m", "not fail", "-k=test_include"]
 
     # for other CLI args, use `pytest_add_cli_args`
     pytest_add_cli_args = ["-p", "no:some_plugin"] # disable a plugin
