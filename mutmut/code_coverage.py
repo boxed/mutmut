@@ -46,9 +46,8 @@ def gather_coverage(runner, source_files):
         abs_filename = str((mutants_path / filename).absolute())
         lines = coverage_data.lines(abs_filename)
         if lines is None:
-            raise Exception(f'Could not collect coverage for file {abs_filename}. '
-                             'Please create a MRE and file an issue.'
-                            f'Collected coverage from following files: {coverage_data.measured_files()}')
+            # file was not imported during test run, e.g. because test selection excluded this file
+            lines = []
         covered_lines[abs_filename] = list(lines)
 
     _unload_modules_not_in(modules)
