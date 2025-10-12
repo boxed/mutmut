@@ -312,33 +312,35 @@ class SourceFileMutationData:
         self.estimated_time_of_tests_by_mutant = {}
         self.path = path
         self.meta_path = Path('mutants') / (str(path) + '.meta')
-        self.meta = None
         self.key_by_pid = {}
         self.exit_code_by_key = {}
+        self.durations_by_key = {}
         self.hash_by_function_name = {}
         self.start_time_by_pid = {}
-        self.estimated_time_of_tests_by_pid = {}
 
     def load(self):
         try:
             with open(self.meta_path) as f:
-                self.meta = json.load(f)
+                meta = json.load(f)
         except FileNotFoundError:
             return
 
-        self.exit_code_by_key = self.meta.pop('exit_code_by_key')
-        self.hash_by_function_name = self.meta.pop('hash_by_function_name')
-        assert not self.meta, self.meta  # We should read all the data!
+        self.exit_code_by_key = meta.pop('exit_code_by_key')
+        self.hash_by_function_name = meta.pop('hash_by_function_name')
+        self.durations_by_key = meta.pop('durations_by_key')
+        self.estimated_time_of_tests_by_mutant = meta.pop('estimated_durations_by_key')
+        assert not meta, f'Meta file {self.meta_path} constains unexpected keys: {set(meta.keys())}'
 
-    def register_pid(self, *, pid, key, estimated_time_of_tests):
+    def register_pid(self, *, pid, key):
         self.key_by_pid[pid] = key
         with START_TIMES_BY_PID_LOCK:
             self.start_time_by_pid[pid] = datetime.now()
-        self.estimated_time_of_tests_by_pid[pid] = estimated_time_of_tests
 
     def register_result(self, *, pid, exit_code):
         assert self.key_by_pid[pid] in self.exit_code_by_key
-        self.exit_code_by_key[self.key_by_pid[pid]] = exit_code
+        key = self.key_by_pid[pid]
+        self.exit_code_by_key[key] = exit_code
+        self.durations_by_key[key] = (datetime.now() - self.start_time_by_pid[pid]).total_seconds()
         # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
         with START_TIMES_BY_PID_LOCK:
@@ -354,6 +356,8 @@ class SourceFileMutationData:
             json.dump(dict(
                 exit_code_by_key=self.exit_code_by_key,
                 hash_by_function_name=self.hash_by_function_name,
+                durations_by_key=self.durations_by_key,
+                estimated_durations_by_key=self.estimated_time_of_tests_by_mutant,
             ), f, indent=4)
 
 
@@ -1123,7 +1127,7 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
             else:
                 # in the parent
                 source_file_mutation_data_by_pid[pid] = m
-                m.register_pid(pid=pid, key=mutant_name, estimated_time_of_tests=estimated_time_of_tests)
+                m.register_pid(pid=pid, key=mutant_name)
                 running_children += 1
 
             if running_children >= max_children:
@@ -1310,8 +1314,6 @@ def apply_mutant(mutant_name):
         f.write(new_module.code)
 
 
-# TODO: junitxml, html commands
-
 @cli.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
 def browse(show_killed):
@@ -1344,13 +1346,14 @@ def browse(show_killed):
         ]
 
         cursor_type = 'row'
-        source_file_mutation_data_and_stat_by_path = None
+        source_file_mutation_data_and_stat_by_path: dict[str, tuple[SourceFileMutationData, Stat]] = {}
 
         def compose(self):
             with Container(classes='container'):
                 yield DataTable(id='files')
                 yield DataTable(id='mutants')
             with Widget(id="diff_view_widget"):
+                yield Static(id='description')
                 yield Static(id='diff_view')
             yield Footer()
 
@@ -1418,25 +1421,36 @@ def browse(show_killed):
             else:
                 assert event.data_table.id == 'mutants'
                 # noinspection PyTypeChecker
-                diff_view: Static = self.query_one('#diff_view')
-                if event.row_key.value is None:
-                    diff_view.update('')
+                description: Static = self.query_one('#description')
+                mutant_name = event.row_key.value
+                self.loading_id = mutant_name
+                path = self.path_by_name.get(mutant_name)
+                source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[str(path)]
+
+                exit_code = source_file_mutation_data.exit_code_by_key[mutant_name]
+                status = status_by_exit_code[exit_code]
+                estimated_duration = source_file_mutation_data.estimated_time_of_tests_by_mutant.get(mutant_name, '?')
+                duration = source_file_mutation_data.durations_by_key.get(mutant_name, '?')
+
+                if status == 'timeout':
+                    description.update(f'Timed out because tests did not finish within {duration:.3f} seconds. Tests without mutation took {estimated_duration:.3f} seconds.\n')
                 else:
-                    diff_view.update('<loading...>')
-                    self.loading_id = event.row_key.value
-                    path = self.path_by_name.get(event.row_key.value)
+                    description.update('')
 
-                    def load_thread():
-                        ensure_config_loaded()
-                        try:
-                            d = get_diff_for_mutant(event.row_key.value, path=path)
-                            if event.row_key.value == self.loading_id:
-                                diff_view.update(Syntax(d, "diff"))
-                        except Exception as e:
-                            diff_view.update(f"<{type(e)} {e}>")
+                diff_view: Static = self.query_one('#diff_view')
+                diff_view.update('<loading code diff...>')
 
-                    t = Thread(target=load_thread)
-                    t.start()
+                def load_thread():
+                    ensure_config_loaded()
+                    try:
+                        d = get_diff_for_mutant(event.row_key.value, path=path)
+                        if event.row_key.value == self.loading_id:
+                            diff_view.update(Syntax(d, "diff"))
+                    except Exception as e:
+                        diff_view.update(f"<{type(e)} {e}>")
+
+                t = Thread(target=load_thread)
+                t.start()
 
         def retest(self, pattern):
             with self.suspend():
