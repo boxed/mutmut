@@ -1,4 +1,4 @@
-libcst ~= 1.7.0 
+libcst ~= 1.8.5
 click
 setproctitle
 textual
