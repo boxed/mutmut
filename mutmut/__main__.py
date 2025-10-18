@@ -432,7 +432,7 @@ class PytestRunner(TestRunner):
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs):
         import pytest
-        params = ['--rootdir=.'] + params + self._pytest_add_cli_args
+        params = ['--rootdir=.', '--tb=native'] + params + self._pytest_add_cli_args
         if mutmut.config.debug:
             params = ['-vv'] + params
             print('python -m pytest ', ' '.join([f'"{param}"' for param in params]))
