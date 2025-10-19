@@ -1421,7 +1421,7 @@ def browse(show_killed):
             else:
                 assert event.data_table.id == 'mutants'
                 # noinspection PyTypeChecker
-                description: Static = self.query_one('#description')
+                description_view: Static = self.query_one('#description')
                 mutant_name = event.row_key.value
                 self.loading_id = mutant_name
                 path = self.path_by_name.get(mutant_name)
@@ -1432,10 +1432,28 @@ def browse(show_killed):
                 estimated_duration = source_file_mutation_data.estimated_time_of_tests_by_mutant.get(mutant_name, '?')
                 duration = source_file_mutation_data.durations_by_key.get(mutant_name, '?')
 
-                if status == 'timeout':
-                    description.update(f'Timed out because tests did not finish within {duration:.3f} seconds. Tests without mutation took {estimated_duration:.3f} seconds.\n')
-                else:
-                    description.update('')
+                match status:
+                    case 'killed':
+                        description = f'Killed ({exit_code=}): Mutant got detected by a test.'
+                    case 'survived':
+                        description = f'Survived ({exit_code=}): No test detected this mutant.'
+                    case 'skipped':
+                        description = f'Skipped ({exit_code=})'
+                    case 'check was interrupted by user':
+                        description = f'User interrupt ({exit_code=})'
+                    case 'timeout':
+                        description = f'Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. Tests without mutation took {estimated_duration:.3f} seconds.'
+                    case 'no tests':
+                        description = f'Untested ({exit_code=}): Skipped because selected tests do not execute this code.'
+                    case 'segfault':
+                        description = f'Segfault ({exit_code=}): Running pytest with this mutant segfaulted.'
+                    case 'suspicious':
+                        description = f'Unknown ({exit_code=}): Unknown pytest exit code'
+                    case 'not checked':
+                        description = 'Not checked in the last mutmut run.'
+                    case _:
+                        description = f'Unknown status ({exit_code=}, {status=})'
+                description_view.update(f'\n {description}\n')
 
                 diff_view: Static = self.query_one('#diff_view')
                 diff_view.update('<loading code diff...>')
