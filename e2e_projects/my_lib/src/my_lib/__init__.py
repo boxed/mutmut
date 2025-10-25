@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from functools import cache
 from typing import Union
+import ctypes
 
 
 def hello() -> str:
@@ -89,3 +90,8 @@ class Point:
 def escape_sequences():
     return "foo" \
            "FOO\\\'\"\a\b\f\n\r\t\v\111\x10\N{ghost}\u1234\U0001F51F"
+
+def create_a_segfault_when_mutated():
+    # when we mutate False->True, then this will segfault
+    if False:
+        ctypes.string_at(0)

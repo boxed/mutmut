@@ -1,4 +1,4 @@
-from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences, simple_consumer, async_consumer
+from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences, simple_consumer, async_consumer, create_a_segfault_when_mutated
 import pytest
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
@@ -45,3 +45,5 @@ async def test_async_consumer():
     result = await async_consumer()
     assert result == list(range(10))
 
+def test_handles_segfaults():
+    create_a_segfault_when_mutated()
