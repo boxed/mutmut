@@ -6,18 +6,20 @@ Setup
 
 First fork the repository and clone your fork.
 
-Install the dependencies:
+We use [uv](https://docs.astral.sh/uv/) to manage dependencies.
+All `uv` commands will implicitly install the required dependencies,
+however you can also explicitly install them with `uv sync`:
 
 .. code-block:: console
 
-    pip install -r requirements.txt -r test_requirements.txt
+    uv sync
 
 Running the tests
 -----------------
 
 .. code-block:: console
 
-    pytest
+    uv run pytest
 
 This also runs E2E tests that verify that `mutmut run` produces the same output as before. If your code changes should change the output of `mutmut run` and this test fails, try to delete the `snapshots/*.json` files (as described in the test errors).
 

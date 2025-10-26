@@ -802,7 +802,7 @@ def load_config():
 
 
 @click.group()
-@click.version_option(mutmut.__version__)
+@click.version_option()
 def cli():
     pass
 

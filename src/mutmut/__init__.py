@@ -1,6 +1,7 @@
+import importlib.metadata
 from collections import defaultdict
 
-__version__ = '3.3.1'
+__version__ = importlib.metadata.version("mutmut")
 
 
 duration_by_test = defaultdict(float)
