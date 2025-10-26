@@ -1,5 +1,0 @@
-pytest
-pytest-asyncio>=1.0.0
-mock>=2.0.0
-coverage
-whatthepatch==0.0.6
