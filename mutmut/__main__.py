@@ -689,6 +689,7 @@ class CatchOutput:
 
     def dump_output(self):
         self.stop()
+        print()
         for line in self.strings:
             print(line, end='')
 
@@ -819,6 +820,18 @@ def run_stats_collection(runner, tests=None):
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
             print(f'failed to collect stats. runner returned {collect_stats_exit_code}')
+            exit(1)
+        # ensure that at least one mutant has associated tests
+        num_associated_tests = sum(len(tests) for tests in mutmut.tests_by_mangled_function_name.values())
+        if num_associated_tests == 0:
+            output_catcher.dump_output()
+            print('Stopping early, because we could not find any test case for any mutant. It seems that the selected tests do not cover any code that we mutated.')
+            if not mutmut.config.debug:
+                print('You can set debug=true to see the executed test names in the output above.')
+            else:
+                print('In the last pytest run above, you can see which tests we executed.')
+            print('You can use mutmut browse to check which parts of the source code we mutated.')
+            print('If some of the mutated code should be covered by the executed tests, consider opening an issue (with a MRE if possible).')
             exit(1)
 
     print('    done')
