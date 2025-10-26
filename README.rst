@@ -206,7 +206,7 @@ You can add and override pytest arguments:
 .. code-block:: python
 
     # for CLI args that select or deselect tests, use `pytest_add_cli_args_test_selection`
-    pytest_add_cli_args_test_selection = ["-m", "not fail", "-k=test_include"]
+    pytest_add_cli_args_test_selection = ["-m", "not fail", "-k", "test_include"]
 
     # for other CLI args, use `pytest_add_cli_args`
     pytest_add_cli_args = ["-p", "no:some_plugin"] # disable a plugin
