@@ -1,0 +1,62 @@
+[project]
+name = "mutmut"
+version = "3.3.1"
+description = "mutation testing for Python 3"
+keyowrds = ["mutmut", "mutant", "mutation", "test", "testing"]
+authors = [
+    { name = "Anders Hovmöller", email = "boxed@killingar.net" },
+]
+requires-python = ">=3.10"
+readme = "README.rst"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+dependencies = [
+    "click>=8.0.0",
+    "coverage>=7.3.0",
+    "libcst>=1.8.5",
+    "pytest>=6.2.5",
+    "setproctitle>=1.1.0",
+    "textual>=1.0.0",
+    "toml>=0.10.2 ; python_full_version < '3.11'",
+]
+
+[project.urls]
+Homepage = "https://github.com/boxed/mutmut"
+Documentation = "https://mutmut.readthedocs.io/en/latest/"
+Repository = "https://github.com/boxed/mutmut"
+Issues = "https://github.com/boxed/mutmut/issues"
+Changelog = "https://github.com/boxed/mutmut/blob/main/HISTORY.rst"
+
+
+[project.scripts]
+mutmut = "mutmut.__main__:cli"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+source-include = ["HISTORY.rst"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
