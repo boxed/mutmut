@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import platform
 from abc import ABC
 from collections import defaultdict
 from configparser import (
@@ -55,7 +56,11 @@ import click
 import libcst as cst
 import libcst.matchers as m
 from rich.text import Text
-from setproctitle import setproctitle
+
+# do not import on macOS before forking, because this causes a segfault on newer versions (see #446)
+# on other platforms, import before forking for a small performance gain (import takes some miliseconds; re-import later on is instant)
+if platform.system() != 'Darwin':
+    from setproctitle import setproctitle
 
 import mutmut
 from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
@@ -1101,6 +1106,8 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
             if not pid:
                 # In the child
                 os.environ['MUTANT_UNDER_TEST'] = mutant_name
+                # import for macOS (on other platforms, this re-import does nothing)
+                from setproctitle import setproctitle
                 setproctitle(f'mutmut: {mutant_name}')
 
                 # Run fast tests first
