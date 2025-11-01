@@ -1323,6 +1323,7 @@ def browse(show_killed):
             ("f", "retest_function()", "Retest function"),
             ("m", "retest_module()", "Retest module"),
             ("a", "apply_mutant()", "Apply mutant to disk"),
+            ("t", "view_tests()", "View tests for mutant"),
         ]
 
         columns = [
@@ -1419,23 +1420,26 @@ def browse(show_killed):
                 estimated_duration = source_file_mutation_data.estimated_time_of_tests_by_mutant.get(mutant_name, '?')
                 duration = source_file_mutation_data.durations_by_key.get(mutant_name, '?')
 
+                view_tests_description = f'(press t to view tests executed for this mutant)'
+
                 match status:
                     case 'killed':
-                        description = f'Killed ({exit_code=}): Mutant got detected by a test.'
+                        description = f'Killed ({exit_code=}): Mutant caused a test to fail 🎉'
                     case 'survived':
-                        description = f'Survived ({exit_code=}): No test detected this mutant.'
+                        description = f'Survived ({exit_code=}): No test detected this mutant. {view_tests_description}'
                     case 'skipped':
                         description = f'Skipped ({exit_code=})'
                     case 'check was interrupted by user':
-                        description = f'User interrupt ({exit_code=})'
+                        description = f'User interrupted ({exit_code=})'
                     case 'timeout':
-                        description = f'Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. Tests without mutation took {estimated_duration:.3f} seconds.'
+                        description = (f'Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. '
+                                            f'Tests without mutation took {estimated_duration:.3f} seconds. {view_tests_description}')
                     case 'no tests':
                         description = f'Untested ({exit_code=}): Skipped because selected tests do not execute this code.'
                     case 'segfault':
                         description = f'Segfault ({exit_code=}): Running pytest with this mutant segfaulted.'
                     case 'suspicious':
-                        description = f'Unknown ({exit_code=}): Unknown pytest exit code'
+                        description = f'Unknown ({exit_code=}): Running pytest with this mutant resulted in an unknown exit code.'
                     case 'not checked':
                         description = 'Not checked in the last mutmut run.'
                     case _:
@@ -1458,10 +1462,18 @@ def browse(show_killed):
                 t.start()
 
         def retest(self, pattern):
+            self._run_subprocess_command('run', [pattern])
+
+        def view_tests(self, mutant_name: str):
+            self._run_subprocess_command('tests-for-mutant', [mutant_name])
+
+        def _run_subprocess_command(self, command: str, args: list[str]):
             with self.suspend():
                 browse_index = sys.argv.index('browse')
                 initial_args = sys.argv[:browse_index]
-                subprocess.run([sys.executable, *initial_args, 'run', pattern])
+                subprocess_args = [sys.executable, *initial_args, command, *args]
+                print('>', *subprocess_args)
+                subprocess.run(subprocess_args)
                 input('press enter to return to browser')
 
             self.read_data()
@@ -1491,6 +1503,9 @@ def browse(show_killed):
             if mutants_table.cursor_row is None:
                 return
             apply_mutant(mutants_table.get_row_at(mutants_table.cursor_row)[0])
+
+        def action_view_tests(self):
+            self.view_tests(self.get_mutant_name_from_selection())
 
     ResultBrowser().run()
 
