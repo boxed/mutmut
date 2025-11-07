@@ -154,6 +154,13 @@ def mutated_module(source: str) -> str:
         ('"FoO"', ['"XXFoOXX"', '"foo"', '"FOO"']),
         ("'FoO'", ["'XXFoOXX'", "'foo'", "'FOO'"]),
         ("u'FoO'", ["u'XXFoOXX'", "u'foo'", "u'FOO'"]),
+        # f-strings - mutate the first non-empty text part
+        ('f"Hello {name}"', ['f"XXHello XX{name}"', 'f"hello {name}"', 'f"HELLO {name}"']),
+        ('f"Hello {x} World"', ['f"XXHello XX{x} World"', 'f"hello {x} World"', 'f"HELLO {x} World"']),
+        ('f"{x} World"', ['f"{x}XX WorldXX"', 'f"{x} world"', 'f"{x} WORLD"']),
+        ('f"{x}{y}"', []),  # no text parts to mutate
+        # concatenated strings - currently mutates all parts
+        ('"Hello " "World"', ['"XXHello XX" "World"', '"hello " "World"', '"HELLO " "World"', '"Hello " "XXWorldXX"', '"Hello " "world"', '"Hello " "WORLD"']),
         ("10", "11"),
         ("10.", "11.0"),
         ("0o10", "9"),

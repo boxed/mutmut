@@ -57,6 +57,40 @@ def operator_string(
                 continue
             yield node.with_changes(value=new_value)
 
+    elif isinstance(node, cst.FormattedString):
+        # Mutate the first non-empty FormattedStringText part in f-strings
+        for i, part in enumerate(node.parts):
+            if isinstance(part, cst.FormattedStringText) and part.value.strip():
+                old_value = part.value
+
+                supported_str_mutations: list[Callable[[str], str]] = [
+                    lambda x: "XX" + x + "XX",
+                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
+                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
+                ]
+
+                for mut_func in supported_str_mutations:
+                    new_value = mut_func(old_value)
+                    if new_value == old_value:
+                        continue
+
+                    # Create a new part with the mutated value
+                    mutated_part = part.with_changes(value=new_value)
+                    # Replace the part in the parts list
+                    new_parts = [*node.parts[:i], mutated_part, *node.parts[i+1:]]
+                    yield node.with_changes(parts=new_parts)
+
+                # Only mutate the first non-empty text part
+                break
+
+    elif isinstance(node, cst.ConcatenatedString):
+        # ConcatenatedString nodes themselves don't need mutation; their SimpleString/FormattedString
+        # children will be mutated directly by the mutation framework when it visits them.
+        # Note: Currently, all parts of a concatenated string are mutated. Ideally, we would only
+        # mutate the first non-empty part to reduce mutant count, but that would require changes
+        # to the visitor pattern in file_mutation.py to skip certain children.
+        return
+
 
 def operator_lambda(
     node: cst.Lambda
