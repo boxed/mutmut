@@ -1,6 +1,36 @@
 Changelog
 ---------
 
+3.4.0
+~~~~~
+
+* Add action to view tests for mutant
+
+* Add basic description for all results in mutmut browse
+
+* Add description for timeout mutants
+
+* Early exit when stats find no tests for any mutant
+
+* Support python 3.14
+
+* Performance improvements
+
+* Fix `mutate_only_covered_lines` when files are excluded from test run
+
+* Add `pytest_add_cli_args` and `pytest_add_cli_args_test_selection` configs
+
+* `mutate_only_covered_lines` added to config to control whether coverage.py is used to filter down mutations
+
+* Filter out identical string mutants with different values
+
+* Handle more exit codes
+
+* Disable common order-randomising pytest plugins, as that can seriously deteriorate mutation testing performance
+
+* Fixed packaging issue
+
+
 3.3.1
 ~~~~~
 
