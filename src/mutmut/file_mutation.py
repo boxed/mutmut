@@ -248,7 +248,7 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
         nodes.append(mutated_method) # type: ignore
 
     # trampoline that forwards the calls
-    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
+    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name, asynchronous=function.asynchronous)).body)
     trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
     nodes.extend(trampoline)
 
