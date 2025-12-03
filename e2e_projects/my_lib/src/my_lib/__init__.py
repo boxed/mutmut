@@ -2,6 +2,7 @@ from collections.abc import Callable
 from functools import cache
 from typing import Union
 import ctypes
+import asyncio
 
 
 def hello() -> str:
@@ -35,6 +36,7 @@ async def async_consumer():
 
 async def async_generator():
     for i in range(10):
+        await asyncio.sleep(0.001) # pragma: no mutate
         yield i
 
 def simple_consumer():
