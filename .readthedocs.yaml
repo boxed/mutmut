@@ -4,10 +4,11 @@ version: 2
 sphinx:
   configuration: docs/conf.py
 
-# Optionally set the version of Python and requirements required to build your docs
+# Install the package itself to build docs
 python:
   install:
-    - requirements: requirements.txt
+    - method: pip
+      path: .
 
 
 build:
