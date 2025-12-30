@@ -80,16 +80,20 @@
 
 # ==================================== lint ====================================
 [tool.ruff]
-  extend = "./ruff.default.toml"
+  extend         = "./ruff.default.toml"
+  extend-exclude = ["tests/data/test_generation/*.py"]
 
   [tool.ruff.lint]
     ignore = [
-      # "TD002",  # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
-      # "TD003",  # Missing issue link for this TODO
-      # "FIX002", # Line contains TODO, consider resolving the issue
+      "TD002",  # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
+      "TD003",  # Missing issue link for this TODO
+      "FIX002", # Line contains TODO, consider resolving the issue
       # "N802",   # Function name should be lowercase
       # "ARG002", # Unused method argument
+      "DOC",  # Documentation
+      "N818", # Exception name should be named with an Error suffix
     ]
+    extend-per-file-ignores = { "tests/data/test_generation/*.py" = ["E226", "E302", "E999", "INP001", "W292"] }
 
 # ==================================== typecheck ====================================
 [tool.ty.src]

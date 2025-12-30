@@ -1,38 +1,49 @@
-CLASS_NAME_SEPARATOR = 'ǁ'
+CLASS_NAME_SEPARATOR = "ǁ"
+
 
 def build_trampoline(*, orig_name, mutants, class_name):
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
-    access_prefix = ''
-    access_suffix = ''
-    self_arg = ''
+    mutants_dict = (
+        f"{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n"
+        + ", \n    ".join(f"{m!r}: {m}" for m in mutants)
+        + "\n}"
+    )
+    access_prefix = ""
+    access_suffix = ""
+    self_arg = ""
     if class_name is not None:
-        access_prefix = f'object.__getattribute__(self, "'
+        access_prefix = 'object.__getattribute__(self, "'
         access_suffix = '")'
-        self_arg = ', self'
+        self_arg = ", self"
 
-    trampoline_name = '_mutmut_trampoline'
+    trampoline_name = "_mutmut_trampoline"
 
     return f"""
 {mutants_dict}
 
-def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
+def {orig_name}({"self, " if class_name is not None else ""}*args, **kwargs):
     result = {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
-    return result 
+    return result
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
 """
 
+
 def mangle_function_name(*, name, class_name):
-    assert CLASS_NAME_SEPARATOR not in name
+    if CLASS_NAME_SEPARATOR in name:
+        msg = f"Function name {name!r} cannot contain the class-name separator."
+        raise ValueError(msg)
     if class_name:
-        assert CLASS_NAME_SEPARATOR not in class_name
-        prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
+        if CLASS_NAME_SEPARATOR in class_name:
+            msg = f"Class name {class_name!r} cannot contain the class-name separator."
+            raise ValueError(msg)
+        prefix = f"x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
     else:
-        prefix = 'x_'
-    return f'{prefix}{name}'
+        prefix = "x_"
+    return f"{prefix}{name}"
+
 
 # noinspection PyUnresolvedReferences
 # language=python
@@ -52,7 +63,7 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
         from mutmut.__main__ import MutmutProgrammaticFailException
-        raise MutmutProgrammaticFailException('Failed programmatically')      
+        raise MutmutProgrammaticFailException('Failed programmatically')
     elif mutant_under_test == 'stats':
         from mutmut.__main__ import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)

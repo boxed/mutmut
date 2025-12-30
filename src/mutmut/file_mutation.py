@@ -1,39 +1,41 @@
-"""This module contains code for managing mutant creation for whole files."""
+"""Manage mutant creation for whole files."""
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Union
-import warnings
-import libcst as cst
-from libcst.metadata import PositionProvider, MetadataWrapper
-import libcst.matchers as m
-from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
-from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
+from typing import cast
 
-NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
-NEVER_MUTATE_FUNCTION_CALLS = { "len", "isinstance" }
+import libcst as cst
+import libcst.matchers as m
+from libcst.metadata import MetadataWrapper, PositionProvider
+
+from mutmut.node_mutation import OPERATORS_TYPE, mutation_operators
+from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
+
+NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
+NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
+
 
 @dataclass
 class Mutation:
     original_node: cst.CSTNode
     mutated_node: cst.CSTNode
-    contained_by_top_level_function: Union[cst.FunctionDef, None]
+    contained_by_top_level_function: cst.FunctionDef | None
 
 
-def mutate_file_contents(filename: str, code: str, covered_lines: Union[set[int], None] = None) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(
+    _filename: str, code: str, covered_lines: set[int] | None = None
+) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
-    :return: A tuple of (mutated code, list of mutant function names)"""
+    :return: A tuple of (mutated code, list of mutant function names)
+    """
     module, mutations = create_mutations(code, covered_lines)
 
     return combine_mutations_to_source(module, mutations)
 
-def create_mutations(
-    code: str,
-    covered_lines: Union[set[int], None] = None
-) -> tuple[cst.Module, list[Mutation]]:
+
+def create_mutations(code: str, covered_lines: set[int] | None = None) -> tuple[cst.Module, list[Mutation]]:
     """Parse the code and create mutations."""
     ignored_lines = pragma_no_mutate_lines(code)
 
@@ -45,6 +47,7 @@ def create_mutations(
 
     return module, visitor.mutations
 
+
 class OuterFunctionProvider(cst.BatchableMetadataProvider):
     """Link all nodes to the top-level function or method that contains them.
 
@@ -55,13 +58,14 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider):
         def bar():
             x = 1
     ```
-    
+
     Then `self.get_metadata(OuterFunctionProvider, <x>)` returns `<foo>`.
     """
+
     def __init__(self):
         super().__init__()
 
-    def visit_Module(self, node: cst.Module):
+    def visit_Module(self, node: cst.Module) -> bool:  # noqa: N802
         for child in node.body:
             if isinstance(child, cst.FunctionDef):
                 # mark all nodes inside the function to belong to this function
@@ -77,25 +81,30 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider):
 
 class OuterFunctionVisitor(cst.CSTVisitor):
     """Mark all nodes as children of `top_level_node`."""
+
     def __init__(self, provider: "OuterFunctionProvider", top_level_node: cst.CSTNode) -> None:
         self.provider = provider
         self.top_level_node = top_level_node
         super().__init__()
 
-    def on_visit(self, node: cst.CSTNode):
+    def on_visit(self, node: cst.CSTNode) -> bool:
         self.provider.set_metadata(node, self.top_level_node)
         return True
 
 
 class MutationVisitor(cst.CSTVisitor):
     """Iterate through all nodes in the module and create mutations for them.
+
     Ignore nodes at lines `ignore_lines` and several other cases (e.g. nodes within type annotations).
-    
-    The created mutations will be accessible at `self.mutations`."""
+
+    The created mutations will be accessible at `self.mutations`.
+    """
 
     METADATA_DEPENDENCIES = (PositionProvider, OuterFunctionProvider)
 
-    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: Union[set[int], None] = None):
+    def __init__(
+        self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: set[int] | None = None
+    ):
         self.mutations: list[Mutation] = []
         self._operators = operators
         self._ignored_lines = ignore_lines
@@ -111,79 +120,89 @@ class MutationVisitor(cst.CSTVisitor):
         # continue to mutate children
         return True
 
-    def _create_mutations(self, node: cst.CSTNode):
+    def _create_mutations(self, node: cst.CSTNode) -> None:
         for t, operator in self._operators:
             if isinstance(node, t):
                 for mutated_node in operator(node):
                     mutation = Mutation(
                         original_node=node,
                         mutated_node=mutated_node,
-                        contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None), # type: ignore
+                        contained_by_top_level_function=cast(
+                            "cst.FunctionDef | None", self.get_metadata(OuterFunctionProvider, node, None)
+                        ),
                     )
                     self.mutations.append(mutation)
 
-    def _should_mutate_node(self, node: cst.CSTNode):
+    def _should_mutate_node(self, node: cst.CSTNode) -> bool:
         # currently, the position metadata does not always exist
         # (see https://github.com/Instagram/LibCST/issues/1322)
-        position = self.get_metadata(PositionProvider,node, None)
+        position = self.get_metadata(PositionProvider, node, None)
         if position:
             # do not mutate nodes with a pragma: no mutate comment
             if position.start.line in self._ignored_lines:
                 return False
 
             # do not mutate nodes that are not covered
-            if self._covered_lines is not None and not position.start.line in self._covered_lines:
+            if self._covered_lines is not None and position.start.line not in self._covered_lines:
                 return False
 
         return True
 
-    def _skip_node_and_children(self, node: cst.CSTNode):
-        if (isinstance(node, cst.Call) and isinstance(node.func, cst.Name) and node.func.value in NEVER_MUTATE_FUNCTION_CALLS) \
-            or (isinstance(node, cst.FunctionDef) and node.name.value in NEVER_MUTATE_FUNCTION_NAMES):
+    @staticmethod
+    def _skip_node_and_children(node: cst.CSTNode) -> bool:
+        if (
+            isinstance(node, cst.Call)
+            and isinstance(node.func, cst.Name)
+            and node.func.value in NEVER_MUTATE_FUNCTION_CALLS
+        ) or (isinstance(node, cst.FunctionDef) and node.name.value in NEVER_MUTATE_FUNCTION_NAMES):
             return True
 
         # ignore everything inside of type annotations
         if isinstance(node, cst.Annotation):
             return True
 
-        # default args are executed at definition time 
+        # default args are executed at definition time
         # We want to prevent e.g. def foo(x = abs(-1)) mutating to def foo(x = abs(None)),
         # which would raise an Exception as soon as the function is defined (can break the whole import)
         # Therefore we only allow simple default values, where mutations should not raise exceptions
-        if isinstance(node, cst.Param) and node.default and not isinstance(node.default, (cst.Name, cst.BaseNumber, cst.BaseString)):
+        if (
+            isinstance(node, cst.Param)
+            and node.default
+            and not isinstance(node.default, (cst.Name, cst.BaseNumber, cst.BaseString))
+        ):
             return True
 
         # ignore decorated functions, because
         # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
         # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
-        if isinstance(node, (cst.FunctionDef, cst.ClassDef)) and len(node.decorators):
-            return True
-
-        return False
+        return bool(isinstance(node, (cst.FunctionDef, cst.ClassDef)) and len(node.decorators))
 
 
-
-MODULE_STATEMENT = Union[cst.SimpleStatementLine, cst.BaseCompoundStatement]
+MODULE_STATEMENT = cst.SimpleStatementLine | cst.BaseCompoundStatement
 
 # convert str trampoline implementations to CST nodes with some whitespace
 trampoline_impl_cst = list(cst.parse_module(trampoline_impl).body)
-trampoline_impl_cst[-1] = trampoline_impl_cst[-1].with_changes(leading_lines = [cst.EmptyLine(), cst.EmptyLine()])
+trampoline_impl_cst[-1] = trampoline_impl_cst[-1].with_changes(
+    leading_lines=[cst.EmptyLine(), cst.EmptyLine()]
+)
 
 
-def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation]) -> tuple[str, Sequence[str]]:
+def combine_mutations_to_source(
+    module: cst.Module, mutations: Sequence[Mutation]
+) -> tuple[str, Sequence[str]]:
     """Create mutated functions and trampolines for all mutations and compile them to a single source code.
-    
+
     :param module: The original parsed module
     :param mutations: Mutations that should be applied.
-    :return: Mutated code and list of mutation names"""
-
+    :return: Mutated code and list of mutation names
+    """
     # copy start of the module (in particular __future__ imports)
     result: list[MODULE_STATEMENT] = get_statements_until_func_or_class(module.body)
     mutation_names: list[str] = []
 
     # statements we still need to potentially mutate and add to the result
-    remaining_statements = module.body[len(result):]
+    remaining_statements = module.body[len(result) :]
 
     # trampoline functions
     result.extend(trampoline_impl_cst)
@@ -215,7 +234,9 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
                     if not isinstance(method, cst.FunctionDef) or not method_mutants:
                         mutated_body.append(method)
                         continue
-                    nodes, mutant_names = function_trampoline_arrangement(method, method_mutants, class_name=cls.name.value)
+                    nodes, mutant_names = function_trampoline_arrangement(
+                        method, method_mutants, class_name=cls.name.value
+                    )
                     mutated_body.extend(nodes)
                     mutation_names.extend(mutant_names)
 
@@ -226,29 +247,35 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
     mutated_module = module.with_changes(body=result)
     return mutated_module.code, mutation_names
 
-def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable[Mutation], class_name: Union[str, None]) -> tuple[Sequence[MODULE_STATEMENT], Sequence[str]]:
+
+def function_trampoline_arrangement(
+    function: cst.FunctionDef, mutants: Iterable[Mutation], class_name: str | None
+) -> tuple[Sequence[MODULE_STATEMENT], Sequence[str]]:
     """Create mutated functions and a trampoline that switches between original and mutated versions.
-    
-    :return: A tuple of (nodes, mutant names)"""
+
+    :return: A tuple of (nodes, mutant names)
+    """
     nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
 
     name = function.name.value
-    mangled_name = mangle_function_name(name=name, class_name=class_name) + '__mutmut'
+    mangled_name = mangle_function_name(name=name, class_name=class_name) + "__mutmut"
 
     # copy of original function
-    nodes.append(function.with_changes(name=cst.Name(mangled_name + '_orig')))
+    nodes.append(function.with_changes(name=cst.Name(mangled_name + "_orig")))
 
     # mutated versions of the function
     for i, mutant in enumerate(mutants):
-        mutant_name = f'{mangled_name}_{i+1}'
+        mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
         mutated_method = function.with_changes(name=cst.Name(mutant_name))
         mutated_method = deep_replace(mutated_method, mutant.original_node, mutant.mutated_node)
-        nodes.append(mutated_method) # type: ignore
+        nodes.append(cast("MODULE_STATEMENT", mutated_method))
 
     # trampoline that forwards the calls
-    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
+    trampoline = list(
+        cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name)).body
+    )
     trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
     nodes.extend(trampoline)
 
@@ -256,7 +283,7 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
 
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
-    """Get all statements until we encounter the first function or class definition"""
+    """Get all statements until we encounter the first function or class definition."""
     result = []
 
     for stmt in statements:
@@ -266,24 +293,28 @@ def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -
 
     return result
 
+
 def group_by_top_level_node(mutations: Sequence[Mutation]) -> Mapping[cst.CSTNode, Sequence[Mutation]]:
     grouped: dict[cst.CSTNode, list[Mutation]] = defaultdict(list)
-    for m in mutations:
-        if m.contained_by_top_level_function:
-            grouped[m.contained_by_top_level_function].append(m)
+    for mutation in mutations:
+        if mutation.contained_by_top_level_function:
+            grouped[mutation.contained_by_top_level_function].append(mutation)
 
     return grouped
+
 
 def pragma_no_mutate_lines(source: str) -> set[int]:
     return {
         i + 1
-        for i, line in enumerate(source.split('\n'))
-        if '# pragma:' in line and 'no mutate' in line.partition('# pragma:')[-1]
+        for i, line in enumerate(source.split("\n"))
+        if "# pragma:" in line and "no mutate" in line.partition("# pragma:")[-1]
     }
+
 
 def deep_replace(tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode) -> cst.CSTNode:
     """Like the CSTNode.deep_replace method, except that we only replace up to one occurrence of old_node."""
-    return tree.visit(ChildReplacementTransformer(old_node, new_node)) # type: ignore
+    return cast("cst.CSTNode", tree.visit(ChildReplacementTransformer(old_node, new_node)))
+
 
 class ChildReplacementTransformer(cst.CSTTransformer):
     def __init__(self, old_node: cst.CSTNode, new_node: cst.CSTNode):

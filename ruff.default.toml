@@ -1,0 +1,199 @@
+include = [
+  "pyproject.toml",
+  "src/**/*.py",
+  # "scripts/**/*.py",
+  "tests/**/*.py",
+]
+
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+]
+
+target-version    = "py312"
+line-length       = 110
+indent-width      = 4
+output-format     = "concise"
+show-fixes        = true
+unsafe-fixes      = true
+fix               = true
+force-exclude     = true
+respect-gitignore = true
+
+[lint]
+  preview = true
+
+  select = [
+    "A",     # flake8-builtins
+    "AIR",   # Airflow
+    "ANN",   # flake8-annotations
+    "ARG",   # flake8-unused-arguments
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    "BLE",   # flake8-blind-except
+    "COM",   # flake8-commas
+    "CPY",   # flake8-copyright
+    "D",     # pydocstyle
+    "DJ",    # flake8-django
+    "DOC",   # pydoclint
+    "DTZ",   # flake8-datetimez
+    "E",     # Error
+    "E",     # pycodestyle Error
+    "EM",    # flake8-errmsg
+    "ERA",   # eradicate
+    "EXE",   # flake8-executable
+    "F",     # Pyflakes
+    "FA",    # flake8-future-annotations
+    "FAST",  # FastAPI
+    "FBT",   # flake8-boolean-trap
+    "FIX",   # flake8-fixme
+    "FLY",   # flynt
+    "FURB",  # refurb
+    "G",     # flake8-logging-format
+    "I",     # isort
+    "ICN",   # flake8-import-conventions
+    "INP",   # flake8-no-pep420
+    "INT",   # flake8-gettext
+    "ISC",   # flake8-implicit-str-concat
+    "LOG",   # flake8-logging
+    "N",     # pep8-naming
+    "NPY",   # NumPy-specific rules
+    "PD",    # pandas-vet
+    "PERF",  # Perflint
+    "PGH",   # pygrep-hooks
+    "PIE",   # flake8-pie
+    "PL",    # Pylint
+    "PLC",   # Convention
+    "PLE",   # Error
+    "PLR",   # Refactor
+    "PLW",   # Warning
+    "PT",    # flake8-pytest-style
+    "PTH",   # flake8-use-pathlib
+    "PYI",   # flake8-pyi
+    "Q",     # flake8-quotes
+    "RET",   # flake8-return
+    "RSE",   # flake8-raise
+    "RUF",   # Ruff-specific rules
+    "S",     # flake8-bandit
+    "SIM",   # flake8-simplify
+    "SLF",   # flake8-self
+    "SLOT",  # flake8-slots
+    "TC",    # flake8-type-checking
+    "TD",    # flake8-todos
+    "TID",   # flake8-tidy-imports
+    "TRY",   # tryceratops
+    "UP",    # pyupgrade
+    "W",     # pycodestyle Warning
+    "W",     # Warning
+    "YTT",   # flake8-2020
+  ]
+
+  # for development
+  # ignore when linting
+  ignore = [
+    "ERA001", # Found commented-out code
+    "CPY001", # Missing copyright notice at top of file
+
+    "D100", # Missing docstring in public module
+    "D101", # Missing docstring in public class
+    "D102", # Missing docstring in public method
+    "D103", # Missing docstring in public function
+    "D104", # Missing docstring in public package
+
+    "T201", # `print` found
+
+    "PLR0913", # Too many arguments in function definition
+    "PLR0917", # Too many positional arguments
+
+    # "ANN101", # Missing type annotation for `self` in method
+    # "ANN002", # Missing type annotation for *args
+    # "ANN003", # Missing type annotation for **kwargs
+
+    # conflict with formatting
+    "COM812", # missing trailing comma
+    "ISC001", # implicitly concatenated string literals on one line
+  ]
+
+  [lint.per-file-ignores]
+    "tests/**/*.py" = [
+      "ANN202",  # Missing return type annotation for private function
+      "ARG001",  # Unused function argument
+      "ARG002",  # Unused method argument
+      "ARG005",  # Unused lambda argument
+      "D105",    # Missing docstring in magic method
+      "FBT003",  # Boolean default value in function definition
+      "N803",    # Argument name should be lowercase
+      "N806",    # Variable in function should be lowercase
+      "PLC2701", # Private name import from external module
+      "PLR2004", # Magic value used in comparison
+      "PLR6301", # Method could be a function
+      "S101",    # Use of `assert` detected
+      "S404",    # `subprocess` module is possibly insecure
+      "S603",    # `subprocess` call: check for execution of untrusted
+      "SLF001",  # Private member accessed
+      "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed in `renderable`
+    ]
+
+    # disable autofix when linting
+    unfixable = [
+      "F401", # delete unused imports
+      "F841", # remove assignment to unused variable
+    ]
+
+
+    # # for release
+    # # ignore when linting
+    # ignore = [
+    #     # "CPY001", # Missing copyright notice at top of file
+    #
+    #     "PLR0913", # Too many arguments in function definition
+    #     "PLR0917", # Too many positional arguments
+    #
+    #     # conflict with formatting
+    #     "COM812", # missing trailing comma
+    #     "ISC001", # implicitly concatenated string literals on one line
+    # ]
+    #
+    # # disable autofix when linting
+    # unfixable = []
+
+  [lint.pydocstyle]
+    convention = "numpy"
+
+  [lint.flake8-annotations]
+    ignore-fully-untyped = true
+    allow-star-arg-any   = true
+    mypy-init-return     = true
+
+[format]
+  docstring-code-format      = true      # format code in docstrings
+  docstring-code-line-length = "dynamic"
+  indent-style               = "space"
+  line-ending                = "auto"
+  preview                    = true
+  quote-style                = "double"
+  skip-magic-trailing-comma  = false

@@ -20,13 +20,14 @@ def change_cwd(path):
 
 
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
-    """Create a single dict from all mutant results in *.meta files"""
+    """Create a single dict from all mutant results in *.meta files."""
     with change_cwd(project_path):
         ensure_config_loaded()
 
         stats = {}
+        config = mutmut.config
         for p in walk_source_files():
-            if mutmut.config.should_ignore_for_mutation(p):  # type: ignore
+            if config is not None and config.should_ignore_for_mutation(p):
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
@@ -35,18 +36,18 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
         return stats
 
 
-def read_json_file(path: Path):
-    with open(path, 'r') as file:
+def read_json_file(path: Path) -> Any:
+    with Path(path).open("r", encoding="utf-8") as file:
         return json.load(file)
 
 
-def write_json_file(path: Path, data: Any):
-    with open(path, 'w') as file:
+def write_json_file(path: Path, data: Any) -> None:
+    with Path(path).open("w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
 
 
-def asserts_results_did_not_change(project: str):
-    """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
+def asserts_results_did_not_change(project: str) -> None:
+    """Run mutmut on this project and verify that the results stay the same for all mutations."""
     project_path = Path("..").parent / "e2e_projects" / project
 
     mutants_path = project_path / "mutants"
@@ -64,7 +65,10 @@ def asserts_results_did_not_change(project: str):
         # compare results against previous snapshot
         previous_snapshot = read_json_file(snapshot_path)
 
-        err_msg = f'Mutmut results changed for the E2E project \'{project}\'. If this change was on purpose, delete {snapshot_path} and rerun the tests.'
+        err_msg = (
+            f"Mutmut results changed for the E2E project '{project}'. "
+            f"If this change was on purpose, delete {snapshot_path} and rerun the tests."
+        )
         assert results == previous_snapshot, err_msg
     else:
         # create the first snapshot
