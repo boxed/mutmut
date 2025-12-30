@@ -2,7 +2,7 @@
   name = "mutmut"
   version = "3.4.0"
   description = "mutation testing for Python 3"
-  keyowrds = ["mutmut", "mutant", "mutation", "test", "testing"]
+  keywords = ["mutmut", "mutant", "mutation", "test", "testing"]
   authors = [
     { name = "Anders Hovmöller", email = "boxed@killingar.net" },
   ]

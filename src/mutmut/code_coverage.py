@@ -1,6 +1,11 @@
 import importlib
 import sys
+from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mutmut.__main__ import TestRunner
 
 import coverage
 
@@ -25,7 +30,7 @@ def get_covered_lines_for_file(
 # Returns a dict of filenames to sets of lines that are covered
 # Since this is run on the source files before we create mutations,
 # we need to unload any modules that get loaded during the test run
-def gather_coverage(runner, source_files) -> dict[str, set[int]]:
+def gather_coverage(runner: "TestRunner", source_files: Iterable[str]) -> dict[str, set[int]]:
     # We want to unload any python modules that get loaded
     # because we plan to mutate them and want them to be reloaded
     modules = dict(sys.modules)
@@ -49,8 +54,9 @@ def gather_coverage(runner, source_files) -> dict[str, set[int]]:
         lines = coverage_data.lines(abs_filename)
         if lines is None:
             # file was not imported during test run, e.g. because test selection excluded this file
-            covered_lines[abs_filename] s= et()
+            covered_lines[abs_filename] = set()
         else:
+            # REVIEW: use set for O(1) membership in MutationVisitor covered-lines filtering
             covered_lines[abs_filename] = set(lines)
 
     _unload_modules_not_in(modules)

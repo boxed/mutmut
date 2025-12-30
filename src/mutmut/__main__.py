@@ -67,7 +67,6 @@ status_by_exit_code = defaultdict(
     {
         1: "killed",
         3: "killed",  # internal error in pytest means a kill
-        -24: "killed",
         0: "survived",
         5: "no tests",
         2: "check was interrupted by user",
@@ -497,7 +496,7 @@ class ListAllTestsResult:
         self.ids = ids
 
     def clear_out_obsolete_test_names(self):
-        count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
+        count_before = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
         mutmut.tests_by_mangled_function_name = defaultdict(
             set,
             **{
@@ -505,7 +504,7 @@ class ListAllTestsResult:
                 for k, test_names in mutmut.tests_by_mangled_function_name.items()
             },
         )
-        count_after = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
+        count_after = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
         if count_before != count_after:
             print(f"Removed {count_before - count_after} obsolete test names")
             save_stats()
@@ -1032,7 +1031,7 @@ def load_stats():
             data = json.load(f)
             for k, v in data.pop("tests_by_mangled_function_name").items():
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
-            mutmut.duration_by_test = data.pop("duration_by_test")
+            mutmut.duration_by_test = defaultdict(float, data.pop("duration_by_test"))
             mutmut.stats_time = data.pop("stats_time")
             if data:
                 msg = f"Unexpected keys in stats file: {sorted(data.keys())}"
