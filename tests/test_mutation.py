@@ -8,16 +8,14 @@ import libcst as cst
 import pytest
 
 import mutmut
-from mutmut.cli import (
-    CLASS_NAME_SEPARATOR,
-    CatchOutput,
+from mutmut.cli import CatchOutput, run_forced_fail_test
+from mutmut.file_mutation import create_mutations, mutate_file_contents
+from mutmut.mutation import (
     MutmutProgrammaticFailException,
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
-    run_forced_fail_test,
 )
-from mutmut.file_mutation import create_mutations, mutate_file_contents
-from mutmut.trampoline_templates import mangle_function_name
+from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR, mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:

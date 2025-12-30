@@ -1,1 +1,1 @@
---8<-- "HISTORY.md"
+--8<-- "CHANGELOG.md"

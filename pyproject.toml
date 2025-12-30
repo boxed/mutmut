@@ -30,11 +30,11 @@
   ]
 
   [project.urls]
-    Homepage      = "https://github.com/boxed/mutmut"
-    Documentation = "https://mutmut.readthedocs.io/en/latest/"
-    Repository    = "https://github.com/boxed/mutmut"
-    Issues        = "https://github.com/boxed/mutmut/issues"
-    Changelog     = "https://github.com/boxed/mutmut/blob/main/HISTORY.md"
+    Homepage = "https://github.com/josephcourtney/mutmut"
+    # Documentation = "https://mutmut.readthedocs.io/en/latest/"
+    Repository = "https://github.com/josephcourtney/mutmut"
+    Issues     = "https://github.com/josephcourtney/mutmut/issues"
+    Changelog  = "https://github.com/josephcourtney/mutmut/blob/main/CHANGELOG.md"
 
 
   [project.scripts]

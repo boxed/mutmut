@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import mutmut
-from mutmut.cli import _run, walk_source_files
+from mutmut.cli import _run
 from mutmut.config import ensure_config_loaded
 from mutmut.meta import SourceFileMutationData
+from mutmut.mutation import walk_source_files
 
 
 @contextmanager

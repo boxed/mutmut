@@ -14,7 +14,7 @@ from difflib import unified_diff
 from multiprocessing import Pool
 from os import walk
 from pathlib import Path
-from typing import Iterable, cast
+from typing import TYPE_CHECKING, cast
 
 import libcst as cst
 
@@ -25,6 +25,11 @@ from mutmut.file_mutation import mutate_file_contents
 from mutmut.meta import SourceFileMutationData
 from mutmut.runners import PytestRunner
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+else:
+    Iterable = object
 
 status_by_exit_code = defaultdict(
     lambda: "suspicious",
@@ -138,7 +143,6 @@ class Stat:
     segfault: int
 
 
-
 def create_mutants(max_children: int) -> None:
     with Pool(processes=max_children) as p:
         for result in p.imap_unordered(create_file_mutants, walk_source_files()):
@@ -200,6 +204,7 @@ def copy_also_copy_files():
         msg = "mutmut.config.also_copy must be a list of paths"
         raise TypeError(msg)
     for path_to_copy in config.also_copy:
+        print("     also copying", path_to_copy)
         source_path = Path(path_to_copy)
         destination = Path("mutants") / source_path
         if not source_path.exists():
@@ -326,7 +331,9 @@ def calculate_summary_stats(source_file_mutation_data_by_path: dict[str, SourceF
     )
 
 
-def collect_source_file_mutation_data(*, mutant_names: Iterable[str]) -> tuple[list[tuple[SourceFileMutationData, str, int | None]], dict[str, SourceFileMutationData]]:
+def collect_source_file_mutation_data(
+    *, mutant_names: Iterable[str]
+) -> tuple[list[tuple[SourceFileMutationData, str, int | None]], dict[str, SourceFileMutationData]]:
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
     config = get_config()
 
@@ -438,9 +445,6 @@ def get_diff_for_mutant(mutant_name: str, source: str | None = None, path: str |
     if path is None:
         m = find_mutant(mutant_name)
         path = m.path
-        status = status_by_exit_code[m.exit_code_by_key[mutant_name]]
-    else:
-        status = "not checked"
 
     module = read_mutants_module(path) if source is None else cst.parse_module(source)
     orig_code = cst.Module([read_original_function(module, mutant_name)]).code.strip()

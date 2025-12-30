@@ -68,10 +68,10 @@ def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
-        from mutmut.cli import MutmutProgrammaticFailException
+        from mutmut.mutation import MutmutProgrammaticFailException
         raise MutmutProgrammaticFailException('Failed programmatically')
     elif mutant_under_test == 'stats':
-        from mutmut.cli import record_trampoline_hit
+        from mutmut.mutation import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
         result = orig(*call_args, **call_kwargs)
         return result
