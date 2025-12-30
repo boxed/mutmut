@@ -1,62 +1,170 @@
 [project]
-name = "mutmut"
-version = "3.4.0"
-description = "mutation testing for Python 3"
-keyowrds = ["mutmut", "mutant", "mutation", "test", "testing"]
-authors = [
+  name = "mutmut"
+  version = "3.4.0"
+  description = "mutation testing for Python 3"
+  keyowrds = ["mutmut", "mutant", "mutation", "test", "testing"]
+  authors = [
     { name = "Anders Hovmöller", email = "boxed@killingar.net" },
-]
-requires-python = ">=3.10"
-readme = "README.rst"
-license = "BSD-3-Clause"
-license-files = ["LICENSE"]
+  ]
+  requires-python = ">=3.12"
+  readme = "README.rst"
+  license = "BSD-3-Clause"
+  license-files = ["LICENSE"]
 
-classifiers = [
+  classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
-]
+  ]
 
-dependencies = [
+  dependencies = [
     "click>=8.0.0",
     "coverage>=7.3.0",
     "libcst>=1.8.5",
     "pytest>=6.2.5",
     "setproctitle>=1.1.0",
     "textual>=1.0.0",
-    "toml>=0.10.2 ; python_full_version < '3.11'",
-]
+  ]
 
-[project.urls]
-Homepage = "https://github.com/boxed/mutmut"
-Documentation = "https://mutmut.readthedocs.io/en/latest/"
-Repository = "https://github.com/boxed/mutmut"
-Issues = "https://github.com/boxed/mutmut/issues"
-Changelog = "https://github.com/boxed/mutmut/blob/main/HISTORY.rst"
+  [project.urls]
+    Homepage      = "https://github.com/boxed/mutmut"
+    Documentation = "https://mutmut.readthedocs.io/en/latest/"
+    Repository    = "https://github.com/boxed/mutmut"
+    Issues        = "https://github.com/boxed/mutmut/issues"
+    Changelog     = "https://github.com/boxed/mutmut/blob/main/HISTORY.rst"
 
 
-[project.scripts]
-mutmut = "mutmut.__main__:cli"
+  [project.scripts]
+    mutmut = "mutmut.__main__:cli"
 
+# =================================== build ====================================
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
-build-backend = "uv_build"
+  requires      = ["uv_build>=0.9.5,<0.10.0"]
+  build-backend = "uv_build"
 
-[tool.uv.build-backend]
-source-include = ["HISTORY.rst"]
+
+[tool.uv]
+  default-groups = ["dev"]
+  [tool.uv.build-backend]
+    source-include = ["HISTORY.rst"]
+  [tool.uv.sources]
+    showcov = { git = "https://github.com/josephcourtney/showcov.git", rev = "main" }
+
 
 [dependency-groups]
-dev = [
-    "pytest-asyncio>=1.0.0",
-]
+  dev = [
+    "coverage>=7.12.0",
+    "diff-cover>=9.7.2",
+    "hypothesis>=6.148.6",
+    "mutmut>=3.4.0",
+    "pip-audit>=2.10.0",
+    "pytest>=9.0.1",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "pytest-randomly>=4.0.1",
+    "pytest-socket>=0.7.0",
+    "radon>=6.0.1",
+    "ruff>=0.14.7",
+    "rust-just>=1.43.1",
+    "showcov>=0.1.4",
+    "ty>=0.0.1a31",
+    "urllib3>=2.6.0",
+    "vulture>=2.14",
+    "wily>=1.12.2",
 
+  ]
+
+# ==================================== lint ====================================
+[tool.ruff]
+  extend = "./ruff.default.toml"
+
+  [tool.ruff.lint]
+    ignore = [
+      # "TD002",  # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
+      # "TD003",  # Missing issue link for this TODO
+      # "FIX002", # Line contains TODO, consider resolving the issue
+      # "N802",   # Function name should be lowercase
+      # "ARG002", # Unused method argument
+    ]
+
+# ==================================== typecheck ====================================
+[tool.ty.src]
+  include = [
+    "src",
+  ]
+
+# =================================== test ===================================
 [tool.pytest.ini_options]
-testpaths = [
-    "tests",
-]
+  minversion = "8.0"
+  testpaths = ["tests"]
+  python_files = ["test_*.py"]
+  addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+    "--cov-branch",
+    "--cov=mutmut",
+    "--cov-report=xml",
+  ]
+  xfail_strict = true
+  log_cli = true
+  log_cli_level = "INFO"
+  log_cli_format = "%%(asctime)s [%%(levelname)s] %%(name)s - %%(message)s"
+  log_cli_date_format = "%%Y-%%m-%%d %%H:%%M:%%S"
+  filterwarnings = [
+    "error::DeprecationWarning:mutmut\\.",
+    "ignore::DeprecationWarning:some_known_third_party",
+  ]
+  markers = [
+    "unit: Fast, isolated tests of individual functions/classes. No real I/O.",
+    "component: Tests of a subsystem via public APIs; may use local fakes or lightweight real deps.",
+    "integration: Tests involving real external dependencies (DB, HTTP APIs, queues).",
+    "system: End-to-end tests treating the app as a black box.",
+    "contract: Tests of API or schema contracts.",
+    "db: Tests that exercise database behaviour or schema.",
+    "smoke: Fast, critical-path tests for quick feedback.",
+    "slow: Known slow tests.",
+    "regression: Guards against previously reported bugs.",
+    "property_based: Property-based tests (e.g. Hypothesis).",
+    "observability: Tests asserting on logs, metrics, or traces.",
+    "security: Security-focused tests.",
+    "performance: Performance or performance-regression tests.",
+    "data_quality: Tests of data integrity or freshness.",
+    "perf: performance tests",
+  ]
+  asyncio_mode = "auto"
+
+# =================================== test:coverage ===================================
+[tool.coverage.run]
+  source   = ["mutmut"]
+  branch   = true
+  parallel = true
+
+[tool.coverage.report]
+  show_missing = true
+  skip_covered = true
+  # Regexes for lines to exclude from consideration
+  exclude_also = [
+    # Don't complain about missing debug-only code:
+    "def __repr__",
+    "if self\\.debug",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+  ]
+  ignore_errors = true
+
+[tool.coverage.xml]
+  output = ".coverage.xml"
