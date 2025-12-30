@@ -3,6 +3,9 @@
 # (exclude from directory tree listings)
 # ============================================
 exclude_tree = [
+  ".codex",
+  ".ropeproject",
+  ".readthedocs.yaml",
   "*.png",
   "uv.lock",
 

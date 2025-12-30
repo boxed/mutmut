@@ -1,4 +1,0 @@
-Mutmut cached results plan:
-
-Unanswered question: 
-    When do we update the cache? It must be safe so that you can quit mutmut at any time and the cache won't be broken.
