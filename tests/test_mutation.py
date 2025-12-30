@@ -8,7 +8,7 @@ import libcst as cst
 import pytest
 
 import mutmut
-from mutmut.__main__ import (
+from mutmut.cli import (
     CLASS_NAME_SEPARATOR,
     CatchOutput,
     MutmutProgrammaticFailException,

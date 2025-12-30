@@ -1,7 +1,7 @@
 from click.testing import CliRunner
 
 from mutmut import __version__
-from mutmut.__main__ import cli
+from mutmut.cli import cli
 
 
 def test_cli_version():

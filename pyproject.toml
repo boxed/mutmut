@@ -1,6 +1,6 @@
 [project]
   name = "mutmut"
-  version = "3.4.0"
+  version = "3.4.1"
   description = "mutation testing for Python 3"
   keywords = ["mutmut", "mutant", "mutation", "test", "testing"]
   authors = [
@@ -9,7 +9,6 @@
   requires-python = ">=3.12"
   readme = "README.md"
   license = "BSD-3-Clause"
-  license-files = ["LICENSE"]
 
   classifiers = [
     "Development Status :: 4 - Beta",
@@ -39,7 +38,7 @@
 
 
   [project.scripts]
-    mutmut = "mutmut.__main__:cli"
+    mutmut = "mutmut.cli:cli"
 
 # =================================== build ====================================
 [build-system]
@@ -76,17 +75,17 @@
     "urllib3>=2.6.0",
     "vulture>=2.14",
     "wily>=1.12.2",
-]
+  ]
   docs = [
     "mkdocs>=1.6.0",
     "pymdown-extensions>=10.12.1",
   ]
 
-[project.optional-dependencies]
-  docs = [
-    "mkdocs>=1.6.0",
-    "pymdown-extensions>=10.12.1",
-  ]
+  [project.optional-dependencies]
+    docs = [
+      "mkdocs>=1.6.0",
+      "pymdown-extensions>=10.12.1",
+    ]
 
 # ==================================== lint ====================================
 [tool.ruff]
