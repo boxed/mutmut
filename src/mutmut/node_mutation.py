@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 import libcst.matchers as m
@@ -204,6 +204,30 @@ _operator_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
     cst.Or: cst.And,
 }
 
+OperatorNode = (
+    cst.BinaryOperation | cst.UnaryOperation | cst.BooleanOperation | cst.ComparisonTarget | cst.AugAssign
+)
+
+if TYPE_CHECKING:
+
+    def _as_operator_node(node: cst.CSTNode) -> OperatorNode:
+        assert isinstance(
+            node,
+            (
+                cst.BinaryOperation,
+                cst.UnaryOperation,
+                cst.BooleanOperation,
+                cst.ComparisonTarget,
+                cst.AugAssign,
+            ),
+        )
+        return node
+
+else:
+
+    def _as_operator_node(node: cst.CSTNode) -> OperatorNode:
+        return node
+
 
 def operator_swap_op(node: cst.CSTNode) -> Iterable[cst.CSTNode]:
     if m.matches(
@@ -214,10 +238,7 @@ def operator_swap_op(node: cst.CSTNode) -> Iterable[cst.CSTNode]:
         | m.ComparisonTarget()
         | m.AugAssign(),
     ):
-        typed_node = cast(
-            "cst.BinaryOperation | cst.UnaryOperation | cst.BooleanOperation | cst.ComparisonTarget | cst.AugAssign",
-            node,
-        )
+        typed_node = _as_operator_node(node)
         operator = typed_node.operator
         for new_operator in _simple_mutation_mapping(operator, _operator_mapping):
             yield node.with_changes(operator=new_operator)

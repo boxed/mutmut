@@ -38,8 +38,7 @@ def consume_stats() -> set[str]:
 
 
 def set_covered_lines(covered_lines: dict[str, set[int]] | None) -> None:
-    global _covered_lines
-    _covered_lines = covered_lines
+    globals()["_covered_lines"] = covered_lines
 
 
 def get_covered_lines() -> dict[str, set[int]] | None:
@@ -47,11 +46,10 @@ def get_covered_lines() -> dict[str, set[int]] | None:
 
 
 def _reset_globals():
-    global stats_time, config, _stats, tests_by_mangled_function_name, _covered_lines
-
+    module_globals = globals()
     duration_by_test.clear()
-    stats_time = None
-    config = None
-    _stats = set()
-    tests_by_mangled_function_name = defaultdict(set)
-    _covered_lines = None
+    module_globals["stats_time"] = None
+    module_globals["config"] = None
+    module_globals["_stats"] = set()
+    module_globals["tests_by_mangled_function_name"] = defaultdict(set)
+    module_globals["_covered_lines"] = None

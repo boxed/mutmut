@@ -5,17 +5,18 @@ from pathlib import Path
 import coverage
 
 
-# Returns a set of lines that are covered in this file gvein the covered_lines dict
-#  returned by gather_coverage
-# None means it's not enabled, set() means no lines are covered
-def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]] | None) -> set[int] | None:
+# Returns a set of lines that are covered in this file given the covered_lines dict
+# returned by gather_coverage.
+# None means it's not enabled, set() means no lines are covered.
+def get_covered_lines_for_file(
+    filename: str,
+    covered_lines: dict[str, set[int]] | None,
+) -> set[int] | None:
     if covered_lines is None or filename is None:
         return None
 
     abs_filename = str((Path("mutants") / filename).absolute())
-    lines = None
-    if abs_filename in covered_lines:
-        lines = covered_lines[abs_filename]
+    lines = covered_lines.get(abs_filename)
 
     return lines or set()
 
@@ -24,7 +25,7 @@ def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]
 # Returns a dict of filenames to sets of lines that are covered
 # Since this is run on the source files before we create mutations,
 # we need to unload any modules that get loaded during the test run
-def gather_coverage(runner, source_files):
+def gather_coverage(runner, source_files) -> dict[str, set[int]]:
     # We want to unload any python modules that get loaded
     # because we plan to mutate them and want them to be reloaded
     modules = dict(sys.modules)
@@ -40,7 +41,7 @@ def gather_coverage(runner, source_files):
     # Build mapping of filenames to covered lines
     # The CoverageData object is a wrapper around sqlite, and this
     # will make it more efficient to access the data
-    covered_lines = {}
+    covered_lines: dict[str, set[int]] = {}
     coverage_data = cov.get_data()
 
     for filename in source_files:
@@ -48,8 +49,9 @@ def gather_coverage(runner, source_files):
         lines = coverage_data.lines(abs_filename)
         if lines is None:
             # file was not imported during test run, e.g. because test selection excluded this file
-            lines = []
-        covered_lines[abs_filename] = list(lines)
+            covered_lines[abs_filename] s= et()
+        else:
+            covered_lines[abs_filename] = set(lines)
 
     _unload_modules_not_in(modules)
 

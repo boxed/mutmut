@@ -6,7 +6,7 @@ def build_trampoline(*, orig_name, mutants, class_name):
 
     mutants_dict = (
         f"{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n"
-        + ", \n    ".join(f"{m!r}: {m}" for m in mutants)
+        + ",\n    ".join(f"{m!r}: {m}" for m in mutants)
         + "\n}"
     )
     access_prefix = ""
@@ -18,12 +18,18 @@ def build_trampoline(*, orig_name, mutants, class_name):
         self_arg = ", self"
 
     trampoline_name = "_mutmut_trampoline"
+    trampoline_call = (
+        f"{trampoline_name}("
+        f"{access_prefix}{mangled_name}__mutmut_orig{access_suffix}, "
+        f"{access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, "
+        f"args, kwargs{self_arg})"
+    )
 
     return f"""
 {mutants_dict}
 
 def {orig_name}({"self, " if class_name is not None else ""}*args, **kwargs):
-    result = {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
+    result = {trampoline_call}
     return result
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)

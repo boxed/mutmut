@@ -173,9 +173,12 @@ class MutationVisitor(cst.CSTVisitor):
             return True
 
         # ignore decorated functions, because
-        # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
-        # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
-        # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
+        # 1) copying them for the trampoline setup can cause side effects
+        #    (e.g. multiple @app.post("/foo") definitions)
+        # 2) decorators are executed when the function is defined, so we don't want
+        #    to mutate their arguments and cause exceptions
+        # 3) @property decorators break the trampoline signature assignment
+        #    (which expects it to be a function)
         return bool(isinstance(node, (cst.FunctionDef, cst.ClassDef)) and len(node.decorators))
 
 

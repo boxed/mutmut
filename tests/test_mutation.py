@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from textwrap import dedent
 from typing import cast
 from unittest.mock import Mock, patch
@@ -16,7 +17,7 @@ from mutmut.__main__ import (
     run_forced_fail_test,
 )
 from mutmut.file_mutation import create_mutations, mutate_file_contents
-from mutmut.trampoline_templates import mangle_function_name, trampoline_impl
+from mutmut.trampoline_templates import mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -545,79 +546,89 @@ def test_bug_github_issue_435():
 
     mutants = mutants_for_source(source)
 
+    def _expected_function(text: str) -> str:
+        dedented = dedent(text).strip()
+        lines = dedented.split("\n")
+        if not lines:
+            return ""
+        return "\n".join([
+            lines[0],
+            *("        " + line.lstrip() if line else line for line in lines[1:]),
+        ])
+
     expected = [
-        dedent(
+        _expected_function(
             """
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = None
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             """
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(None, dashrepl, text)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'[\w\-]  [\w\-]', None, text)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'[\w\-]  [\w\-]', dashrepl, None)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             """
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(dashrepl, text)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'[\w\-]  [\w\-]', text)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'[\w\-]  [\w\-]', dashrepl, )
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'XX[\w\-]  [\w\-]XX', dashrepl, text)
 
                 return self.parser.parse(text), text
             """
-        ).strip(),
-        dedent(
+        ),
+        _expected_function(
             r"""
             def parse(self, text: str) -> tuple[Tree[Token], str]:
                 text = re.sub(r'[\w\-]  [\w\-]', dashrepl, text)
 
                 return self.parser.parse(None), text
             """
-        ).strip(),
+        ),
     ]
     assert sorted(mutants) == sorted(expected)
 
@@ -845,100 +856,5 @@ print(Adder(1).add(2))"""
 
     src, _ = mutate_file_contents("file.py", source)
 
-    init_trampoline_call = (
-        "        result = _mutmut_trampoline("
-        "object.__getattribute__(self, "
-        '"xǁAdderǁ__init____mutmut_orig"), '
-        "object.__getattribute__(self, "
-        '"xǁAdderǁ__init____mutmut_mutants"), '
-        "args, kwargs, self)\n"
-    )
-    add_trampoline_call = (
-        "        result = _mutmut_trampoline("
-        "object.__getattribute__(self, "
-        '"xǁAdderǁadd__mutmut_orig"), '
-        "object.__getattribute__(self, "
-        '"xǁAdderǁadd__mutmut_mutants"), '
-        "args, kwargs, self)\n"
-    )
-
-    expected = dedent(
-        f"""
-        from __future__ import division
-        import lib
-
-        lib.foo()
-        {trampoline_impl.strip()}
-
-        def x_foo__mutmut_orig(a, b):
-            return a > b
-
-        def x_foo__mutmut_1(a, b):
-            return a >= b
-
-        x_foo__mutmut_mutants : ClassVar[MutantDict] = {{
-        'x_foo__mutmut_1': x_foo__mutmut_1
-        }}
-
-        def foo(*args, **kwargs):
-            result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs)
-            return result
-
-        foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig)
-        x_foo__mutmut_orig.__name__ = 'x_foo'
-
-        def x_bar__mutmut_orig():
-            yield 1
-
-        def x_bar__mutmut_1():
-            yield 2
-
-        x_bar__mutmut_mutants : ClassVar[MutantDict] = {{
-        'x_bar__mutmut_1': x_bar__mutmut_1
-        }}
-
-        def bar(*args, **kwargs):
-            result = _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
-            return result
-
-        bar.__signature__ = _mutmut_signature(x_bar__mutmut_orig)
-        x_bar__mutmut_orig.__name__ = 'x_bar'
-
-        class Adder:
-            def xǁAdderǁ__init____mutmut_orig(self, amount):
-                self.amount = amount
-            def xǁAdderǁ__init____mutmut_1(self, amount):
-                self.amount = None
-
-            xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = {{
-            'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1
-            }}
-
-            def __init__(self, *args, **kwargs):
-{init_trampoline_call}
-                return result
-
-            __init__.__signature__ = _mutmut_signature(xǁAdderǁ__init____mutmut_orig)
-            xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__'
-
-            def xǁAdderǁadd__mutmut_orig(self, value):
-                return self.amount + value
-
-            def xǁAdderǁadd__mutmut_1(self, value):
-                return self.amount - value
-
-            xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = {{
-            'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1
-            }}
-
-            def add(self, *args, **kwargs):
-{add_trampoline_call}
-                return result
-
-            add.__signature__ = _mutmut_signature(xǁAdderǁadd__mutmut_orig)
-            xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
-
-        print(Adder(1).add(2))
-        """
-    ).strip()
+    expected = Path("tests/data/module_mutation_expected.py.txt").read_text(encoding="utf-8")
     assert src == expected

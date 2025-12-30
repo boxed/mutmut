@@ -55,7 +55,8 @@ from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
 from mutmut.file_mutation import mutate_file_contents
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 
-# Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
+# Document: surviving mutants are retested when you ask mutmut to retest them,
+# interactively in the UI or via command line
 
 # TODO: pragma no mutate should end up in `skipped` category
 # TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
@@ -223,7 +224,10 @@ class CollectTestsFailedException(Exception):
 
 class BadTestExecutionCommandsException(Exception):
     def __init__(self, pytest_args: list[str]) -> None:
-        msg = f"Failed to run pytest with args: {pytest_args}. If your config sets debug=true, the original pytest error should be above."
+        msg = (
+            f"Failed to run pytest with args: {pytest_args}. "
+            "If your config sets debug=true, the original pytest error should be above."
+        )
         super().__init__(msg)
 
 
@@ -411,7 +415,8 @@ class SourceFileMutationData:
             raise KeyError(msg)
         self.exit_code_by_key[key] = exit_code
         self.durations_by_key[key] = (utcnow() - self.start_time_by_pid[pid]).total_seconds()
-        # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
+        # TODO: maybe rate limit this? Saving on each result can slow down
+        # mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
         with START_TIMES_BY_PID_LOCK:
             del self.start_time_by_pid[pid]
@@ -519,6 +524,10 @@ class PytestRunner(TestRunner):
         # so also use pytest_add_cli_args_test_selection for the implementation
         self._pytest_add_cli_args_test_selection += config.tests_dir
 
+    def prepare_main_test_run(self) -> None:
+        """Pytest does not need additional preparation."""
+        unused(self)
+
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
         import pytest  # noqa: PLC0415
@@ -538,8 +547,8 @@ class PytestRunner(TestRunner):
     def run_stats(self, *, tests: Iterable[str] | None) -> int:
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
-            def pytest_runtest_logstart(self, nodeid, _location):
-                unused(self)
+            def pytest_runtest_logstart(self, nodeid, location):
+                unused(self, location)
                 mutmut.duration_by_test[nodeid] = 0
 
             # noinspection PyMethodMayBeStatic
@@ -767,10 +776,11 @@ def print_stats(
     force_output: bool = False,
 ) -> None:
     s = calculate_summary_stats(source_file_mutation_data_by_path)
-    print_status(
-        f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}",
-        force_output=force_output,
+    summary = (
+        f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  "
+        f"⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}"
     )
+    print_status(summary, force_output=force_output)
 
 
 def run_forced_fail_test(runner):
@@ -964,7 +974,8 @@ def run_stats_collection(runner, tests=None):
         if num_associated_tests == 0:
             output_catcher.dump_output()
             print(
-                "Stopping early, because we could not find any test case for any mutant. It seems that the selected tests do not cover any code that we mutated."
+                "Stopping early, because we could not find any test case for any mutant. "
+                "It seems that the selected tests do not cover any code that we mutated."
             )
             if not config.debug:
                 print("You can set debug=true to see the executed test names in the output above.")
@@ -972,7 +983,8 @@ def run_stats_collection(runner, tests=None):
                 print("In the last pytest run above, you can see which tests we executed.")
             print("You can use mutmut browse to check which parts of the source code we mutated.")
             print(
-                "If some of the mutated code should be covered by the executed tests, consider opening an issue (with a MRE if possible)."
+                "If some of the mutated code should be covered by the executed tests, "
+                "consider opening an issue (with a MRE if possible)."
             )
             sys.exit(1)
 
@@ -1167,7 +1179,9 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     max_children: int | None,
 ) -> None:
     # TODO: run no-ops once in a while to detect if we get false negatives
-    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
+    # TODO: we should be able to get information on which tests killed mutants,
+    # which means we can get a list of tests and how many mutants each test kills.
+    # Those that kill zero mutants are redundant!
     os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
     ensure_config_loaded()
     config = get_config()
@@ -1209,7 +1223,8 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
             sys.exit(1)
     print("    done")
 
-    # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
+    # this can't be the first thing, because it can fail deep inside pytest/django
+    # setup and then everything is destroyed
     run_forced_fail_test(runner)
 
     runner.prepare_main_test_run()
@@ -1282,7 +1297,8 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
                     normalized_mutant_name
                 ]
                 cpu_time_limit = ceil((estimated_time_of_tests + 1) * 30 + process_time())
-                # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
+                # signal SIGXCPU after <cpu_time_limit>. One second later signal
+                # SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit + 1))
 
                 with CatchOutput():
@@ -1626,15 +1642,22 @@ def browse(*, show_killed: bool) -> None:
                         description = f"User interrupted ({exit_code=})"
                     case "timeout":
                         description = (
-                            f"Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. "
-                            f"Tests without mutation took {estimated_duration:.3f} seconds. {view_tests_description}"
+                            f"Timeout ({exit_code=}): Timed out because tests did not finish "
+                            f"within {duration:.3f} seconds. Tests without mutation took "
+                            f"{estimated_duration:.3f} seconds. {view_tests_description}"
                         )
                     case "no tests":
-                        description = f"Untested ({exit_code=}): Skipped because selected tests do not execute this code."
+                        description = (
+                            f"Untested ({exit_code=}): Skipped because selected tests do not "
+                            "execute this code."
+                        )
                     case "segfault":
                         description = f"Segfault ({exit_code=}): Running pytest with this mutant segfaulted."
                     case "suspicious":
-                        description = f"Unknown ({exit_code=}): Running pytest with this mutant resulted in an unknown exit code."
+                        description = (
+                            f"Unknown ({exit_code=}): Running pytest with this mutant resulted "
+                            "in an unknown exit code."
+                        )
                     case "not checked":
                         description = "Not checked in the last mutmut run."
                     case _:
