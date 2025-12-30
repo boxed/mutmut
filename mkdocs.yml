@@ -1,0 +1,22 @@
+site_name: mutmut
+site_description: Mutation testing for Python 3
+site_url: https://mutmut.readthedocs.io/
+repo_url: https://github.com/boxed/mutmut
+repo_name: boxed/mutmut
+docs_dir: docs
+nav:
+  - Home: index.md
+  - Architecture: ARCHITECTURE.md
+  - Contributing: CONTRIBUTING.md
+  - Changelog: HISTORY.md
+  - Authors: AUTHORS.md
+theme:
+  name: mkdocs
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.snippets:
+      check_paths: true
+      base_path:
+        - .

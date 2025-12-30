@@ -1,27 +1,18 @@
 import ast
 import fnmatch
 import gc
-import importlib
 import inspect
 import itertools
-import json
 import os
 import resource
 import shutil
 import signal
 import subprocess  # noqa: S404
 import sys
-import tomllib
 import warnings
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
-from configparser import (
-    ConfigParser,
-    NoOptionError,
-    NoSectionError,
-)
-from contextlib import contextmanager, suppress
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import (
     UTC,
@@ -30,14 +21,12 @@ from datetime import (
 )
 from difflib import unified_diff
 from io import TextIOBase
-from json import JSONDecodeError
 from math import ceil
-from multiprocessing import Lock, Pool, set_start_method
+from multiprocessing import Pool, set_start_method
 from os import (
     walk,
 )
 from pathlib import Path
-from signal import SIGTERM
 from threading import Thread
 from time import (
     process_time,
@@ -52,7 +41,18 @@ from setproctitle import setproctitle
 
 import mutmut
 from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
+from mutmut.config import ensure_config_loaded, get_config
 from mutmut.file_mutation import mutate_file_contents
+from mutmut.meta import (
+    START_TIMES_BY_PID_LOCK,
+    SourceFileMutationData,
+    load_stats,
+    save_stats,
+)
+from mutmut.runners import (
+    CollectTestsFailedException,
+    PytestRunner,
+)
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 
 # Document: surviving mutants are retested when you ask mutmut to retest them,
@@ -98,81 +98,13 @@ emoji_by_status = {
 
 exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status in status_by_exit_code.items()}
 
-PYTEST_USAGE_ERROR_EXIT_CODE = 4
-
 
 class StatusPrinterType(Protocol):
     def __call__(self, message: str, *, force_output: bool = False) -> None: ...
 
 
-class PostTestCallback(Protocol):
-    def __call__(self, name: str, **kwargs: object) -> None: ...
-
-
-class HammettConfigProtocol(Protocol):
-    workerinput: dict[str, str]
-
-
-class HammettModule(Protocol):
-    Config: HammettConfigProtocol
-
-    def main(
-        self,
-        *,
-        quiet: bool,
-        fail_fast: bool,
-        disable_assert_analyze: bool,
-        post_test_callback: PostTestCallback | None = None,
-        use_cache: bool,
-        insert_cwd: bool,
-    ) -> int: ...
-
-    def main_setup(
-        self,
-        *,
-        quiet: bool,
-        fail_fast: bool,
-        disable_assert_analyze: bool,
-        use_cache: bool,
-        insert_cwd: bool,
-    ) -> dict[str, object]: ...
-
-    def main_run_tests(self, *, tests: Iterable[str] | None, **kwargs: object) -> int: ...
-
-
 def utcnow() -> datetime:
     return datetime.now(tz=UTC)
-
-
-def guess_paths_to_mutate() -> list[Path]:
-    """Guess the path to source code to mutate."""
-    this_dir = Path.cwd().name
-    candidate_dirs = [
-        "lib",
-        "src",
-        this_dir,
-        this_dir.replace("-", "_"),
-        this_dir.replace(" ", "_"),
-        this_dir.replace("-", ""),
-        this_dir.replace(" ", ""),
-    ]
-    seen: set[str] = set()
-    for candidate in candidate_dirs:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if Path(candidate).is_dir():
-            return [Path(candidate)]
-
-    file_candidate = Path(f"{this_dir}.py")
-    if file_candidate.is_file():
-        return [file_candidate]
-
-    msg = (
-        "Could not figure out where the code to mutate is. "
-        'Please specify it by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.'
-    )
-    raise FileNotFoundError(msg)
 
 
 def record_trampoline_hit(name: str) -> None:
@@ -215,19 +147,6 @@ def walk_source_files():
 
 class MutmutProgrammaticFailException(Exception):
     pass
-
-
-class CollectTestsFailedException(Exception):
-    pass
-
-
-class BadTestExecutionCommandsException(Exception):
-    def __init__(self, pytest_args: list[str]) -> None:
-        msg = (
-            f"Failed to run pytest with args: {pytest_args}. "
-            "If your config sets debug=true, the original pytest error should be above."
-        )
-        super().__init__(msg)
 
 
 class InvalidGeneratedSyntaxException(Exception):
@@ -375,72 +294,13 @@ def write_all_mutants_to_file(*, out, source, filename):
     return mutant_names, hash_by_function_name
 
 
-class SourceFileMutationData:
-    def __init__(self, *, path):
-        self.estimated_time_of_tests_by_mutant = {}
-        self.path = path
-        self.meta_path = Path("mutants") / (str(path) + ".meta")
-        self.key_by_pid = {}
-        self.exit_code_by_key = {}
-        self.durations_by_key = {}
-        self.hash_by_function_name = {}
-        self.start_time_by_pid = {}
-
-    def load(self):
-        try:
-            with Path(self.meta_path).open(encoding="utf-8") as f:
-                meta = json.load(f)
-        except FileNotFoundError:
-            return
-
-        self.exit_code_by_key = meta.pop("exit_code_by_key")
-        self.hash_by_function_name = meta.pop("hash_by_function_name")
-        self.durations_by_key = meta.pop("durations_by_key")
-        self.estimated_time_of_tests_by_mutant = meta.pop("estimated_durations_by_key")
-        if meta:
-            unexpected = ", ".join(sorted(meta.keys()))
-            msg = f"Meta file {self.meta_path} contains unexpected keys: {unexpected}"
-            raise ValueError(msg)
-
-    def register_pid(self, *, pid, key):
-        self.key_by_pid[pid] = key
-        with START_TIMES_BY_PID_LOCK:
-            self.start_time_by_pid[pid] = utcnow()
-
-    def register_result(self, *, pid, exit_code):
-        key = self.key_by_pid.get(pid)
-        if key not in self.exit_code_by_key:
-            msg = f"Unknown mutant key for pid {pid}"
-            raise KeyError(msg)
-        self.exit_code_by_key[key] = exit_code
-        self.durations_by_key[key] = (utcnow() - self.start_time_by_pid[pid]).total_seconds()
-        # TODO: maybe rate limit this? Saving on each result can slow down
-        # mutation testing a lot if the test run is fast.
-        del self.key_by_pid[pid]
-        with START_TIMES_BY_PID_LOCK:
-            del self.start_time_by_pid[pid]
-        self.save()
-
-    def stop_children(self):
-        for pid in self.key_by_pid:
-            os.kill(pid, SIGTERM)
-
-    def save(self):
-        with Path(self.meta_path).open("w", encoding="utf-8") as f:
-            json.dump(
-                dict(
-                    exit_code_by_key=self.exit_code_by_key,
-                    hash_by_function_name=self.hash_by_function_name,
-                    durations_by_key=self.durations_by_key,
-                    estimated_durations_by_key=self.estimated_time_of_tests_by_mutant,
-                ),
-                f,
-                indent=4,
-            )
+def unused(*_: object) -> None:
+    """Silence unused-argument linters."""
+    return
 
 
-def unused(*_):
-    pass
+def collected_test_names() -> set[str]:
+    return set(mutmut.duration_by_test.keys())
 
 
 def strip_prefix(s: str, *, prefix: str, strict: bool = False) -> str:
@@ -450,226 +310,6 @@ def strip_prefix(s: str, *, prefix: str, strict: bool = False) -> str:
         msg = f"String '{s}' does not start with prefix '{prefix}'"
         raise ValueError(msg)
     return s
-
-
-class TestRunner(ABC):
-    @abstractmethod
-    def run_stats(self, *, tests: Iterable[str] | None) -> int:
-        """Collect statistics for the provided tests."""
-
-    @abstractmethod
-    def run_forced_fail(self) -> int:
-        """Run the forced-fail hook for the runner."""
-
-    @abstractmethod
-    def prepare_main_test_run(self) -> None:
-        """Prepare the test runner before executing tests."""
-
-    @abstractmethod
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str] | None) -> int:
-        """Execute the provided tests for the given mutant."""
-
-    @abstractmethod
-    def list_all_tests(self) -> "ListAllTestsResult":
-        """Return all available tests."""
-
-
-@contextmanager
-def change_cwd(path):
-    old_cwd = Path(Path.cwd()).resolve()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(old_cwd)
-
-
-def collected_test_names():
-    return set(mutmut.duration_by_test.keys())
-
-
-class ListAllTestsResult:
-    def __init__(self, *, ids: set[str]) -> None:
-        if not isinstance(ids, set):
-            msg = f"ids must be a set, got {type(ids)}"
-            raise TypeError(msg)
-        self.ids = ids
-
-    def clear_out_obsolete_test_names(self):
-        count_before = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
-        mutmut.tests_by_mangled_function_name = defaultdict(
-            set,
-            **{
-                k: {test_name for test_name in test_names if test_name in self.ids}
-                for k, test_names in mutmut.tests_by_mangled_function_name.items()
-            },
-        )
-        count_after = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
-        if count_before != count_after:
-            print(f"Removed {count_before - count_after} obsolete test names")
-            save_stats()
-
-    def new_tests(self):
-        return self.ids - collected_test_names()
-
-
-class PytestRunner(TestRunner):
-    def __init__(self):
-        config = get_config()
-        self._pytest_add_cli_args: list[str] = list(config.pytest_add_cli_args)
-        self._pytest_add_cli_args_test_selection: list[str] = list(config.pytest_add_cli_args_test_selection)
-
-        # tests_dir is a special case of a test selection option,
-        # so also use pytest_add_cli_args_test_selection for the implementation
-        self._pytest_add_cli_args_test_selection += config.tests_dir
-
-    def prepare_main_test_run(self) -> None:
-        """Pytest does not need additional preparation."""
-        unused(self)
-
-    # noinspection PyMethodMayBeStatic
-    def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
-        import pytest  # noqa: PLC0415
-
-        config = get_config()
-        params = ["--rootdir=.", "--tb=native", *params, *self._pytest_add_cli_args]
-        if config.debug:
-            params = ["-vv", *params]
-            print("python -m pytest ", " ".join([f'"{param}"' for param in params]))
-        exit_code = int(pytest.main(params, **kwargs))
-        if config.debug:
-            print("    exit code", exit_code)
-        if exit_code == PYTEST_USAGE_ERROR_EXIT_CODE:
-            raise BadTestExecutionCommandsException(params)
-        return exit_code
-
-    def run_stats(self, *, tests: Iterable[str] | None) -> int:
-        class StatsCollector:
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_logstart(self, nodeid, location):
-                unused(self, location)
-                mutmut.duration_by_test[nodeid] = 0
-
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_teardown(self, item, nextitem):
-                unused(self)
-                unused(nextitem)
-                for function in mutmut.consume_stats():
-                    mutmut.tests_by_mangled_function_name[function].add(
-                        strip_prefix(item.nodeid, prefix="mutants/")
-                    )
-
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_makereport(self, item, call):
-                unused(self)
-                mutmut.duration_by_test[item.nodeid] += call.duration
-
-        stats_collector = StatsCollector()
-
-        pytest_args = ["-x", "-q"]
-        if tests:
-            pytest_args += list(tests)
-        else:
-            pytest_args += self._pytest_add_cli_args_test_selection
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args, plugins=[stats_collector]))
-
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str] | None) -> int:
-        unused(mutant_name)
-        pytest_args = ["-x", "-q", "-p", "no:randomly", "-p", "no:random-order"]
-        if tests:
-            pytest_args += list(tests)
-        else:
-            pytest_args += self._pytest_add_cli_args_test_selection
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args))
-
-    def run_forced_fail(self):
-        pytest_args = ["-x", "-q", *self._pytest_add_cli_args_test_selection]
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args))
-
-    def list_all_tests(self):
-        class TestsCollector:
-            def __init__(self):
-                self.collected_nodeids = set()
-                self.deselected_nodeids = set()
-
-            def pytest_collection_modifyitems(self, items):
-                self.collected_nodeids |= {item.nodeid for item in items}
-
-            def pytest_deselected(self, items):
-                self.deselected_nodeids |= {item.nodeid for item in items}
-
-        collector = TestsCollector()
-
-        pytest_args = ["-x", "-q", "--collect-only", *self._pytest_add_cli_args_test_selection]
-
-        with change_cwd("mutants"):
-            exit_code = int(self.execute_pytest(pytest_args, plugins=[collector]))
-            if exit_code != 0:
-                raise CollectTestsFailedException
-
-        selected_nodeids = collector.collected_nodeids - collector.deselected_nodeids
-        return ListAllTestsResult(ids=selected_nodeids)
-
-
-def import_hammett() -> HammettModule:
-    module = importlib.import_module("hammett")
-    return cast("HammettModule", module)
-
-
-class HammettRunner(TestRunner):
-    def __init__(self):
-        self.hammett_kwargs: dict[str, object] | None = None
-
-    def run_stats(self, *, tests: Iterable[str] | None) -> int:
-        unused(self, tests)
-        hammett = import_hammett()
-
-        print("Running hammett stats...")
-
-        def post_test_callback(_name: str, **_: object) -> None:
-            for function in mutmut.consume_stats():
-                mutmut.tests_by_mangled_function_name[function].add(_name)
-
-        return hammett.main(
-            quiet=True,
-            fail_fast=True,
-            disable_assert_analyze=True,
-            post_test_callback=cast("PostTestCallback", post_test_callback),
-            use_cache=False,
-            insert_cwd=False,
-        )
-
-    def run_forced_fail(self):
-        unused(self)
-        hammett = import_hammett()
-
-        return hammett.main(
-            quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False, insert_cwd=False
-        )
-
-    def prepare_main_test_run(self):
-        hammett = import_hammett()
-
-        self.hammett_kwargs = hammett.main_setup(
-            quiet=True,
-            fail_fast=True,
-            disable_assert_analyze=True,
-            use_cache=False,
-            insert_cwd=False,
-        )
-
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str] | None) -> int:
-        hammett = import_hammett()
-
-        hammett.Config.workerinput = dict(workerinput=f"_{mutant_name}")
-        kwargs = self.hammett_kwargs
-        if kwargs is None:
-            msg = "Hammett runner has not been prepared"
-            raise RuntimeError(msg)
-        return hammett.main_run_tests(**kwargs, tests=tests)
 
 
 def mangled_name_from_mutant_name(mutant_name: str) -> str:
@@ -850,103 +490,6 @@ class CatchOutput:
             print()
 
 
-@dataclass
-class Config:
-    also_copy: list[Path]
-    do_not_mutate: list[str]
-    max_stack_depth: int
-    debug: bool
-    paths_to_mutate: list[Path]
-    pytest_add_cli_args: list[str]
-    pytest_add_cli_args_test_selection: list[str]
-    tests_dir: list[str]
-    mutate_only_covered_lines: bool
-
-    def should_ignore_for_mutation(self, path: Path | str) -> bool:
-        checked_path = str(path)
-        if not checked_path.endswith(".py"):
-            return True
-        return any(fnmatch.fnmatch(checked_path, pattern) for pattern in self.do_not_mutate)
-
-
-def config_reader():
-    path = Path("pyproject.toml")
-    if path.exists():
-        data = tomllib.loads(path.read_text("utf-8"))
-
-        try:
-            config = data["tool"]["mutmut"]
-        except KeyError:
-            pass
-        else:
-
-            def s(key: str, default: object) -> object:
-                try:
-                    result = config[key]
-                except KeyError:
-                    return default
-                return result
-
-            return s
-
-    config_parser = ConfigParser()
-    config_parser.read("setup.cfg")
-
-    def s(key: str, default: object) -> object:
-        try:
-            result = config_parser.get("mutmut", key)
-        except (NoOptionError, NoSectionError):
-            return default
-        if isinstance(default, list):
-            result = [x for x in result.split("\n") if x] if "\n" in result else [result]
-        elif isinstance(default, bool):
-            result = result.lower() in {"1", "t", "true"}
-        elif isinstance(default, int):
-            result = int(result)
-        return result
-
-    return s
-
-
-def ensure_config_loaded():
-    if mutmut.config is None:
-        mutmut.config = load_config()
-
-
-def get_config() -> "Config":
-    ensure_config_loaded()
-    config = mutmut.config
-    if config is None:
-        msg = "mutmut config must be loaded before accessing it"
-        raise RuntimeError(msg)
-    return config
-
-
-def load_config() -> "Config":
-    s = config_reader()
-
-    paths_from_config = [Path(y) for y in s("paths_to_mutate", [])]
-
-    return Config(
-        do_not_mutate=s("do_not_mutate", []),
-        also_copy=[Path(y) for y in s("also_copy", [])]
-        + [
-            Path("tests/"),
-            Path("test/"),
-            Path("setup.cfg"),
-            Path("pyproject.toml"),
-        ]
-        + list(Path().glob("test*.py")),
-        max_stack_depth=s("max_stack_depth", -1),
-        debug=s("debug", default=False),
-        mutate_only_covered_lines=s("mutate_only_covered_lines", default=False),
-        paths_to_mutate=paths_from_config or guess_paths_to_mutate(),
-        tests_dir=s("tests_dir", []),
-        pytest_add_cli_args=s("pytest_add_cli_args", []),
-        pytest_add_cli_args_test_selection=s("pytest_add_cli_args_test_selection", []),
-    )
-
-
 @click.group()
 @click.version_option()
 def cli():
@@ -1022,39 +565,6 @@ def collect_or_load_stats(runner):
         if new_tests:
             print(f"Found {len(new_tests)} new tests, rerunning stats collection")
             run_stats_collection(runner, tests=new_tests)
-
-
-def load_stats():
-    did_load = False
-    try:
-        with Path("mutants/mutmut-stats.json").open(encoding="utf-8") as f:
-            data = json.load(f)
-            for k, v in data.pop("tests_by_mangled_function_name").items():
-                mutmut.tests_by_mangled_function_name[k] |= set(v)
-            mutmut.duration_by_test = defaultdict(float, data.pop("duration_by_test"))
-            mutmut.stats_time = data.pop("stats_time")
-            if data:
-                msg = f"Unexpected keys in stats file: {sorted(data.keys())}"
-                raise ValueError(msg)
-            did_load = True
-    except (FileNotFoundError, JSONDecodeError):
-        pass
-    return did_load
-
-
-def save_stats():
-    with Path("mutants/mutmut-stats.json").open("w", encoding="utf-8") as f:
-        json.dump(
-            dict(
-                tests_by_mangled_function_name={
-                    k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()
-                },
-                duration_by_test=mutmut.duration_by_test,
-                stats_time=mutmut.stats_time,
-            ),
-            f,
-            indent=4,
-        )
 
 
 def collect_source_file_mutation_data(*, mutant_names):
@@ -1139,8 +649,8 @@ def stop_all_children(mutants):
 
 
 # used to copy the global mutmut.config to subprocesses
-set_start_method("fork")
-START_TIMES_BY_PID_LOCK = Lock()
+with suppress(RuntimeError):
+    set_start_method("fork")
 
 
 def timeout_checker(mutants):

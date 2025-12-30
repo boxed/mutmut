@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mutmut.__main__ import TestRunner
+    from mutmut.runners import TestRunner
 
 import coverage
 

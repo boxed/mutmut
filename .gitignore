@@ -55,6 +55,7 @@ output/*/index.html
 # Sphinx
 docs/_build
 docs/tri*.rst
+site/
 
 # tests
 results/

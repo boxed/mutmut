@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mutmut.__main__ import Config
+    from mutmut.config import Config
 
 __version__ = importlib.metadata.version("mutmut")
 

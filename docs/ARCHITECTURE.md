@@ -1,0 +1,1 @@
+--8<-- "ARCHITECTURE.md"
