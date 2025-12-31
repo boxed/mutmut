@@ -1,6 +1,6 @@
 [project]
   name = "mutmut"
-  version = "3.4.1"
+  version = "3.4.2"
   description = "mutation testing for Python 3"
   keywords = ["mutmut", "mutant", "mutation", "test", "testing"]
   authors = [
@@ -38,7 +38,7 @@
 
 
   [project.scripts]
-    mutmut = "mutmut.cli:cli"
+    mutmut = "mutmut.cli.root:cli"
 
 # =================================== build ====================================
 [build-system]

@@ -248,7 +248,10 @@ def combine_mutations_to_source(
             result.append(statement)
 
     mutated_module = module.with_changes(body=result)
-    return mutated_module.code, mutation_names
+    mutated_code = mutated_module.code
+    if not mutated_code.endswith("\n"):
+        mutated_code += "\n"
+    return mutated_code, mutation_names
 
 
 def function_trampoline_arrangement(

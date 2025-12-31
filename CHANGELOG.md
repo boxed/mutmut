@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.4.2] - 2025-12-30
+
+### Changed
+- split the CLI implementation into focused command modules and expose them through `mutmut.cli.root`
+- ensure generated mutations always end with a newline so files stay well-formed
+
 ## [3.4.1] - 2025-12-30
 
 ### Changed

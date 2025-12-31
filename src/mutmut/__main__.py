@@ -5,7 +5,7 @@ Why does this file exist, and why __main__? For more info, read:
 - https://docs.python.org/3/using/cmdline.html#cmdoption-m
 """
 
-from mutmut.cli import cli
+from mutmut.cli.root import cli
 
 if __name__ == "__main__":
     cli()
