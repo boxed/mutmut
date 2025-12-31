@@ -760,7 +760,7 @@ def test_run_forced_fail_test_with_failing_test(nootnoot_state, capfd):
     print()
     print(f"out: {out}")
     print(f"err: {err}")
-    assert "done" in out
+    assert "done" in err
     assert not os.environ["MUTANT_UNDER_TEST"]
 
 
@@ -771,8 +771,8 @@ def test_run_forced_fail_test_with_nootnoot_programmatic_fail_exception(nootnoot
 
     run_forced_fail_test(runner, nootnoot_state)
 
-    out, _ = capfd.readouterr()
-    assert "done" in out
+    _out, err = capfd.readouterr()
+    assert "done" in err
     assert not os.environ["MUTANT_UNDER_TEST"]
 
 
@@ -785,8 +785,8 @@ def test_run_forced_fail_test_with_all_tests_passing(nootnoot_state, capfd):
         run_forced_fail_test(runner, nootnoot_state)
 
     assert error.value.code == 1
-    out, _ = capfd.readouterr()
-    assert "FAILED: Unable to force test failures" in out
+    _out, err = capfd.readouterr()
+    assert "FAILED: Unable to force test failures" in err
 
 
 def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):

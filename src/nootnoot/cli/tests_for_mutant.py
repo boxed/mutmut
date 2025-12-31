@@ -12,7 +12,10 @@ from nootnoot.state import NootNootState
 @click.pass_obj
 def tests_for_mutant(state: NootNootState, mutant_name: str) -> None:
     if not load_stats(state):
-        print("Failed to load stats. Please run nootnoot first to collect stats.")
+        print(
+            "Failed to load stats. Please run nootnoot first to collect stats.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     tests = tests_for_mutant_names(state, [mutant_name])

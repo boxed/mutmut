@@ -1,6 +1,6 @@
 [project]
   name = "nootnoot"
-version = "3.4.5"
+version = "3.4.6"
   description = "mutation testing for Python 3"
   keywords = ["nootnoot", "mutant", "mutation", "test", "testing"]
   authors = [

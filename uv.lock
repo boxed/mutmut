@@ -697,7 +697,7 @@ wheels = [
 
 [[package]]
 name = "nootnoot"
-version = "3.4.5"
+version = "3.4.6"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

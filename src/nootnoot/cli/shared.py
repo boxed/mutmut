@@ -4,7 +4,7 @@ import os
 import sys
 from io import TextIOBase
 from time import process_time
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 from rich.console import Console
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from nootnoot.state import NootNootState
 
 console = Console(
-    file=sys.__stdout__ or sys.stdout,
+    file=sys.__stderr__ or sys.stderr,
 )  # use rich (via textual) for deterministic spinner instead of reimplementing animation.
 
 
@@ -51,16 +51,20 @@ def print_stats(
 
 def run_forced_fail_test(runner: TestRunner, state: NootNootState) -> None:
     os.environ["MUTANT_UNDER_TEST"] = "fail"
-    with CatchOutput(state=state, spinner_title="Running forced fail test") as catcher:
+    with CatchOutput(
+        state=state,
+        spinner_title="Running forced fail test",
+        output_stream=sys.stderr,
+    ) as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
-                print("FAILED: Unable to force test failures")
+                print("FAILED: Unable to force test failures", file=sys.stderr)
                 raise SystemExit(1)
         except NootNootProgrammaticFailException:
             pass
     os.environ["MUTANT_UNDER_TEST"] = ""
-    print("    done")
+    print("    done", file=sys.stderr)
 
 
 class CatchOutput:
@@ -70,6 +74,7 @@ class CatchOutput:
         state: NootNootState,
         callback: Callable[[str], None] = lambda _s: None,
         spinner_title: str | None = None,
+        output_stream: TextIOBase | IO[str] | None = None,
     ):
         self.strings = []
         self.spinner_title = spinner_title or ""
@@ -77,6 +82,7 @@ class CatchOutput:
         self._state = state
         self._status: Status | None = None
         self._is_debug = config is not None and config.debug
+        self._output_stream = output_stream or sys.stderr
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher: CatchOutput):
@@ -110,9 +116,9 @@ class CatchOutput:
 
     def dump_output(self):
         self.stop()
-        print()
+        print(file=self._output_stream)
         for line in self.strings:
-            print(line, end="")
+            print(line, end="", file=self._output_stream)
 
     def __enter__(self):
         """Start redirecting stdout/stderr and return the catcher."""
@@ -123,7 +129,7 @@ class CatchOutput:
         """Restore the original stdout/stderr streams."""
         self.stop()
         if self.spinner_title:
-            print()
+            print(file=self._output_stream)
 
 
 def run_stats_collection(
@@ -139,11 +145,18 @@ def run_stats_collection(
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     start_cpu_time = process_time()
 
-    with CatchOutput(state=state, spinner_title="Running stats") as output_catcher:
+    with CatchOutput(
+        state=state,
+        spinner_title="Running stats",
+        output_stream=sys.stderr,
+    ) as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
-            print(f"failed to collect stats. runner returned {collect_stats_exit_code}")
+            print(
+                f"failed to collect stats. runner returned {collect_stats_exit_code}",
+                file=sys.stderr,
+            )
             sys.exit(1)
         # ensure that at least one mutant has associated tests
         num_associated_tests = sum(len(tests) for tests in state.tests_by_mangled_function_name.values())
@@ -151,25 +164,36 @@ def run_stats_collection(
             output_catcher.dump_output()
             print(
                 "Stopping early, because we could not find any test case for any mutant. "
-                "It seems that the selected tests do not cover any code that we mutated."
+                "It seems that the selected tests do not cover any code that we mutated.",
+                file=sys.stderr,
             )
             if not config.debug:
-                print("You can set debug=true to see the executed test names in the output above.")
+                print(
+                    "You can set debug=true to see the executed test names in the output above.",
+                    file=sys.stderr,
+                )
             else:
-                print("In the last pytest run above, you can see which tests we executed.")
-            print("You can use nootnoot browse to check which parts of the source code we mutated.")
+                print(
+                    "In the last pytest run above, you can see which tests we executed.",
+                    file=sys.stderr,
+                )
+            print(
+                "You can use nootnoot browse to check which parts of the source code we mutated.",
+                file=sys.stderr,
+            )
             print(
                 "If some of the mutated code should be covered by the executed tests, "
-                "consider opening an issue (with a MRE if possible)."
+                "consider opening an issue (with a MRE if possible).",
+                file=sys.stderr,
             )
             sys.exit(1)
 
-    print("    done")
+    print("    done", file=sys.stderr)
     if not tests:  # again, meaning all
         state.stats_time = process_time() - start_cpu_time
 
     if not collected_test_names(state):
-        print("failed to collect stats, no active tests found")
+        print("failed to collect stats, no active tests found", file=sys.stderr)
         sys.exit(1)
 
     save_stats(state)
@@ -183,13 +207,17 @@ def collect_or_load_stats(runner: TestRunner, state: NootNootState) -> None:
         run_stats_collection(runner, state)
     else:
         # Run incremental stats
-        with CatchOutput(state=state, spinner_title="Listing all tests") as output_catcher:
+        with CatchOutput(
+            state=state,
+            spinner_title="Listing all tests",
+            output_stream=sys.stderr,
+        ) as output_catcher:
             os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
             try:
                 all_tests_result = runner.list_all_tests()
             except CollectTestsFailedException:
                 output_catcher.dump_output()
-                print("Failed to collect list of tests")
+                print("Failed to collect list of tests", file=sys.stderr)
                 sys.exit(1)
 
         all_tests_result.clear_out_obsolete_test_names()
@@ -197,5 +225,8 @@ def collect_or_load_stats(runner: TestRunner, state: NootNootState) -> None:
         new_tests = all_tests_result.new_tests()
 
         if new_tests:
-            print(f"Found {len(new_tests)} new tests, rerunning stats collection")
+            print(
+                f"Found {len(new_tests)} new tests, rerunning stats collection",
+                file=sys.stderr,
+            )
             run_stats_collection(runner, state, tests=new_tests)

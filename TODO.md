@@ -141,7 +141,7 @@
 
 ## Output, observability, and UX contracts
 
-* [ ] **Introduce structured event stream in core**
+* [x] **Introduce structured event stream in core**
 
   * Core emits events like:
 
@@ -152,7 +152,7 @@
     * Core does not call `print()`.
     * Unit tests can assert on emitted events.
 
-* [ ] **Add `--format json` output mode**
+* [x] **Add `--format json` output mode**
 
   * JSON output should be stable and machine-readable.
   * Ensure no ANSI / spinner output contaminates JSON mode.
@@ -161,7 +161,7 @@
     * `nootnoot run --format json` prints valid JSON to stdout only.
     * Diagnostics go to stderr (or are suppressed per contract).
 
-* [ ] **Fix stdout/stderr separation across all commands**
+* [x] **Fix stdout/stderr separation across all commands**
 
   * Results: stdout
   * Diagnostics/progress/errors: stderr

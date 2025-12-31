@@ -14,8 +14,10 @@ import click
 from setproctitle import setproctitle
 
 from nootnoot.config import ensure_config_loaded, get_config
+from nootnoot.events import EventSink, ListEventSink, emit_event
 from nootnoot.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
 from nootnoot.mutation import (
+    calculate_summary_stats,
     collect_source_file_mutation_data,
     copy_also_copy_files,
     copy_src_dir,
@@ -29,6 +31,7 @@ from nootnoot.mutation import (
     tests_for_mutant_names,
     utcnow,
 )
+from nootnoot.reporting import RunReport, render_json_report
 from nootnoot.runners import PytestRunner
 from nootnoot.state import NootNootState, set_state
 
@@ -64,8 +67,19 @@ def timeout_checker(mutants):
     return inner_timeout_checker
 
 
+def _diagnostic(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
 @click.command()
 @click.option("--max-children", type=int)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["human", "json"]),
+    default="human",
+    show_default=True,
+)
 @click.argument("mutant_names", required=False, nargs=-1)
 @click.pass_obj
 def run(
@@ -73,11 +87,21 @@ def run(
     mutant_names: tuple[str, ...] | list[str],
     *,
     max_children: int | None,
+    output_format: str,
 ) -> None:
     if not isinstance(mutant_names, (tuple, list)):
         msg = f"mutant_names must be tuple or list, got {type(mutant_names)}"
         raise TypeError(msg)
-    _run(state, mutant_names, max_children)
+    event_sink = ListEventSink() if output_format == "json" else None
+    report = _run(
+        state,
+        mutant_names,
+        max_children,
+        output_format=output_format,
+        event_sink=event_sink,
+    )
+    if output_format == "json" and report is not None:
+        click.echo(render_json_report(report))
 
 
 # separate function, so we can call it directly from the tests
@@ -85,7 +109,10 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     state: NootNootState,
     mutant_names: tuple[str, ...] | list[str],
     max_children: int | None,
-) -> None:
+    *,
+    output_format: str = "human",
+    event_sink: EventSink | None = None,
+) -> RunReport | None:
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants,
     # which means we can get a list of tests and how many mutants each test kills.
@@ -101,6 +128,15 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     if max_children is None:
         max_children = os.cpu_count() or 4
 
+    emit_event(
+        event_sink,
+        "session_started",
+        {
+            "max_children": max_children,
+            "mutant_names": list(mutant_names),
+        },
+    )
+
     start = utcnow()
     Path("mutants").mkdir(exist_ok=True, parents=True)
     with CatchOutput(state=state, spinner_title="Generating mutants"):
@@ -111,7 +147,13 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         create_mutants(max_children, state)
 
     time = utcnow() - start
-    print(f"    done in {round(time.total_seconds() * 1000)}ms")
+    if output_format == "human":
+        _diagnostic(f"    done in {round(time.total_seconds() * 1000)}ms")
+    emit_event(
+        event_sink,
+        "mutants_generated",
+        {"elapsed_ms": round(time.total_seconds() * 1000)},
+    )
 
     # TODO: config/option for runner
     # runner = HammettRunner()
@@ -134,9 +176,10 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
         if clean_test_exit_code != 0:
             output_catcher.dump_output()
-            print("Failed to run clean test")
+            print("Failed to run clean test", file=sys.stderr)
             sys.exit(1)
-    print("    done")
+    if output_format == "human":
+        _diagnostic("    done")
 
     # this can't be the first thing, because it can fail deep inside pytest/django
     # setup and then everything is destroyed
@@ -148,8 +191,22 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         pid, wait_status = os.wait()
         exit_code = os.waitstatus_to_exitcode(wait_status)
         if config.debug:
-            print("    worker exit code", exit_code)
-        source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
+            print("    worker exit code", exit_code, file=sys.stderr)
+        source_data = source_file_mutation_data_by_pid[pid]
+        mutant_key = source_data.key_by_pid.get(pid)
+        source_data.register_result(pid=pid, exit_code=exit_code)
+        if mutant_key is not None:
+            emit_event(
+                event_sink,
+                "mutant_finished",
+                {
+                    "name": mutant_key,
+                    "path": str(source_data.path),
+                    "exit_code": exit_code,
+                    "status": status_by_exit_code[exit_code],
+                    "duration_seconds": source_data.durations_by_key.get(mutant_key),
+                },
+            )
 
     source_file_mutation_data_by_pid: dict[
         int, SourceFileMutationData
@@ -164,7 +221,8 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
 
     start = utcnow()
     try:
-        print("Running mutation testing")
+        if output_format == "human":
+            _diagnostic("Running mutation testing")
 
         # Calculate times of tests
         for source_data, mutant_name, _ in mutants:
@@ -179,7 +237,8 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
 
         # Now do mutation
         for source_data, mutant_name, previous_result in mutants:
-            print_stats(source_file_mutation_data_by_path)
+            if output_format == "human":
+                print_stats(source_file_mutation_data_by_path)
 
             normalized_mutant_name = mutant_name.replace("__init__.", "")
 
@@ -195,6 +254,16 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
             if not tests:
                 source_data.exit_code_by_key[normalized_mutant_name] = 33
                 source_data.save()
+                emit_event(
+                    event_sink,
+                    "mutant_finished",
+                    {
+                        "name": normalized_mutant_name,
+                        "path": str(source_data.path),
+                        "exit_code": 33,
+                        "status": status_by_exit_code[33],
+                    },
+                )
                 continue
 
             pid = os.fork()
@@ -227,6 +296,15 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
                 # in the parent
                 source_file_mutation_data_by_pid[pid] = source_data
                 source_data.register_pid(pid=pid, key=normalized_mutant_name)
+                emit_event(
+                    event_sink,
+                    "mutant_started",
+                    {
+                        "name": normalized_mutant_name,
+                        "path": str(source_data.path),
+                        "tests_count": len(tests),
+                    },
+                )
                 running_children += 1
 
             if running_children >= max_children:
@@ -242,14 +320,31 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         except ChildProcessError:
             pass
     except KeyboardInterrupt:
-        print("Stopping...")
+        _diagnostic("Stopping...")
         stop_all_children(mutants)
+        emit_event(
+            event_sink,
+            "session_interrupted",
+            {},
+        )
 
     t = utcnow() - start
 
-    print_stats(source_file_mutation_data_by_path, force_output=True)
-    print()
-    print(f"{count_tried / t.total_seconds():.2f} mutations/second")
+    if output_format == "human":
+        print_stats(source_file_mutation_data_by_path, force_output=True)
+        _diagnostic("")
+        _diagnostic(f"{count_tried / t.total_seconds():.2f} mutations/second")
+
+    summary_stats = calculate_summary_stats(source_file_mutation_data_by_path)
+    emit_event(
+        event_sink,
+        "session_finished",
+        {
+            "summary": summary_stats.__dict__.copy(),
+            "duration_seconds": t.total_seconds(),
+            "mutations_per_second": count_tried / t.total_seconds() if t.total_seconds() else 0.0,
+        },
+    )
 
     if mutant_names:
         print()
@@ -265,3 +360,35 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
             print(emoji_by_status.get(status_by_exit_code[exit_code], "?"), mutant_name)
 
         print()
+
+    if output_format == "json" and isinstance(event_sink, ListEventSink):
+        summary = {
+            "not_checked": summary_stats.not_checked,
+            "killed": summary_stats.killed,
+            "survived": summary_stats.survived,
+            "total": summary_stats.total,
+            "no_tests": summary_stats.no_tests,
+            "skipped": summary_stats.skipped,
+            "suspicious": summary_stats.suspicious,
+            "timeout": summary_stats.timeout,
+            "check_was_interrupted_by_user": summary_stats.check_was_interrupted_by_user,
+            "segfault": summary_stats.segfault,
+        }
+        mutants_payload = []
+        for path, data in sorted(source_file_mutation_data_by_path.items()):
+            for mutant_name in sorted(data.exit_code_by_key):
+                exit_code = data.exit_code_by_key[mutant_name]
+                mutants_payload.append({
+                    "name": mutant_name,
+                    "path": path,
+                    "exit_code": exit_code,
+                    "status": status_by_exit_code[exit_code],
+                    "duration_seconds": data.durations_by_key.get(mutant_name),
+                    "estimated_duration_seconds": data.estimated_time_of_tests_by_mutant.get(mutant_name),
+                })
+        return RunReport(
+            summary=summary,
+            mutants=mutants_payload,
+            events=event_sink.events,
+        )
+    return None

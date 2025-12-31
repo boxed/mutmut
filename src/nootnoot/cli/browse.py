@@ -217,7 +217,7 @@ def browse(state: NootNootState, *, show_killed: bool) -> None:
                 browse_index = sys.argv.index("browse")
                 initial_args = sys.argv[:browse_index]
                 subprocess_args = [sys.executable, *initial_args, command, *args]
-                print(">", *subprocess_args)
+                print(">", *subprocess_args, file=sys.stderr)
                 subprocess.run(subprocess_args, check=False)  # noqa: S603
                 input("press enter to return to browser")
 

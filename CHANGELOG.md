@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.4.6] - 2025-12-30
+
+### Added
+- add structured run events for mutation sessions
+- add `--format json` output for `nootnoot run`
+
+### Changed
+- route mutation run diagnostics to stderr to keep stdout clean
+
 ## [3.4.5] - 2025-12-30
 
 ### Changed
