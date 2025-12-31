@@ -1,11 +1,12 @@
-import itertools
+from __future__ import annotations
+
 import os
 import sys
-from collections.abc import Callable, Iterable
-from datetime import UTC, datetime, timedelta
 from io import TextIOBase
 from time import process_time
-from typing import Protocol, cast
+from typing import TYPE_CHECKING
+
+from rich.console import Console
 
 from mutmut.config import get_config
 from mutmut.meta import SourceFileMutationData, load_stats, save_stats
@@ -13,48 +14,25 @@ from mutmut.mutation import (
     MutmutProgrammaticFailException,
     calculate_summary_stats,
     collected_test_names,
-    utcnow,
 )
 from mutmut.runners import CollectTestsFailedException, TestRunner
-from mutmut.state import MutmutState
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from rich.status import Status
+
+    from mutmut.state import MutmutState
+
+console = Console(
+    file=sys.__stdout__ or sys.stdout,
+)  # use rich (via textual) for deterministic spinner instead of reimplementing animation.
 
 
-class StatusPrinterType(Protocol):
-    def __call__(self, message: str, *, force_output: bool = False) -> None: ...
-
-
-spinner = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-
-
-def status_printer() -> StatusPrinterType:
-    """Manage the printing and in-place updating of a line of characters.
-
-    .. note::
-        If the string is longer than a line, then in-place updating may not
-        work (it will print a new line at each refresh).
-    """
-    last_len = [0]
-    last_update = [datetime(1900, 1, 1, tzinfo=UTC)]
-    update_threshold = timedelta(seconds=0.1)
-
-    def p(s: str, *, force_output: bool = False) -> None:
-        if not force_output and (utcnow() - last_update[0]) < update_threshold:
-            return
-        s = next(spinner) + " " + s
-        len_s = len(s)
-        output = "\r" + s + (" " * max(last_len[0] - len_s, 0))
-        stdout = sys.__stdout__ or sys.stdout
-        if stdout is None:
-            msg = "stdout is not available"
-            raise RuntimeError(msg)
-        stdout.write(output)
-        stdout.flush()
-        last_len[0] = len_s
-
-    return cast("StatusPrinterType", p)
-
-
-print_status: StatusPrinterType = status_printer()
+def print_status(message: str, *, force_output: bool = False) -> None:
+    console.print(message)
+    if force_output:
+        console.file.flush()
 
 
 def print_stats(
@@ -95,9 +73,9 @@ class CatchOutput:
         self.strings = []
         self.spinner_title = spinner_title or ""
         config = state.config
-        if config is not None and config.debug:
-            self.spinner_title += "\n"
         self._state = state
+        self._status: Status | None = None
+        self._is_debug = config is not None and config.debug
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher: CatchOutput):
@@ -105,26 +83,28 @@ class CatchOutput:
 
             def write(self, s: str) -> int:
                 callback(s)
-                if spinner_title:
-                    print_status(spinner_title)
                 self.catcher.strings.append(s)
                 return len(s)
 
         self.redirect = StdOutRedirect(self)
 
-    # noinspection PyMethodMayBeStatic
-    @staticmethod
-    def stop():
+    def stop(self):
+        if self._status is not None:
+            self._status.stop()
+            self._status = None
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
     def start(self):
-        if self.spinner_title:
-            print_status(self.spinner_title)
+        if self.spinner_title and not self._is_debug:
+            self._status = console.status(self.spinner_title, spinner="dots")
+            self._status.start()
+        elif self.spinner_title:
+            console.print(self.spinner_title)
+            console.print()
         sys.stdout = self.redirect
         sys.stderr = self.redirect
-        config = self._state.config
-        if config is not None and config.debug:
+        if self._is_debug:
             self.stop()
 
     def dump_output(self):

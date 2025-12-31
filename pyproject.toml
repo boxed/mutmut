@@ -1,6 +1,6 @@
 [project]
   name = "mutmut"
-version = "3.4.3"
+version = "3.4.4"
   description = "mutation testing for Python 3"
   keywords = ["mutmut", "mutant", "mutation", "test", "testing"]
   authors = [
@@ -25,9 +25,10 @@ version = "3.4.3"
     "coverage>=7.3.0",
     "libcst>=1.8.5",
     "pytest>=6.2.5",
+    "rich>=14.2.0",
     "setproctitle>=1.1.0",
     "textual>=1.0.0",
-  ]
+]
 
   [project.urls]
     Homepage = "https://github.com/josephcourtney/mutmut"

@@ -688,13 +688,14 @@ wheels = [
 
 [[package]]
 name = "mutmut"
-version = "3.4.2"
+version = "3.4.4"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "coverage" },
     { name = "libcst" },
     { name = "pytest" },
+    { name = "rich" },
     { name = "setproctitle" },
     { name = "textual" },
 ]
@@ -740,6 +741,7 @@ requires-dist = [
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.0" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.12.1" },
     { name = "pytest", specifier = ">=6.2.5" },
+    { name = "rich", specifier = ">=14.2.0" },
     { name = "setproctitle", specifier = ">=1.1.0" },
     { name = "textual", specifier = ">=1.0.0" },
 ]
