@@ -6,9 +6,9 @@ from typing import Any, ClassVar, cast
 import click
 from rich.text import Text
 
-from mutmut.config import ensure_config_loaded, get_config
-from mutmut.meta import SourceFileMutationData
-from mutmut.mutation import (
+from nootnoot.config import ensure_config_loaded, get_config
+from nootnoot.meta import SourceFileMutationData
+from nootnoot.mutation import (
     Stat,
     apply_mutant,
     collect_stat,
@@ -18,13 +18,13 @@ from mutmut.mutation import (
     unused,
     walk_source_files,
 )
-from mutmut.state import MutmutState
+from nootnoot.state import NootNootState
 
 
 @click.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
 @click.pass_obj
-def browse(state: MutmutState, *, show_killed: bool) -> None:
+def browse(state: NootNootState, *, show_killed: bool) -> None:
     ensure_config_loaded(state)
 
     from rich.syntax import Syntax  # noqa: PLC0415
@@ -186,7 +186,7 @@ def browse(state: MutmutState, *, show_killed: bool) -> None:
                             "in an unknown exit code."
                         )
                     case "not checked":
-                        description = "Not checked in the last mutmut run."
+                        description = "Not checked in the last nootnoot run."
                     case _:
                         description = f"Unknown status ({exit_code=}, {status=})"
                 description_view.update(f"\n {description}\n")
@@ -242,7 +242,7 @@ def browse(state: MutmutState, *, show_killed: bool) -> None:
             mutant_name = self.get_mutant_name_from_selection()
             if mutant_name is None:
                 return
-            self.retest(mutant_name.rpartition("__mutmut_")[0] + "__mutmut_*")
+            self.retest(mutant_name.rpartition("__nootnoot_")[0] + "__nootnoot_*")
 
         def action_retest_module(self):
             mutant_name = self.get_mutant_name_from_selection()

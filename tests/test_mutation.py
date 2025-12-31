@@ -7,14 +7,14 @@ from unittest.mock import Mock, patch
 import libcst as cst
 import pytest
 
-from mutmut.cli import CatchOutput, run_forced_fail_test
-from mutmut.file_mutation import create_mutations, mutate_file_contents
-from mutmut.mutation import (
-    MutmutProgrammaticFailException,
+from nootnoot.cli import CatchOutput, run_forced_fail_test
+from nootnoot.file_mutation import create_mutations, mutate_file_contents
+from nootnoot.mutation import (
+    NootNootProgrammaticFailException,
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
 )
-from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR, mangle_function_name
+from nootnoot.trampoline_templates import CLASS_NAME_SEPARATOR, mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -411,9 +411,9 @@ class Foo:
     mutated_code = mutated_module(source)
 
     expected = """class Foo:
-    def xǁFooǁmember__mutmut_orig(self):
+    def xǁFooǁmember__nootnoot_orig(self):
         return 1
-    def xǁFooǁmember__mutmut_1(self):
+    def xǁFooǁmember__nootnoot_1(self):
         return 2"""
 
     assert expected in mutated_code
@@ -426,9 +426,9 @@ def test_function_with_annotation():
     print(mutated_code)
 
     expected_defs = [
-        "def x_capitalize__mutmut_1(s : str):\n    return s[0].title() - s[1:] if s else s",
-        "def x_capitalize__mutmut_2(s : str):\n    return s[1].title() + s[1:] if s else s",
-        "def x_capitalize__mutmut_3(s : str):\n    return s[0].title() + s[2:] if s else s",
+        "def x_capitalize__nootnoot_1(s : str):\n    return s[0].title() - s[1:] if s else s",
+        "def x_capitalize__nootnoot_2(s : str):\n    return s[1].title() + s[1:] if s else s",
+        "def x_capitalize__nootnoot_3(s : str):\n    return s[0].title() + s[2:] if s else s",
     ]
 
     for expected in expected_defs:
@@ -654,9 +654,9 @@ def foo():
 
 def test_orig_function_name_from_key():
     assert orig_function_and_class_names_from_key(
-        f"_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__mutmut_1"
+        f"_{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar__nootnoot_1"
     ) == ("bar", "Foo")
-    assert orig_function_and_class_names_from_key("x_bar__mutmut_1") == ("bar", None)
+    assert orig_function_and_class_names_from_key("x_bar__nootnoot_1") == ("bar", None)
 
 
 def test_mangle_function_name():
@@ -667,7 +667,7 @@ def test_mangle_function_name():
     )
 
 
-def test_diff_ops(mutmut_state):
+def test_diff_ops(nootnoot_state):
     source = """
 def foo():
     return 1
@@ -683,13 +683,13 @@ class Foo:
     assert len(mutant_names) == 2
 
     diff1 = get_diff_for_mutant(
-        mutmut_state,
+        nootnoot_state,
         mutant_name=mutant_names[0],
         source=mutants_source,
         path="test.py",
     ).strip()
     diff2 = get_diff_for_mutant(
-        mutmut_state,
+        nootnoot_state,
         mutant_name=mutant_names[1],
         source=mutants_source,
         path="test.py",
@@ -750,10 +750,10 @@ def foo():
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_failing_test(mutmut_state, capfd):
+def test_run_forced_fail_test_with_failing_test(nootnoot_state, capfd):
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
-    run_forced_fail_test(runner, mutmut_state)
+    run_forced_fail_test(runner, nootnoot_state)
 
     out, err = capfd.readouterr()
 
@@ -766,10 +766,10 @@ def test_run_forced_fail_test_with_failing_test(mutmut_state, capfd):
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(mutmut_state, capfd):
-    runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
+def test_run_forced_fail_test_with_nootnoot_programmatic_fail_exception(nootnoot_state, capfd):
+    runner = _mocked_runner_run_forced_failed(side_effect=NootNootProgrammaticFailException())
 
-    run_forced_fail_test(runner, mutmut_state)
+    run_forced_fail_test(runner, nootnoot_state)
 
     out, _ = capfd.readouterr()
     assert "done" in out
@@ -778,11 +778,11 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(mutmut_sta
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_all_tests_passing(mutmut_state, capfd):
+def test_run_forced_fail_test_with_all_tests_passing(nootnoot_state, capfd):
     runner = _mocked_runner_run_forced_failed(return_value=0)
 
     with pytest.raises(SystemExit) as error:
-        run_forced_fail_test(runner, mutmut_state)
+        run_forced_fail_test(runner, nootnoot_state)
 
     assert error.value.code == 1
     out, _ = capfd.readouterr()
@@ -828,7 +828,7 @@ def foo():
         pass""".strip()
 
     expected = """
-def x_foo__mutmut_1():
+def x_foo__nootnoot_1():
 
     def inner():
         pass""".strip()

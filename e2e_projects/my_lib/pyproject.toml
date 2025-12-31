@@ -16,7 +16,7 @@ dev = [
     "pytest>=8.3.5",
 ]
 
-[tool.mutmut]
+[tool.nootnoot]
 debug = true
 
 [tool.pytest]

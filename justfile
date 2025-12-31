@@ -24,7 +24,7 @@ RUFF       := justfile_directory() + "/.venv/bin/ruff"
 PYTEST     := justfile_directory() + "/.venv/bin/pytest"
 TY         := justfile_directory() + "/.venv/bin/ty"
 SHOWCOV    := justfile_directory() + "/.venv/bin/showcov"
-MUTMUT     := justfile_directory() + "/.venv/bin/mutmut"
+NOOTNOOT     := justfile_directory() + "/.venv/bin/nootnoot"
 MKDOCS     := justfile_directory() + "/.venv/bin/mkdocs"
 WILY       := justfile_directory() + "/.venv/bin/wily"
 WILY_CACHE := justfile_directory() + "/.wily"
@@ -56,7 +56,7 @@ env:
   @echo "PYTEST={{PYTEST}}"
   @echo "TY={{TY}}"
   @echo "SHOWCOV={{SHOWCOV}}"
-  @echo "MUTMUT={{MUTMUT}}"
+  @echo "NOOTNOOT={{NOOTNOOT}}"
   @echo "MKDOCS={{MKDOCS}}"
   @{{UV}} --version || true
   @{{PYTEST}} --version || true
@@ -247,27 +247,27 @@ cov-lines:
 # Test Quality: Run mutation testing on the test suite
 mutation *ARGS:
   #!/usr/bin/env bash
-  if [ -x {{MUTMUT}} ]; then
-    {{MUTMUT}} run {{ARGS}}
+  if [ -x {{NOOTNOOT}} ]; then
+    {{NOOTNOOT}} run {{ARGS}}
   else
-    echo "[mutmut] skipping: mutmut not found ({{MUTMUT}})"
+    echo "[nootnoot] skipping: nootnoot not found ({{NOOTNOOT}})"
   fi
 
 # Test Quality: Report mutation testing results
 mutation-report:
   #!/usr/bin/env bash
-  if [ -x {{MUTMUT}} ]; then
-    {{MUTMUT}} results
+  if [ -x {{NOOTNOOT}} ]; then
+    {{NOOTNOOT}} results
   else
-    echo "[mutation-report] skipping: mutmut not found ({{MUTMUT}})"
+    echo "[mutation-report] skipping: nootnoot not found ({{NOOTNOOT}})"
   fi
 
 # Test Quality: Mutation score summary (for humans/CI)
 mutation-score:
-  {{MUTMUT}} results | .venv/bin/python scripts/mutation_score.py
+  {{NOOTNOOT}} results | .venv/bin/python scripts/mutation_score.py
 
 
-# Test Quality: Show the diff for every mutant listed by `mutmut results`
+# Test Quality: Show the diff for every mutant listed by `nootnoot results`
 mutation-diffs *ARGS:
   #!/usr/bin/env bash
   echo "=== Mutant Diffs ==="
@@ -391,10 +391,10 @@ metrics-report:
 
   echo
   echo "--- Mutation score ---"
-  if [ -x {{MUTMUT}} ]; then
-    {{MUTMUT}} results | .venv/bin/python scripts/mutation_score.py || true
+  if [ -x {{NOOTNOOT}} ]; then
+    {{NOOTNOOT}} results | .venv/bin/python scripts/mutation_score.py || true
   else
-    echo "[metrics-report] mutmut not found ({{MUTMUT}}); skipping mutation score"
+    echo "[metrics-report] nootnoot not found ({{NOOTNOOT}}); skipping mutation score"
   fi
 
   echo
@@ -453,8 +453,8 @@ metrics-gate:
   {{RADON}} cc -s -n 11 {{PY_SRC}}
 
   # 4) Mutation: enforce minimum score
-  if [ -x {{MUTMUT}} ]; then
-    {{MUTMUT}} results | .venv/bin/python scripts/mutation_score.py | tee .mutation-score.txt
+  if [ -x {{NOOTNOOT}} ]; then
+    {{NOOTNOOT}} results | .venv/bin/python scripts/mutation_score.py | tee .mutation-score.txt
     if [ -x .venv/bin/python ] && [ -f scripts/check_mutation_threshold.py ]; then
       export MUTATION_MIN="${MUTATION_MIN:-70}"
       .venv/bin/python scripts/check_mutation_threshold.py < .mutation-score.txt
@@ -463,7 +463,7 @@ metrics-gate:
       exit 1
     fi
   else
-    echo "[metrics-gate] ERROR: mutmut not found ({{MUTMUT}})"
+    echo "[metrics-gate] ERROR: nootnoot not found ({{NOOTNOOT}})"
     exit 1
   fi
 

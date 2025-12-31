@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from mutmut.config import Config
+    from nootnoot.config import Config
 
 
 @dataclass
-class MutmutState:
+class NootNootState:
     duration_by_test: defaultdict[str, float] = field(default_factory=lambda: defaultdict(float))
     tests_by_mangled_function_name: defaultdict[str, set[str]] = field(
         default_factory=lambda: defaultdict(set)
@@ -38,27 +38,27 @@ class MutmutState:
         return stats
 
 
-_state_var: ContextVar[MutmutState | None] = ContextVar("mutmut_state", default=None)
+_state_var: ContextVar[NootNootState | None] = ContextVar("nootnoot_state", default=None)
 
 
-def get_state() -> MutmutState:
+def get_state() -> NootNootState:
     state = _state_var.get()
     if state is None:
-        msg = "Mutmut state is not initialized"
+        msg = "NootNoot state is not initialized"
         raise RuntimeError(msg)
     return state
 
 
-def set_state(state: MutmutState) -> Token[MutmutState | None]:
+def set_state(state: NootNootState) -> Token[NootNootState | None]:
     return _state_var.set(state)
 
 
-def reset_state(token: Token[MutmutState | None]) -> None:
+def reset_state(token: Token[NootNootState | None]) -> None:
     _state_var.reset(token)
 
 
 @contextmanager
-def using_state(state: MutmutState) -> Iterator[MutmutState]:
+def using_state(state: NootNootState) -> Iterator[NootNootState]:
     token = set_state(state)
     try:
         yield state

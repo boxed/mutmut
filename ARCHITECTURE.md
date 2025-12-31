@@ -1,8 +1,8 @@
 # Architecture
 
-This document gives an overview on how Mutmut works internally.
+This document gives an overview on how NootNoot works internally.
 
-## Phases of `mutmut run`
+## Phases of `nootnoot run`
 
 ### Generating mutants
 
@@ -24,7 +24,7 @@ will run the original code.
 We collect a list of all tests and execute them. In this test run, we
 track which tests would execute which mutants, and how long they take.
 We use both stats for performance optimizations later on. The results
-are stored in `mutants/mutmut-stats.json` and global variables.
+are stored in `mutants/nootnoot-stats.json` and global variables.
 
 ### Collecting mutation results
 

@@ -1,6 +1,6 @@
 import click
 
-from mutmut.state import MutmutState
+from nootnoot.state import NootNootState
 
 from .apply import apply
 from .browse import browse
@@ -15,7 +15,7 @@ from .tests_for_mutant import tests_for_mutant
 @click.version_option()
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    ctx.obj = MutmutState()
+    ctx.obj = NootNootState()
 
 
 cli.add_command(print_time_estimates)

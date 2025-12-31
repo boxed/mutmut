@@ -1,13 +1,13 @@
-# mutmut - python mutation tester
+# nootnoot - python mutation tester
 
-[![image](https://github.com/boxed/mutmut/actions/workflows/tests.yml/badge.svg)](https://github.com/boxed/mutmut/actions/workflows/tests.yml)
+[![image](https://github.com/boxed/nootnoot/actions/workflows/tests.yml/badge.svg)](https://github.com/boxed/nootnoot/actions/workflows/tests.yml)
 
-[![Documentation Status](https://readthedocs.org/projects/mutmut/badge/?version=latest)](https://mutmut.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/nootnoot/badge/?version=latest)](https://nootnoot.readthedocs.io/en/latest/?badge=latest)
 
-Mutmut is a mutation testing system for Python, with a strong focus on
+NootNoot is a mutation testing system for Python, with a strong focus on
 ease of use. If you don't know what mutation testing is try starting
 with [this
-article](https://kodare.net/2016/12/01/mutmut-a-python-mutation-testing-system.html).
+article](https://kodare.net/2016/12/01/nootnoot-a-python-mutation-testing-system.html).
 
 Some highlight features:
 
@@ -21,11 +21,11 @@ Some highlight features:
 ![image](browse_screenshot.png)
 
 If you want to mutate code outside of functions, you can try using
-mutmut 2, which has a different execution model than mutmut 3+.
+nootnoot 2, which has a different execution model than nootnoot 3+.
 
 ## Requirements
 
-Mutmut must be run on a system with `fork`
+NootNoot must be run on a system with `fork`
 support. This means that if you want to run on windows, you must run
 inside WSL.
 
@@ -34,24 +34,24 @@ inside WSL.
 You can get started with a simple:
 
 ``` console
-pip install mutmut
-mutmut run
+pip install nootnoot
+nootnoot run
 ```
 
 This will by run pytest on tests in the "tests" or "test" folder and it
 will try to figure out where the code to mutate is.
 
-You can stop the mutation run at any time and mutmut will restart where
+You can stop the mutation run at any time and nootnoot will restart where
 you left off. It will continue where it left off, and re-test functions
 that were modified since last run.
 
-To work with the results, use `mutmut
+To work with the results, use `nootnoot
 browse` where you can see the mutants, retest them when you've
 updated your tests.
 
 You can also write a mutant to disk from the
 `browse` interface, or via
-`mutmut apply <mutant>`. You should
+`nootnoot apply <mutant>`. You should
 **REALLY** have the file you mutate under source code control and
 committed before you apply a mutant!
 
@@ -70,8 +70,8 @@ architecture.
 Unix filename pattern matching style on mutants is supported. Example:
 
 ``` console
-mutmut run "my_module*"
-mutmut run "my_module.my_function*"
+nootnoot run "my_module*"
+nootnoot run "my_module.my_function*"
 ```
 
 In the `browse` TUI you can press
@@ -81,25 +81,25 @@ In the `browse` TUI you can press
 ## Configuration
 
 In `setup.cfg` in the root of your project
-you can configure mutmut if you need to:
+you can configure nootnoot if you need to:
 
 ``` ini
-[mutmut]
+[nootnoot]
 paths_to_mutate=src/
 pytest_add_cli_args_test_selection=tests/
 ```
 
 If you use `pyproject.toml`, you must
 specify the paths as array in a
-`tool.mutmut` section:
+`tool.nootnoot` section:
 
 ``` toml
-[tool.mutmut]
+[tool.nootnoot]
 paths_to_mutate = [ "src/" ]
 pytest_add_cli_args_test_selection= [ "tests/" ]
 ```
 
-See below for more options for configuring mutmut.
+See below for more options for configuring nootnoot.
 
 ### "also copy" files
 
@@ -125,7 +125,7 @@ leads to bad test suites as any introduced bug in those base functions
 will lead to many tests that fail which are hard to understand how they
 relate to the function with the change.
 
-You can configure mutmut to only count a test as being relevant for a
+You can configure nootnoot to only count a test as being relevant for a
 function if the stack depth from the test to the function is below some
 limit. In your `setup.cfg` add:
 
@@ -148,8 +148,8 @@ do_not_mutate=
 
 ### Enable coverage.py filtering of lines to mutate
 
-By default, mutmut will mutate only functions that are called. But, if
-you would like a finer grained (line-level) check for coverage, mutmut
+By default, nootnoot will mutate only functions that are called. But, if
+you would like a finer grained (line-level) check for coverage, nootnoot
 can use coverage.py to do that.
 
 If you only want to mutate lines that are called (according to
@@ -164,7 +164,7 @@ mutate_only_covered_lines=true
 
 ### Enable debug output (increase verbosity)
 
-By default, mutmut "swallows" all the test output etc. so that you get a
+By default, nootnoot "swallows" all the test output etc. so that you get a
 nice clean output.
 
 If you want to see all the detail to aid with debugging, you can set
@@ -207,8 +207,8 @@ pytest_add_cli_args = ["-o", "xfail_strict=False"] # overrides xfail_strict from
 
 # if you want to ignore the normal pytest configuration
 # you can specify a diferent pytest ini file to be used
-pytest_add_cli_args = ["-c", "mutmut_pytest.ini"]
-also_copy = ["mutmut_pytest.ini"]
+pytest_add_cli_args = ["-c", "nootnoot_pytest.ini"]
+also_copy = ["nootnoot_pytest.ini"]
 ```
 
 ## Example mutations
@@ -226,24 +226,24 @@ describing them.
 
 ## Workflow
 
-This section describes how to work with mutmut to enhance your test
+This section describes how to work with nootnoot to enhance your test
 suite.
 
-1.  Run mutmut with `mutmut run`. A full
+1.  Run nootnoot with `nootnoot run`. A full
     run is preferred but if you're just getting started you can exit in
     the middle and start working with what you have found so far.
-2.  Show the mutants with `mutmut browse`
+2.  Show the mutants with `nootnoot browse`
 3.  Find a mutant you want to work on and write a test to try to kill
     it.
 4.  Press `r` to rerun the mutant and see
     if you successfully managed to kill it.
 
-Mutmut keeps the data of what it has done and the mutants in the
+NootNoot keeps the data of what it has done and the mutants in the
 `mutants/` directory.If you want to make
-sure you run a full mutmut run you can delete this directory to start
+sure you run a full nootnoot run you can delete this directory to start
 from scratch.
 
-## Contributing to Mutmut
+## Contributing to NootNoot
 
-If you wish to contribute to Mutmut, please see our [contributing
+If you wish to contribute to NootNoot, please see our [contributing
 guide](CONTRIBUTING.md).

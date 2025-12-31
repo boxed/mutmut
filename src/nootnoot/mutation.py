@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING, TextIO, cast
 
 import libcst as cst
 
-from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
-from mutmut.config import get_config
-from mutmut.file_mutation import mutate_file_contents
-from mutmut.meta import SourceFileMutationData
-from mutmut.runners import PytestRunner
-from mutmut.state import MutmutState, get_state
-from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
+from nootnoot.code_coverage import gather_coverage, get_covered_lines_for_file
+from nootnoot.config import get_config
+from nootnoot.file_mutation import mutate_file_contents
+from nootnoot.meta import SourceFileMutationData
+from nootnoot.runners import PytestRunner
+from nootnoot.state import NootNootState, get_state
+from nootnoot.trampoline_templates import CLASS_NAME_SEPARATOR
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
@@ -74,20 +74,20 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-class MutmutProgrammaticFailException(Exception):
+class NootNootProgrammaticFailException(Exception):
     pass
 
 
 class InvalidGeneratedSyntaxException(Exception):
     def __init__(self, file: Path | str) -> None:
         super().__init__(
-            f"Mutmut generated invalid python syntax for {file}. "
+            f"NootNoot generated invalid python syntax for {file}. "
             "If the original file has valid python syntax, please file an issue "
             "with a minimal reproducible example file."
         )
 
 
-def record_trampoline_hit(name: str, state: MutmutState | None = None) -> None:
+def record_trampoline_hit(name: str, state: NootNootState | None = None) -> None:
     if name.startswith("src."):
         msg = "Failed trampoline hit. Module name starts with `src.`, which is invalid"
         raise ValueError(msg)
@@ -110,7 +110,7 @@ def record_trampoline_hit(name: str, state: MutmutState | None = None) -> None:
     state.add_stat(name)
 
 
-def walk_all_files(state: MutmutState) -> Iterator[tuple[str, str]]:
+def walk_all_files(state: NootNootState) -> Iterator[tuple[str, str]]:
     config = get_config(state)
     for path in config.paths_to_mutate:
         if not path.is_dir() and path.is_file():
@@ -121,7 +121,7 @@ def walk_all_files(state: MutmutState) -> Iterator[tuple[str, str]]:
                 yield root, filename
 
 
-def walk_source_files(state: MutmutState) -> Iterator[Path]:
+def walk_source_files(state: NootNootState) -> Iterator[Path]:
     for root, filename in walk_all_files(state):
         if filename.endswith(".py"):
             yield Path(root) / filename
@@ -147,7 +147,7 @@ class Stat:
     segfault: int
 
 
-def create_mutants(max_children: int, state: MutmutState) -> None:
+def create_mutants(max_children: int, state: NootNootState) -> None:
     with Pool(processes=max_children) as p:
         for result in p.imap_unordered(
             _create_file_mutants_with_state,
@@ -159,12 +159,12 @@ def create_mutants(max_children: int, state: MutmutState) -> None:
                 raise result.error
 
 
-def _create_file_mutants_with_state(args: tuple[Path, MutmutState]) -> FileMutationResult:
+def _create_file_mutants_with_state(args: tuple[Path, NootNootState]) -> FileMutationResult:
     path, state = args
     return create_file_mutants(path, state)
 
 
-def create_file_mutants(path: Path, state: MutmutState) -> FileMutationResult:
+def create_file_mutants(path: Path, state: NootNootState) -> FileMutationResult:
     try:
         print(path)
         output_path = Path("mutants") / path
@@ -179,7 +179,7 @@ def create_file_mutants(path: Path, state: MutmutState) -> FileMutationResult:
         return FileMutationResult(warnings=[], error=e)
 
 
-def copy_src_dir(state: MutmutState) -> None:
+def copy_src_dir(state: NootNootState) -> None:
     config = get_config(state)
     for path in config.paths_to_mutate:
         output_path: Path = Path("mutants") / path
@@ -203,14 +203,14 @@ def setup_source_paths():
                 del sys.path[i]
 
 
-def store_lines_covered_by_tests(state: MutmutState) -> None:
+def store_lines_covered_by_tests(state: NootNootState) -> None:
     config = get_config(state)
     if config.mutate_only_covered_lines:
         covered_lines = gather_coverage(PytestRunner(state), list(walk_source_files(state)))
         state.covered_lines = covered_lines
 
 
-def copy_also_copy_files(state: MutmutState) -> None:
+def copy_also_copy_files(state: NootNootState) -> None:
     config = get_config(state)
     if not isinstance(config.also_copy, list):
         msg = "config.also_copy must be a list of paths"
@@ -227,7 +227,7 @@ def copy_also_copy_files(state: MutmutState) -> None:
             shutil.copytree(source_path, destination, dirs_exist_ok=True)
 
 
-def create_mutants_for_file(filename: Path, output_path: Path, state: MutmutState) -> FileMutationResult:
+def create_mutants_for_file(filename: Path, output_path: Path, state: NootNootState) -> FileMutationResult:
     input_stat = filename.stat()
     warnings_list: list[Warning] = []
 
@@ -270,7 +270,7 @@ def write_all_mutants_to_file(
     out: TextIO,
     source: str,
     filename: str | Path,
-    state: MutmutState,
+    state: NootNootState,
 ) -> Sequence[str]:
     covered_lines = state.covered_lines
     result, mutant_names = mutate_file_contents(
@@ -287,7 +287,7 @@ def unused(*_: object) -> None:
     return
 
 
-def collected_test_names(state: MutmutState) -> set[str]:
+def collected_test_names(state: NootNootState) -> set[str]:
     return set(state.duration_by_test.keys())
 
 
@@ -301,10 +301,10 @@ def strip_prefix(s: str, *, prefix: str, strict: bool = False) -> str:
 
 
 def mangled_name_from_mutant_name(mutant_name: str) -> str:
-    if "__mutmut_" not in mutant_name:
+    if "__nootnoot_" not in mutant_name:
         msg = f"{mutant_name} is not a valid mutant name"
         raise ValueError(msg)
-    return mutant_name.partition("__mutmut_")[0]
+    return mutant_name.partition("__nootnoot_")[0]
 
 
 def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
@@ -349,7 +349,7 @@ def calculate_summary_stats(source_file_mutation_data_by_path: dict[str, SourceF
 
 
 def collect_source_file_mutation_data(
-    *, mutant_names: Iterable[str], state: MutmutState
+    *, mutant_names: Iterable[str], state: NootNootState
 ) -> tuple[list[tuple[SourceFileMutationData, str, int | None]], dict[str, SourceFileMutationData]]:
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
     config = get_config(state)
@@ -383,12 +383,12 @@ def collect_source_file_mutation_data(
     return mutants, source_file_mutation_data_by_path
 
 
-def estimated_worst_case_time(state: MutmutState, mutant_name: str) -> float:
+def estimated_worst_case_time(state: NootNootState, mutant_name: str) -> float:
     tests = state.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
     return sum(state.duration_by_test[t] for t in tests)
 
 
-def tests_for_mutant_names(state: MutmutState, mutant_names: Iterable[str]) -> set[str]:
+def tests_for_mutant_names(state: NootNootState, mutant_names: Iterable[str]) -> set[str]:
     tests: set[str] = set()
     for mutant_name in mutant_names:
         if "*" in mutant_name:
@@ -424,7 +424,7 @@ def find_top_level_function_or_method(module: cst.Module, name: str) -> cst.Func
 
 def read_original_function(module: cst.Module, mutant_name: str) -> cst.FunctionDef:
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
-    orig_name = mangled_name_from_mutant_name(mutant_name) + "__mutmut_orig"
+    orig_name = mangled_name_from_mutant_name(mutant_name) + "__nootnoot_orig"
 
     result = find_top_level_function_or_method(module, orig_name)
     if not result:
@@ -443,7 +443,7 @@ def read_mutant_function(module: cst.Module, mutant_name: str) -> cst.FunctionDe
     return result.with_changes(name=cst.Name(orig_function_name))
 
 
-def find_mutant(state: MutmutState, mutant_name: str) -> SourceFileMutationData:
+def find_mutant(state: NootNootState, mutant_name: str) -> SourceFileMutationData:
     config = get_config(state)
     for path in walk_source_files(state):
         if config.should_ignore_for_mutation(path):
@@ -459,7 +459,7 @@ def find_mutant(state: MutmutState, mutant_name: str) -> SourceFileMutationData:
 
 
 def get_diff_for_mutant(
-    state: MutmutState,
+    state: NootNootState,
     mutant_name: str,
     source: str | None = None,
     path: str | Path | None = None,
@@ -481,7 +481,7 @@ def get_diff_for_mutant(
     ])
 
 
-def apply_mutant(state: MutmutState, mutant_name: str) -> None:
+def apply_mutant(state: NootNootState, mutant_name: str) -> None:
     path = find_mutant(state, mutant_name).path
 
     orig_function_name, _class_name = orig_function_and_class_names_from_key(mutant_name)

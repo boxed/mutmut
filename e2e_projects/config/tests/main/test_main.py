@@ -16,7 +16,7 @@ def test_include_non_mutated_function():
 
 def test_include_max_stack_depth():
     # This test should only cover functions up to some depth
-    # For more context, see https://github.com/boxed/mutmut/issues/378
+    # For more context, see https://github.com/boxed/nootnoot/issues/378
     assert call_depth_two() == 2
 
 def test_include_data_exists():

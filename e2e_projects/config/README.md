@@ -1,1 +1,1 @@
-This project uses most/all of the mutmut configuration in pyproject.toml.
+This project uses most/all of the nootnoot configuration in pyproject.toml.

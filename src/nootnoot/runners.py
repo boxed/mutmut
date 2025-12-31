@@ -8,13 +8,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from mutmut.config import get_config
-from mutmut.meta import save_stats
+from nootnoot.config import get_config
+from nootnoot.meta import save_stats
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from mutmut.state import MutmutState
+    from nootnoot.state import NootNootState
 
 PYTEST_USAGE_ERROR_EXIT_CODE = 4
 
@@ -94,12 +94,12 @@ def change_cwd(path: Path | str) -> Iterator[None]:
         os.chdir(old_cwd)
 
 
-def collected_test_names(state: MutmutState) -> set[str]:
+def collected_test_names(state: NootNootState) -> set[str]:
     return set(state.duration_by_test.keys())
 
 
 class ListAllTestsResult:
-    def __init__(self, *, ids: set[str], state: MutmutState) -> None:
+    def __init__(self, *, ids: set[str], state: NootNootState) -> None:
         if not isinstance(ids, set):
             msg = f"ids must be a set, got {type(ids)}"
             raise TypeError(msg)
@@ -132,7 +132,7 @@ def _normalized_nodeid(nodeid: str) -> str:
 
 
 class PytestRunner(TestRunner):
-    def __init__(self, state: MutmutState):
+    def __init__(self, state: NootNootState):
         self._state = state
         config = get_config(state)
         self._pytest_add_cli_args: list[str] = list(config.pytest_add_cli_args)
@@ -160,7 +160,7 @@ class PytestRunner(TestRunner):
 
     def run_stats(self, *, tests: Iterable[str] | None) -> int:
         class StatsCollector:
-            def __init__(self, state: MutmutState):
+            def __init__(self, state: NootNootState):
                 self._state = state
 
             def pytest_runtest_logstart(self, nodeid, location):
@@ -233,7 +233,7 @@ def import_hammett() -> HammettModule:
 
 
 class HammettRunner(TestRunner):
-    def __init__(self, state: MutmutState):
+    def __init__(self, state: NootNootState):
         self._state = state
         self.hammett_kwargs: dict[str, object] | None = None
 

@@ -1,15 +1,15 @@
 import click
 
-from mutmut.config import ensure_config_loaded
-from mutmut.meta import SourceFileMutationData
-from mutmut.mutation import status_by_exit_code, walk_source_files
-from mutmut.state import MutmutState
+from nootnoot.config import ensure_config_loaded
+from nootnoot.meta import SourceFileMutationData
+from nootnoot.mutation import status_by_exit_code, walk_source_files
+from nootnoot.state import NootNootState
 
 
 @click.command()
 @click.option("--all", "show_all", default=False)
 @click.pass_obj
-def results(state: MutmutState, *, show_all: bool) -> None:
+def results(state: NootNootState, *, show_all: bool) -> None:
     ensure_config_loaded(state)
     for path in walk_source_files(state):
         if not str(path).endswith(".py"):

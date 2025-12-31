@@ -128,7 +128,7 @@ def operator_unsymmetrical_string_methods_swap(node: cst.Call) -> Iterable[cst.C
     for old_call, new_call in supported_unsymmetrical_str_methods_swap:
         if m.matches(node.func, m.Attribute(attr=m.Name(value=old_call))) and old_call in {"split", "rsplit"}:
             # The logic of this "if" operator described here:
-            # https://github.com/boxed/mutmut/pull/394#issuecomment-2977890188
+            # https://github.com/boxed/nootnoot/pull/394#issuecomment-2977890188
             key_args: set[str] = {
                 a.keyword.value for a in node.args if a.keyword
             }  # sep or maxsplit or nothing

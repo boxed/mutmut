@@ -11,7 +11,7 @@ from signal import SIGTERM
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mutmut.state import MutmutState
+    from nootnoot.state import NootNootState
 
 
 def _utcnow() -> datetime:
@@ -81,10 +81,10 @@ class SourceFileMutationData:
             )
 
 
-def load_stats(state: MutmutState) -> bool:
+def load_stats(state: NootNootState) -> bool:
     did_load = False
     try:
-        with Path("mutants/mutmut-stats.json").open(encoding="utf-8") as f:
+        with Path("mutants/nootnoot-stats.json").open(encoding="utf-8") as f:
             data = json.load(f)
             for k, v in data.pop("tests_by_mangled_function_name").items():
                 state.tests_by_mangled_function_name[k] |= set(v)
@@ -99,8 +99,8 @@ def load_stats(state: MutmutState) -> bool:
     return did_load
 
 
-def save_stats(state: MutmutState) -> None:
-    with Path("mutants/mutmut-stats.json").open("w", encoding="utf-8") as f:
+def save_stats(state: NootNootState) -> None:
+    with Path("mutants/nootnoot-stats.json").open("w", encoding="utf-8") as f:
         json.dump(
             dict(
                 tests_by_mangled_function_name={

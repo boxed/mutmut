@@ -1,7 +1,7 @@
 from click.testing import CliRunner
 
-from mutmut import __version__
-from mutmut.cli import cli
+from nootnoot import __version__
+from nootnoot.cli import cli
 
 
 def test_cli_version():

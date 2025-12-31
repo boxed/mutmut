@@ -8,21 +8,21 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from mutmut.config import get_config
-from mutmut.meta import SourceFileMutationData, load_stats, save_stats
-from mutmut.mutation import (
-    MutmutProgrammaticFailException,
+from nootnoot.config import get_config
+from nootnoot.meta import SourceFileMutationData, load_stats, save_stats
+from nootnoot.mutation import (
+    NootNootProgrammaticFailException,
     calculate_summary_stats,
     collected_test_names,
 )
-from mutmut.runners import CollectTestsFailedException, TestRunner
+from nootnoot.runners import CollectTestsFailedException, TestRunner
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from rich.status import Status
 
-    from mutmut.state import MutmutState
+    from nootnoot.state import NootNootState
 
 console = Console(
     file=sys.__stdout__ or sys.stdout,
@@ -48,7 +48,7 @@ def print_stats(
     print_status(summary, force_output=force_output)
 
 
-def run_forced_fail_test(runner: TestRunner, state: MutmutState) -> None:
+def run_forced_fail_test(runner: TestRunner, state: NootNootState) -> None:
     os.environ["MUTANT_UNDER_TEST"] = "fail"
     with CatchOutput(state=state, spinner_title="Running forced fail test") as catcher:
         try:
@@ -56,7 +56,7 @@ def run_forced_fail_test(runner: TestRunner, state: MutmutState) -> None:
                 catcher.dump_output()
                 print("FAILED: Unable to force test failures")
                 raise SystemExit(1)
-        except MutmutProgrammaticFailException:
+        except NootNootProgrammaticFailException:
             pass
     os.environ["MUTANT_UNDER_TEST"] = ""
     print("    done")
@@ -66,7 +66,7 @@ class CatchOutput:
     def __init__(
         self,
         *,
-        state: MutmutState,
+        state: NootNootState,
         callback: Callable[[str], None] = lambda _s: None,
         spinner_title: str | None = None,
     ):
@@ -127,7 +127,7 @@ class CatchOutput:
 
 def run_stats_collection(
     runner: TestRunner,
-    state: MutmutState,
+    state: NootNootState,
     tests: Iterable[str] | None = None,
 ) -> None:
     if tests is None:
@@ -156,7 +156,7 @@ def run_stats_collection(
                 print("You can set debug=true to see the executed test names in the output above.")
             else:
                 print("In the last pytest run above, you can see which tests we executed.")
-            print("You can use mutmut browse to check which parts of the source code we mutated.")
+            print("You can use nootnoot browse to check which parts of the source code we mutated.")
             print(
                 "If some of the mutated code should be covered by the executed tests, "
                 "consider opening an issue (with a MRE if possible)."
@@ -174,7 +174,7 @@ def run_stats_collection(
     save_stats(state)
 
 
-def collect_or_load_stats(runner: TestRunner, state: MutmutState) -> None:
+def collect_or_load_stats(runner: TestRunner, state: NootNootState) -> None:
     did_load = load_stats(state)
 
     if not did_load:

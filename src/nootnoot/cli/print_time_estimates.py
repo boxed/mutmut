@@ -1,9 +1,9 @@
 import click
 
-from mutmut.config import ensure_config_loaded
-from mutmut.mutation import collect_source_file_mutation_data, estimated_worst_case_time
-from mutmut.runners import PytestRunner
-from mutmut.state import MutmutState
+from nootnoot.config import ensure_config_loaded
+from nootnoot.mutation import collect_source_file_mutation_data, estimated_worst_case_time
+from nootnoot.runners import PytestRunner
+from nootnoot.state import NootNootState
 
 from .shared import collect_or_load_stats
 
@@ -11,7 +11,7 @@ from .shared import collect_or_load_stats
 @click.command()
 @click.argument("mutant_names", required=False, nargs=-1)
 @click.pass_obj
-def print_time_estimates(state: MutmutState, mutant_names: tuple[str, ...] | list[str]) -> None:
+def print_time_estimates(state: NootNootState, mutant_names: tuple[str, ...] | list[str]) -> None:
     if not isinstance(mutant_names, (tuple, list)):
         msg = f"mutant_names must be tuple or list, got {type(mutant_names)}"
         raise TypeError(msg)

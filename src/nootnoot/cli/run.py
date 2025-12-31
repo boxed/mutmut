@@ -13,9 +13,9 @@ from time import process_time, sleep
 import click
 from setproctitle import setproctitle
 
-from mutmut.config import ensure_config_loaded, get_config
-from mutmut.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
-from mutmut.mutation import (
+from nootnoot.config import ensure_config_loaded, get_config
+from nootnoot.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
+from nootnoot.mutation import (
     collect_source_file_mutation_data,
     copy_also_copy_files,
     copy_src_dir,
@@ -29,8 +29,8 @@ from mutmut.mutation import (
     tests_for_mutant_names,
     utcnow,
 )
-from mutmut.runners import PytestRunner
-from mutmut.state import MutmutState, set_state
+from nootnoot.runners import PytestRunner
+from nootnoot.state import NootNootState, set_state
 
 from .shared import CatchOutput, collect_or_load_stats, print_stats, run_forced_fail_test
 
@@ -69,7 +69,7 @@ def timeout_checker(mutants):
 @click.argument("mutant_names", required=False, nargs=-1)
 @click.pass_obj
 def run(
-    state: MutmutState,
+    state: NootNootState,
     mutant_names: tuple[str, ...] | list[str],
     *,
     max_children: int | None,
@@ -82,7 +82,7 @@ def run(
 
 # separate function, so we can call it directly from the tests
 def _run(  # noqa: PLR0912, PLR0914, PLR0915
-    state: MutmutState,
+    state: NootNootState,
     mutant_names: tuple[str, ...] | list[str],
     max_children: int | None,
 ) -> None:
@@ -93,7 +93,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     set_state(state)
     os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
     if not hasattr(os, "fork"):
-        print("mutmut run requires os.fork, which is unavailable on this platform.", file=sys.stderr)
+        print("nootnoot run requires os.fork, which is unavailable on this platform.", file=sys.stderr)
         sys.exit(2)
     ensure_config_loaded(state)
     config = get_config(state)
@@ -201,7 +201,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
             if not pid:
                 # In the child
                 os.environ["MUTANT_UNDER_TEST"] = normalized_mutant_name
-                setproctitle(f"mutmut: {normalized_mutant_name}")
+                setproctitle(f"nootnoot: {normalized_mutant_name}")
 
                 # Run fast tests first
                 tests = sorted(tests, key=lambda test_name: state.duration_by_test[test_name])

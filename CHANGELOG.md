@@ -17,25 +17,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - fix path typing mismatches in coverage helpers
-- guard `mutmut run` on platforms without `os.fork`
+- guard `nootnoot run` on platforms without `os.fork`
 
 ## [3.4.2] - 2025-12-30
 
 ### Changed
-- split the CLI implementation into focused command modules and expose them through `mutmut.cli.root`
+- split the CLI implementation into focused command modules and expose them through `nootnoot.cli.root`
 - ensure generated mutations always end with a newline so files stay well-formed
 
 ## [3.4.1] - 2025-12-30
 
 ### Changed
-- move cli implementation to `mutmut.cli` while keeping `python -m mutmut` working
+- move cli implementation to `nootnoot.cli` while keeping `python -m nootnoot` working
 
 ## [3.4.0] - 2025-11-19
 
 ### Changed
 
 - add action to view tests for mutant
-- add basic description for all results in mutmut browse
+- add basic description for all results in nootnoot browse
 - add description for timeout mutants
 - exit early when stats find no tests for any mutant
 - support python 3.14
@@ -64,7 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - add python 3.13 compatibility
-- add argument `--show-killed` for `mutmut browse`
+- add argument `--show-killed` for `nootnoot browse`
 - prevent accidentally importing the un-mutated original code
 - handle segfault for mutant subprocesses
 - add mutations for string literals
@@ -93,7 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- fix crash when running `mutmut results`
+- fix crash when running `nootnoot results`
 
 ## [3.2.1] - 2024-11-13
 
@@ -101,7 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - read `paths_to_mutate` from config file
 - mutate `break` to `return` to avoid timeouts
-- add debug mode, enabled with `debug=True` in `setup.cfg` under `[mutmut]`
+- add debug mode, enabled with `debug=True` in `setup.cfg` under `[nootnoot]`
 - fix new test detection, which previously detected tests when there were none and slowed down the feedback loop
 - fix many additional issues
 
@@ -113,7 +113,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - add syntax highlighting to the browser diff view
 - fix additional generator issues
 - fix support for `src`-style project layouts
-- fix bug where mutmut recollected all tests on every run, slowing down startup
+- fix bug where nootnoot recollected all tests on every run, slowing down startup
 
 ## [3.1.0] - 2024-10-22
 
@@ -170,18 +170,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - add a new execution model that yields modest speed improvements when using pytest
 - add a special execution mode for the hammett test runner to deliver dramatic speed improvements
-- drop support for python < 3.7 (use mutmut 1.9.0 on older versions)
+- drop support for python < 3.7 (use nootnoot 1.9.0 on older versions)
 - improve speed further
 
 ## [1.9.0] - 2020-03-18
 
 ### Changed
 
-- add `mutmut run 7` to rerun mutant `7`
-- add `mutmut show <filename>` to list all mutants for that file
-- add `mutmut run <filename>` to run mutation testing on a specific file
-- add an experimental plugin system via `mutmut_config.py` with `init()` and `pre_mutation(context)` hooks that can skip mutants or tweak `context.config.runner`
-- improve display of `mutmut show`/`mutmut result`
+- add `nootnoot run 7` to rerun mutant `7`
+- add `nootnoot show <filename>` to list all mutants for that file
+- add `nootnoot run <filename>` to run mutation testing on a specific file
+- add an experimental plugin system via `nootnoot_config.py` with `init()` and `pre_mutation(context)` hooks that can skip mutants or tweak `context.config.runner`
+- improve display of `nootnoot show`/`nootnoot result`
 - fix a spurious mutant on assigning a local variable with type annotations
 
 ## [1.8.1] - 2020-03-13
@@ -194,7 +194,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- add `mutmut html` report generation
+- add `nootnoot html` report generation
 
 ## [1.7.0] - 2020-02-29
 
@@ -202,7 +202,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - fix multiple assignment handling where `foo = bar = baz` was broken (thanks Roxane Bellot!)
 - fix incorrect mutation of the `in` operator (thanks Roxane Bellot!)
-- fix bug where a mutant survived in the internal AST too long. This could cause mutmut to apply more than one mutant at a time.
+- fix bug where a mutant survived in the internal AST too long. This could cause nootnoot to apply more than one mutant at a time.
 - improve startup performance drastically when resuming a mutation run
 - add new experimental feature for advanced config at runtime of mutations
 
@@ -210,10 +210,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- add `mutmut show [path to file]` command that shows all mutants for a given file
+- add `nootnoot show [path to file]` command that shows all mutants for a given file
 - improve error messages if .coverage file isn't usable
 - add support for windows paths in tests
-- use the same python executable as mutmut is started as if possible
+- use the same python executable as nootnoot is started as if possible
 - drop python 2 support
 - add more assignment operator mutations
 - fix
@@ -223,11 +223,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - add mutation: None -> ''
-- display all diffs for surviving mutants for a specific file with `mutmut show all path/to/file.py`
-- display all diffs for surviving mutants with `mutmut show all`
-- fix a bug with grouping of the results for `mutmut results`
-- fix bug where `mutmut show X` sometimes showed no diff
-- fix bug where `mutmut apply X` sometimes didn't apply a mutation
+- display all diffs for surviving mutants for a specific file with `nootnoot show all path/to/file.py`
+- display all diffs for surviving mutants with `nootnoot show all`
+- fix a bug with grouping of the results for `nootnoot results`
+- fix bug where `nootnoot show X` sometimes showed no diff
+- fix bug where `nootnoot apply X` sometimes didn't apply a mutation
 - improve error message when trying to find the code
 - fix incorrect help message
 
@@ -238,19 +238,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - add setting: `--test-time-base=15.0`. This flag can be used to avoid issues with timing.
 - add pre- and post-mutation hooks via `--pre-mutation=command` and `--post-mutation=command` to run commands around each mutation testing round
 - fix a bug with mutation of imports.
-- fix missing newline at end of the output of mutmut.
+- fix missing newline at end of the output of nootnoot.
 - add support for mutating only lines specified by a patch file: `--use-patch-file=foo.patch`
 - fix mutation of arguments in function call.
 - loosen heuristics for finding the source to mutate so more projects work out of the box
 - fix mutation of arguments in function call for python 2.7.
-- fix a bug where if mutmut couldn't find the test code it thought the tests hadn't changed. Now mutmut treats this situation as the tests always being changed.
+- fix a bug where if nootnoot couldn't find the test code it thought the tests hadn't changed. Now nootnoot treats this situation as the tests always being changed.
 - fix bug where the function body was skipped for mutation if a return type annotation existed
 
 ## [1.3.1] - 2019-01-30
 
 ### Changed
 
-- fix a bug where mutmut crashed if a file contained exactly zero bytes.
+- fix a bug where nootnoot crashed if a file contained exactly zero bytes.
 
 ## [1.3.0] - 2019-01-23
 
@@ -264,12 +264,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- provide JUnit XML output via `mutmut junitxml`
+- provide JUnit XML output via `nootnoot junitxml`
 - fix python 2 compatibility
 - fix PyPy compatibility
-- fix an issue where mutmut couldn't kill the spawned test process.
+- fix an issue where nootnoot couldn't kill the spawned test process.
 - expand Travis tests to cover python2, python3, PyPy, and Windows
-- adjust the return code to reflect what mutmut found during execution
+- adjust the return code to reflect what nootnoot found during execution
 - add the `--test-time-multiplier` CLI option to tweak the detection threshold for slower mutations
 - fix compatibility with Windows (thanks Marcelo Da Cruz Pinto and Savo Kovacevic)
 
@@ -323,7 +323,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- fix critical bug: mutmut reported killed mutants as surviving and vice versa.
+- fix critical bug: nootnoot reported killed mutants as surviving and vice versa.
 - fix an issue where the install failed on some systems.
 - handle tests dirs spread out in the file system. This is the normal case for django projects for example.
 - fix support for both python 3 and python 2
@@ -350,7 +350,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- fix bug where initial mutation count was wrong, which caused mutmut to miss mutants at the end of the file
+- fix bug where initial mutation count was wrong, which caused nootnoot to miss mutants at the end of the file
 - change the mutation API to always require a `Context` object, making it easier to pass additional data to callers
 - support specifying individual files to mutate (thanks Felipe Pontes!)
 
@@ -381,7 +381,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- fix bug that made mutmut crash when setup.cfg was missing
+- fix bug that made nootnoot crash when setup.cfg was missing
 
 ## [0.0.10] - 2017-07-16
 

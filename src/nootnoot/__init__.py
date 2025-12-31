@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib.metadata
 
-from mutmut.state import MutmutState, get_state, set_state
+from nootnoot.state import NootNootState, get_state, set_state
 
-__version__ = importlib.metadata.version("mutmut")
+__version__ = importlib.metadata.version("nootnoot")
 
 
 def add_stat(name: str) -> None:
@@ -32,4 +32,4 @@ def get_covered_lines() -> dict[str, set[int]] | None:
 
 
 def _reset_globals():
-    set_state(MutmutState())
+    set_state(NootNootState())

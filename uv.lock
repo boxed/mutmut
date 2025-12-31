@@ -261,7 +261,7 @@ wheels = [
 
 [[package]]
 name = "diff-cover"
-version = "10.0.0"
+version = "10.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "chardet" },
@@ -269,9 +269,9 @@ dependencies = [
     { name = "pluggy" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/84/f4/5d876c7d262bb40108ac6109c426ee97e49d975e8623031ae5e1d69f2d1d/diff_cover-10.0.0.tar.gz", hash = "sha256:92ead026726055bf4c1a90cd7ff83544049d467840e07c66289a4351126dbe25", size = 100934, upload-time = "2025-12-10T02:50:29.791Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/d2/764a9889d14c30600dea9ddb745ab64af2ca41dcd3cfd272e45654352ccb/diff_cover-10.1.0.tar.gz", hash = "sha256:fd21db41eebe9a6facac5c8f49e4bb164d010211b40694c05b151aa99331dd5e", size = 101730, upload-time = "2025-12-31T03:36:49.493Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/78/cf0484cd70b44de6bac1c54de1ce387b63398db9b1d3ac7cba4360025eb2/diff_cover-10.0.0-py3-none-any.whl", hash = "sha256:b3a095d733ba715df6098f51d9155607e4752f82be8a6cbba9bfcf77df736852", size = 56210, upload-time = "2025-12-10T02:50:27.012Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/78/90b2c95133ea4a9b0f85be653b1000d84fa1c623570973f3113ff822d600/diff_cover-10.1.0-py3-none-any.whl", hash = "sha256:0943508c7f969d5ed8edd7b29652005814736acac52cfc50d3a5448165418e1b", size = 56584, upload-time = "2025-12-31T03:36:48.004Z" },
 ]
 
 [[package]]
@@ -687,7 +687,16 @@ wheels = [
 ]
 
 [[package]]
-name = "mutmut"
+name = "narwhals"
+version = "2.14.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/84/897fe7b6406d436ef312e57e5a1a13b4a5e7e36d1844e8d934ce8880e3d3/narwhals-2.14.0.tar.gz", hash = "sha256:98be155c3599db4d5c211e565c3190c398c87e7bf5b3cdb157dece67641946e0", size = 600648, upload-time = "2025-12-16T11:29:13.458Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/3e/b8ecc67e178919671695f64374a7ba916cf0adbf86efedc6054f38b5b8ae/narwhals-2.14.0-py3-none-any.whl", hash = "sha256:b56796c9a00179bd757d15282c540024e1d5c910b19b8c9944d836566c030acf", size = 430788, upload-time = "2025-12-16T11:29:11.699Z" },
+]
+
+[[package]]
+name = "nootnoot"
 version = "3.4.4"
 source = { editable = "." }
 dependencies = [
@@ -772,15 +781,6 @@ dev = [
 docs = [
     { name = "mkdocs", specifier = ">=1.6.0" },
     { name = "pymdown-extensions", specifier = ">=10.12.1" },
-]
-
-[[package]]
-name = "narwhals"
-version = "2.14.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4a/84/897fe7b6406d436ef312e57e5a1a13b4a5e7e36d1844e8d934ce8880e3d3/narwhals-2.14.0.tar.gz", hash = "sha256:98be155c3599db4d5c211e565c3190c398c87e7bf5b3cdb157dece67641946e0", size = 600648, upload-time = "2025-12-16T11:29:13.458Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/3e/b8ecc67e178919671695f64374a7ba916cf0adbf86efedc6054f38b5b8ae/narwhals-2.14.0-py3-none-any.whl", hash = "sha256:b56796c9a00179bd757d15282c540024e1d5c910b19b8c9944d836566c030acf", size = 430788, upload-time = "2025-12-16T11:29:11.699Z" },
 ]
 
 [[package]]

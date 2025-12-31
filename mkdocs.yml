@@ -1,8 +1,8 @@
-site_name: mutmut
+site_name: nootnoot
 site_description: Mutation testing for Python 3
-site_url: https://mutmut.readthedocs.io/
-repo_url: https://github.com/boxed/mutmut
-repo_name: boxed/mutmut
+site_url: https://nootnoot.readthedocs.io/
+repo_url: https://github.com/boxed/nootnoot
+repo_name: boxed/nootnoot
 docs_dir: docs
 nav:
   - Home: index.md

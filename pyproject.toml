@@ -1,8 +1,8 @@
 [project]
-  name = "mutmut"
+  name = "nootnoot"
 version = "3.4.4"
   description = "mutation testing for Python 3"
-  keywords = ["mutmut", "mutant", "mutation", "test", "testing"]
+  keywords = ["nootnoot", "mutant", "mutation", "test", "testing"]
   authors = [
     { name = "Anders Hovmöller", email = "boxed@killingar.net" },
   ]
@@ -31,15 +31,15 @@ version = "3.4.4"
 ]
 
   [project.urls]
-    Homepage = "https://github.com/josephcourtney/mutmut"
-    # Documentation = "https://mutmut.readthedocs.io/en/latest/"
-    Repository = "https://github.com/josephcourtney/mutmut"
-    Issues     = "https://github.com/josephcourtney/mutmut/issues"
-    Changelog  = "https://github.com/josephcourtney/mutmut/blob/main/CHANGELOG.md"
+    Homepage = "https://github.com/josephcourtney/nootnoot"
+    # Documentation = "https://nootnoot.readthedocs.io/en/latest/"
+    Repository = "https://github.com/josephcourtney/nootnoot"
+    Issues     = "https://github.com/josephcourtney/nootnoot/issues"
+    Changelog  = "https://github.com/josephcourtney/nootnoot/blob/main/CHANGELOG.md"
 
 
   [project.scripts]
-    mutmut = "mutmut.cli.root:cli"
+    nootnoot = "nootnoot.cli.root:cli"
 
 # =================================== build ====================================
 [build-system]
@@ -121,7 +121,7 @@ version = "3.4.4"
     "--strict-config",
     "-ra",
     "--cov-branch",
-    "--cov=mutmut",
+    "--cov=nootnoot",
     "--cov-report=xml",
   ]
   xfail_strict = true
@@ -130,7 +130,7 @@ version = "3.4.4"
   log_cli_format = "%%(asctime)s [%%(levelname)s] %%(name)s - %%(message)s"
   log_cli_date_format = "%%Y-%%m-%%d %%H:%%M:%%S"
   filterwarnings = [
-    "error::DeprecationWarning:mutmut\\.",
+    "error::DeprecationWarning:nootnoot\\.",
     "ignore::DeprecationWarning:some_known_third_party",
   ]
   markers = [
@@ -154,7 +154,7 @@ version = "3.4.4"
 
 # =================================== test:coverage ===================================
 [tool.coverage.run]
-  source   = ["mutmut"]
+  source   = ["nootnoot"]
   branch   = true
   parallel = true
 

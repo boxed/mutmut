@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from mutmut.state import MutmutState
+    from nootnoot.state import NootNootState
 
 T = TypeVar("T")
 
@@ -64,7 +64,7 @@ def guess_paths_to_mutate() -> list[Path]:
 
     msg = (
         "Could not figure out where the code to mutate is. "
-        'Please specify it by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.'
+        'Please specify it by adding "paths_to_mutate=code_dir" in setup.cfg to the [nootnoot] section.'
     )
     raise FileNotFoundError(msg)
 
@@ -75,7 +75,7 @@ def config_reader() -> Callable[[str, T], T]:
         data = tomllib.loads(path.read_text("utf-8"))
 
         try:
-            config = data["tool"]["mutmut"]
+            config = data["tool"]["nootnoot"]
         except KeyError:
             pass
         else:
@@ -94,7 +94,7 @@ def config_reader() -> Callable[[str, T], T]:
 
     def reader(key: str, default: T) -> T:
         try:
-            result = config_parser.get("mutmut", key)
+            result = config_parser.get("nootnoot", key)
         except (NoOptionError, NoSectionError):
             return default
         if isinstance(default, list):
@@ -108,15 +108,15 @@ def config_reader() -> Callable[[str, T], T]:
     return reader
 
 
-def ensure_config_loaded(state: MutmutState) -> None:
+def ensure_config_loaded(state: NootNootState) -> None:
     if state.config is None:
         state.config = load_config()
 
 
-def get_config(state: MutmutState) -> Config:
+def get_config(state: NootNootState) -> Config:
     ensure_config_loaded(state)
     if state.config is None:
-        msg = "mutmut config must be loaded before accessing it"
+        msg = "nootnoot config must be loaded before accessing it"
         raise RuntimeError(msg)
     return state.config
 

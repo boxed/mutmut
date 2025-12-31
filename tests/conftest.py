@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from mutmut.state import MutmutState, reset_state, set_state
+from nootnoot.state import NootNootState, reset_state, set_state
 
 
 @pytest.fixture
-def mutmut_state() -> MutmutState:
-    state = MutmutState()
+def nootnoot_state() -> NootNootState:
+    state = NootNootState()
     token = set_state(state)
     try:
         yield state
