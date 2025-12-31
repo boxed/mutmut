@@ -49,12 +49,18 @@ def print_stats(
     print_status(summary, force_output=force_output)
 
 
-def run_forced_fail_test(runner: TestRunner, state: NootNootState) -> None:
+def run_forced_fail_test(
+    runner: TestRunner,
+    state: NootNootState,
+    *,
+    force_redirect: bool = False,
+) -> None:
     os.environ["MUTANT_UNDER_TEST"] = "fail"
     with CatchOutput(
         state=state,
         spinner_title="Running forced fail test",
         output_stream=sys.stderr,
+        force_redirect=force_redirect,
     ) as catcher:
         try:
             if runner.run_forced_fail() == 0:
@@ -75,6 +81,7 @@ class CatchOutput:
         callback: Callable[[str], None] = lambda _s: None,
         spinner_title: str | None = None,
         output_stream: TextIOBase | IO[str] | None = None,
+        force_redirect: bool = False,
     ):
         self.strings = []
         self.spinner_title = spinner_title or ""
@@ -83,6 +90,7 @@ class CatchOutput:
         self._status: Status | None = None
         self._is_debug = config is not None and config.debug
         self._output_stream = output_stream or sys.stderr
+        self._force_redirect = force_redirect
 
         class StdOutRedirect(TextIOBase):
             def __init__(self, catcher: CatchOutput):
@@ -111,7 +119,7 @@ class CatchOutput:
             console.print()
         sys.stdout = self.redirect
         sys.stderr = self.redirect
-        if self._is_debug:
+        if self._is_debug and not self._force_redirect:
             self.stop()
 
     def dump_output(self):
@@ -136,6 +144,8 @@ def run_stats_collection(
     runner: TestRunner,
     state: NootNootState,
     tests: Iterable[str] | None = None,
+    *,
+    force_redirect: bool = False,
 ) -> None:
     if tests is None:
         tests = []  # Meaning all...
@@ -149,6 +159,7 @@ def run_stats_collection(
         state=state,
         spinner_title="Running stats",
         output_stream=sys.stderr,
+        force_redirect=force_redirect,
     ) as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
@@ -199,18 +210,24 @@ def run_stats_collection(
     save_stats(state)
 
 
-def collect_or_load_stats(runner: TestRunner, state: NootNootState) -> None:
+def collect_or_load_stats(
+    runner: TestRunner,
+    state: NootNootState,
+    *,
+    force_redirect: bool = False,
+) -> None:
     did_load = load_stats(state)
 
     if not did_load:
         # Run full stats
-        run_stats_collection(runner, state)
+        run_stats_collection(runner, state, force_redirect=force_redirect)
     else:
         # Run incremental stats
         with CatchOutput(
             state=state,
             spinner_title="Listing all tests",
             output_stream=sys.stderr,
+            force_redirect=force_redirect,
         ) as output_catcher:
             os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
             try:
@@ -229,4 +246,4 @@ def collect_or_load_stats(runner: TestRunner, state: NootNootState) -> None:
                 f"Found {len(new_tests)} new tests, rerunning stats collection",
                 file=sys.stderr,
             )
-            run_stats_collection(runner, state, tests=new_tests)
+            run_stats_collection(runner, state, tests=new_tests, force_redirect=force_redirect)

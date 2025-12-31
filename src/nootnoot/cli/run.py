@@ -137,9 +137,14 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         },
     )
 
+    force_redirect = output_format == "json"
     start = utcnow()
     Path("mutants").mkdir(exist_ok=True, parents=True)
-    with CatchOutput(state=state, spinner_title="Generating mutants"):
+    with CatchOutput(
+        state=state,
+        spinner_title="Generating mutants",
+        force_redirect=force_redirect,
+    ):
         copy_src_dir(state)
         copy_also_copy_files(state)
         setup_source_paths()
@@ -162,7 +167,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
 
     # TODO: run these steps only if we have mutants to test
 
-    collect_or_load_stats(runner, state)
+    collect_or_load_stats(runner, state, force_redirect=force_redirect)
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(
         mutant_names=mutant_names,
@@ -170,7 +175,11 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     )
 
     os.environ["MUTANT_UNDER_TEST"] = ""
-    with CatchOutput(state=state, spinner_title="Running clean tests") as output_catcher:
+    with CatchOutput(
+        state=state,
+        spinner_title="Running clean tests",
+        force_redirect=force_redirect,
+    ) as output_catcher:
         tests = tests_for_mutant_names(state, mutant_names)
 
         clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
@@ -183,7 +192,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
 
     # this can't be the first thing, because it can fail deep inside pytest/django
     # setup and then everything is destroyed
-    run_forced_fail_test(runner, state)
+    run_forced_fail_test(runner, state, force_redirect=force_redirect)
 
     runner.prepare_main_test_run()
 
@@ -285,7 +294,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
                 # SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit, cpu_time_limit + 1))
 
-                with CatchOutput(state=state):
+                with CatchOutput(state=state, force_redirect=force_redirect):
                     test_result = runner.run_tests(mutant_name=normalized_mutant_name, tests=tests)
 
                 if test_result != 0:
@@ -346,7 +355,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         },
     )
 
-    if mutant_names:
+    if mutant_names and output_format == "human":
         print()
         print("Mutant results")
         print("--------------")

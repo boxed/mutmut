@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import contextmanager
@@ -117,7 +118,7 @@ class ListAllTestsResult:
         )
         count_after = sum(len(v) for v in self._state.tests_by_mangled_function_name.values())
         if count_before != count_after:
-            print(f"Removed {count_before - count_after} obsolete test names")
+            print(f"Removed {count_before - count_after} obsolete test names", file=sys.stderr)
             save_stats(self._state)
 
     def new_tests(self) -> set[str]:
@@ -150,10 +151,10 @@ class PytestRunner(TestRunner):
         params = ["--rootdir=.", "--tb=native", *params, *self._pytest_add_cli_args]
         if config.debug:
             params = ["-vv", *params]
-            print("python -m pytest ", " ".join([f'"{param}"' for param in params]))
+            print("python -m pytest ", " ".join([f'"{param}"' for param in params]), file=sys.stderr)
         exit_code = int(pytest.main(params, **kwargs))
         if config.debug:
-            print("    exit code", exit_code)
+            print("    exit code", exit_code, file=sys.stderr)
         if exit_code == PYTEST_USAGE_ERROR_EXIT_CODE:
             raise BadTestExecutionCommandsException(params)
         return exit_code
@@ -241,7 +242,7 @@ class HammettRunner(TestRunner):
         del tests
         hammett = import_hammett()
 
-        print("Running hammett stats...")
+        print("Running hammett stats...", file=sys.stderr)
 
         def post_test_callback(_name: str, **_: object) -> None:
             for function in self._state.consume_stats():

@@ -1,6 +1,7 @@
 """Define node-level mutations, e.g. replacing a != b with a == b."""
 
 import re
+import sys
 from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -24,7 +25,7 @@ def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
     elif isinstance(node, cst.Imaginary):
         yield node.with_changes(value=repr(node.evaluated_value + 1j))
     else:
-        print("Unexpected number type", node)
+        print("Unexpected number type", node, file=sys.stderr)
 
 
 def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:

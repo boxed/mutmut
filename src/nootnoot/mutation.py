@@ -166,7 +166,7 @@ def _create_file_mutants_with_state(args: tuple[Path, NootNootState]) -> FileMut
 
 def create_file_mutants(path: Path, state: NootNootState) -> FileMutationResult:
     try:
-        print(path)
+        print(path, file=sys.stderr)
         output_path = Path("mutants") / path
         Path(output_path.parent).mkdir(exist_ok=True, parents=True)
 
@@ -216,7 +216,7 @@ def copy_also_copy_files(state: NootNootState) -> None:
         msg = "config.also_copy must be a list of paths"
         raise TypeError(msg)
     for path_to_copy in config.also_copy:
-        print("     also copying", path_to_copy)
+        print("     also copying", path_to_copy, file=sys.stderr)
         source_path = Path(path_to_copy)
         destination = Path("mutants") / source_path
         if not source_path.exists():
