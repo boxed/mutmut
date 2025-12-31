@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 
 from nootnoot.config import get_config
-from nootnoot.meta import SourceFileMutationData, load_stats, save_stats
 from nootnoot.mutation import (
     NootNootProgrammaticFailException,
     calculate_summary_stats,
     collected_test_names,
 )
+from nootnoot.persistence import load_stats, save_stats
 from nootnoot.runners import CollectTestsFailedException, TestRunner
 
 if TYPE_CHECKING:
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from rich.status import Status
 
+    from nootnoot.meta import SourceFileMutationData
     from nootnoot.state import NootNootState
 
 console = Console(

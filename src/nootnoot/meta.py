@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
-from collections import defaultdict
 from datetime import UTC, datetime
-from json import JSONDecodeError
 from multiprocessing import Lock
 from pathlib import Path
 from signal import SIGTERM
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from nootnoot.state import NootNootState
+from nootnoot.persistence import MetaPayload, load_meta, save_meta
 
 
 def _utcnow() -> datetime:
@@ -31,21 +26,13 @@ class SourceFileMutationData:
         self.durations_by_key: dict[str, float] = {}
         self.start_time_by_pid: dict[int, datetime] = {}
 
-    def load(self) -> None:
-        try:
-            with Path(self.meta_path).open(encoding="utf-8") as f:
-                meta = json.load(f)
-        except FileNotFoundError:
+    def load(self, *, debug: bool = False) -> None:
+        payload = load_meta(self.meta_path, debug=debug)
+        if payload is None:
             return
-
-        self.exit_code_by_key = meta.pop("exit_code_by_key")
-        meta.pop("hash_by_function_name", None)
-        self.durations_by_key = meta.pop("durations_by_key")
-        self.estimated_time_of_tests_by_mutant = meta.pop("estimated_durations_by_key")
-        if meta:
-            unexpected = ", ".join(sorted(meta.keys()))
-            msg = f"Meta file {self.meta_path} contains unexpected keys: {unexpected}"
-            raise ValueError(msg)
+        self.exit_code_by_key = payload.exit_code_by_key
+        self.durations_by_key = payload.durations_by_key
+        self.estimated_time_of_tests_by_mutant = payload.estimated_durations_by_key
 
     def register_pid(self, *, pid: int, key: str) -> None:
         self.key_by_pid[pid] = key
@@ -69,46 +56,11 @@ class SourceFileMutationData:
             os.kill(pid, SIGTERM)
 
     def save(self) -> None:
-        with Path(self.meta_path).open("w", encoding="utf-8") as f:
-            json.dump(
-                dict(
-                    exit_code_by_key=self.exit_code_by_key,
-                    durations_by_key=self.durations_by_key,
-                    estimated_durations_by_key=self.estimated_time_of_tests_by_mutant,
-                ),
-                f,
-                indent=4,
-            )
-
-
-def load_stats(state: NootNootState) -> bool:
-    did_load = False
-    try:
-        with Path("mutants/nootnoot-stats.json").open(encoding="utf-8") as f:
-            data = json.load(f)
-            for k, v in data.pop("tests_by_mangled_function_name").items():
-                state.tests_by_mangled_function_name[k] |= set(v)
-            state.duration_by_test = defaultdict(float, data.pop("duration_by_test"))
-            state.stats_time = data.pop("stats_time")
-            if data:
-                msg = f"Unexpected keys in stats file: {sorted(data.keys())}"
-                raise ValueError(msg)
-            did_load = True
-    except (FileNotFoundError, JSONDecodeError):
-        pass
-    return did_load
-
-
-def save_stats(state: NootNootState) -> None:
-    with Path("mutants/nootnoot-stats.json").open("w", encoding="utf-8") as f:
-        json.dump(
-            dict(
-                tests_by_mangled_function_name={
-                    k: list(v) for k, v in state.tests_by_mangled_function_name.items()
-                },
-                duration_by_test=state.duration_by_test,
-                stats_time=state.stats_time,
+        save_meta(
+            self.meta_path,
+            MetaPayload(
+                exit_code_by_key=self.exit_code_by_key,
+                durations_by_key=self.durations_by_key,
+                estimated_durations_by_key=self.estimated_time_of_tests_by_mutant,
             ),
-            f,
-            indent=4,
         )

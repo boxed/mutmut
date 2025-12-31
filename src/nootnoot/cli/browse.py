@@ -93,7 +93,7 @@ def browse(state: NootNootState, *, show_killed: bool) -> None:
                 if config.should_ignore_for_mutation(p):
                     continue
                 source_file_mutation_data = SourceFileMutationData(path=p)
-                source_file_mutation_data.load()
+                source_file_mutation_data.load(debug=config.debug)
                 stat = collect_stat(source_file_mutation_data)
 
                 path_key = str(p)

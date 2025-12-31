@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from nootnoot.config import get_config
-from nootnoot.meta import save_stats
+from nootnoot.persistence import save_stats
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator

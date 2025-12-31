@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.4.5] - 2025-12-30
+
+### Changed
+- add schema_version to stats/meta JSON for forward-compatible persistence
+- write stats/meta JSON atomically to reduce corruption risk on abrupt exits
+- centralize stats/meta JSON persistence logic in a dedicated module
+
 ## [3.4.4] - 2025-12-31
 
 ### Changed

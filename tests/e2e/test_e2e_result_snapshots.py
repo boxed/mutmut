@@ -29,11 +29,12 @@ def read_all_stats_for_project(project_path: Path, state: NootNootState) -> dict
 
         stats = {}
         config = state.config
+        debug = config.debug if config else False
         for p in walk_source_files(state):
             if config is not None and config.should_ignore_for_mutation(p):
                 continue
             data = SourceFileMutationData(path=p)
-            data.load()
+            data.load(debug=debug)
             stats[str(data.meta_path)] = data.exit_code_by_key
 
         return stats

@@ -111,7 +111,7 @@
 
 ## Persistence hardening (schema + atomic writes)
 
-* [ ] **Add schema versioning to stats and meta JSON**
+* [x] **Add schema versioning to stats and meta JSON**
 
   * Add `schema_version: int` to:
 
@@ -123,7 +123,7 @@
     * New fields don’t break old runs.
     * Unknown keys do not hard-fail by default.
 
-* [ ] **Implement atomic JSON writes**
+* [x] **Implement atomic JSON writes**
 
   * Write to `*.tmp`, `flush + fsync`, then `os.replace(tmp, path)`.
   * Apply to both meta and stats saves.
@@ -132,7 +132,7 @@
     * Abrupt termination does not corrupt JSON files.
     * Readers never observe partially-written JSON.
 
-* [ ] **Centralize persistence logic**
+* [x] **Centralize persistence logic**
 
   * Move JSON read/write + migrations into dedicated module, e.g. `nootnoot/persistence.py`.
   * Acceptance:
@@ -243,4 +243,3 @@
   * Acceptance:
 
     * Users know how to integrate nootnoot into CI reliably.
-

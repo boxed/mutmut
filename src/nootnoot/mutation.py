@@ -361,7 +361,7 @@ def collect_source_file_mutation_data(
             msg = f"Duplicate source file entry detected: {path}"
             raise ValueError(msg)
         m = SourceFileMutationData(path=path)
-        m.load()
+        m.load(debug=config.debug)
         source_file_mutation_data_by_path[str(path)] = m
 
     mutants = [
@@ -450,7 +450,7 @@ def find_mutant(state: NootNootState, mutant_name: str) -> SourceFileMutationDat
             continue
 
         m = SourceFileMutationData(path=path)
-        m.load()
+        m.load(debug=config.debug)
         if mutant_name in m.exit_code_by_key:
             return m
 

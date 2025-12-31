@@ -2,8 +2,8 @@ import sys
 
 import click
 
-from nootnoot.meta import load_stats
 from nootnoot.mutation import tests_for_mutant_names
+from nootnoot.persistence import load_stats
 from nootnoot.state import NootNootState
 
 
