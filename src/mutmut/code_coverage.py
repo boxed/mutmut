@@ -14,7 +14,7 @@ import coverage
 # returned by gather_coverage.
 # None means it's not enabled, set() means no lines are covered.
 def get_covered_lines_for_file(
-    filename: str,
+    filename: str | Path,
     covered_lines: dict[str, set[int]] | None,
 ) -> set[int] | None:
     if covered_lines is None or filename is None:
@@ -30,7 +30,10 @@ def get_covered_lines_for_file(
 # Returns a dict of filenames to sets of lines that are covered
 # Since this is run on the source files before we create mutations,
 # we need to unload any modules that get loaded during the test run
-def gather_coverage(runner: "TestRunner", source_files: Iterable[str]) -> dict[str, set[int]]:
+def gather_coverage(
+    runner: "TestRunner",
+    source_files: Iterable[Path | str],
+) -> dict[str, set[int]]:
     # We want to unload any python modules that get loaded
     # because we plan to mutate them and want them to be reloaded
     modules = dict(sys.modules)

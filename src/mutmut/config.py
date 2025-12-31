@@ -1,22 +1,16 @@
 from __future__ import annotations
 
 import fnmatch
-import sys
 import tomllib
-from configparser import (
-    ConfigParser,
-    NoOptionError,
-    NoSectionError,
-)
+from configparser import ConfigParser, NoOptionError, NoSectionError
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Any, TypeVar, cast
-
-import mutmut
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from mutmut.state import MutmutState
 
 T = TypeVar("T")
 
@@ -114,18 +108,17 @@ def config_reader() -> Callable[[str, T], T]:
     return reader
 
 
-def ensure_config_loaded() -> None:
-    if mutmut.config is None or isinstance(mutmut.config, ModuleType):
-        mutmut.config = load_config()
+def ensure_config_loaded(state: MutmutState) -> None:
+    if state.config is None:
+        state.config = load_config()
 
 
-def get_config() -> Config:
-    ensure_config_loaded()
-    config = mutmut.config
-    if config is None:
+def get_config(state: MutmutState) -> Config:
+    ensure_config_loaded(state)
+    if state.config is None:
         msg = "mutmut config must be loaded before accessing it"
         raise RuntimeError(msg)
-    return config
+    return state.config
 
 
 def load_config() -> Config:
@@ -151,35 +144,3 @@ def load_config() -> Config:
         pytest_add_cli_args=reader("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=reader("pytest_add_cli_args_test_selection", []),
     )
-
-
-class _ConfigModule(ModuleType):
-    @staticmethod
-    def _config_obj() -> Config | None:
-        cfg = getattr(mutmut, "config", None)
-        if isinstance(cfg, ModuleType):
-            return None
-        return cast("Config | None", cfg)
-
-    def __getattr__(self, name: str) -> object:
-        cfg = self._config_obj()
-        if cfg is not None and hasattr(cfg, name):
-            return getattr(cfg, name)
-        raise AttributeError(name)
-
-    def __setattr__(self, name: str, value: object) -> None:
-        if name in self.__dict__ or hasattr(type(self), name):
-            super().__setattr__(name, value)
-            return
-        cfg = self._config_obj()
-        if cfg is not None and hasattr(cfg, name):
-            setattr(cfg, name, value)
-            return
-        super().__setattr__(name, value)
-
-
-_module = sys.modules[__name__]
-setattr(mutmut, "config_module", _module)  # noqa: B010
-if isinstance(getattr(mutmut, "config", None), ModuleType):
-    mutmut.config = None
-_module.__class__ = _ConfigModule

@@ -5,11 +5,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import mutmut
 from mutmut.cli import _run
 from mutmut.config import ensure_config_loaded
 from mutmut.meta import SourceFileMutationData
 from mutmut.mutation import walk_source_files
+from mutmut.state import MutmutState
 
 
 @contextmanager
@@ -22,14 +22,14 @@ def change_cwd(path):
         os.chdir(old_cwd)
 
 
-def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
+def read_all_stats_for_project(project_path: Path, state: MutmutState) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files."""
     with change_cwd(project_path):
-        ensure_config_loaded()
+        ensure_config_loaded(state)
 
         stats = {}
-        config = mutmut.config
-        for p in walk_source_files():
+        config = state.config
+        for p in walk_source_files(state):
             if config is not None and config.should_ignore_for_mutation(p):
                 continue
             data = SourceFileMutationData(path=p)
@@ -49,7 +49,7 @@ def write_json_file(path: Path, data: Any) -> None:
         json.dump(data, file, indent=2)
 
 
-def asserts_results_did_not_change(project: str) -> None:
+def asserts_results_did_not_change(project: str, state: MutmutState) -> None:
     """Run mutmut on this project and verify that the results stay the same for all mutations."""
     project_path = Path("..").parent / "e2e_projects" / project
 
@@ -58,9 +58,9 @@ def asserts_results_did_not_change(project: str) -> None:
 
     # mutmut run
     with change_cwd(project_path):
-        _run([], None)
+        _run(state, [], None)
 
-    results = read_all_stats_for_project(project_path)
+    results = read_all_stats_for_project(project_path, state)
 
     snapshot_path = Path("tests") / "e2e" / "snapshots" / (project + ".json")
 
@@ -78,16 +78,13 @@ def asserts_results_did_not_change(project: str) -> None:
         write_json_file(snapshot_path, results)
 
 
-def test_my_lib_result_snapshot():
-    mutmut._reset_globals()
-    asserts_results_did_not_change("my_lib")
+def test_my_lib_result_snapshot(mutmut_state):
+    asserts_results_did_not_change("my_lib", mutmut_state)
 
 
-def test_config_result_snapshot():
-    mutmut._reset_globals()
-    asserts_results_did_not_change("config")
+def test_config_result_snapshot(mutmut_state):
+    asserts_results_did_not_change("config", mutmut_state)
 
 
-def test_mutate_only_covered_lines_result_snapshot():
-    mutmut._reset_globals()
-    asserts_results_did_not_change("mutate_only_covered_lines")
+def test_mutate_only_covered_lines_result_snapshot(mutmut_state):
+    asserts_results_did_not_change("mutate_only_covered_lines", mutmut_state)

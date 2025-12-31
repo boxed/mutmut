@@ -8,12 +8,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-import mutmut
 from mutmut.config import get_config
 from mutmut.meta import save_stats
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
+
+    from mutmut.state import MutmutState
 
 PYTEST_USAGE_ERROR_EXIT_CODE = 4
 
@@ -93,33 +94,34 @@ def change_cwd(path: Path | str) -> Iterator[None]:
         os.chdir(old_cwd)
 
 
-def collected_test_names() -> set[str]:
-    return set(mutmut.duration_by_test.keys())
+def collected_test_names(state: MutmutState) -> set[str]:
+    return set(state.duration_by_test.keys())
 
 
 class ListAllTestsResult:
-    def __init__(self, *, ids: set[str]) -> None:
+    def __init__(self, *, ids: set[str], state: MutmutState) -> None:
         if not isinstance(ids, set):
             msg = f"ids must be a set, got {type(ids)}"
             raise TypeError(msg)
         self.ids = ids
+        self._state = state
 
     def clear_out_obsolete_test_names(self) -> None:
-        count_before = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
-        mutmut.tests_by_mangled_function_name = defaultdict(
+        count_before = sum(len(v) for v in self._state.tests_by_mangled_function_name.values())
+        self._state.tests_by_mangled_function_name = defaultdict(
             set,
             **{
                 k: {test_name for test_name in test_names if test_name in self.ids}
-                for k, test_names in mutmut.tests_by_mangled_function_name.items()
+                for k, test_names in self._state.tests_by_mangled_function_name.items()
             },
         )
-        count_after = sum(len(v) for v in mutmut.tests_by_mangled_function_name.values())
+        count_after = sum(len(v) for v in self._state.tests_by_mangled_function_name.values())
         if count_before != count_after:
             print(f"Removed {count_before - count_after} obsolete test names")
-            save_stats()
+            save_stats(self._state)
 
     def new_tests(self) -> set[str]:
-        return self.ids - collected_test_names()
+        return self.ids - collected_test_names(self._state)
 
 
 def _normalized_nodeid(nodeid: str) -> str:
@@ -130,8 +132,9 @@ def _normalized_nodeid(nodeid: str) -> str:
 
 
 class PytestRunner(TestRunner):
-    def __init__(self):
-        config = get_config()
+    def __init__(self, state: MutmutState):
+        self._state = state
+        config = get_config(state)
         self._pytest_add_cli_args: list[str] = list(config.pytest_add_cli_args)
         self._pytest_add_cli_args_test_selection: list[str] = list(config.pytest_add_cli_args_test_selection)
 
@@ -143,7 +146,7 @@ class PytestRunner(TestRunner):
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
         import pytest  # noqa: PLC0415
 
-        config = get_config()
+        config = get_config(self._state)
         params = ["--rootdir=.", "--tb=native", *params, *self._pytest_add_cli_args]
         if config.debug:
             params = ["-vv", *params]
@@ -157,21 +160,24 @@ class PytestRunner(TestRunner):
 
     def run_stats(self, *, tests: Iterable[str] | None) -> int:
         class StatsCollector:
-            def pytest_runtest_logstart(self, nodeid, location):  # noqa: PLR6301
-                del location
-                mutmut.duration_by_test[nodeid] = 0
+            def __init__(self, state: MutmutState):
+                self._state = state
 
-            def pytest_runtest_teardown(self, item, nextitem):  # noqa: PLR6301
+            def pytest_runtest_logstart(self, nodeid, location):
+                del location
+                self._state.duration_by_test[nodeid] = 0
+
+            def pytest_runtest_teardown(self, item, nextitem):
                 del nextitem
-                for function in mutmut.consume_stats():
-                    mutmut.tests_by_mangled_function_name[function].add(
+                for function in self._state.consume_stats():
+                    self._state.tests_by_mangled_function_name[function].add(
                         _normalized_nodeid(item.nodeid),
                     )
 
-            def pytest_runtest_makereport(self, item, call):  # noqa: PLR6301
-                mutmut.duration_by_test[item.nodeid] += call.duration
+            def pytest_runtest_makereport(self, item, call):
+                self._state.duration_by_test[item.nodeid] += call.duration
 
-        stats_collector = StatsCollector()
+        stats_collector = StatsCollector(self._state)
 
         pytest_args = ["-x", "-q"]
         if tests:
@@ -218,7 +224,7 @@ class PytestRunner(TestRunner):
                 raise CollectTestsFailedException
 
         selected_nodeids = collector.collected_nodeids - collector.deselected_nodeids
-        return ListAllTestsResult(ids=selected_nodeids)
+        return ListAllTestsResult(ids=selected_nodeids, state=self._state)
 
 
 def import_hammett() -> HammettModule:
@@ -227,18 +233,19 @@ def import_hammett() -> HammettModule:
 
 
 class HammettRunner(TestRunner):
-    def __init__(self):
+    def __init__(self, state: MutmutState):
+        self._state = state
         self.hammett_kwargs: dict[str, object] | None = None
 
-    def run_stats(self, *, tests: Iterable[str] | None) -> int:  # noqa: PLR6301
+    def run_stats(self, *, tests: Iterable[str] | None) -> int:
         del tests
         hammett = import_hammett()
 
         print("Running hammett stats...")
 
         def post_test_callback(_name: str, **_: object) -> None:
-            for function in mutmut.consume_stats():
-                mutmut.tests_by_mangled_function_name[function].add(_name)
+            for function in self._state.consume_stats():
+                self._state.tests_by_mangled_function_name[function].add(_name)
 
         return hammett.main(
             quiet=True,

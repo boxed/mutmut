@@ -3,13 +3,15 @@ import click
 from mutmut.config import ensure_config_loaded
 from mutmut.meta import SourceFileMutationData
 from mutmut.mutation import status_by_exit_code, walk_source_files
+from mutmut.state import MutmutState
 
 
 @click.command()
 @click.option("--all", "show_all", default=False)
-def results(*, show_all: bool) -> None:
-    ensure_config_loaded()
-    for path in walk_source_files():
+@click.pass_obj
+def results(state: MutmutState, *, show_all: bool) -> None:
+    ensure_config_loaded(state)
+    for path in walk_source_files(state):
         if not str(path).endswith(".py"):
             continue
         m = SourceFileMutationData(path=path)

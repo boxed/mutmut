@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 import libcst as cst
 import pytest
 
-import mutmut
 from mutmut.cli import CatchOutput, run_forced_fail_test
 from mutmut.file_mutation import create_mutations, mutate_file_contents
 from mutmut.mutation import (
@@ -668,7 +667,7 @@ def test_mangle_function_name():
     )
 
 
-def test_diff_ops():
+def test_diff_ops(mutmut_state):
     source = """
 def foo():
     return 1
@@ -683,8 +682,18 @@ class Foo:
     mutants_source, mutant_names = mutate_file_contents("filename", source)
     assert len(mutant_names) == 2
 
-    diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path="test.py").strip()
-    diff2 = get_diff_for_mutant(mutant_name=mutant_names[1], source=mutants_source, path="test.py").strip()
+    diff1 = get_diff_for_mutant(
+        mutmut_state,
+        mutant_name=mutant_names[0],
+        source=mutants_source,
+        path="test.py",
+    ).strip()
+    diff2 = get_diff_for_mutant(
+        mutmut_state,
+        mutant_name=mutant_names[1],
+        source=mutants_source,
+        path="test.py",
+    ).strip()
 
     assert (
         diff1
@@ -741,11 +750,10 @@ def foo():
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_failing_test(capfd):
-    mutmut._reset_globals()
+def test_run_forced_fail_test_with_failing_test(mutmut_state, capfd):
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
-    run_forced_fail_test(runner)
+    run_forced_fail_test(runner, mutmut_state)
 
     out, err = capfd.readouterr()
 
@@ -758,11 +766,10 @@ def test_run_forced_fail_test_with_failing_test(capfd):
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(capfd):
-    mutmut._reset_globals()
+def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(mutmut_state, capfd):
     runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
 
-    run_forced_fail_test(runner)
+    run_forced_fail_test(runner, mutmut_state)
 
     out, _ = capfd.readouterr()
     assert "done" in out
@@ -771,12 +778,11 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(capfd):
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
 @pytest.mark.usefixtures("mock_catch_output")
-def test_run_forced_fail_test_with_all_tests_passing(capfd):
-    mutmut._reset_globals()
+def test_run_forced_fail_test_with_all_tests_passing(mutmut_state, capfd):
     runner = _mocked_runner_run_forced_failed(return_value=0)
 
     with pytest.raises(SystemExit) as error:
-        run_forced_fail_test(runner)
+        run_forced_fail_test(runner, mutmut_state)
 
     assert error.value.code == 1
     out, _ = capfd.readouterr()

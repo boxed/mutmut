@@ -1,5 +1,7 @@
 import click
 
+from mutmut.state import MutmutState
+
 from .apply import apply
 from .browse import browse
 from .print_time_estimates import print_time_estimates
@@ -11,8 +13,9 @@ from .tests_for_mutant import tests_for_mutant
 
 @click.group()
 @click.version_option()
-def cli() -> None:
-    pass
+@click.pass_context
+def cli(ctx: click.Context) -> None:
+    ctx.obj = MutmutState()
 
 
 cli.add_command(print_time_estimates)

@@ -18,12 +18,14 @@ from mutmut.mutation import (
     unused,
     walk_source_files,
 )
+from mutmut.state import MutmutState
 
 
 @click.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
-def browse(*, show_killed: bool) -> None:
-    ensure_config_loaded()
+@click.pass_obj
+def browse(state: MutmutState, *, show_killed: bool) -> None:
+    ensure_config_loaded(state)
 
     from rich.syntax import Syntax  # noqa: PLC0415
     from textual.app import App  # noqa: PLC0415
@@ -50,6 +52,7 @@ def browse(*, show_killed: bool) -> None:
 
         def __init__(self, **kwargs: Any):
             super().__init__(**kwargs)
+            self._state = state
             self.loading_id: str | None = None
             self.source_file_mutation_data_and_stat_by_path: dict[
                 str, tuple[SourceFileMutationData, Stat]
@@ -82,11 +85,11 @@ def browse(*, show_killed: bool) -> None:
             self.populate_files_table()
 
         def read_data(self):
-            config = get_config()
+            config = get_config(self._state)
             self.source_file_mutation_data_and_stat_by_path = {}
             self.path_by_name = {}
 
-            for p in walk_source_files():
+            for p in walk_source_files(self._state):
                 if config.should_ignore_for_mutation(p):
                     continue
                 source_file_mutation_data = SourceFileMutationData(path=p)
@@ -192,9 +195,9 @@ def browse(*, show_killed: bool) -> None:
                 diff_view.update("<loading code diff...>")
 
                 def load_thread():
-                    ensure_config_loaded()
+                    ensure_config_loaded(self._state)
                     try:
-                        d = get_diff_for_mutant(event.row_key.value, path=path)
+                        d = get_diff_for_mutant(self._state, event.row_key.value, path=path)
                         if event.row_key.value == self.loading_id:
                             diff_view.update(Syntax(d, "diff"))
                     except Exception as e:  # noqa: BLE001
@@ -248,11 +251,11 @@ def browse(*, show_killed: bool) -> None:
             self.retest(mutant_name.rpartition(".")[0] + ".*")
 
         def action_apply_mutant(self):
-            ensure_config_loaded()
+            ensure_config_loaded(self._state)
             mutant_name = self.get_mutant_name_from_selection()
             if mutant_name is None:
                 return
-            apply_mutant(mutant_name)
+            apply_mutant(self._state, mutant_name)
 
         def action_view_tests(self):
             mutant_name = self.get_mutant_name_from_selection()

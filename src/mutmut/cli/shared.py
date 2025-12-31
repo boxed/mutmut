@@ -1,13 +1,12 @@
 import itertools
 import os
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from io import TextIOBase
 from time import process_time
 from typing import Protocol, cast
 
-import mutmut
 from mutmut.config import get_config
 from mutmut.meta import SourceFileMutationData, load_stats, save_stats
 from mutmut.mutation import (
@@ -17,6 +16,7 @@ from mutmut.mutation import (
     utcnow,
 )
 from mutmut.runners import CollectTestsFailedException, TestRunner
+from mutmut.state import MutmutState
 
 
 class StatusPrinterType(Protocol):
@@ -70,9 +70,9 @@ def print_stats(
     print_status(summary, force_output=force_output)
 
 
-def run_forced_fail_test(runner: TestRunner) -> None:
+def run_forced_fail_test(runner: TestRunner, state: MutmutState) -> None:
     os.environ["MUTANT_UNDER_TEST"] = "fail"
-    with CatchOutput(spinner_title="Running forced fail test") as catcher:
+    with CatchOutput(state=state, spinner_title="Running forced fail test") as catcher:
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
@@ -85,18 +85,25 @@ def run_forced_fail_test(runner: TestRunner) -> None:
 
 
 class CatchOutput:
-    def __init__(self, callback=lambda _s: None, spinner_title=None):
+    def __init__(
+        self,
+        *,
+        state: MutmutState,
+        callback: Callable[[str], None] = lambda _s: None,
+        spinner_title: str | None = None,
+    ):
         self.strings = []
         self.spinner_title = spinner_title or ""
-        config = mutmut.config
+        config = state.config
         if config is not None and config.debug:
             self.spinner_title += "\n"
+        self._state = state
 
         class StdOutRedirect(TextIOBase):
-            def __init__(self, catcher):
+            def __init__(self, catcher: CatchOutput):
                 self.catcher = catcher
 
-            def write(self, s):
+            def write(self, s: str) -> int:
                 callback(s)
                 if spinner_title:
                     print_status(spinner_title)
@@ -116,7 +123,7 @@ class CatchOutput:
             print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
-        config = mutmut.config
+        config = self._state.config
         if config is not None and config.debug:
             self.stop()
 
@@ -138,23 +145,27 @@ class CatchOutput:
             print()
 
 
-def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None) -> None:
+def run_stats_collection(
+    runner: TestRunner,
+    state: MutmutState,
+    tests: Iterable[str] | None = None,
+) -> None:
     if tests is None:
         tests = []  # Meaning all...
 
-    config = get_config()
+    config = get_config(state)
     os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     start_cpu_time = process_time()
 
-    with CatchOutput(spinner_title="Running stats") as output_catcher:
+    with CatchOutput(state=state, spinner_title="Running stats") as output_catcher:
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
             print(f"failed to collect stats. runner returned {collect_stats_exit_code}")
             sys.exit(1)
         # ensure that at least one mutant has associated tests
-        num_associated_tests = sum(len(tests) for tests in mutmut.tests_by_mangled_function_name.values())
+        num_associated_tests = sum(len(tests) for tests in state.tests_by_mangled_function_name.values())
         if num_associated_tests == 0:
             output_catcher.dump_output()
             print(
@@ -174,24 +185,24 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
 
     print("    done")
     if not tests:  # again, meaning all
-        mutmut.stats_time = process_time() - start_cpu_time
+        state.stats_time = process_time() - start_cpu_time
 
-    if not collected_test_names():
+    if not collected_test_names(state):
         print("failed to collect stats, no active tests found")
         sys.exit(1)
 
-    save_stats()
+    save_stats(state)
 
 
-def collect_or_load_stats(runner: TestRunner) -> None:
-    did_load = load_stats()
+def collect_or_load_stats(runner: TestRunner, state: MutmutState) -> None:
+    did_load = load_stats(state)
 
     if not did_load:
         # Run full stats
-        run_stats_collection(runner)
+        run_stats_collection(runner, state)
     else:
         # Run incremental stats
-        with CatchOutput(spinner_title="Listing all tests") as output_catcher:
+        with CatchOutput(state=state, spinner_title="Listing all tests") as output_catcher:
             os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
             try:
                 all_tests_result = runner.list_all_tests()
@@ -206,4 +217,4 @@ def collect_or_load_stats(runner: TestRunner) -> None:
 
         if new_tests:
             print(f"Found {len(new_tests)} new tests, rerunning stats collection")
-            run_stats_collection(runner, tests=new_tests)
+            run_stats_collection(runner, state, tests=new_tests)
