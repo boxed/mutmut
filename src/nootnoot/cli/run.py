@@ -16,6 +16,7 @@ from setproctitle import setproctitle
 from nootnoot.app.config import ensure_config_loaded, get_config
 from nootnoot.app.events import EventSink, ListEventSink, emit_event
 from nootnoot.app.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
+from nootnoot.app.mutant_env import mutant_under_test, set_mutant_under_test
 from nootnoot.app.mutation import (
     calculate_summary_stats,
     collect_source_file_mutation_data,
@@ -118,7 +119,6 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     # which means we can get a list of tests and how many mutants each test kills.
     # Those that kill zero mutants are redundant!
     set_state(state)
-    os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
     if not hasattr(os, "fork"):
         print("nootnoot run requires os.fork, which is unavailable on this platform.", file=sys.stderr)
         sys.exit(2)
@@ -140,10 +140,13 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
     force_redirect = output_format == "json"
     start = utcnow()
     Path("mutants").mkdir(exist_ok=True, parents=True)
-    with CatchOutput(
-        state=state,
-        spinner_title="Generating mutants",
-        force_redirect=force_redirect,
+    with (
+        mutant_under_test("mutant_generation"),
+        CatchOutput(
+            state=state,
+            spinner_title="Generating mutants",
+            force_redirect=force_redirect,
+        ),
     ):
         copy_src_dir(state)
         copy_also_copy_files(state)
@@ -174,19 +177,18 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
         state=state,
     )
 
-    os.environ["MUTANT_UNDER_TEST"] = ""
     with CatchOutput(
         state=state,
         spinner_title="Running clean tests",
         force_redirect=force_redirect,
     ) as output_catcher:
         tests = tests_for_mutant_names(state, mutant_names)
-
-        clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
-        if clean_test_exit_code != 0:
-            output_catcher.dump_output()
-            print("Failed to run clean test", file=sys.stderr)
-            sys.exit(1)
+        with mutant_under_test(""):
+            clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
+            if clean_test_exit_code != 0:
+                output_catcher.dump_output()
+                print("Failed to run clean test", file=sys.stderr)
+                sys.exit(1)
     if output_format == "human":
         _diagnostic("    done")
 
@@ -278,7 +280,7 @@ def _run(  # noqa: PLR0912, PLR0914, PLR0915
             pid = os.fork()
             if not pid:
                 # In the child
-                os.environ["MUTANT_UNDER_TEST"] = normalized_mutant_name
+                set_mutant_under_test(normalized_mutant_name)
                 setproctitle(f"nootnoot: {normalized_mutant_name}")
 
                 # Run fast tests first

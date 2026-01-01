@@ -9,6 +9,7 @@ from typing import IO, TYPE_CHECKING
 from rich.console import Console
 
 from nootnoot.app.config import get_config
+from nootnoot.app.mutant_env import mutant_under_test
 from nootnoot.app.mutation import (
     NootNootProgrammaticFailException,
     calculate_summary_stats,
@@ -55,13 +56,15 @@ def run_forced_fail_test(
     *,
     force_redirect: bool = False,
 ) -> None:
-    os.environ["MUTANT_UNDER_TEST"] = "fail"
-    with CatchOutput(
-        state=state,
-        spinner_title="Running forced fail test",
-        output_stream=sys.stderr,
-        force_redirect=force_redirect,
-    ) as catcher:
+    with (
+        mutant_under_test("fail"),
+        CatchOutput(
+            state=state,
+            spinner_title="Running forced fail test",
+            output_stream=sys.stderr,
+            force_redirect=force_redirect,
+        ) as catcher,
+    ):
         try:
             if runner.run_forced_fail() == 0:
                 catcher.dump_output()
@@ -69,7 +72,6 @@ def run_forced_fail_test(
                 raise SystemExit(1)
         except NootNootProgrammaticFailException:
             pass
-    os.environ["MUTANT_UNDER_TEST"] = ""
     print("    done", file=sys.stderr)
 
 
@@ -151,16 +153,18 @@ def run_stats_collection(
         tests = []  # Meaning all...
 
     config = get_config(state)
-    os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     start_cpu_time = process_time()
 
-    with CatchOutput(
-        state=state,
-        spinner_title="Running stats",
-        output_stream=sys.stderr,
-        force_redirect=force_redirect,
-    ) as output_catcher:
+    with (
+        mutant_under_test("stats"),
+        CatchOutput(
+            state=state,
+            spinner_title="Running stats",
+            output_stream=sys.stderr,
+            force_redirect=force_redirect,
+        ) as output_catcher,
+    ):
         collect_stats_exit_code = runner.run_stats(tests=tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
@@ -223,13 +227,15 @@ def collect_or_load_stats(
         run_stats_collection(runner, state, force_redirect=force_redirect)
     else:
         # Run incremental stats
-        with CatchOutput(
-            state=state,
-            spinner_title="Listing all tests",
-            output_stream=sys.stderr,
-            force_redirect=force_redirect,
-        ) as output_catcher:
-            os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
+        with (
+            CatchOutput(
+                state=state,
+                spinner_title="Listing all tests",
+                output_stream=sys.stderr,
+                force_redirect=force_redirect,
+            ) as output_catcher,
+            mutant_under_test("list_all_tests"),
+        ):
             try:
                 all_tests_result = runner.list_all_tests()
             except CollectTestsFailedException:

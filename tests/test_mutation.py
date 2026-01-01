@@ -752,7 +752,7 @@ def foo():
 @pytest.mark.usefixtures("mock_catch_output")
 def test_run_forced_fail_test_with_failing_test(nootnoot_state, capfd):
     runner = _mocked_runner_run_forced_failed(return_value=1)
-
+    prev = os.environ.get("MUTANT_UNDER_TEST")
     run_forced_fail_test(runner, nootnoot_state)
 
     out, err = capfd.readouterr()
@@ -761,7 +761,7 @@ def test_run_forced_fail_test_with_failing_test(nootnoot_state, capfd):
     print(f"out: {out}")
     print(f"err: {err}")
     assert "done" in err
-    assert not os.environ["MUTANT_UNDER_TEST"]
+    assert os.environ.get("MUTANT_UNDER_TEST") == prev
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
@@ -769,11 +769,12 @@ def test_run_forced_fail_test_with_failing_test(nootnoot_state, capfd):
 def test_run_forced_fail_test_with_nootnoot_programmatic_fail_exception(nootnoot_state, capfd):
     runner = _mocked_runner_run_forced_failed(side_effect=NootNootProgrammaticFailException())
 
+    prev = os.environ.get("MUTANT_UNDER_TEST")
     run_forced_fail_test(runner, nootnoot_state)
 
     _out, err = capfd.readouterr()
     assert "done" in err
-    assert not os.environ["MUTANT_UNDER_TEST"]
+    assert os.environ.get("MUTANT_UNDER_TEST") == prev
 
 
 # Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
