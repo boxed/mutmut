@@ -18,13 +18,14 @@ from typing import TYPE_CHECKING, TextIO, cast
 
 import libcst as cst
 
-from nootnoot.code_coverage import gather_coverage, get_covered_lines_for_file
-from nootnoot.config import get_config
-from nootnoot.file_mutation import mutate_file_contents
-from nootnoot.meta import SourceFileMutationData
-from nootnoot.runners import PytestRunner
-from nootnoot.state import NootNootState, get_state
-from nootnoot.trampoline_templates import CLASS_NAME_SEPARATOR
+from nootnoot.app.code_coverage import gather_coverage, get_covered_lines_for_file
+from nootnoot.app.config import get_config
+from nootnoot.app.meta import SourceFileMutationData
+from nootnoot.app.runners import PytestRunner
+from nootnoot.app.state import NootNootState, get_state
+from nootnoot.core import trampoline_runtime
+from nootnoot.core.file_mutation import mutate_file_contents
+from nootnoot.core.trampoline_templates import CLASS_NAME_SEPARATOR
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
@@ -74,10 +75,6 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-class NootNootProgrammaticFailException(Exception):
-    pass
-
-
 class InvalidGeneratedSyntaxException(Exception):
     def __init__(self, file: Path | str) -> None:
         super().__init__(
@@ -88,11 +85,12 @@ class InvalidGeneratedSyntaxException(Exception):
 
 
 def record_trampoline_hit(name: str, state: NootNootState | None = None) -> None:
+    if state is None:
+        trampoline_runtime.record_trampoline_hit(name)
+        return
     if name.startswith("src."):
         msg = "Failed trampoline hit. Module name starts with `src.`, which is invalid"
         raise ValueError(msg)
-    if state is None:
-        state = get_state()
     config = get_config(state)
     if config.max_stack_depth != -1:
         f = inspect.currentframe()
@@ -108,6 +106,26 @@ def record_trampoline_hit(name: str, state: NootNootState | None = None) -> None
             return
 
     state.add_stat(name)
+
+
+NootNootProgrammaticFailException = trampoline_runtime.NootNootProgrammaticFailException
+
+
+def _get_max_stack_depth() -> int:
+    state = get_state()
+    config = get_config(state)
+    return config.max_stack_depth
+
+
+def _add_stat(name: str) -> None:
+    state = get_state()
+    state.add_stat(name)
+
+
+trampoline_runtime.register_trampoline_hooks(
+    get_max_stack_depth=_get_max_stack_depth,
+    add_stat=_add_stat,
+)
 
 
 def walk_all_files(state: NootNootState) -> Iterator[tuple[str, str]]:

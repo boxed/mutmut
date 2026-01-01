@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from nootnoot.state import NootNootState
+    from nootnoot.app.state import NootNootState
 
 T = TypeVar("T")
 

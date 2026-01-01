@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nootnoot.runners import TestRunner
+    from nootnoot.app.runners import TestRunner
 
 import coverage
 
@@ -70,7 +70,7 @@ def gather_coverage(
 # Unloads modules that are not in the 'modules' list
 def _unload_modules_not_in(modules):
     for name in list(sys.modules):
-        if name == "nootnoot.code_coverage":
+        if name == "nootnoot.app.code_coverage":
             continue
         if name not in modules:
             sys.modules.pop(name, None)

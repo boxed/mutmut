@@ -8,22 +8,22 @@ from typing import IO, TYPE_CHECKING
 
 from rich.console import Console
 
-from nootnoot.config import get_config
-from nootnoot.mutation import (
+from nootnoot.app.config import get_config
+from nootnoot.app.mutation import (
     NootNootProgrammaticFailException,
     calculate_summary_stats,
     collected_test_names,
 )
-from nootnoot.persistence import load_stats, save_stats
-from nootnoot.runners import CollectTestsFailedException, TestRunner
+from nootnoot.app.persistence import load_stats, save_stats
+from nootnoot.app.runners import CollectTestsFailedException, TestRunner
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from rich.status import Status
 
-    from nootnoot.meta import SourceFileMutationData
-    from nootnoot.state import NootNootState
+    from nootnoot.app.meta import SourceFileMutationData
+    from nootnoot.app.state import NootNootState
 
 console = Console(
     file=sys.__stderr__ or sys.stderr,

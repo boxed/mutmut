@@ -2,9 +2,9 @@ import sys
 
 import click
 
-from nootnoot.mutation import tests_for_mutant_names
-from nootnoot.persistence import load_stats
-from nootnoot.state import NootNootState
+from nootnoot.app.mutation import tests_for_mutant_names
+from nootnoot.app.persistence import load_stats
+from nootnoot.app.state import NootNootState
 
 
 @click.command()

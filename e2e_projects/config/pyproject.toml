@@ -1,39 +1,41 @@
 [project]
-name = "config"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-authors = []
-requires-python = ">=3.10"
-dependencies = []
+  name            = "config"
+  version         = "0.1.0"
+  description     = "Add your description here"
+  readme          = "README.md"
+  authors         = []
+  requires-python = ">=3.10"
+  dependencies    = []
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+  requires      = ["hatchling"]
+  build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-include = [
-  "/config_pkg",
-  "/tests",
-]
+  include = [
+    "/config_pkg",
+    "/tests",
+  ]
 
 [dependency-groups]
-dev = [
+  dev = [
     "pytest>=8.3.5",
-]
+  ]
 
 [tool.nootnoot]
-debug = true
-paths_to_mutate = [ "config_pkg/" ]
-do_not_mutate = [ "*ignore*" ]
-also_copy = [ "data" ]
-max_stack_depth=8 # Includes frames by nootnoot, see https://github.com/boxed/nootnoot/issues/378
-tests_dir = [ "tests/main/" ]
-# verify that we can override options with pytest_add_cli_args
-pytest_add_cli_args = ["-o", "xfail_strict=False"]
-# verify test exclusion (-m 'not fail') and test inclusion (-k=test_include)
-pytest_add_cli_args_test_selection = [ "-m", "not fail", "-k=test_include"]
+  debug           = true
+  paths_to_mutate = ["config_pkg/"]
+  do_not_mutate   = ["*ignore*"]
+  also_copy       = ["data"]
+  max_stack_depth = 8               # Includes frames by nootnoot, see https://github.com/boxed/nootnoot/issues/378
+  tests_dir       = ["tests/main/"]
+  # verify that we can override options with pytest_add_cli_args
+  pytest_add_cli_args = ["-o", "xfail_strict=False"]
+  # verify test exclusion (-m 'not fail') and test inclusion (-k=test_include)
+  pytest_add_cli_args_test_selection = ["-m", "not fail", "-k=test_include"]
 
 [tool.pytest.ini_options]
-xfail_strict = true
-markers = [ "fail: tests that should be ignored with nootnoot" ]
+  xfail_strict                       = true
+  markers                            = ["fail: tests that should be ignored with nootnoot"]
+  asyncio_default_fixture_loop_scope = "function"
+

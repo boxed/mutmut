@@ -1,9 +1,9 @@
 import click
 
-from nootnoot.config import ensure_config_loaded
-from nootnoot.meta import SourceFileMutationData
-from nootnoot.mutation import status_by_exit_code, walk_source_files
-from nootnoot.state import NootNootState
+from nootnoot.app.config import ensure_config_loaded
+from nootnoot.app.meta import SourceFileMutationData
+from nootnoot.app.mutation import status_by_exit_code, walk_source_files
+from nootnoot.app.state import NootNootState
 
 
 @click.command()

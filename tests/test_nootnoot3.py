@@ -1,5 +1,5 @@
-from nootnoot.file_mutation import mutate_file_contents
-from nootnoot.trampoline_templates import trampoline_impl
+from nootnoot.core.file_mutation import mutate_file_contents
+from nootnoot.core.trampoline_templates import trampoline_impl
 
 
 def mutated_module(source: str) -> str:

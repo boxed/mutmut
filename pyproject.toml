@@ -1,6 +1,6 @@
 [project]
   name = "nootnoot"
-version = "3.4.6"
+  version = "3.4.6"
   description = "mutation testing for Python 3"
   keywords = ["nootnoot", "mutant", "mutation", "test", "testing"]
   authors = [
@@ -28,7 +28,7 @@ version = "3.4.6"
     "rich>=14.2.0",
     "setproctitle>=1.1.0",
     "textual>=1.0.0",
-]
+  ]
 
   [project.urls]
     Homepage = "https://github.com/josephcourtney/nootnoot"
@@ -60,6 +60,7 @@ version = "3.4.6"
     "coverage>=7.12.0",
     "diff-cover>=9.7.2",
     "hypothesis>=6.148.6",
+    "import-linter>=2.9",
     "mkdocs>=1.6.1",
     "pip-audit>=2.10.0",
     "pymdown-extensions>=10.19.1",
@@ -151,6 +152,7 @@ version = "3.4.6"
     "perf: performance tests",
   ]
   asyncio_mode = "auto"
+  asyncio_default_fixture_loop_scope = "function"
 
 # =================================== test:coverage ===================================
 [tool.coverage.run]

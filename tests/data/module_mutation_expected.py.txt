@@ -16,10 +16,10 @@ def _nootnoot_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None)
     import os
     mutant_under_test = os.environ['MUTANT_UNDER_TEST']
     if mutant_under_test == 'fail':
-        from nootnoot.mutation import NootNootProgrammaticFailException
+        from nootnoot.core.trampoline_runtime import NootNootProgrammaticFailException
         raise NootNootProgrammaticFailException('Failed programmatically')
     elif mutant_under_test == 'stats':
-        from nootnoot.mutation import record_trampoline_hit
+        from nootnoot.core.trampoline_runtime import record_trampoline_hit
         record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
         result = orig(*call_args, **call_kwargs)
         return result

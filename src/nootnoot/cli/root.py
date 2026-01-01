@@ -1,6 +1,6 @@
 import click
 
-from nootnoot.state import NootNootState
+from nootnoot.app.state import NootNootState
 
 from .apply import apply
 from .browse import browse

@@ -9,13 +9,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from nootnoot.config import get_config
-from nootnoot.persistence import save_stats
+from nootnoot.app.config import get_config
+from nootnoot.app.persistence import save_stats
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from nootnoot.state import NootNootState
+    from nootnoot.app.state import NootNootState
 
 PYTEST_USAGE_ERROR_EXIT_CODE = 4
 

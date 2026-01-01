@@ -6,7 +6,7 @@ from multiprocessing import Lock
 from pathlib import Path
 from signal import SIGTERM
 
-from nootnoot.persistence import MetaPayload, load_meta, save_meta
+from nootnoot.app.persistence import MetaPayload, load_meta, save_meta
 
 
 def _utcnow() -> datetime:

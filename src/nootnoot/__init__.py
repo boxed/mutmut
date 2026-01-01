@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.metadata
 
-from nootnoot.state import NootNootState, get_state, set_state
+from nootnoot.app.state import NootNootState, get_state, set_state
 
 __version__ = importlib.metadata.version("nootnoot")
 

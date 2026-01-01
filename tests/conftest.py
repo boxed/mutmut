@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from nootnoot.state import NootNootState, reset_state, set_state
+from nootnoot.app.state import NootNootState, reset_state, set_state
 
 
 @pytest.fixture

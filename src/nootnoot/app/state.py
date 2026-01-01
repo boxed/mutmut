@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from nootnoot.config import Config
+    from nootnoot.app.config import Config
 
 
 @dataclass

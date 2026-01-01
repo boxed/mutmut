@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from nootnoot.events import RunEvent
+    from nootnoot.app.events import RunEvent
 
 REPORT_SCHEMA_VERSION = 1
 

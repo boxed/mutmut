@@ -13,10 +13,10 @@ from time import process_time, sleep
 import click
 from setproctitle import setproctitle
 
-from nootnoot.config import ensure_config_loaded, get_config
-from nootnoot.events import EventSink, ListEventSink, emit_event
-from nootnoot.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
-from nootnoot.mutation import (
+from nootnoot.app.config import ensure_config_loaded, get_config
+from nootnoot.app.events import EventSink, ListEventSink, emit_event
+from nootnoot.app.meta import START_TIMES_BY_PID_LOCK, SourceFileMutationData
+from nootnoot.app.mutation import (
     calculate_summary_stats,
     collect_source_file_mutation_data,
     copy_also_copy_files,
@@ -31,9 +31,9 @@ from nootnoot.mutation import (
     tests_for_mutant_names,
     utcnow,
 )
-from nootnoot.reporting import RunReport, render_json_report
-from nootnoot.runners import PytestRunner
-from nootnoot.state import NootNootState, set_state
+from nootnoot.app.reporting import RunReport, render_json_report
+from nootnoot.app.runners import PytestRunner
+from nootnoot.app.state import NootNootState, set_state
 
 from .shared import CatchOutput, collect_or_load_stats, print_stats, run_forced_fail_test
 

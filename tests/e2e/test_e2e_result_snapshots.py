@@ -5,11 +5,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from nootnoot.app.config import ensure_config_loaded
+from nootnoot.app.meta import SourceFileMutationData
+from nootnoot.app.mutation import walk_source_files
+from nootnoot.app.state import NootNootState
 from nootnoot.cli import _run
-from nootnoot.config import ensure_config_loaded
-from nootnoot.meta import SourceFileMutationData
-from nootnoot.mutation import walk_source_files
-from nootnoot.state import NootNootState
 
 
 @contextmanager

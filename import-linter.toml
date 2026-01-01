@@ -1,0 +1,63 @@
+[tool.importlinter]
+  root_package                  = "nootnoot"
+  include_external_packages     = true
+  exclude_type_checking_imports = true
+
+  # Layering: cli -> app -> core
+  [[tool.importlinter.contracts]]
+    name = "Enforce nootnoot layering (cli -> app -> core)"
+    type = "layers"
+    layers = [
+      "nootnoot.cli",
+      "nootnoot.app",
+      "nootnoot.core",
+    ]
+
+  # Core must be pure (no app/cli, no heavy side-effectful deps)
+  [[tool.importlinter.contracts]]
+    name = "Core must be pure"
+    type = "forbidden"
+    source_modules = ["nootnoot.core"]
+    forbidden_modules = [
+      "nootnoot.app",
+      "nootnoot.cli",
+      "os",
+      "multiprocessing",
+      "pytest",
+      "coverage",
+    ]
+
+  # Limit intra-app coupling (protect heavyweight mutation module)
+  [[tool.importlinter.contracts]]
+    name = "Limit intra-app coupling"
+    type = "forbidden"
+    source_modules = [
+      "nootnoot.app.code_coverage",
+      "nootnoot.app.meta",
+      "nootnoot.app.persistence",
+      "nootnoot.app.reporting",
+      "nootnoot.app.runners",
+    ]
+    forbidden_modules = [
+      "nootnoot.app.mutation",
+    ]
+
+  # Prevent sensitive app cycles (state must remain low-level)
+  [[tool.importlinter.contracts]]
+    name              = "No cycles between app state and runners"
+    type              = "forbidden"
+    source_modules    = ["nootnoot.app.state"]
+    forbidden_modules = ["nootnoot.app.runners"]
+
+  # CLI isolation: only entrypoints may import cli
+  [[tool.importlinter.contracts]]
+    name              = "No app->cli dependency"
+    type              = "forbidden"
+    source_modules    = ["nootnoot.app"]
+    forbidden_modules = ["nootnoot.cli"]
+
+  [[tool.importlinter.contracts]]
+    name              = "No core->cli dependency"
+    type              = "forbidden"
+    source_modules    = ["nootnoot.core"]
+    forbidden_modules = ["nootnoot.cli"]

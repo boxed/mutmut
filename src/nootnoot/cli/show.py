@@ -1,8 +1,8 @@
 import click
 
-from nootnoot.config import ensure_config_loaded
-from nootnoot.mutation import get_diff_for_mutant
-from nootnoot.state import NootNootState
+from nootnoot.app.config import ensure_config_loaded
+from nootnoot.app.mutation import get_diff_for_mutant
+from nootnoot.app.state import NootNootState
 
 
 @click.command()

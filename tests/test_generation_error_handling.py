@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-import nootnoot.mutation as nootnoot_mutation
-from nootnoot.mutation import InvalidGeneratedSyntaxException, create_mutants
+import nootnoot.app.mutation as nootnoot_mutation
+from nootnoot.app.mutation import InvalidGeneratedSyntaxException, create_mutants
 
 source_dir = Path(__file__).parent / "data" / "test_generation"
 source_dir = source_dir.relative_to(Path.cwd())

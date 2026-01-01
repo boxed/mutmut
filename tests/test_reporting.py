@@ -1,7 +1,7 @@
 import json
 
-from nootnoot.events import RunEvent
-from nootnoot.reporting import REPORT_SCHEMA_VERSION, RunReport, render_json_report
+from nootnoot.app.events import RunEvent
+from nootnoot.app.reporting import REPORT_SCHEMA_VERSION, RunReport, render_json_report
 
 
 def test_render_json_report_schema() -> None:

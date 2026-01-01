@@ -9,8 +9,8 @@ import libcst as cst
 import libcst.matchers as m
 from libcst.metadata import MetadataWrapper, PositionProvider
 
-from nootnoot.node_mutation import OPERATORS_TYPE, mutation_operators
-from nootnoot.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
+from nootnoot.core.node_mutation import OPERATORS_TYPE, mutation_operators
+from nootnoot.core.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
 
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}

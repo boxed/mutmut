@@ -6,9 +6,9 @@ from typing import Any, ClassVar, cast
 import click
 from rich.text import Text
 
-from nootnoot.config import ensure_config_loaded, get_config
-from nootnoot.meta import SourceFileMutationData
-from nootnoot.mutation import (
+from nootnoot.app.config import ensure_config_loaded, get_config
+from nootnoot.app.meta import SourceFileMutationData
+from nootnoot.app.mutation import (
     Stat,
     apply_mutant,
     collect_stat,
@@ -18,7 +18,7 @@ from nootnoot.mutation import (
     unused,
     walk_source_files,
 )
-from nootnoot.state import NootNootState
+from nootnoot.app.state import NootNootState
 
 
 @click.command()

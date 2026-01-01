@@ -19,21 +19,22 @@ VERBOSE        := env("VERBOSE", "0")
 # Tool wrappers
 # ----------------------------------------------------------------------
 
-UV         := "uv"
-RUFF       := justfile_directory() + "/.venv/bin/ruff"
-PYTEST     := justfile_directory() + "/.venv/bin/pytest"
-TY         := justfile_directory() + "/.venv/bin/ty"
-SHOWCOV    := justfile_directory() + "/.venv/bin/showcov"
-NOOTNOOT     := justfile_directory() + "/.venv/bin/nootnoot"
-MKDOCS     := justfile_directory() + "/.venv/bin/mkdocs"
-WILY       := justfile_directory() + "/.venv/bin/wily"
-WILY_CACHE := justfile_directory() + "/.wily"
-WILY_CONFIG := justfile_directory() + "/wily.cfg"
-VULTURE    := justfile_directory() + "/.venv/bin/vulture"
-RADON      := justfile_directory() + "/.venv/bin/radon"
-JSCPD      := "npx --yes jscpd@4.0"
-DIFF_COVER := justfile_directory() + "/.venv/bin/diff-cover"
-
+UV                  := "uv"
+RUFF                := justfile_directory() + "/.venv/bin/ruff"
+PYTEST              := justfile_directory() + "/.venv/bin/pytest"
+TY                  := justfile_directory() + "/.venv/bin/ty"
+SHOWCOV             := justfile_directory() + "/.venv/bin/showcov"
+NOOTNOOT            := justfile_directory() + "/.venv/bin/nootnoot"
+MKDOCS              := justfile_directory() + "/.venv/bin/mkdocs"
+WILY                := justfile_directory() + "/.venv/bin/wily"
+WILY_CACHE          := justfile_directory() + "/.wily"
+WILY_CONFIG         := justfile_directory() + "/wily.cfg"
+VULTURE             := justfile_directory() + "/.venv/bin/vulture"
+RADON               := justfile_directory() + "/.venv/bin/radon"
+JSCPD               := "npx --yes jscpd@4.0"
+DIFF_COVER          := justfile_directory() + "/.venv/bin/diff-cover"
+IMPORTLINTER        := justfile_directory() + "/.venv/bin/lint-imports"
+IMPORTLINTER_CONFIG := justfile_directory() + "/import-linter.toml"
 
 # ======================================================================
 # Meta / Defaults
@@ -88,6 +89,28 @@ lint:
 # Code Quality: Check for linting violations with `ruff check` without modifying files
 lint-no-fix:
   {{RUFF}} check --no-fix {{PY_SRC}} {{PY_TESTPATH}}
+
+# Code Quality: Lint import architecture (Import Linter)
+lint-imports:
+  #!/usr/bin/env bash
+  if [ ! -x {{IMPORTLINTER}} ]; then
+    echo "[lint-imports] ERROR: lint-imports not found ({{IMPORTLINTER}}); install import-linter dev dep and run 'just setup'"
+    exit 1
+  fi
+
+  set +e
+  output="$({{IMPORTLINTER}} --verbose --config {{IMPORTLINTER_CONFIG}} 2>&1)"
+  status=$?
+  set -e
+
+  if [ "$status" -ne 0 ]; then
+    echo "[lint-imports] FAILED"
+    echo
+    echo "$output"
+    exit "$status"
+  else
+    echo "[lint-imports] no import-linter contract violations detected."
+  fi
 
 # Code Quality: Format with `ruff format` and auto-fix where possible
 format:
@@ -560,10 +583,10 @@ scour: clean stash-untracked
 # ======================================================================
 
 # Convenience: setup, lint, format, typecheck, build-docs, test, cov
-fix: setup lint format typecheck build-docs test cov
+fix: setup lint format typecheck lint-imports build-docs test cov
 
 # CI: lint/type/tests/coverage summary with tool fallbacks
-check: setup format-no-fix lint-no-fix typecheck test-strict cov sec-deps
+check: setup format-no-fix lint-no-fix typecheck lint-imports test-strict cov sec-deps
 
 ci-pr: check diff-cov-strict sec-secrets sec-tools
 

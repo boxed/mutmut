@@ -2,10 +2,10 @@ import json
 import warnings
 from pathlib import Path
 
-from nootnoot.config import Config
-from nootnoot.meta import SourceFileMutationData
-from nootnoot.persistence import SCHEMA_VERSION, load_stats, save_stats
-from nootnoot.state import NootNootState
+from nootnoot.app.config import Config
+from nootnoot.app.meta import SourceFileMutationData
+from nootnoot.app.persistence import SCHEMA_VERSION, load_stats, save_stats
+from nootnoot.app.state import NootNootState
 
 
 def make_state(*, debug: bool) -> NootNootState:

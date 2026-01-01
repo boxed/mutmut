@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from nootnoot.state import NootNootState
+    from nootnoot.app.state import NootNootState
 
 SCHEMA_VERSION = 1
 

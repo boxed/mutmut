@@ -7,14 +7,14 @@ from unittest.mock import Mock, patch
 import libcst as cst
 import pytest
 
-from nootnoot.cli import CatchOutput, run_forced_fail_test
-from nootnoot.file_mutation import create_mutations, mutate_file_contents
-from nootnoot.mutation import (
+from nootnoot.app.mutation import (
     NootNootProgrammaticFailException,
     get_diff_for_mutant,
     orig_function_and_class_names_from_key,
 )
-from nootnoot.trampoline_templates import CLASS_NAME_SEPARATOR, mangle_function_name
+from nootnoot.cli import CatchOutput, run_forced_fail_test
+from nootnoot.core.file_mutation import create_mutations, mutate_file_contents
+from nootnoot.core.trampoline_templates import CLASS_NAME_SEPARATOR, mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -819,7 +819,7 @@ class A(Enum):
 
 
 # TODO: implement removal of inner decorators
-@pytest.mark.skip
+@pytest.mark.xfail(reason="not implemented", strict=True)
 def test_decorated_inner_functions_mutation():
     source = """
 def foo():
