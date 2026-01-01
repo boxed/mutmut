@@ -3,6 +3,7 @@
 # (exclude from directory tree listings)
 # ============================================
 exclude_tree = [
+  ".import_linter_cache",
   ".codex",
   ".ropeproject",
   ".readthedocs.yaml",
