@@ -1,6 +1,6 @@
 CLASS_NAME_SEPARATOR = 'ǁ'
 
-def build_trampoline(*, orig_name, mutants, class_name):
+def build_trampoline(*, orig_name, mutants, class_name, asynchronous):
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
     mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
@@ -17,8 +17,8 @@ def build_trampoline(*, orig_name, mutants, class_name):
     return f"""
 {mutants_dict}
 
-def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
-    result = {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
+{'async ' if asynchronous is not None else ''}def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
+    result = {'await ' if asynchronous is not None else ''} {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
     return result 
 
 {orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
