@@ -1,16 +1,12 @@
-from inline_snapshot import snapshot
 import libcst as cst
+from inline_snapshot import snapshot
+from mutmut.file_mutation import create_trampoline_wrapper
+from mutmut.file_mutation import mutate_file_contents
 
-from mutmut.file_mutation import mutate_file_contents, create_trampoline_wrapper
 
-
-def _get_trampoline_wrapper(
-    source: str, mangled_name: str, class_name: str | None = None
-) -> str:
+def _get_trampoline_wrapper(source: str, mangled_name: str, class_name: str | None = None) -> str:
     function = cst.ensure_type(cst.parse_statement(source), cst.FunctionDef)
-    trampoline = create_trampoline_wrapper(
-        function, mangled_name, class_name=class_name
-    )
+    trampoline = create_trampoline_wrapper(function, mangled_name, class_name=class_name)
     return cst.Module([trampoline]).code.strip()
 
 
@@ -55,9 +51,7 @@ def foo(p1, p2=None, /, p_or_kw=None, *, kw):
 def test_create_trampoline_wrapper_for_class_method():
     source = "def foo(self, a, b): pass"
 
-    assert _get_trampoline_wrapper(
-        source, "x_foo__mutmut", class_name="Person"
-    ) == snapshot("""\
+    assert _get_trampoline_wrapper(source, "x_foo__mutmut", class_name="Person") == snapshot("""\
 def foo(self, a, b):
     args = [a, b]# type: ignore
     kwargs = {}# type: ignore

@@ -1,13 +1,12 @@
 import shutil
 from pathlib import Path
 
-import pytest
-
-import mutmut
 import mutmut.__main__
-from mutmut.__main__ import InvalidGeneratedSyntaxException, create_mutants
+import pytest
+from mutmut.__main__ import create_mutants
+from mutmut.__main__ import InvalidGeneratedSyntaxException
 
-source_dir = Path(__file__).parent / 'data' / 'test_generation'
+source_dir = Path(__file__).parent / "data" / "test_generation"
 source_dir = source_dir.relative_to(Path.cwd())
 
 
@@ -20,7 +19,7 @@ def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
     mutmut._reset_globals()
     mutmut.config = MockConfig()
 
-    shutil.rmtree('mutants', ignore_errors=True)
+    shutil.rmtree("mutants", ignore_errors=True)
 
     source_files = [
         source_dir / "valid_syntax_1.py",
@@ -38,4 +37,4 @@ def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
         # should raise a warning, because libcst is not able to parse invalid_syntax.py
         with pytest.warns(SyntaxWarning):
             create_mutants(max_children=2)
-    assert 'invalid_syntax.py' in str(excinfo.value)
+    assert "invalid_syntax.py" in str(excinfo.value)

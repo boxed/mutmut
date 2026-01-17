@@ -1,22 +1,29 @@
-CLASS_NAME_SEPARATOR = 'ǁ'
+CLASS_NAME_SEPARATOR = "ǁ"
+
 
 def create_trampoline_lookup(*, orig_name, mutants, class_name):
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{ # type: ignore\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+    mutants_dict = (
+        f"{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{ # type: ignore\n"
+        + ", \n    ".join(f"{repr(m)}: {m}" for m in mutants)
+        + "\n}"
+    )
     return f"""
 {mutants_dict}
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
 """
 
+
 def mangle_function_name(*, name, class_name):
     assert CLASS_NAME_SEPARATOR not in name
     if class_name:
         assert CLASS_NAME_SEPARATOR not in class_name
-        prefix = f'x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}'
+        prefix = f"x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
     else:
-        prefix = 'x_'
-    return f'{prefix}{name}'
+        prefix = "x_"
+    return f"{prefix}{name}"
+
 
 # noinspection PyUnresolvedReferences
 # language=python

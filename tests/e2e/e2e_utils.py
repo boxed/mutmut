@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import mutmut
-from mutmut.__main__ import SourceFileMutationData, _run, ensure_config_loaded, walk_source_files
+from mutmut.__main__ import _run
+from mutmut.__main__ import ensure_config_loaded
+from mutmut.__main__ import SourceFileMutationData
+from mutmut.__main__ import walk_source_files
 
 
 @contextmanager
@@ -36,12 +39,12 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
 
 
 def read_json_file(path: Path):
-    with open(path, 'r') as file:
+    with open(path) as file:
         return json.load(file)
 
 
 def write_json_file(path: Path, data: Any):
-    with open(path, 'w') as file:
+    with open(path, "w") as file:
         json.dump(data, file, indent=2)
 
 

@@ -1,7 +1,12 @@
 """This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
+
 import re
-from typing import Any, Union, cast
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable
+from collections.abc import Iterable
+from collections.abc import Sequence
+from typing import Any
+from typing import cast
+
 import libcst as cst
 import libcst.matchers as m
 
@@ -15,10 +20,9 @@ OPERATORS_TYPE = Sequence[
 # pattern to match (nearly) all chars in a string that are not part of an escape sequence
 NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
 
-def operator_number(
-    node: cst.BaseNumber
-) -> Iterable[cst.BaseNumber]:
-    if isinstance(node, (cst.Integer, cst.Float)):
+
+def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
+    if isinstance(node, cst.Integer | cst.Float):
         yield node.with_changes(value=repr(node.evaluated_value + 1))
     elif isinstance(node, cst.Imaginary):
         yield node.with_changes(value=repr(node.evaluated_value + 1j))
@@ -26,15 +30,11 @@ def operator_number(
         print("Unexpected number type", node)
 
 
-def operator_string(
-    node: cst.BaseString
-) -> Iterable[cst.BaseString]:
+def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
     if isinstance(node, cst.SimpleString):
         value = node.value
         old_value = value
-        prefix = value[
-            : min([x for x in [value.find('"'), value.find("'")] if x != -1])
-        ]
+        prefix = value[: min([x for x in [value.find('"'), value.find("'")] if x != -1])]
         value = value[len(prefix) :]
 
         if value.startswith('"""') or value.startswith("'''"):
@@ -58,18 +58,14 @@ def operator_string(
             yield node.with_changes(value=new_value)
 
 
-def operator_lambda(
-    node: cst.Lambda
-) -> Iterable[cst.Lambda]:
+def operator_lambda(node: cst.Lambda) -> Iterable[cst.Lambda]:
     if m.matches(node, m.Lambda(body=m.Name("None"))):
         yield node.with_changes(body=cst.Integer("0"))
     else:
         yield node.with_changes(body=cst.Name("None"))
 
 
-def operator_dict_arguments(
-    node: cst.Call
-) -> Iterable[cst.Call]:
+def operator_dict_arguments(node: cst.Call) -> Iterable[cst.Call]:
     """mutate dict(a=b, c=d) to dict(aXX=b, c=d) and dict(a=b, cXX=d)"""
     if not m.matches(node.func, m.Name(value="dict")):
         return
@@ -82,18 +78,16 @@ def operator_dict_arguments(
         mutated_args = [
             *node.args[:i],
             node.args[i].with_changes(keyword=mutated_keyword),
-            *node.args[i+1:],
+            *node.args[i + 1 :],
         ]
         yield node.with_changes(args=mutated_args)
 
 
-def operator_arg_removal(
-    node: cst.Call
-) -> Iterable[cst.Call]:
+def operator_arg_removal(node: cst.Call) -> Iterable[cst.Call]:
     """try to drop each arg in a function call, e.g. foo(a, b) -> foo(b), foo(a)"""
     for i, arg in enumerate(node.args):
         # replace with None
-        if arg.star == '' and not m.matches(arg.value, m.Name("None")):
+        if arg.star == "" and not m.matches(arg.value, m.Name("None")):
             mutated_arg = arg.with_changes(value=cst.Name("None"))
             yield node.with_changes(args=[*node.args[:i], mutated_arg, *node.args[i + 1 :]])
 
@@ -104,58 +98,51 @@ def operator_arg_removal(
 
 
 supported_symmetric_str_methods_swap = [
-         ("lower", "upper"),
-         ("upper", "lower"),
-         ("lstrip", "rstrip"),
-         ("rstrip", "lstrip"),
-         ("find", "rfind"),
-         ("rfind", "find"),
-         ("ljust", "rjust"),
-         ("rjust", "ljust"),
-         ("index", "rindex"),
-         ("rindex", "index"),
-         ("removeprefix", "removesuffix"),
-         ("removesuffix", "removeprefix"),
-         ("partition", "rpartition"),
-         ("rpartition", "partition")
+    ("lower", "upper"),
+    ("upper", "lower"),
+    ("lstrip", "rstrip"),
+    ("rstrip", "lstrip"),
+    ("find", "rfind"),
+    ("rfind", "find"),
+    ("ljust", "rjust"),
+    ("rjust", "ljust"),
+    ("index", "rindex"),
+    ("rindex", "index"),
+    ("removeprefix", "removesuffix"),
+    ("removesuffix", "removeprefix"),
+    ("partition", "rpartition"),
+    ("rpartition", "partition"),
 ]
 
-supported_unsymmetrical_str_methods_swap = [
-    ("split", "rsplit"),
-    ("rsplit", "split")
-]
+supported_unsymmetrical_str_methods_swap = [("split", "rsplit"), ("rsplit", "split")]
 
-def operator_symmetric_string_methods_swap(
-     node: cst.Call
- ) -> Iterable[cst.Call]:
-     """try to swap string method to opposite e.g. a.lower() -> a.upper()"""
 
-     for old_call, new_call in supported_symmetric_str_methods_swap:
-         if m.matches(node.func, m.Attribute(value=m.DoNotCare(),  attr=m.Name(value=old_call))):
+def operator_symmetric_string_methods_swap(node: cst.Call) -> Iterable[cst.Call]:
+    """try to swap string method to opposite e.g. a.lower() -> a.upper()"""
+
+    for old_call, new_call in supported_symmetric_str_methods_swap:
+        if m.matches(node.func, m.Attribute(value=m.DoNotCare(), attr=m.Name(value=old_call))):
             func_name = cst.ensure_type(node.func, cst.Attribute).attr
             yield node.with_deep_changes(func_name, value=new_call)
 
-def operator_unsymmetrical_string_methods_swap(
-    node: cst.Call
-) -> Iterable[cst.Call]:
+
+def operator_unsymmetrical_string_methods_swap(node: cst.Call) -> Iterable[cst.Call]:
     """Try to handle specific mutations of string, which useful only in specific args combination."""
     for old_call, new_call in supported_unsymmetrical_str_methods_swap:
         if m.matches(node.func, m.Attribute(attr=m.Name(value=old_call))):
             if old_call in {"split", "rsplit"}:
                 # The logic of this "if" operator described here:
                 # https://github.com/boxed/mutmut/pull/394#issuecomment-2977890188
-                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword} # sep or maxsplit or nothing
+                key_args: set[str] = {a.keyword.value for a in node.args if a.keyword}  # sep or maxsplit or nothing
                 if len(node.args) == 2 or "maxsplit" in key_args:
                     func_name = cst.ensure_type(node.func, cst.Attribute).attr
                     yield node.with_deep_changes(func_name, value=new_call)
 
 
-
-def operator_remove_unary_ops(
-    node: cst.UnaryOperation
-) -> Iterable[cst.BaseExpression]:
-    if isinstance(node.operator, (cst.Not, cst.BitInvert)):
+def operator_remove_unary_ops(node: cst.UnaryOperation) -> Iterable[cst.BaseExpression]:
+    if isinstance(node.operator, cst.Not | cst.BitInvert):
         yield node.expression
+
 
 _keyword_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
     cst.Is: cst.IsNot,
@@ -166,9 +153,8 @@ _keyword_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
     cst.Continue: cst.Break,
 }
 
-def operator_keywords(
-    node: cst.CSTNode
-) -> Iterable[cst.CSTNode]:
+
+def operator_keywords(node: cst.CSTNode) -> Iterable[cst.CSTNode]:
     yield from _simple_mutation_mapping(node, _keyword_mapping)
 
 
@@ -181,6 +167,7 @@ def operator_name(node: cst.Name) -> Iterable[cst.CSTNode]:
     }
     if node.value in name_mappings:
         yield node.with_changes(value=name_mappings[node.value])
+
 
 _operator_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
     cst.Plus: cst.Minus,
@@ -219,25 +206,28 @@ _operator_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
     cst.Or: cst.And,
 }
 
-def operator_swap_op(
-    node: cst.CSTNode
-) -> Iterable[cst.CSTNode]:
-    if m.matches(node, m.BinaryOperation() | m.UnaryOperation() | m.BooleanOperation() | m.ComparisonTarget() | m.AugAssign()):
-        typed_node = cast(Union[cst.BinaryOperation, cst.UnaryOperation, cst.BooleanOperation, cst.ComparisonTarget, cst.AugAssign], node)
+
+def operator_swap_op(node: cst.CSTNode) -> Iterable[cst.CSTNode]:
+    if m.matches(
+        node,
+        m.BinaryOperation() | m.UnaryOperation() | m.BooleanOperation() | m.ComparisonTarget() | m.AugAssign(),
+    ):
+        typed_node = cast(
+            cst.BinaryOperation | cst.UnaryOperation | cst.BooleanOperation | cst.ComparisonTarget | cst.AugAssign,
+            node,
+        )
         operator = typed_node.operator
         for new_operator in _simple_mutation_mapping(operator, _operator_mapping):
             yield node.with_changes(operator=new_operator)
 
 
-def operator_augmented_assignment(
-    node: cst.AugAssign
-) -> Iterable[cst.Assign]:
+def operator_augmented_assignment(node: cst.AugAssign) -> Iterable[cst.Assign]:
     """mutate all augmented assignments (+=, *=, |=, etc.) to normal = assignments"""
     yield cst.Assign([cst.AssignTarget(node.target)], node.value, node.semicolon)
 
 
 def operator_assignment(
-    node: Union[cst.Assign, cst.AnnAssign]
+    node: cst.Assign | cst.AnnAssign,
 ) -> Iterable[cst.CSTNode]:
     """mutate `a = b` to `a = None` and `a = None` to `a = ""`"""
     if not node.value:
@@ -250,11 +240,13 @@ def operator_assignment(
 
     yield node.with_changes(value=mutated_value)
 
+
 def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
     """Drop the case statements in a match."""
     if len(node.cases) > 1:
         for i in range(len(node.cases)):
-            yield node.with_changes(cases=[*node.cases[:i], *node.cases[i+1:]])
+            yield node.with_changes(cases=[*node.cases[:i], *node.cases[i + 1 :]])
+
 
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
