@@ -1,7 +1,8 @@
-from inline_snapshot import snapshot
-from mutmut.type_checking import parse_mypy_report, parse_pyrefly_report
-
 from pathlib import Path
+
+from inline_snapshot import snapshot
+from mutmut.type_checking import parse_mypy_report
+from mutmut.type_checking import parse_pyrefly_report
 from mutmut.type_checking import TypeCheckingError
 
 

@@ -67,3 +67,26 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.inline-snapshot]
 format-command="ruff format --stdin-filename {filename}"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "C4", "UP"]
+ignore = [
+    "E501",  # line too long - handled by formatter
+    "B007",  # unused loop control variable
+    "B018",  # useless expression
+    "B024",  # abstract base class without abstract methods
+    "B027",  # empty method in abstract base class without abstract decorator
+    "B028",  # no explicit stacklevel in warnings.warn
+    "B904",  # raise without from in except
+    "C405",  # unnecessary list literal
+    "C408",  # unnecessary dict() call
+    "C416",  # unnecessary list comprehension
+    "F402",  # import shadowed by loop variable
+    "F841",  # local variable assigned but never used
+    "UP007", # use X | Y for type annotations
+    "UP038", # use X | Y in isinstance
+]
