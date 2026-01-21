@@ -899,6 +899,20 @@ def save_stats():
             stats_time=mutmut.stats_time,
         ), f, indent=4)
 
+def save_cicd_stats(source_file_mutation_data_by_path):
+    s = calculate_summary_stats(source_file_mutation_data_by_path)
+    with open('mutants/mutmut-cicd-stats.json', 'w') as f:
+        json.dump(dict(
+            killed=s.killed,
+            survived=s.survived,
+            total=s.total,
+            no_tests=s.no_tests,
+            skipped=s.skipped,
+            suspicious=s.suspicious,
+            timeout=s.timeout,
+            check_was_interrupted_by_user=s.check_was_interrupted_by_user,
+            segfault=s.segfault
+        ), f, indent=4)
 
 def collect_source_file_mutation_data(*, mutant_names):
     source_file_mutation_data_by_path: Dict[str, SourceFileMutationData] = {}
@@ -1151,6 +1165,9 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
     print_stats(source_file_mutation_data_by_path, force_output=True)
     print()
     print(f'{count_tried / t.total_seconds():.2f} mutations/second')
+
+    # save stats so CI/CD pipelines can optionally take action
+    save_cicd_stats(source_file_mutation_data_by_path)
 
     if mutant_names:
         print()
