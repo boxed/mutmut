@@ -899,6 +899,50 @@ def save_stats():
             stats_time=mutmut.stats_time,
         ), f, indent=4)
 
+def save_cicd_stats(source_file_mutation_data_by_path):
+    s = calculate_summary_stats(source_file_mutation_data_by_path)
+    with open('mutants/mutmut-cicd-stats.json', 'w') as f:
+        json.dump(dict(
+            killed=s.killed,
+            survived=s.survived,
+            total=s.total,
+            no_tests=s.no_tests,
+            skipped=s.skipped,
+            suspicious=s.suspicious,
+            timeout=s.timeout,
+            check_was_interrupted_by_user=s.check_was_interrupted_by_user,
+            segfault=s.segfault
+        ), f, indent=4)
+
+# exports CI/CD stats to block pull requests from merging if mutation score is too low, or used in other ways in CI/CD pipelines
+@cli.command()
+def export_cicd_stats():
+    ensure_config_loaded()
+
+    source_file_mutation_data_by_path: Dict[str, SourceFileMutationData] = {}
+
+    for path in walk_source_files():
+        if mutmut.config.should_ignore_for_mutation(path):
+            continue
+
+        meta_path = Path('mutants') / (str(path) + '.meta')
+        if not meta_path.exists():
+            continue
+
+        m = SourceFileMutationData(path=path)
+        m.load()
+        if not m.exit_code_by_key:
+            continue
+
+        source_file_mutation_data_by_path[str(path)] = m
+
+    if not source_file_mutation_data_by_path:
+        print('No previous mutation data found. Run "mutmut run" first.')
+        return
+
+    save_cicd_stats(source_file_mutation_data_by_path)
+    print('Saved CI/CD stats to mutants/mutmut-cicd-stats.json')
+
 
 def collect_source_file_mutation_data(*, mutant_names):
     source_file_mutation_data_by_path: Dict[str, SourceFileMutationData] = {}
