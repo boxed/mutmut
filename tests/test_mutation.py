@@ -434,7 +434,7 @@ def test_bug_github_issue_77():
 
 
 def test_bug_github_issue_435():
-    source = """
+    source = r"""
     def parse(self, text: str) -> tuple[Tree[Token], str]:
         text = re.sub(r'[\w\-]  [\w\-]', dashrepl, text)
 
