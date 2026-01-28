@@ -37,3 +37,4 @@ pytest_add_cli_args_test_selection = [ "-m", "not fail", "-k=test_include"]
 [tool.pytest.ini_options]
 xfail_strict = true
 markers = [ "fail: tests that should be ignored with mutmut" ]
+asyncio_default_fixture_loop_scope = "function"
