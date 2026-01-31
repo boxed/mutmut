@@ -64,6 +64,12 @@
     "my_lib.x_escape_sequences__mutmut_5": 0,
     "my_lib.x_create_a_segfault_when_mutated__mutmut_1": -11,
     "my_lib.x_create_a_segfault_when_mutated__mutmut_2": 0,
-    "my_lib.x_create_a_segfault_when_mutated__mutmut_3": 0
+    "my_lib.x_create_a_segfault_when_mutated__mutmut_3": 0,
+    "my_lib.x_some_func__mutmut_1": 0,
+    "my_lib.x_some_func__mutmut_2": 0,
+    "my_lib.x_some_func__mutmut_3": 1,
+    "my_lib.x_func_with_star__mutmut_1": 1,
+    "my_lib.x_func_with_star__mutmut_2": 1,
+    "my_lib.x_func_with_arbitrary_args__mutmut_1": 1
   }
 }

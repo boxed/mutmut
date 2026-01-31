@@ -97,3 +97,17 @@ def create_a_segfault_when_mutated():
     # when we mutate False->True, then this will segfault
     if False:
         ctypes.string_at(0)
+
+def some_func_clone(a, b: str = "111", c: Callable[[str], int] | None = None) -> int | None: pass  # pragma: no mutate
+def some_func(a, b: str = "111", c: Callable[[str], int] | None = None) -> int | None:
+    if a and c:
+        return c(b)
+    return None
+
+def func_with_star_clone(a, *, b, **kwargs): pass  # pragma: no mutate
+def func_with_star(a, *, b, **kwargs):
+    return a + b + len(kwargs)
+
+def func_with_arbitrary_args_clone(*args, **kwargs): pass  # pragma: no mutate
+def func_with_arbitrary_args(*args, **kwargs):
+    return len(args) + len(kwargs)

@@ -4,6 +4,8 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+import pytest
+import sys
 
 import mutmut
 from mutmut.__main__ import SourceFileMutationData, _run, ensure_config_loaded, walk_source_files
@@ -84,3 +86,9 @@ def test_config_result_snapshot():
 def test_mutate_only_covered_lines_result_snapshot():
     mutmut._reset_globals()
     asserts_results_did_not_change("mutate_only_covered_lines")
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Can only test python 3.14 features on 3.14")
+def test_python_3_14_result_snapshot():
+    mutmut._reset_globals()
+    asserts_results_did_not_change("py3_14_features")

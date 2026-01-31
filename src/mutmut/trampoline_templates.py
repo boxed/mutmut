@@ -21,7 +21,7 @@ def {orig_name}({'self, ' if class_name is not None else ''}*args, **kwargs):
     result = {trampoline_name}({access_prefix}{mangled_name}__mutmut_orig{access_suffix}, {access_prefix}{mangled_name}__mutmut_mutants{access_suffix}, args, kwargs{self_arg})
     return result 
 
-{orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
+_mutmut_copy_signature({orig_name}, {mangled_name}__mutmut_orig)
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
 """
 
@@ -37,10 +37,29 @@ def mangle_function_name(*, name, class_name):
 # noinspection PyUnresolvedReferences
 # language=python
 trampoline_impl = """
-from inspect import signature as _mutmut_signature
+import inspect as _mutmut_inspect
+import sys as _mutmut_sys
 from typing import Annotated
 from typing import Callable
 from typing import ClassVar
+
+def _mutmut_copy_signature(trampoline, original_method):
+    if _mutmut_sys.version_info >= (3, 14):
+        # PEP 649 introduced deferred loading for annotations
+        # When some_method.__annotations__ is accessed, Python uses some_method.__annotate__(format) to compute it
+        # By copying the original __annotate__ method, we provide get the original annotations
+        trampoline.__annotate__ = original_method.__annotate__
+    else:
+        # On Python 3.13 and earlier, __annotations__ can be accessed immediately
+        trampoline.__annotations__ = original_method.__annotations__
+
+    try:
+        trampoline.__signature__ = _mutmut_inspect.signature(original_method)
+    except NameError:
+        # Also, because of PEP 649, it can happen that we cannot eagerly evaluate the signature
+        # In this case, fall back to stringifying the signature (which could cause different behaviour with runtime introspection)
+        trampoline.__signature__ = _mutmut_inspect.signature(original_method, annotation_format=_mutmut_inspect.Format.STRING)
+
 
 
 MutantDict = Annotated[dict[str, Callable], "Mutant"]

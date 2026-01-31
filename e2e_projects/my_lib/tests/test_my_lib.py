@@ -1,4 +1,5 @@
-from my_lib import hello, Point, badly_tested, make_greeter, fibonacci, cached_fibonacci, escape_sequences, simple_consumer, async_consumer, create_a_segfault_when_mutated
+import inspect
+from my_lib import *
 import pytest
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
@@ -47,3 +48,17 @@ async def test_async_consumer():
 
 def test_handles_segfaults():
     create_a_segfault_when_mutated()
+
+def test_that_signatures_are_preserved():
+    assert inspect.signature(some_func) == inspect.signature(some_func_clone)
+    assert inspect.signature(func_with_star) == inspect.signature(func_with_star_clone)
+    assert inspect.signature(func_with_arbitrary_args) == inspect.signature(func_with_arbitrary_args_clone)
+
+    assert inspect.get_annotations(some_func) == inspect.get_annotations(some_func_clone)
+    assert inspect.get_annotations(func_with_star) == inspect.get_annotations(func_with_star_clone)
+    assert inspect.get_annotations(func_with_arbitrary_args) == inspect.get_annotations(func_with_arbitrary_args_clone)
+
+def test_signature_functions_are_callable():
+    assert some_func(True, c=lambda s: int(s), b="222") == 222
+    assert func_with_star(1, b=2, x='x', y='y', z='z') == 6
+    assert func_with_arbitrary_args('a', 'b', foo=123, bar=456) == 4
