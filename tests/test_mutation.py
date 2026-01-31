@@ -699,7 +699,7 @@ def foo(*args, **kwargs):
     result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs)
     return result 
 
-foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig)
+_mutmut_copy_signature(foo, x_foo__mutmut_orig)
 x_foo__mutmut_orig.__name__ = 'x_foo'
 
 def x_bar__mutmut_orig():
@@ -716,7 +716,7 @@ def bar(*args, **kwargs):
     result = _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
     return result 
 
-bar.__signature__ = _mutmut_signature(x_bar__mutmut_orig)
+_mutmut_copy_signature(bar, x_bar__mutmut_orig)
 x_bar__mutmut_orig.__name__ = 'x_bar'
 
 class Adder:
@@ -733,7 +733,7 @@ class Adder:
         result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁ__init____mutmut_orig"), object.__getattribute__(self, "xǁAdderǁ__init____mutmut_mutants"), args, kwargs, self)
         return result 
     
-    __init__.__signature__ = _mutmut_signature(xǁAdderǁ__init____mutmut_orig)
+    _mutmut_copy_signature(__init__, xǁAdderǁ__init____mutmut_orig)
     xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__'
 
     def xǁAdderǁadd__mutmut_orig(self, value):
@@ -750,7 +750,7 @@ class Adder:
         result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁadd__mutmut_orig"), object.__getattribute__(self, "xǁAdderǁadd__mutmut_mutants"), args, kwargs, self)
         return result 
     
-    add.__signature__ = _mutmut_signature(xǁAdderǁadd__mutmut_orig)
+    _mutmut_copy_signature(add, xǁAdderǁadd__mutmut_orig)
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
 
 print(Adder(1).add(2))"""
