@@ -1,3 +1,9 @@
+import os
+import sys
+import platform
+if platform.system() == 'Windows':
+    print('To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue https://github.com/boxed/mutmut/issues/397')
+    sys.exit(1)
 import ast
 import fnmatch
 import gc
@@ -5,12 +11,10 @@ import inspect
 import itertools
 import json
 from multiprocessing import Pool, set_start_method, Lock
-import os
 import resource
 import shutil
 import signal
 import subprocess
-import sys
 from abc import ABC
 from collections import defaultdict
 from configparser import (
