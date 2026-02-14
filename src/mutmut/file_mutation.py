@@ -258,10 +258,10 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
 
 def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, class_name: str | None) -> cst.FunctionDef:
     args: list[cst.Element | cst.StarredElement] = []
-    for param in function.params.params:
-        args.append(cst.Element(param.name))
     for pos_only_param in function.params.posonly_params:
         args.append(cst.Element(pos_only_param.name))
+    for param in function.params.params:
+        args.append(cst.Element(param.name))
     if isinstance(function.params.star_arg, cst.Param):
         args.append(cst.StarredElement(function.params.star_arg.name))
 

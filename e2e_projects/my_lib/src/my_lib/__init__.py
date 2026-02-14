@@ -104,9 +104,9 @@ def some_func(a, b: str = "111", c: Callable[[str], int] | None = None) -> int |
         return c(b)
     return None
 
-def func_with_star_clone(a, *, b, **kwargs): pass  # pragma: no mutate
-def func_with_star(a, *, b, **kwargs):
-    return a + b + len(kwargs)
+def func_with_star_clone(a, /, b, *, c, **kwargs): pass  # pragma: no mutate
+def func_with_star(a, /, b, *, c, **kwargs):
+    return a + b + c + len(kwargs)
 
 def func_with_arbitrary_args_clone(*args, **kwargs): pass  # pragma: no mutate
 def func_with_arbitrary_args(*args, **kwargs):

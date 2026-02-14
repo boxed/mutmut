@@ -61,7 +61,7 @@ def test_that_signatures_are_preserved():
 
 def test_signature_functions_are_callable():
     assert some_func(True, c=lambda s: int(s), b="222") == 222
-    assert func_with_star(1, b=2, x='x', y='y', z='z') == 6
+    assert func_with_star(1, b=2, c=3, x='x', y='y', z='z') == 9
     assert func_with_arbitrary_args('a', 'b', foo=123, bar=456) == 4
 
 def test_signature_is_coroutine():
