@@ -55,6 +55,7 @@ source-include = ["HISTORY.rst"]
 dev = [
     "inline-snapshot>=0.32.0",
     "pytest-asyncio>=1.0.0",
+    "ruff>=0.15.1",
 ]
 
 [tool.pytest.ini_options]
@@ -62,3 +63,6 @@ testpaths = [
     "tests",
 ]
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.inline-snapshot]
+format-command="ruff format --stdin-filename {filename}"
