@@ -1,6 +1,7 @@
 import inspect
 from my_lib import *
 import pytest
+import asyncio
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
 
@@ -62,3 +63,7 @@ def test_signature_functions_are_callable():
     assert some_func(True, c=lambda s: int(s), b="222") == 222
     assert func_with_star(1, b=2, x='x', y='y', z='z') == 6
     assert func_with_arbitrary_args('a', 'b', foo=123, bar=456) == 4
+
+def test_signature_is_coroutine():
+    assert asyncio.iscoroutinefunction(async_consumer)
+

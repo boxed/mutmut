@@ -53,6 +53,7 @@ source-include = ["HISTORY.rst"]
 
 [dependency-groups]
 dev = [
+    "inline-snapshot>=0.32.0",
     "pytest-asyncio>=1.0.0",
 ]
 

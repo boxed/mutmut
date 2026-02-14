@@ -3,13 +3,11 @@
 from collections import defaultdict
 from collections.abc import Iterable, Sequence, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Union
-import warnings
 import libcst as cst
 from libcst.metadata import PositionProvider, MetadataWrapper
 import libcst.matchers as m
-from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
+from mutmut.trampoline_templates import create_trampoline_lookup, mangle_function_name, trampoline_impl
 from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
 
 NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
@@ -248,11 +246,86 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
         nodes.append(mutated_method) # type: ignore
 
     # trampoline that forwards the calls
-    trampoline = list(cst.parse_module(build_trampoline(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
-    trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
-    nodes.extend(trampoline)
+    trampoline = create_trampoline_wrapper(function, mangled_name, class_name)
+    mutants_dict = list(cst.parse_module(create_trampoline_lookup(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
+    mutants_dict[0] = mutants_dict[0].with_changes(leading_lines=[cst.EmptyLine()])
+
+    nodes.append(trampoline)
+    nodes.extend(mutants_dict)
 
     return nodes, mutant_names
+
+
+def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, class_name: str | None) -> cst.FunctionDef:
+    args: list[cst.Element | cst.StarredElement] = []
+    for param in function.params.params:
+        args.append(cst.Element(param.name))
+    for pos_only_param in function.params.posonly_params:
+        args.append(cst.Element(pos_only_param.name))
+    if isinstance(function.params.star_arg, cst.Param):
+        args.append(cst.StarredElement(function.params.star_arg.name))
+
+    if class_name is not None:
+        # remove self arg (handled by the trampoline function)
+        args = args[1:]
+
+    args_assignemnt = cst.Assign([cst.AssignTarget(cst.Name(value='args'))], cst.List(args))
+
+    kwargs: list[cst.DictElement | cst.StarredDictElement] = []
+    for param in function.params.kwonly_params:
+        kwargs.append(cst.DictElement(cst.SimpleString(f"'{param.name.value}'"), param.name))
+    if isinstance(function.params.star_kwarg, cst.Param):
+        kwargs.append(cst.StarredDictElement(function.params.star_kwarg.name))
+    
+    kwargs_assignment = cst.Assign([cst.AssignTarget(cst.Name(value='kwargs'))], cst.Dict(kwargs))
+
+    def _get_local_name(func_name: str) -> cst.BaseExpression:
+        # for top level, simply return the name
+        if class_name is None:
+            return cst.Name(func_name)
+        # for class methods, use object.__getattribute__(self, name)
+        return cst.Call(
+            func=cst.Attribute(cst.Name('object'), cst.Name('__getattribute__')),
+            args=[cst.Arg(cst.Name('self')), cst.Arg(cst.SimpleString(f"'{func_name}'"))]
+        )
+
+    result: cst.BaseExpression = cst.Call(
+        func=cst.Name('_mutmut_trampoline'),
+        args=[
+            cst.Arg(_get_local_name(f'{mangled_name}_orig')),
+            cst.Arg(_get_local_name(f'{mangled_name}_mutants')),
+            cst.Arg(cst.Name('args')),
+            cst.Arg(cst.Name('kwargs')),
+            cst.Arg(cst.Name('None' if class_name is None else 'self')),
+        ],
+    )
+    # for non-async functions, simply return the value or generator
+    result_statement = cst.SimpleStatementLine([cst.Return(result)])
+
+    if function.asynchronous:
+        is_generator = _is_generator(function)
+        if is_generator:
+            # async for i in _mutmut_trampoline(...): yield i
+            result_statement = cst.For(
+                target=cst.Name('i'),
+                iter=result,
+                body=cst.IndentedBlock([cst.SimpleStatementLine([cst.Expr(cst.Yield(cst.Name('i')))])]),
+                asynchronous=cst.Asynchronous(),
+            )
+        else:
+            # return await _mutmut_trampoline(...)
+            result_statement = cst.SimpleStatementLine([cst.Return(cst.Await(result))])
+
+    function.whitespace_after_type_parameters
+    return function.with_changes(
+        body=cst.IndentedBlock(
+            [
+                cst.SimpleStatementLine([args_assignemnt]),
+                cst.SimpleStatementLine([kwargs_assignment]),
+                result_statement,
+            ],
+        ),
+    )
 
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
@@ -302,3 +375,25 @@ class ChildReplacementTransformer(cst.CSTTransformer):
             self.replaced_node = True
             return self.new_node
         return updated_node
+
+def _is_generator(function: cst.FunctionDef) -> bool:
+    """Return True if the function has yield statement(s)."""
+    visitor = IsGeneratorVisitor(function)
+    function.visit(visitor)
+    return visitor.is_generator
+
+class IsGeneratorVisitor(cst.CSTVisitor):
+    """Check if a function is a generator.
+    We do so by checking if any child is a Yield statement, but not looking into inner function definitions."""
+    def __init__(self, original_function: cst.FunctionDef):
+        self.is_generator = False
+        self.original_function: cst.FunctionDef = original_function
+
+    def visit_FunctionDef(self, node):
+        # do not recurse into inner function definitions
+        if self.original_function != node:
+            return False
+
+    def visit_Yield(self, node):
+        self.is_generator = True
+        return False
