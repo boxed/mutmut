@@ -53,6 +53,7 @@ source-include = ["HISTORY.rst"]
 
 [dependency-groups]
 dev = [
+    "pyrefly>=0.52.0",
     "pytest-asyncio>=1.0.0",
 ]
 

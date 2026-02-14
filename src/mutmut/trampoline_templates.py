@@ -3,7 +3,7 @@ CLASS_NAME_SEPARATOR = 'ǁ'
 def build_trampoline(*, orig_name, mutants, class_name):
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
-    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
+    mutants_dict = f'{mangled_name}__mutmut_mutants : ClassVar[MutantDict] = {{ # type: ignore\n' + ', \n    '.join(f'{repr(m)}: {m}' for m in mutants) + '\n}'
     access_prefix = ''
     access_suffix = ''
     self_arg = ''
@@ -58,7 +58,7 @@ def _mutmut_copy_signature(trampoline, original_method):
     except NameError:
         # Also, because of PEP 649, it can happen that we cannot eagerly evaluate the signature
         # In this case, fall back to stringifying the signature (which could cause different behaviour with runtime introspection)
-        trampoline.__signature__ = _mutmut_inspect.signature(original_method, annotation_format=_mutmut_inspect.Format.STRING)
+        trampoline.__signature__ = _mutmut_inspect.signature(original_method, annotation_format=_mutmut_inspect.Format.STRING)  # type: ignore
 
 
 

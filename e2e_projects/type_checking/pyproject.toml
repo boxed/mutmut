@@ -1,0 +1,29 @@
+[project]
+name = "type-checking"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = []
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.52.0",
+    "pytest>=8.2.0",
+]
+
+[tool.mutmut]
+debug = true
+# TODO: pyrefly ignores mutants/ dir if it is in .gitignore
+type_check_command = ["pyrefly", "check", "--output-format=json", "--use-ignore-files=false"]
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
+]

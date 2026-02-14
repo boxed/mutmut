@@ -1,0 +1,8 @@
+{
+  "mutants/src/type_checking/__init__.py.meta": {
+    "type_checking.x_hello__mutmut_1": 6,
+    "type_checking.x_hello__mutmut_2": 1,
+    "type_checking.x_hello__mutmut_3": 1,
+    "type_checking.x_hello__mutmut_4": 1
+  }
+}

@@ -12,7 +12,7 @@ import libcst.matchers as m
 from mutmut.trampoline_templates import build_trampoline, mangle_function_name, trampoline_impl
 from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
 
-NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
+NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__", "__init__" }
 NEVER_MUTATE_FUNCTION_CALLS = { "len", "isinstance" }
 
 @dataclass
@@ -158,6 +158,10 @@ class MutationVisitor(cst.CSTVisitor):
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
         # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
         if isinstance(node, (cst.FunctionDef, cst.ClassDef)) and len(node.decorators):
+            return True
+
+        if isinstance(node, cst.ClassDef):
+            # TODO: do not skip classes for type checking
             return True
 
         return False

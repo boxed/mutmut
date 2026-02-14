@@ -92,3 +92,8 @@ def test_mutate_only_covered_lines_result_snapshot():
 def test_python_3_14_result_snapshot():
     mutmut._reset_globals()
     asserts_results_did_not_change("py3_14_features")
+
+
+def test_type_checking_result_snapshot():
+    mutmut._reset_globals()
+    asserts_results_did_not_change("type_checking")
