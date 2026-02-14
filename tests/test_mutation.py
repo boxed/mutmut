@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import libcst as cst
 import pytest
+from inline_snapshot import snapshot
 
 import mutmut
 from mutmut.__main__ import (
@@ -657,13 +658,14 @@ def x_foo__mutmut_1():
 
 
 def test_module_mutation():
+    """Regression test, for a complete module with functions, type annotations and a class"""
     source = """from __future__ import division
 import lib
 
 lib.foo()
 
-def foo(a, b):
-    return a > b
+def foo(a: list[int], b):
+    return a[0] > b
 
 def bar():
     yield 1
@@ -679,27 +681,61 @@ print(Adder(1).add(2))"""
 
     src, _ = mutate_file_contents("file.py", source)
 
-    assert src == f"""from __future__ import division
+    assert src == snapshot('''\
+from __future__ import division
 import lib
 
 lib.foo()
-{trampoline_impl.strip()}
+from typing import Annotated
+from typing import Callable
+from typing import ClassVar
 
-def x_foo__mutmut_orig(a, b):
-    return a > b
+MutantDict = Annotated[dict[str, Callable], "Mutant"]
 
-def x_foo__mutmut_1(a, b):
-    return a >= b
 
-x_foo__mutmut_mutants : ClassVar[MutantDict] = {{
-'x_foo__mutmut_1': x_foo__mutmut_1
-}}
+def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None):
+    """Forward call to original or mutated function, depending on the environment"""
+    import os
+    mutant_under_test = os.environ['MUTANT_UNDER_TEST']
+    if mutant_under_test == 'fail':
+        from mutmut.__main__ import MutmutProgrammaticFailException
+        raise MutmutProgrammaticFailException('Failed programmatically')      \n\
+    elif mutant_under_test == 'stats':
+        from mutmut.__main__ import record_trampoline_hit
+        record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
+        # (for class methods, orig is bound and thus does not need the explicit self argument)
+        result = orig(*call_args, **call_kwargs)
+        return result
+    prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
+    if not mutant_under_test.startswith(prefix):
+        result = orig(*call_args, **call_kwargs)
+        return result
+    mutant_name = mutant_under_test.rpartition('.')[-1]
+    if self_arg is not None:
+        # call to a class method where self is not bound
+        result = mutants[mutant_name](self_arg, *call_args, **call_kwargs)
+    else:
+        result = mutants[mutant_name](*call_args, **call_kwargs)
+    return result
 
-def foo(*args, **kwargs):
-    result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs)
-    return result 
+def x_foo__mutmut_orig(a: list[int], b):
+    return a[0] > b
 
-_mutmut_copy_signature(foo, x_foo__mutmut_orig)
+def x_foo__mutmut_1(a: list[int], b):
+    return a[1] > b
+
+def x_foo__mutmut_2(a: list[int], b):
+    return a[0] >= b
+
+def foo(a: list[int], b):
+    args = [a, b]
+    kwargs = {}
+    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)
+
+x_foo__mutmut_mutants : ClassVar[MutantDict] = {
+'x_foo__mutmut_1': x_foo__mutmut_1, \n\
+    'x_foo__mutmut_2': x_foo__mutmut_2
+}
 x_foo__mutmut_orig.__name__ = 'x_foo'
 
 def x_bar__mutmut_orig():
@@ -708,15 +744,14 @@ def x_bar__mutmut_orig():
 def x_bar__mutmut_1():
     yield 2
 
-x_bar__mutmut_mutants : ClassVar[MutantDict] = {{
+def bar():
+    args = []
+    kwargs = {}
+    return _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs, None)
+
+x_bar__mutmut_mutants : ClassVar[MutantDict] = {
 'x_bar__mutmut_1': x_bar__mutmut_1
-}}
-
-def bar(*args, **kwargs):
-    result = _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs)
-    return result 
-
-_mutmut_copy_signature(bar, x_bar__mutmut_orig)
+}
 x_bar__mutmut_orig.__name__ = 'x_bar'
 
 class Adder:
@@ -724,16 +759,14 @@ class Adder:
         self.amount = amount
     def xǁAdderǁ__init____mutmut_1(self, amount):
         self.amount = None
-    
-    xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = {{
+    def __init__(self, amount):
+        args = [amount]
+        kwargs = {}
+        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_mutants'), args, kwargs, self)
+    \n\
+    xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = {
     'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1
-    }}
-    
-    def __init__(self, *args, **kwargs):
-        result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁ__init____mutmut_orig"), object.__getattribute__(self, "xǁAdderǁ__init____mutmut_mutants"), args, kwargs, self)
-        return result 
-    
-    _mutmut_copy_signature(__init__, xǁAdderǁ__init____mutmut_orig)
+    }
     xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__'
 
     def xǁAdderǁadd__mutmut_orig(self, value):
@@ -741,16 +774,16 @@ class Adder:
 
     def xǁAdderǁadd__mutmut_1(self, value):
         return self.amount - value
-    
-    xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = {{
+
+    def add(self, value):
+        args = [value]
+        kwargs = {}
+        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁadd__mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁadd__mutmut_mutants'), args, kwargs, self)
+    \n\
+    xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = {
     'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1
-    }}
-    
-    def add(self, *args, **kwargs):
-        result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁadd__mutmut_orig"), object.__getattribute__(self, "xǁAdderǁadd__mutmut_mutants"), args, kwargs, self)
-        return result 
-    
-    _mutmut_copy_signature(add, xǁAdderǁadd__mutmut_orig)
+    }
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
 
-print(Adder(1).add(2))"""
+print(Adder(1).add(2))\
+''')

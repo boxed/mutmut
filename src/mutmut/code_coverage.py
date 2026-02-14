@@ -2,7 +2,6 @@ import coverage
 import importlib
 import sys
 from pathlib import Path
-import json
 
 
 # Returns a set of lines that are covered in this file gvein the covered_lines dict
