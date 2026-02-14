@@ -77,6 +77,7 @@ def test_my_lib_result_snapshot():
                 "my_lib.x_some_func__mutmut_3": 1,
                 "my_lib.x_func_with_star__mutmut_1": 1,
                 "my_lib.x_func_with_star__mutmut_2": 1,
+                "my_lib.x_func_with_star__mutmut_3": 1,
                 "my_lib.x_func_with_arbitrary_args__mutmut_1": 1,
             }
         }

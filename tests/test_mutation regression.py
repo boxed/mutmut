@@ -1,6 +1,68 @@
 from inline_snapshot import snapshot
+import libcst as cst
 
-from mutmut.file_mutation import mutate_file_contents
+from mutmut.file_mutation import mutate_file_contents, create_trampoline_wrapper
+
+
+def _get_trampoline_wrapper(
+    source: str, mangled_name: str, class_name: str | None = None
+) -> str:
+    function = cst.ensure_type(cst.parse_statement(source), cst.FunctionDef)
+    trampoline = create_trampoline_wrapper(
+        function, mangled_name, class_name=class_name
+    )
+    return cst.Module([trampoline]).code.strip()
+
+
+def test_create_trampoline_wrapper_async_method():
+    source = "async def foo(a: str, b, *args, **kwargs) -> dict[str, int]: pass"
+
+    assert _get_trampoline_wrapper(source, "x_foo__mutmut") == snapshot("""\
+async def foo(a: str, b, *args, **kwargs) -> dict[str, int]:
+    args = [a, b, *args]
+    kwargs = {**kwargs}
+    return await _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)\
+""")
+
+
+def test_create_trampoline_wrapper_async_generator():
+    source = """
+async def foo():
+    for i in range(10):
+        yield i
+    """
+
+    assert _get_trampoline_wrapper(source, "x_foo__mutmut") == snapshot("""\
+async def foo():
+    args = []
+    kwargs = {}
+    async for i in _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None):
+        yield i\
+""")
+
+
+def test_create_trampoline_wrapper_with_positionals_only_args():
+    source = "def foo(p1, p2=None, /, p_or_kw=None, *, kw): pass"
+
+    assert _get_trampoline_wrapper(source, "x_foo__mutmut") == snapshot("""\
+def foo(p1, p2=None, /, p_or_kw=None, *, kw):
+    args = [p1, p2, p_or_kw]
+    kwargs = {'kw': kw}
+    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)\
+""")
+
+
+def test_create_trampoline_wrapper_for_class_method():
+    source = "def foo(self, a, b): pass"
+
+    assert _get_trampoline_wrapper(
+        source, "x_foo__mutmut", class_name="Person"
+    ) == snapshot("""\
+def foo(self, a, b):
+    args = [a, b]
+    kwargs = {}
+    return _mutmut_trampoline(object.__getattribute__(self, 'x_foo__mutmut_orig'), object.__getattribute__(self, 'x_foo__mutmut_mutants'), args, kwargs, self)\
+""")
 
 
 def test_module_mutation():
