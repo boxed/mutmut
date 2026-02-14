@@ -167,6 +167,26 @@ If you only want to mutate lines that are called (according to coverage.py), you
     mutate_only_covered_lines=true
 
 
+Filter generated mutants with type checker
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When your project is type checked, you can also use it to filter out invalid mutants.
+For instance, mutmut mutates `x: str = 'foo'` to `x: str = None` which can easily caught by type checkers.
+
+To enable this filtering, configure the `type_check_command` to output json results as follows:
+
+.. code-block::
+
+    # for pyrefly
+    type_check_command = ['pyrefly', 'check', '--output-format=json']
+    # for mypy
+    type_check_command = ['mypy', 'traces_parser', '--output', 'json']
+
+Currently, only `pyrefly` and `mypy` are supported.
+With `pyright` and `ty`, mutating a class method `Foo.bar()` can break the types of all methods of `Foo`,
+and therefore mutmut cannot match the type error with the mutant that caused the type error.
+
+
 Enable debug output (increase verbosity)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

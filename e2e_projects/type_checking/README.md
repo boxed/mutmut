@@ -1,0 +1,1 @@
+This project uses type checking to detect invalid mutants.

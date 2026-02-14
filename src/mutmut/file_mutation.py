@@ -10,7 +10,7 @@ import libcst.matchers as m
 from mutmut.trampoline_templates import create_trampoline_lookup, mangle_function_name, trampoline_impl
 from mutmut.node_mutation import mutation_operators, OPERATORS_TYPE
 
-NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__" }
+NEVER_MUTATE_FUNCTION_NAMES = { "__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = { "len", "isinstance" }
 
 @dataclass
@@ -234,6 +234,10 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
     name = function.name.value
     mangled_name = mangle_function_name(name=name, class_name=class_name) + '__mutmut'
 
+    # trampoline with same signature, that forwards the calls to the activated mutant/original method
+    # (put first, s.t. it stays next to @overload definitions of this function. mypy needs this)
+    nodes.append(create_trampoline_wrapper(function, mangled_name, class_name))
+
     # copy of original function
     nodes.append(function.with_changes(name=cst.Name(mangled_name + '_orig')))
 
@@ -245,12 +249,9 @@ def function_trampoline_arrangement(function: cst.FunctionDef, mutants: Iterable
         mutated_method = deep_replace(mutated_method, mutant.original_node, mutant.mutated_node)
         nodes.append(mutated_method) # type: ignore
 
-    # trampoline that forwards the calls
-    trampoline = create_trampoline_wrapper(function, mangled_name, class_name)
     mutants_dict = list(cst.parse_module(create_trampoline_lookup(orig_name=name, mutants=mutant_names, class_name=class_name)).body)
     mutants_dict[0] = mutants_dict[0].with_changes(leading_lines=[cst.EmptyLine()])
 
-    nodes.append(trampoline)
     nodes.extend(mutants_dict)
 
     return nodes, mutant_names
@@ -316,12 +317,14 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             # return await _mutmut_trampoline(...)
             result_statement = cst.SimpleStatementLine([cst.Return(cst.Await(result))])
 
+    type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment('# type: ignore'))
+
     function.whitespace_after_type_parameters
     return function.with_changes(
         body=cst.IndentedBlock(
             [
-                cst.SimpleStatementLine([args_assignemnt]),
-                cst.SimpleStatementLine([kwargs_assignment]),
+                cst.SimpleStatementLine([args_assignemnt], trailing_whitespace=type_ignore_whitespace),
+                cst.SimpleStatementLine([kwargs_assignment], trailing_whitespace=type_ignore_whitespace),
                 result_statement,
             ],
         ),
