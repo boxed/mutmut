@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,8 @@ class MockConfig:
 def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
     mutmut._reset_globals()
     mutmut.config = MockConfig()
+
+    shutil.rmtree('mutants', ignore_errors=True)
 
     source_files = [
         source_dir / "valid_syntax_1.py",
