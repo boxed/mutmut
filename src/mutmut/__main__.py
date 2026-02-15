@@ -23,7 +23,7 @@ from configparser import (
     NoSectionError,
 )
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import (
     datetime,
     timedelta,
@@ -69,7 +69,6 @@ from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
 # TODO: pragma no mutate should end up in `skipped` category
-# TODO: hash of function. If hash changes, retest all mutants as mutant IDs are not stable
 
 
 status_by_exit_code = defaultdict(lambda: 'suspicious', {
@@ -194,27 +193,49 @@ class InvalidGeneratedSyntaxException(Exception):
 
 
 def copy_src_dir():
-    for path in mutmut.config.paths_to_mutate:
-        output_path: Path = Path('mutants') / path
-        if isdir(path):
-            shutil.copytree(path, output_path, dirs_exist_ok=True)
+    for root, name in walk_all_files():
+        source_path = Path(root) / name
+        target_path = Path('mutants') / root / name
+        
+        if target_path.exists():
+            continue
+
+        if isdir(source_path):
+            shutil.copytree(source_path, target_path)
         else:
-            output_path.parent.mkdir(exist_ok=True, parents=True)
-            shutil.copyfile(path, output_path)
+            target_path.parent.mkdir(exist_ok=True, parents=True)
+            # copy mtime, so we later know that when source_mtime == target_mtime, the file is not (yet) mutated.
+            shutil.copy2(source_path, target_path)
 
 @dataclass
 class FileMutationResult:
     """Dataclass to transfer warnings and errors from child processes to the parent"""
-    warnings: list[Warning]
+    warnings: list[Warning] = field(default_factory=list)
     error: Optional[Exception] = None
+    unmodified: bool = False
+    ignored: bool = False
 
-def create_mutants(max_children: int):
+@dataclass
+class MutantGenerationStats:
+    mutated: int = 0
+    unmodified: int = 0
+    ignored: int = 0
+
+def create_mutants(max_children: int) -> MutantGenerationStats:
+    stats = MutantGenerationStats()
     with Pool(processes=max_children) as p:
         for result in p.imap_unordered(create_file_mutants, walk_source_files()):
             for warning in result.warnings:
                 warnings.warn(warning)
             if result.error:
                 raise result.error
+            if result.unmodified:
+                stats.unmodified += 1
+            elif result.ignored:
+                stats.ignored += 1
+            else:
+                stats.mutated += 1
+    return stats
 
 def create_file_mutants(path: Path) -> FileMutationResult:
     try:
@@ -224,11 +245,11 @@ def create_file_mutants(path: Path) -> FileMutationResult:
 
         if mutmut.config.should_ignore_for_mutation(path):
             shutil.copy(path, output_path)
-            return FileMutationResult(warnings=[])
+            return FileMutationResult(ignored=True)
         else:
             return create_mutants_for_file(path, output_path)
     except Exception as e:
-        return FileMutationResult(warnings=[], error=e)
+        return FileMutationResult(error=e)
 
 def setup_source_paths():
     # ensure that the mutated source code can be imported by the tests
@@ -257,25 +278,43 @@ def copy_also_copy_files():
         if not path.exists():
             continue
         if path.is_file():
-            shutil.copy(path, destination)
+            shutil.copy2(path, destination)
         else:
             shutil.copytree(path, destination, dirs_exist_ok=True)
 
-def create_mutants_for_file(filename, output_path) -> FileMutationResult:
-    input_stat = os.stat(filename)
+def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationResult:
     warnings: list[Warning] = []
+
+    try:
+        source_mtime = os.path.getmtime(filename)
+        mutant_mtime = os.path.getmtime(output_path)
+        # We have three possible cases here:
+        # source_mtime > mutant_mtime: the source file was modified after the mutant has been created
+        # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
+        # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
+        if source_mtime < mutant_mtime:
+            # reset the mutation stats
+            source_file_mutation_data = SourceFileMutationData(path=filename)
+            source_file_mutation_data.load()
+            for key in source_file_mutation_data.exit_code_by_key:
+                source_file_mutation_data.exit_code_by_key[key] = None
+            source_file_mutation_data.save()
+
+            return FileMutationResult(unmodified=True)
+    except OSError:
+        pass
 
     with open(filename) as f:
         source = f.read()
 
     with open(output_path, 'w') as out:
         try:
-            mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
+            mutant_names = write_all_mutants_to_file(out=out, source=source, filename=filename)
         except cst.ParserSyntaxError as e:
             # if libcst cannot parse it, then copy the source without any mutations
             warnings.append(SyntaxWarning(f'Unsupported syntax in {filename} ({str(e)}), skipping'))
             out.write(source)
-            mutant_names, hash_by_function_name = [], {}
+            mutant_names = []
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -293,11 +332,8 @@ def create_mutants_for_file(filename, output_path) -> FileMutationResult:
          '.'.join([module_name, x]).replace('.__init__.', '.'): None
         for x in mutant_names
     }
-    source_file_mutation_data.hash_by_function_name = hash_by_function_name
-    assert None not in hash_by_function_name
     source_file_mutation_data.save()
 
-    os.utime(output_path, (input_stat.st_atime, input_stat.st_mtime))
     return FileMutationResult(warnings=warnings)
 
 
@@ -305,10 +341,7 @@ def write_all_mutants_to_file(*, out, source, filename):
     result, mutant_names = mutate_file_contents(filename, source, get_covered_lines_for_file(filename, mutmut._covered_lines))
     out.write(result)
 
-    # TODO: function hashes are currently not used. Reimplement this when needed.
-    hash_by_function_name = {}
-
-    return mutant_names, hash_by_function_name
+    return mutant_names
 
 
 class SourceFileMutationData:
@@ -319,7 +352,6 @@ class SourceFileMutationData:
         self.key_by_pid = {}
         self.exit_code_by_key = {}
         self.durations_by_key = {}
-        self.hash_by_function_name = {}
         self.start_time_by_pid = {}
 
     def load(self):
@@ -330,7 +362,6 @@ class SourceFileMutationData:
             return
 
         self.exit_code_by_key = meta.pop('exit_code_by_key')
-        self.hash_by_function_name = meta.pop('hash_by_function_name')
         self.durations_by_key = meta.pop('durations_by_key')
         self.estimated_time_of_tests_by_mutant = meta.pop('estimated_durations_by_key')
         assert not meta, f'Meta file {self.meta_path} constains unexpected keys: {set(meta.keys())}'
@@ -359,7 +390,6 @@ class SourceFileMutationData:
         with open(self.meta_path, 'w') as f:
             json.dump(dict(
                 exit_code_by_key=self.exit_code_by_key,
-                hash_by_function_name=self.hash_by_function_name,
                 durations_by_key=self.durations_by_key,
                 estimated_durations_by_key=self.estimated_time_of_tests_by_mutant,
             ), f, indent=4)
@@ -1070,10 +1100,10 @@ def _run(mutant_names: Union[tuple, list], max_children: Union[None, int]):
         copy_also_copy_files()
         setup_source_paths()
         store_lines_covered_by_tests()            
-        create_mutants(max_children)
+        stats = create_mutants(max_children)
 
     time = datetime.now() - start
-    print(f'    done in {round(time.total_seconds()*1000)}ms', )
+    print(f'    done in {round(time.total_seconds()*1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)', )
 
     # TODO: config/option for runner
     # runner = HammettRunner()
