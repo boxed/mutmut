@@ -824,6 +824,7 @@ def load_config():
             Path('test/'),
             Path('setup.cfg'),
             Path('pyproject.toml'),
+            Path('pytest.ini'),
         ] + list(Path('.').glob('test*.py')),
         max_stack_depth=s('max_stack_depth', -1),
         debug=s('debug', False),
