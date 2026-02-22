@@ -1,6 +1,22 @@
 Changelog
 ---------
 
+3.5.0
+~~~~~
+
+* Filter mutants based on type annotations. This feature needs to be turned on with the `type_check_command` config.
+
+* Support running on Windows
+
+* Save mutation stats for use with CI/CD pipeline (#460)
+
+* Async functions fixed
+
+* Fix for functions with positional only arguments
+
+* Support signatures with PEP 649 deferred annotations
+
+
 3.4.0
 ~~~~~
 
