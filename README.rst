@@ -170,8 +170,16 @@ If you only want to mutate lines that are called (according to coverage.py), you
 Filter generated mutants with type checker
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When your project is type checked, you can also use it to filter out invalid mutants.
+When your project is type checked using `mypy` or `pyrefly`, you can also use it to filter out invalid mutants.
 For instance, mutmut mutates `x: str = 'foo'` to `x: str = None` which can easily caught by type checkers.
+
+Using this filter can improve performance and reduce noise, however it can also hide a few relevant mutations:
+
+1. `x: str = None` may not be valid, but if your tests do not detect such a change it indicates that
+    the value of `x` is not properly tested (even if your type checker would catch this particular modification)
+2. In some edge cases with class properties (usually in the `__init__` method), the way `mypy` and `pyrefly` infer types does not work well
+    with the way mutmut mutates code. Some valid mutations like changing `self.x = 123` to `self.x = None` can
+    be filtered out, even though the may be valid.
 
 To enable this filtering, configure the `type_check_command` to output json results as follows:
 
