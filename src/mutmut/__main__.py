@@ -1514,7 +1514,7 @@ def apply_mutant(mutant_name):
 
 
 @cli.command()
-@click.option("--show-killed", is_flag=True, default=False, help="Display killed mutants.")
+@click.option("--show-killed", is_flag=True, default=False, help="Display mutants killed by tests and type checker.")
 def browse(show_killed):
     ensure_config_loaded()
 
@@ -1616,7 +1616,7 @@ def browse(show_killed):
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
                 for k, v in source_file_mutation_data.exit_code_by_key.items():
                     status = status_by_exit_code[v]
-                    if status != 'killed' or show_killed:
+                    if status not in ('killed', 'caught by type check') or show_killed:
                         mutants_table.add_row(k, emoji_by_status[status], key=k)
             else:
                 assert event.data_table.id == 'mutants'
