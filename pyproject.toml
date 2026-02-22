@@ -55,7 +55,6 @@ source-include = ["HISTORY.rst"]
 dev = [
     "inline-snapshot>=0.32.0",
     "pyrefly>=0.53.0",
-    "pyright>=1.1.408",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.15.1",
 ]

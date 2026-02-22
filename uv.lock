@@ -270,7 +270,6 @@ dependencies = [
 dev = [
     { name = "inline-snapshot" },
     { name = "pyrefly" },
-    { name = "pyright" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
@@ -290,18 +289,8 @@ requires-dist = [
 dev = [
     { name = "inline-snapshot", specifier = ">=0.32.0" },
     { name = "pyrefly", specifier = ">=0.53.0" },
-    { name = "pyright", specifier = ">=1.1.408" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.15.1" },
-]
-
-[[package]]
-name = "nodeenv"
-version = "1.10.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611, upload-time = "2025-12-20T14:08:54.006Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
 ]
 
 [[package]]
@@ -354,19 +343,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/38/99/0779b7202d801cdf67f08159cf7dd318d23114661143689a767d9b8a98f1/pyrefly-0.53.0-py3-none-win32.whl", hash = "sha256:00687bb6be6e366b8c0137a89625da40ced3b9212a65e561857ff888fe88e6e8", size = 11111961, upload-time = "2026-02-17T21:15:38.455Z" },
     { url = "https://files.pythonhosted.org/packages/bd/71/dc7e59f0acb81dcf3f56e7ad30e740a08527403cb1d657caca9d44fef803/pyrefly-0.53.0-py3-none-win_amd64.whl", hash = "sha256:e0512e6f7af44ae01cfddba096ff7740e15cbd1d0497a3d34a7afcb504e2b300", size = 11888648, upload-time = "2026-02-17T21:15:40.471Z" },
     { url = "https://files.pythonhosted.org/packages/5d/72/2a7c00a439c6593430289a4581426efe0bee73f6e5a443f501969e104300/pyrefly-0.53.0-py3-none-win_arm64.whl", hash = "sha256:5066e2102769683749102421b8b8667cae26abe1827617f04e8df4317e0a94af", size = 11368150, upload-time = "2026-02-17T21:15:42.74Z" },
-]
-
-[[package]]
-name = "pyright"
-version = "1.1.408"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "nodeenv" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/74/b2/5db700e52554b8f025faa9c3c624c59f1f6c8841ba81ab97641b54322f16/pyright-1.1.408.tar.gz", hash = "sha256:f28f2321f96852fa50b5829ea492f6adb0e6954568d1caa3f3af3a5f555eb684", size = 4400578, upload-time = "2026-01-08T08:07:38.795Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/82/a2c93e32800940d9573fb28c346772a14778b84ba7524e691b324620ab89/pyright-1.1.408-py3-none-any.whl", hash = "sha256:090b32865f4fdb1e0e6cd82bf5618480d48eecd2eb2e70f960982a3d9a4c17c1", size = 6399144, upload-time = "2026-01-08T08:07:37.082Z" },
 ]
 
 [[package]]

@@ -81,7 +81,7 @@ status_by_exit_code = defaultdict(lambda: 'suspicious', {
     34: 'skipped',
     35: 'suspicious',
     36: 'timeout',
-    6: 'caught by type check',
+    37: 'caught by type check',
     -24: 'timeout',  # SIGXCPU
     24: 'timeout',  # SIGXCPU
     152: 'timeout',  # SIGXCPU
@@ -326,16 +326,21 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
     source_file_mutation_data = SourceFileMutationData(path=filename)
-    module_name = strip_prefix(str(filename)[:-len(filename.suffix)].replace(os.sep, '.'), prefix='src.')
-
     source_file_mutation_data.exit_code_by_key = {
-         '.'.join([module_name, x]).replace('.__init__.', '.'): None
-        for x in mutant_names
+        get_mutant_name(filename, mutant_name): None for mutant_name in mutant_names
     }
     source_file_mutation_data.save()
 
     return FileMutationResult(warnings=warnings)
 
+def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
+    module_name = str(relative_source_path)[:-len(relative_source_path.suffix)].replace(os.sep, '.')
+    module_name = strip_prefix(module_name, prefix='src.')
+
+    # FYI, we currently use "mutant_name" inconsistently, for both the whole identifier including the path and only the mangled method name
+    mutant_name = f'{module_name}.{mutant_method_name}'
+    mutant_name = mutant_name.replace('.__init__.', '.')
+    return mutant_name
 
 def write_all_mutants_to_file(*, out, source, filename):
     result, mutant_names = mutate_file_contents(filename, source, get_covered_lines_for_file(filename, mutmut._covered_lines))
@@ -352,7 +357,7 @@ class SourceFileMutationData:
         self.key_by_pid = {}
         self.exit_code_by_key = {}
         self.durations_by_key = {}
-        self.type_check_error_by_key = {}
+        self.type_check_error_by_key: dict[str, str] = {}
         self.start_time_by_pid = {}
 
     def load(self):
@@ -400,11 +405,11 @@ class SourceFileMutationData:
 def filter_mutants_with_type_checker():
     with change_cwd(Path('mutants')):
         errors = run_type_checker(mutmut.config.type_check_command)
-        grouped_errors = group_by_path(errors)
+        errors_by_path = group_by_path(errors)
 
-        mutants_to_skip: list[FailedTypeCheckMutant] = []
+        mutants_to_skip: dict[str, FailedTypeCheckMutant] = {}
 
-        for path, errors_of_file in grouped_errors.items():
+        for path, errors_of_file in errors_by_path.items():
             with open(path, 'r', encoding='utf-8') as file:
                 source = file.read()
             wrapper = cst.MetadataWrapper(cst.parse_module(source))
@@ -416,16 +421,17 @@ def filter_mutants_with_type_checker():
                 assert error.file_path == visitor.file
                 mutant = next((m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None)
                 if mutant is None:
-                    raise Exception(f'Could not find mutant for error {error.file_path}:{error.line_number} ({error.error_description})')
+                    raise Exception(f'Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). '
+                                    'Probably, a code mutation influenced types in unexpected locations. '
+                                    'If your project normally has no type errors and uses mypy/pyrefly, please file an issue with steps to reproduce on github.')
 
-                module_name = strip_prefix(str(path.relative_to(Path('.').absolute()))[:-len(path.suffix)].replace(os.sep, '.'), prefix='src.')
+                mutant_name = get_mutant_name(path.relative_to(Path('.').absolute()), mutant.function_name)
 
-                mutant_name = '.'.join([module_name, mutant.function_name]).replace('.__init__.', '.')
-                mutants_to_skip.append(FailedTypeCheckMutant(
+                mutants_to_skip[mutant_name] = FailedTypeCheckMutant(
                     method_location=mutant,
                     name=mutant_name,
                     error=error,
-                ))
+                )
         
         return mutants_to_skip
 
@@ -477,18 +483,6 @@ class MutatedMethodsCollector(cst.CSTVisitor):
 
 def is_mutated_method_name(name: str):
     return name.startswith(('x_', 'xǁ')) and '__mutmut' in name
-
-def parse_mutant_methods(file_paths: Iterable[Path]) -> dict[Path, list[MutatedMethodLocation]]:
-    methods: dict[Path, list[MutatedMethodLocation]] = {}
-
-    for path in file_paths:
-        with open(path, 'r', encoding='utf-8') as file:
-            source = file.read()
-        module = cst.parse_module(source)
-
-    return methods
-
-
 
 
 def unused(*_):
@@ -1209,15 +1203,9 @@ def _run(mutant_names: tuple | list, max_children: None | int):
 
     if mutmut.config.type_check_command:
         with CatchOutput(spinner_title='Filtering mutations with type checker'):
-            failed_type_check_mutants = filter_mutants_with_type_checker()
+            mutants_caught_by_type_checker = filter_mutants_with_type_checker()
     else:
-        failed_type_check_mutants = []
-
-    if mutmut.config.type_check_command:
-        with CatchOutput(spinner_title='Filtering mutations with type checker'):
-            failed_type_check_mutants = filter_mutants_with_type_checker()
-    else:
-        failed_type_check_mutants = []
+        mutants_caught_by_type_checker = {}
 
     # TODO: config/option for runner
     # runner = HammettRunner()
@@ -1287,15 +1275,14 @@ def _run(mutant_names: tuple | list, max_children: None | int):
 
             tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), [])
 
-            # print(tests)
             if not tests:
                 m.exit_code_by_key[mutant_name] = 33
                 m.save()
                 continue
 
-            failed_type_check_mutant = next((m for m in failed_type_check_mutants if m.name == mutant_name), None)
+            failed_type_check_mutant = mutants_caught_by_type_checker.get(mutant_name)
             if failed_type_check_mutant:
-                m.exit_code_by_key[mutant_name] = 6
+                m.exit_code_by_key[mutant_name] = 37
                 m.type_check_error_by_key[mutant_name] = failed_type_check_mutant.error.error_description
                 m.save()
                 continue
