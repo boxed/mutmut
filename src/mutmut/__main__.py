@@ -1,4 +1,3 @@
-from typing import Iterable
 from mutmut.type_checking import TypeCheckingError
 from mutmut.type_checking import run_type_checker
 from typing import Any
@@ -55,7 +54,6 @@ import warnings
 
 import click
 import libcst as cst
-import libcst.matchers as m
 from rich.text import Text
 from setproctitle import setproctitle
 
@@ -137,7 +135,7 @@ def guess_paths_to_mutate():
 
 
 def record_trampoline_hit(name):
-    assert not name.startswith('src.'), f'Failed trampoline hit. Module name starts with `src.`, which is invalid'
+    assert not name.startswith('src.'), 'Failed trampoline hit. Module name starts with `src.`, which is invalid'
     if mutmut.config.max_stack_depth != -1:
         f = inspect.currentframe()
         c = mutmut.config.max_stack_depth
@@ -293,13 +291,7 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
         # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
         # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
         if source_mtime < mutant_mtime:
-            # reset the mutation stats
-            source_file_mutation_data = SourceFileMutationData(path=filename)
-            source_file_mutation_data.load()
-            for key in source_file_mutation_data.exit_code_by_key:
-                source_file_mutation_data.exit_code_by_key[key] = None
-            source_file_mutation_data.save()
-
+            # Source unchanged, mutations already generated — preserve cached results
             return FileMutationResult(unmodified=True)
     except OSError:
         pass
@@ -626,7 +618,6 @@ class PytestRunner(TestRunner):
 
         collector = TestsCollector()
 
-        tests_dir = mutmut.config.tests_dir
         pytest_args = ['-x', '-q', '--collect-only'] + self._pytest_add_cli_args_test_selection
 
         with change_cwd('mutants'):
@@ -1127,7 +1118,7 @@ def print_time_estimates(mutant_names):
 
     for time, key in sorted(times_and_keys):
         if not time:
-            print(f'<no tests>', key)
+            print('<no tests>', key)
         else:
             print(f'{int(time*1000)}ms', key)
 
@@ -1620,7 +1611,7 @@ def browse(show_killed):
                 duration = source_file_mutation_data.durations_by_key.get(mutant_name, '?')
                 type_check_error = source_file_mutation_data.type_check_error_by_key.get(mutant_name, '?')
 
-                view_tests_description = f'(press t to view tests executed for this mutant)'
+                view_tests_description = '(press t to view tests executed for this mutant)'
 
                 match status:
                     case 'killed':
