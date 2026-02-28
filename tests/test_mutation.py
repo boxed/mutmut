@@ -3,12 +3,13 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import libcst as cst
-import mutmut
 import pytest
-from mutmut.__main__ import CatchOutput
+
+import mutmut
 from mutmut.__main__ import CLASS_NAME_SEPARATOR
-from mutmut.__main__ import get_diff_for_mutant
+from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
+from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.file_mutation import create_mutations

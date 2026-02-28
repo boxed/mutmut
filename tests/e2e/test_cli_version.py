@@ -1,4 +1,5 @@
 from click.testing import CliRunner
+
 from mutmut import __version__
 from mutmut.__main__ import cli
 

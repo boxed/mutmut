@@ -54,6 +54,7 @@ source-include = ["HISTORY.rst"]
 [dependency-groups]
 dev = [
     "inline-snapshot>=0.32.0",
+    "pre-commit>=4.5.1",
     "pyrefly>=0.53.0",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.15.1",
@@ -71,9 +72,15 @@ format-command="ruff format --stdin-filename {filename}"
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+extend-exclude = [
+    "docs/_themes/",
+    "docs/conf.py",
+    "e2e_projects/",
+    "tests/data/test_generation/",
+]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "C4", "UP"]
+select = ["E", "F", "W", "B", "C4", "UP", "I"]
 ignore = [
     "E501",  # line too long - handled by formatter
     "B007",  # unused loop control variable
@@ -90,3 +97,6 @@ ignore = [
     "UP007", # use X | Y for type annotations
     "UP038", # use X | Y in isinstance
 ]
+
+[tool.ruff.lint.isort]
+force-single-line = true

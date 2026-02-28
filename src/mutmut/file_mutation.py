@@ -11,8 +11,9 @@ import libcst as cst
 import libcst.matchers as m
 from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
-from mutmut.node_mutation import mutation_operators
+
 from mutmut.node_mutation import OPERATORS_TYPE
+from mutmut.node_mutation import mutation_operators
 from mutmut.trampoline_templates import create_trampoline_lookup
 from mutmut.trampoline_templates import mangle_function_name
 from mutmut.trampoline_templates import trampoline_impl
@@ -263,7 +264,7 @@ def function_trampoline_arrangement(
 
     # mutated versions of the function
     for i, mutant in enumerate(mutants):
-        mutant_name = f"{mangled_name}_{i+1}"
+        mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
         mutated_method = function.with_changes(name=cst.Name(mutant_name))
         mutated_method = deep_replace(mutated_method, mutant.original_node, mutant.mutated_node)

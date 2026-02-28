@@ -1,10 +1,11 @@
 import shutil
 from pathlib import Path
 
-import mutmut.__main__
 import pytest
-from mutmut.__main__ import create_mutants
+
+import mutmut.__main__
 from mutmut.__main__ import InvalidGeneratedSyntaxException
+from mutmut.__main__ import create_mutants
 
 source_dir = Path(__file__).parent / "data" / "test_generation"
 source_dir = source_dir.relative_to(Path.cwd())
