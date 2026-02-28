@@ -19,11 +19,11 @@ def reset_singletons_fixture():
     reset_singletons()
 
 
-
 @pytest.fixture()
 def patch_config():
     def _patch_config(name, value):
         cfg = config()
         assert hasattr(cfg, name)
         setattr(cfg, name, value)
+
     return _patch_config

@@ -55,7 +55,7 @@ E2E_PROJECTS = REPO_ROOT / "e2e_projects"
 
 def run_mutmut_on_project(project: str) -> dict:
     """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
-    
+
     project_path = E2E_PROJECTS / project
 
     mutants_path = project_path / "mutants"

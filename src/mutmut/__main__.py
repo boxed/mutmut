@@ -60,7 +60,6 @@ from mutmut.models.source_file_mutation_data import SourceFileMutationData
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.state import state
-from mutmut.threading.timeout import register_timeout
 from mutmut.utils.file_utils import change_cwd
 from mutmut.utils.file_utils import walk_all_files
 from mutmut.utils.file_utils import walk_mutatable_files
@@ -70,6 +69,7 @@ from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 from mutmut.utils.format_utils import strip_prefix
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
+from mutmut.workers.timeout import register_timeout
 
 if TYPE_CHECKING:
     from coverage import Coverage

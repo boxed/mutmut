@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mutmut.threading import timeout
+from mutmut.workers import timeout
 
 
 @pytest.fixture(autouse=True)
@@ -131,7 +131,7 @@ class TestTimeoutCheckerThread:
             timeout.register_timeout(pid=pids[2], timeout_s=0.3)
             timeout.register_timeout(pid=pids[0], timeout_s=0.1)
             timeout.register_timeout(pid=pids[1], timeout_s=0.2)
-
+            result_pid = None
             # All children should be terminated
             for pid in pids:
                 for _ in range(50):  # 3 * 50 * 0.1s = 15 seconds max
