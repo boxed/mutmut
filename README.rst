@@ -53,8 +53,7 @@ it will try to figure out where the code to mutate is.
 
 
 You can stop the mutation run at any time and mutmut will restart where you
-left off. It will continue where it left off, and re-test functions that were
-modified since last run.
+left off.
 
 To work with the results, use `mutmut browse` where you can see the mutants,
 retest them when you've updated your tests.
@@ -224,6 +223,30 @@ whitelist lines are:
 - The version string on your library. You really shouldn't have a test for this :P
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
+
+
+Skipping Entire Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Similarly, you can skip an entire function from mutation using
+``# pragma: no mutate function``:
+
+.. code-block:: python
+
+    def complex_algorithm():  # pragma: no mutate function
+        # This function won't be mutated at all
+        return some_complex_calculation()
+
+Both syntax styles are supported:
+
+- ``# pragma: no mutate function``
+- ``# pragma: no mutate: function``
+
+This is useful for functions that:
+
+- Have complex side effects that make mutation testing impractical
+- Are performance-critical and you want to avoid trampoline overhead
+- Are known to cause issues with the mutation testing framework
 
 
 Modifying pytest arguments
