@@ -5,18 +5,32 @@ from collections.abc import Iterable
 from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Union
+from typing import cast
 
 import libcst as cst
 import libcst.matchers as m
 from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
 
-from mutmut.node_mutation import OPERATORS_TYPE
-from mutmut.node_mutation import mutation_operators
-from mutmut.trampoline_templates import create_trampoline_lookup
-from mutmut.trampoline_templates import mangle_function_name
-from mutmut.trampoline_templates import trampoline_impl
+from mutmut.configuration import Config
+from mutmut.mutation.enum_mutation import is_enum_class
+from mutmut.mutation.mutators import OPERATORS_TYPE
+from mutmut.mutation.mutators import MethodType
+from mutmut.mutation.mutators import get_method_type
+from mutmut.mutation.mutators import mutation_operators
+from mutmut.mutation.pragma_handling import parse_pragma_lines
+from mutmut.mutation.trampoline_templates import GENERATED_MARKER
+from mutmut.mutation.trampoline_templates import build_enum_trampoline
+from mutmut.mutation.trampoline_templates import build_function_trampoline
+from mutmut.mutation.trampoline_templates import mangle_function_name
+from mutmut.mutation.trampoline_templates import trampoline_impl
+from mutmut.type_checking import TypeCheckingError
+from mutmut.type_checking import run_type_checker
+from mutmut.utils.file_utils import change_cwd
+from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import is_mutated_method_name
 
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
@@ -26,29 +40,45 @@ NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
 class Mutation:
     original_node: cst.CSTNode
     mutated_node: cst.CSTNode
-    contained_by_top_level_function: cst.CSTNode | None
+    contained_by_top_level_function: cst.FunctionDef | None
 
 
-def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(
+    filename: str, code: str, covered_lines: set[int] | None = None, mutate_enums: bool = True
+) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
+    :param mutate_enums: If True, enum classes will be mutated using external injection pattern.
+                         If False, enum classes will be left unchanged.
     :return: A tuple of (mutated code, list of mutant function names)"""
-    module, mutations = create_mutations(code, covered_lines)
+    module, mutations, ignored_classes, ignored_functions = create_mutations(code, covered_lines)
 
-    return combine_mutations_to_source(module, mutations)
+    mutated_code, mutant_names = combine_mutations_to_source(
+        module, mutations, ignored_classes, ignored_functions, mutate_enums=mutate_enums
+    )
+
+    # TODO: implement function hashing to skip testing unchanged functions
+
+    return mutated_code, mutant_names
 
 
-def create_mutations(code: str, covered_lines: set[int] | None = None) -> tuple[cst.Module, list[Mutation]]:
-    """Parse the code and create mutations."""
-    ignored_lines = pragma_no_mutate_lines(code)
+def create_mutations(
+    code: str, covered_lines: set[int] | None = None
+) -> tuple[cst.Module, list[Mutation], set[str], set[str]]:
+    """Parse the code and create mutations.
+
+    :return: A tuple of (module, mutations, ignored_classes, ignored_functions)"""
+    ignored_lines, ignored_class_lines, ignored_function_lines = parse_pragma_lines(code)
 
     module = cst.parse_module(code)
 
     metadata_wrapper = MetadataWrapper(module)
-    visitor = MutationVisitor(mutation_operators, ignored_lines, covered_lines)
+    visitor = MutationVisitor(
+        mutation_operators, ignored_lines, covered_lines, ignored_class_lines, ignored_function_lines
+    )
     module = metadata_wrapper.visit(visitor)
 
-    return module, visitor.mutations
+    return module, visitor.mutations, visitor.ignored_classes, visitor.ignored_functions
 
 
 class OuterFunctionProvider(cst.BatchableMetadataProvider[cst.CSTNode | None]):
@@ -68,7 +98,7 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider[cst.CSTNode | None]):
     def __init__(self) -> None:
         super().__init__()
 
-    def visit_Module(self, node: cst.Module) -> bool | None:
+    def visit_Module(self, node: cst.Module) -> bool:
         for child in node.body:
             if isinstance(child, cst.FunctionDef):
                 # mark all nodes inside the function to belong to this function
@@ -103,11 +133,22 @@ class MutationVisitor(cst.CSTVisitor):
 
     METADATA_DEPENDENCIES = (PositionProvider, OuterFunctionProvider)
 
-    def __init__(self, operators: OPERATORS_TYPE, ignore_lines: set[int], covered_lines: set[int] | None = None):
+    def __init__(
+        self,
+        operators: OPERATORS_TYPE,
+        ignore_lines: set[int],
+        covered_lines: set[int] | None = None,
+        ignored_class_lines: set[int] | None = None,
+        ignored_function_lines: set[int] | None = None,
+    ):
         self.mutations: list[Mutation] = []
         self._operators = operators
         self._ignored_lines = ignore_lines
         self._covered_lines = covered_lines
+        self._ignored_class_lines = ignored_class_lines or set()
+        self._ignored_function_lines = ignored_function_lines or set()
+        self.ignored_classes: set[str] = set()
+        self.ignored_functions: set[str] = set()
 
     def on_visit(self, node: cst.CSTNode) -> bool:
         if self._skip_node_and_children(node):
@@ -126,7 +167,7 @@ class MutationVisitor(cst.CSTVisitor):
                     mutation = Mutation(
                         original_node=node,
                         mutated_node=mutated_node,
-                        contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None),
+                        contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None),  # type: ignore
                     )
                     self.mutations.append(mutation)
 
@@ -146,6 +187,20 @@ class MutationVisitor(cst.CSTVisitor):
         return True
 
     def _skip_node_and_children(self, node: cst.CSTNode) -> bool:
+        # Check if this is a class with pragma: no mutate class
+        if isinstance(node, cst.ClassDef):
+            position = self.get_metadata(PositionProvider, node, None)
+            if position and position.start.line in self._ignored_class_lines:
+                self.ignored_classes.add(node.name.value)
+                return True
+
+        # Check if this is a function with pragma: no mutate function
+        if isinstance(node, cst.FunctionDef):
+            position = self.get_metadata(PositionProvider, node, None)
+            if position and position.start.line in self._ignored_function_lines:
+                self.ignored_functions.add(node.name.value)
+                return True
+
         if (
             isinstance(node, cst.Call)
             and isinstance(node.func, cst.Name)
@@ -172,7 +227,14 @@ class MutationVisitor(cst.CSTVisitor):
         # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
         # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
-        if isinstance(node, (cst.FunctionDef, cst.ClassDef)) and len(node.decorators):
+        # Exception: @staticmethod and @classmethod are allowed because they are predictable and it's easy to set up trampolines for them
+        if isinstance(node, cst.FunctionDef) and len(node.decorators):
+            if len(node.decorators) == 1:
+                decorator = node.decorators[0].decorator
+                if isinstance(decorator, cst.Name) and decorator.value in ("staticmethod", "classmethod"):
+                    return False
+            return True
+        if isinstance(node, cst.ClassDef) and len(node.decorators):
             return True
 
         return False
@@ -185,12 +247,23 @@ trampoline_impl_cst = list(cst.parse_module(trampoline_impl).body)
 trampoline_impl_cst[-1] = trampoline_impl_cst[-1].with_changes(leading_lines=[cst.EmptyLine(), cst.EmptyLine()])
 
 
-def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation]) -> tuple[str, Sequence[str]]:
+def combine_mutations_to_source(
+    module: cst.Module,
+    mutations: Sequence[Mutation],
+    ignored_classes: set[str] | None = None,
+    ignored_functions: set[str] | None = None,
+    mutate_enums: bool = True,
+) -> tuple[str, Sequence[str]]:
     """Create mutated functions and trampolines for all mutations and compile them to a single source code.
 
     :param module: The original parsed module
     :param mutations: Mutations that should be applied.
+    :param ignored_classes: Class names to skip transformation for (e.g., enums with pragma: no mutate class)
+    :param ignored_functions: Function names to skip transformation for (pragma: no mutate function)
+    :param mutate_enums: Whether to mutate enum classes (True) or skip them entirely (False)
     :return: Mutated code and list of mutation names"""
+    ignored_classes = ignored_classes or set()
+    ignored_functions = ignored_functions or set()
 
     # copy start of the module (in particular __future__ imports)
     result: list[MODULE_STATEMENT] = get_statements_until_func_or_class(module.body)
@@ -219,28 +292,103 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
             mutation_names.extend(mutant_names)
         elif isinstance(statement, cst.ClassDef):
             cls = statement
+            # Skip entire class if it has pragma: no mutate class
+            if cls.name.value in ignored_classes:
+                result.append(cls)
+                continue
             if not isinstance(cls.body, cst.IndentedBlock):
                 # we don't mutate single-line classes, e.g. `class A: a = 1; b = 2`
                 result.append(cls)
+            elif is_enum_class(cls):
+                if not mutate_enums:
+                    result.append(cls)
+                    continue
+                external_nodes, modified_cls, enum_mutant_names = enum_trampoline_arrangement(
+                    cls, mutations_within_function
+                )
+                result.extend(external_nodes)
+                result.append(modified_cls)
+                mutation_names.extend(enum_mutant_names)
             else:
+                external_nodes_for_class: list[MODULE_STATEMENT] = []
                 mutated_body = []
                 for method in cls.body.body:
                     method_mutants = mutations_within_function.get(method)
                     if not isinstance(method, cst.FunctionDef) or not method_mutants:
                         mutated_body.append(method)
                         continue
-                    nodes, mutant_names = function_trampoline_arrangement(
-                        method, method_mutants, class_name=cls.name.value
-                    )
-                    mutated_body.extend(nodes)
-                    mutation_names.extend(mutant_names)
 
+                    method_type = get_method_type(method)
+                    if method_type in (MethodType.STATICMETHOD, MethodType.CLASSMETHOD):
+                        ext_nodes, assignment, method_mutant_names = _external_method_injection(
+                            method, method_mutants, cls.name.value, method_type
+                        )
+                        external_nodes_for_class.extend(ext_nodes)
+                        mutated_body.append(assignment)
+                        mutation_names.extend(method_mutant_names)
+                    else:
+                        nodes, mutant_names = function_trampoline_arrangement(
+                            method, method_mutants, class_name=cls.name.value
+                        )
+                        mutated_body.extend(nodes)
+                        mutation_names.extend(mutant_names)
+
+                result.extend(external_nodes_for_class)
                 result.append(cls.with_changes(body=cls.body.with_changes(body=mutated_body)))
         else:
             result.append(statement)
 
     mutated_module = module.with_changes(body=result)
     return mutated_module.code, mutation_names
+
+
+def _external_method_injection(
+    method: cst.FunctionDef, mutants: Sequence[Mutation], class_name: str, method_type: MethodType
+) -> tuple[Sequence[MODULE_STATEMENT], cst.SimpleStatementLine, Sequence[str]]:
+    """Create external trampoline for a method using external injection pattern.
+
+    This moves mutation code outside the class and uses a simple assignment
+    inside the class body. Works for staticmethod, classmethod, and instance methods.
+
+    :param method: The method to create external trampoline for
+    :param mutants: The mutations for this method
+    :param class_name: The containing class name
+    :param method_type: MethodType.STATICMETHOD, MethodType.CLASSMETHOD, or MethodType.INSTANCE
+    :return: A tuple of (external_nodes, class_body_assignment, mutant_names)
+    """
+    external_nodes: list[MODULE_STATEMENT] = []
+    mutant_names: list[str] = []
+    method_name = method.name.value
+    prefix = f"_{class_name}_{method_name}"
+    mangled_name = mangle_function_name(name=method_name, class_name=class_name) + "__mutmut"
+
+    orig_func = method.with_changes(name=cst.Name(f"{prefix}_orig"), decorators=[])
+    external_nodes.append(orig_func)
+
+    for i, mutant in enumerate(mutants):
+        mutant_func_name = f"{prefix}_mutant_{i + 1}"
+        full_mutant_name = f"{mangled_name}_{i + 1}"
+        mutant_names.append(full_mutant_name)
+
+        mutated = method.with_changes(name=cst.Name(mutant_func_name), decorators=[])
+        mutated = cast(cst.FunctionDef, deep_replace(mutated, mutant.original_node, mutant.mutated_node))
+        external_nodes.append(mutated)
+    trampoline_code = build_enum_trampoline(
+        class_name=class_name, method_name=method_name, mutant_names=mutant_names, method_type=method_type
+    )
+    trampoline_nodes = list(cst.parse_module(trampoline_code).body)
+    external_nodes.extend(trampoline_nodes)
+
+    if method_type == MethodType.STATICMETHOD:
+        assignment_code = f"{method_name} = staticmethod({prefix}_trampoline)"
+    elif method_type == MethodType.CLASSMETHOD:
+        assignment_code = f"{method_name} = classmethod({prefix}_trampoline)"
+    else:
+        assignment_code = f"{method_name} = {prefix}_trampoline"
+
+    assignment = cast(cst.SimpleStatementLine, cst.parse_statement(assignment_code))
+
+    return external_nodes, assignment, mutant_names
 
 
 def function_trampoline_arrangement(
@@ -266,16 +414,26 @@ def function_trampoline_arrangement(
     for i, mutant in enumerate(mutants):
         mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
-        mutated_method_base = function.with_changes(name=cst.Name(mutant_name))
-        mutated_method_result = deep_replace(mutated_method_base, mutant.original_node, mutant.mutated_node)
-        nodes.append(mutated_method_result)  # type: ignore[arg-type]
+        mutated_method = function.with_changes(name=cst.Name(mutant_name))
+        mutated_method = cast(cst.FunctionDef, deep_replace(mutated_method, mutant.original_node, mutant.mutated_node))
+        nodes.append(mutated_method)
 
-    mutants_dict = list(
-        cst.parse_module(create_trampoline_lookup(orig_name=name, mutants=mutant_names, class_name=class_name)).body
+    # trampoline that forwards the calls
+    is_async = function.asynchronous is not None
+    trampoline = list(
+        cst.parse_module(
+            build_function_trampoline(
+                orig_name=name,
+                mutants=mutant_names,
+                class_name=class_name,
+                is_async=is_async,
+                is_async_generator=is_async and _is_generator(function),
+            )
+        ).body
     )
-    mutants_dict[0] = mutants_dict[0].with_changes(leading_lines=[cst.EmptyLine()])
+    trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
 
-    nodes.extend(mutants_dict)
+    nodes.extend(trampoline)
 
     return nodes, mutant_names
 
@@ -324,13 +482,13 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
         ],
     )
     # for non-async functions, simply return the value or generator
-    result_statement = cst.SimpleStatementLine([cst.Return(result)])
+    result_statement: cst.BaseStatement = cst.SimpleStatementLine([cst.Return(result)])
 
     if function.asynchronous:
         is_generator = _is_generator(function)
         if is_generator:
             # async for i in _mutmut_trampoline(...): yield i
-            result_statement = cst.For(  # type: ignore[assignment]
+            result_statement = cst.For(
                 target=cst.Name("i"),
                 iter=result,
                 body=cst.IndentedBlock([cst.SimpleStatementLine([cst.Expr(cst.Yield(cst.Name("i")))])]),
@@ -352,6 +510,53 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             ],
         ),
     )
+
+
+def enum_trampoline_arrangement(
+    cls: cst.ClassDef, mutations_by_method: Mapping[cst.CSTNode, Sequence[Mutation]]
+) -> tuple[Sequence[MODULE_STATEMENT], cst.ClassDef, Sequence[str]]:
+    """Create external functions and minimal enum class for enum mutation.
+
+    This pattern moves all mutation-related code OUTSIDE the enum class body,
+    avoiding the enum metaclass conflict that occurs when class-level attributes
+    are added. The enum class only contains simple method assignments.
+
+    :param cls: The enum class definition
+    :param mutations_by_method: Mapping of method nodes to their mutations
+    :return: A tuple of (external_nodes, modified_class, mutant_names)
+    """
+    external_nodes: list[MODULE_STATEMENT] = []
+    mutant_names: list[str] = []
+    new_body: list[cst.BaseStatement | cst.BaseSmallStatement] = []
+    class_name = cls.name.value
+
+    for item in cls.body.body:
+        if not isinstance(item, cst.FunctionDef):
+            new_body.append(item)
+            continue
+
+        method = item
+        method_mutants = mutations_by_method.get(method)
+
+        if not method_mutants:
+            new_body.append(method)
+            continue
+
+        method_type = get_method_type(method)
+        if method_type is None:
+            new_body.append(method)
+            continue
+
+        ext_nodes, assignment, method_mutant_names = _external_method_injection(
+            method, method_mutants, class_name, method_type
+        )
+        external_nodes.extend(ext_nodes)
+        new_body.append(assignment)
+        mutant_names.extend(method_mutant_names)
+
+    modified_cls = cls.with_changes(body=cls.body.with_changes(body=new_body))
+
+    return external_nodes, modified_cls, mutant_names
 
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
@@ -383,9 +588,11 @@ def pragma_no_mutate_lines(source: str) -> set[int]:
     }
 
 
-def deep_replace(tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode) -> cst.CSTNode:
+def deep_replace(
+    tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode
+) -> cst.CSTNode | cst.RemovalSentinel | cst.FlattenSentinel[cst.CSTNode]:
     """Like the CSTNode.deep_replace method, except that we only replace up to one occurrence of old_node."""
-    return tree.visit(ChildReplacementTransformer(old_node, new_node))  # type: ignore[return-value]
+    return tree.visit(ChildReplacementTransformer(old_node, new_node))
 
 
 class ChildReplacementTransformer(cst.CSTTransformer):
@@ -423,7 +630,6 @@ class IsGeneratorVisitor(cst.CSTVisitor):
         self.original_function: cst.FunctionDef = original_function
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
-        # do not recurse into inner function definitions
         if self.original_function != node:
             return False
         return None
@@ -431,3 +637,94 @@ class IsGeneratorVisitor(cst.CSTVisitor):
     def visit_Yield(self, node: cst.Yield) -> bool:
         self.is_generator = True
         return False
+
+
+@dataclass
+class MutatedMethodLocation:
+    file: Path
+    function_name: str
+    line_number_start: int
+    line_number_end: int
+
+
+@dataclass
+class FailedTypeCheckMutant:
+    method_location: MutatedMethodLocation
+    name: str
+    error: TypeCheckingError
+
+
+class MutatedMethodsCollector(cst.CSTVisitor):
+    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
+
+    def __init__(self, file: Path):
+        self.file = file
+        self.found_mutants: list[MutatedMethodLocation] = []
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        name = node.name.value
+        if is_mutated_method_name(name):
+            range = self.get_metadata(cst.metadata.PositionProvider, node)
+            self.found_mutants.append(
+                MutatedMethodLocation(
+                    file=self.file,
+                    function_name=name,
+                    line_number_start=range.start.line,
+                    line_number_end=range.end.line,
+                )
+            )
+
+        # do not continue visting children of this function
+        # mutated methods are not nested within other methods
+        return False
+
+
+def group_by_path(errors: list[TypeCheckingError]) -> dict[Path, list[TypeCheckingError]]:
+    grouped: dict[Path, list[TypeCheckingError]] = defaultdict(list)
+
+    for error in errors:
+        grouped[error.file_path].append(error)
+
+    return grouped
+
+
+def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
+    with change_cwd(Path("mutants")):
+        errors = run_type_checker(Config.get().type_check_command)
+        errors_by_path = group_by_path(errors)
+
+        mutants_to_skip: dict[str, FailedTypeCheckMutant] = {}
+
+        for path, errors_of_file in errors_by_path.items():
+            with open(path, encoding="utf-8") as file:
+                source = file.read()
+            wrapper = cst.MetadataWrapper(cst.parse_module(source))
+            visitor = MutatedMethodsCollector(path)
+            wrapper.visit(visitor)
+            mutated_methods = visitor.found_mutants
+
+            for error in errors_of_file:
+                assert error.file_path == visitor.file
+                mutant = next(
+                    (m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None
+                )
+                if mutant is None:
+                    source_lines = source.splitlines()
+                    error_line = source_lines[error.line_number - 1] if error.line_number <= len(source_lines) else ""
+                    if GENERATED_MARKER in error_line:
+                        continue
+                    raise Exception(
+                        f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). "
+                        "Probably, a code mutation influenced types in unexpected locations. "
+                        "If your project normally has no type errors and uses mypy/pyrefly, please file an issue with steps to reproduce on github."
+                    )
+
+                mutant_name = get_mutant_name(path.relative_to(Path(".").absolute()), mutant.function_name)
+
+                mutants_to_skip[mutant_name] = FailedTypeCheckMutant(
+                    method_location=mutant,
+                    name=mutant_name,
+                    error=error,
+                )
+
+        return mutants_to_skip
