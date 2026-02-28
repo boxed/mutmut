@@ -21,6 +21,10 @@ while [[ $# -gt 0 ]]; do
             PY_VERSIONS="$2"
             shift 2
             ;;
+        --all)
+            PY_VERSIONS="3.10,3.11,3.12,3.13,3.14"
+            shift
+            ;;
         --ff)
             FAIL_FAST=true
             shift

@@ -100,3 +100,37 @@ def run_in_fork(fn: Callable[..., int], *args: Any, **kwargs: Any) -> int:
     # Parent waits for child
     _, status = os.waitpid(pid, 0)
     return os.waitstatus_to_exitcode(status)
+
+
+class OrchestratorCrashError(Exception):
+    """Raised when the hot-fork orchestrator crashes unexpectedly.
+
+    The orchestrator manages all mutant test runs. If it crashes, any
+    in-flight mutants are lost. The user can resume by running
+    `mutmut run` again - completed results are preserved.
+    """
+
+    def __init__(self, exit_code: int, lost_mutants: list[str], crash_log: str | None = None):
+        self.exit_code = exit_code
+        self.lost_mutants = lost_mutants
+        self.crash_log = crash_log
+
+        # Build detailed message
+        details = [
+            f"Hot-fork orchestrator crashed unexpectedly (exit code: {exit_code})",
+            f"Lost {len(lost_mutants)} in-flight mutant(s):",
+        ]
+        for m in lost_mutants[:10]:
+            details.append(f"  - {m}")
+        if len(lost_mutants) > 10:
+            details.append(f"  ... and {len(lost_mutants) - 10} more")
+
+        details.append("")
+        details.append("This usually indicates a bug in pytest or conftest.py.")
+        if crash_log:
+            details.append(f"Crash log: {crash_log}")
+        details.append("")
+        details.append("To resume: mutmut run")
+        details.append("(Completed mutants are saved; lost ones will be re-run)")
+
+        super().__init__("\n".join(details))
