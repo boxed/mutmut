@@ -10,6 +10,8 @@ venv
 table.css.map
 .idea
 .vscode
+.claude
+.cursor
 .cache
 .DS_Store
 .pytest_cache

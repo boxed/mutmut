@@ -285,7 +285,7 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
 
 
 # Operators that should be called on specific node types
-mutation_operators: OPERATORS_TYPE = [
+MUTATION_OPERATORS: OPERATORS_TYPE = [
     (cst.BaseNumber, operator_number),
     (cst.BaseString, operator_string),
     (cst.Name, operator_name),
@@ -302,6 +302,24 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.CSTNode, operator_swap_op),
     (cst.Match, operator_match),
 ]
+
+
+OPERATOR_TO_TYPE = {
+    operator_number: "number",
+    operator_string: "string",
+    operator_name: "boolean",
+    operator_assignment: "return",
+    operator_augmented_assignment: "operator",
+    operator_remove_unary_ops: "operator",
+    operator_dict_arguments: "argument",
+    operator_arg_removal: "argument",
+    operator_symmetric_string_methods_swap: "string",
+    operator_unsymmetrical_string_methods_swap: "string",
+    operator_lambda: "return",
+    operator_keywords: "boolean",
+    operator_swap_op: "operator",  # disambiguated by node type
+    operator_match: "statement",
+}
 
 
 def _simple_mutation_mapping(

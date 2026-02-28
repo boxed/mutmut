@@ -64,6 +64,34 @@ source code control and committed before you apply a mutant!
 
 
 If during the installation you get an error for the `libcst` dependency mentioning the lack of a rust compiler on your system, it is because your architecture does not have a prebuilt binary for `libcst` and it requires both `rustc` and `cargo` from the [rust toolchain](https://www.rust-lang.org/tools/install) to be built. This is known for at least the `x86_64-darwin` architecture.
+left off.
+
+
+Incremental Testing
+~~~~~~~~~~~~~~~~~~~
+
+Mutmut is designed for incremental workflows. It remembers which mutants have
+been tested and their results, so subsequent runs skip already-tested mutants.
+
+**Function-level change detection:** Mutmut computes a hash of each function's
+source code. When you modify a function, mutmut detects the change and
+automatically re-tests all mutants in that function. Unchanged functions keep
+their previous results.
+
+**Limitation:** Change detection only tracks direct function changes, not
+transitive dependencies. If function A calls function B, and you modify B,
+mutants in A are not automatically re-tested. For significant changes to
+shared utilities, use ``mutmut run "module*"`` to re-test affected modules,
+or delete the ``mutants/`` directory for a full re-run.
+
+This means you can:
+
+- Run ``mutmut run``, stop partway through, and continue later
+- Modify your source code and re-run - only changed functions are re-tested
+- Update your tests and use ``mutmut browse`` to selectively re-test mutants
+
+The mutation data is stored in the ``mutants/`` directory. Delete this
+directory to start completely fresh.
 
 
 Wildcards for testing mutants

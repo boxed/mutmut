@@ -83,7 +83,7 @@ class Adder:
 
 print(Adder(1).add(2))"""
 
-    src, _ = mutate_file_contents("file.py", source)
+    src, _, _, _ = mutate_file_contents("test.py", source)
 
     assert src == snapshot('''\
 from __future__ import division
@@ -185,11 +185,11 @@ class Adder:
         self.amount = amount
     def xǁAdderǁ__init____mutmut_1(self, amount):
         self.amount = None
-    \n\
+
     xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = { # type: ignore # mutmut generated
         'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1 # type: ignore # mutmut generated
     } # type: ignore # mutmut generated
-    \n\
+
     xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__' # type: ignore # mutmut generated
 
     def add(self, value):
@@ -202,11 +202,11 @@ class Adder:
 
     def xǁAdderǁadd__mutmut_1(self, value):
         return self.amount - value
-    \n\
+
     xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = { # type: ignore # mutmut generated
         'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1 # type: ignore # mutmut generated
     } # type: ignore # mutmut generated
-    \n\
+
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd' # type: ignore # mutmut generated
 
 print(Adder(1).add(2))\

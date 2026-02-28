@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from mutmut.utils.file_utils import change_cwd
-from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import strip_prefix
 
 if platform.system() == "Windows":
@@ -21,6 +20,7 @@ import ast
 import fnmatch
 import gc
 import inspect
+import io
 import itertools
 import json
 import resource
@@ -60,6 +60,7 @@ from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import Config
 from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.file_mutation import MutationMetadata
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
@@ -191,7 +192,9 @@ def copy_src_dir() -> None:
             shutil.copytree(source_path, target_path)
         else:
             target_path.parent.mkdir(exist_ok=True, parents=True)
-            # copy mtime, so we later know that when source_mtime == target_mtime, the file is not (yet) mutated.
+            # copy2 preserves mtime so source_mtime == target_mtime after copy.
+            # This matters: create_mutants_for_file skips when source_mtime < mutant_mtime,
+            # so a fresh copy (equal mtime) correctly triggers mutation on the first run.
             shutil.copy2(source_path, target_path)
 
 
@@ -203,6 +206,8 @@ class FileMutationResult:
     error: Exception | None = None
     unmodified: bool = False
     ignored: bool = False
+    changed_functions: set[str] | None = None
+    current_hashes: dict[str, str] | None = None
 
 
 @dataclass
@@ -278,39 +283,32 @@ def copy_also_copy_files() -> None:
             shutil.copytree(path, destination, dirs_exist_ok=True)
 
 
-def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationResult:
+def create_mutants_for_file(source_path: Path, output_path: Path) -> FileMutationResult:
     warnings: list[Warning] = []
 
     try:
-        source_mtime = os.path.getmtime(filename)
+        source_mtime = os.path.getmtime(source_path)
         mutant_mtime = os.path.getmtime(output_path)
-        # We have three possible cases here:
-        # source_mtime > mutant_mtime: the source file was modified after the mutant has been created
-        # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
-        # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
+        # If the source is older than the mutant output, it hasn't been touched
+        # since we last generated mutants — skip the expensive regeneration.
         if source_mtime < mutant_mtime:
-            # reset the mutation stats
-            source_file_mutation_data = SourceFileMutationData(path=filename)
-            source_file_mutation_data.load()
-            for key in source_file_mutation_data.exit_code_by_key:
-                source_file_mutation_data.exit_code_by_key[key] = None
-            source_file_mutation_data.save()
-
             return FileMutationResult(unmodified=True)
     except OSError:
         pass
 
-    with open(filename) as f:
+    with open(source_path) as f:
         source = f.read()
 
     with open(output_path, "w") as out:
         try:
-            mutant_names = write_all_mutants_to_file(out=out, source=source, filename=filename)
+            mutant_names, hash_by_function_name, metadata_by_name = write_all_mutants_to_file(
+                out=out, source=source, filename=source_path
+            )
         except cst.ParserSyntaxError as e:
             # if libcst cannot parse it, then copy the source without any mutations
-            warnings.append(SyntaxWarning(f"Unsupported syntax in {filename} ({str(e)}), skipping"))
+            warnings.append(SyntaxWarning(f"Unsupported syntax in {source_path} ({str(e)}), skipping"))
             out.write(source)
-            mutant_names = []
+            mutant_names, hash_by_function_name, metadata_by_name = [], {}, {}
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -321,22 +319,73 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             invalid_syntax_error.__cause__ = e
             return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
-    source_file_mutation_data = SourceFileMutationData(path=filename)
-    source_file_mutation_data.exit_code_by_key = {
-        get_mutant_name(filename, mutant_name): None for mutant_name in mutant_names
+    source_file_mutation_data = SourceFileMutationData(path=source_path)
+    source_file_mutation_data.load()
+    module_name = strip_prefix(str(source_path)[: -len(source_path.suffix)].replace(os.sep, "."), prefix="src.")
+
+    old_hashes = source_file_mutation_data.hash_by_function_name
+
+    changed_functions_local = {
+        func_name for func_name, new_hash in hash_by_function_name.items() if old_hashes.get(func_name) != new_hash
     }
+
+    new_keys = {".".join([module_name, x]).replace(".__init__.", "."): None for x in mutant_names}
+
+    # Merge: keep existing results for mutants that still exist, add None for new ones
+    # BUT: if the function's hash changed, reset the mutant to None (needs re-testing)
+    merged_exit_codes: dict[str, int | None] = {}
+    for key in new_keys:
+        mangled_func = mangled_name_from_mutant_name(key)
+        # Extract just the function key (e.g., "x_add") for comparison with hash_by_function_name keys
+        _, _, func_name = mangled_func.rpartition(".")
+
+        if func_name in changed_functions_local:
+            merged_exit_codes[key] = None
+        elif key in source_file_mutation_data.exit_code_by_key:
+            merged_exit_codes[key] = source_file_mutation_data.exit_code_by_key[key]
+        else:
+            merged_exit_codes[key] = None
+
+    source_file_mutation_data.exit_code_by_key = merged_exit_codes
+    source_file_mutation_data.hash_by_function_name = hash_by_function_name
+    assert None not in hash_by_function_name
+
+    # Build fully-qualified function names for return to parent
+    # Keys are fully qualified: foo.bar.x_baz
+    current_hashes_qualified: dict[str, str] = {}
+    for mangled_name, hash_value in hash_by_function_name.items():
+        full_name = f"{module_name}.{mangled_name}".replace(".__init__.", ".")
+        current_hashes_qualified[full_name] = hash_value
+
+    # Build fully-qualified changed function names for return to parent
+    changed_functions_qualified = {
+        f"{module_name}.{func_name}".replace(".__init__.", ".") for func_name in changed_functions_local
+    }
+
+    # Build metadata with full module-qualified keys
+    source_file_mutation_data.mutation_metadata_by_module_name = {
+        ".".join([module_name, k]).replace(".__init__.", "."): v for k, v in metadata_by_name.items()
+    }
+
     source_file_mutation_data.save()
 
-    return FileMutationResult(warnings=warnings)
-
-
-def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> Sequence[str]:
-    result, mutant_names = mutate_file_contents(
-        str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
+    return FileMutationResult(
+        warnings=warnings,
+        changed_functions=changed_functions_qualified,
+        current_hashes=current_hashes_qualified,
     )
-    out.write(result)
 
-    return mutant_names
+
+def write_all_mutants_to_file(
+    *, out: io.TextIOWrapper, source: str, filename: Path
+) -> tuple[Sequence[str], dict[str, str], dict[str, MutationMetadata]]:
+    filename_str = str(filename)
+    mutated_code, mutant_names, hash_by_function_name, metadata_by_name = mutate_file_contents(
+        filename_str, source, get_covered_lines_for_file(filename_str, mutmut._covered_lines)
+    )
+    out.write(mutated_code)
+
+    return mutant_names, hash_by_function_name, metadata_by_name
 
 
 def unused(*_: object) -> None:
