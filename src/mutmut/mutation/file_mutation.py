@@ -21,9 +21,8 @@ from mutmut.mutation.mutators import MethodType
 from mutmut.mutation.mutators import get_method_type
 from mutmut.mutation.mutators import mutation_operators
 from mutmut.mutation.pragma_handling import parse_pragma_lines
-from mutmut.mutation.trampoline_templates import GENERATED_MARKER
 from mutmut.mutation.trampoline_templates import build_enum_trampoline
-from mutmut.mutation.trampoline_templates import build_function_trampoline
+from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.mutation.trampoline_templates import trampoline_impl
 from mutmut.type_checking import TypeCheckingError
@@ -43,19 +42,13 @@ class Mutation:
     contained_by_top_level_function: cst.FunctionDef | None
 
 
-def mutate_file_contents(
-    filename: str, code: str, covered_lines: set[int] | None = None, mutate_enums: bool = True
-) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
-    :param mutate_enums: If True, enum classes will be mutated using external injection pattern.
-                         If False, enum classes will be left unchanged.
     :return: A tuple of (mutated code, list of mutant function names)"""
     module, mutations, ignored_classes, ignored_functions = create_mutations(code, covered_lines)
 
-    mutated_code, mutant_names = combine_mutations_to_source(
-        module, mutations, ignored_classes, ignored_functions, mutate_enums=mutate_enums
-    )
+    mutated_code, mutant_names = combine_mutations_to_source(module, mutations, ignored_classes, ignored_functions)
 
     # TODO: implement function hashing to skip testing unchanged functions
 
@@ -252,7 +245,6 @@ def combine_mutations_to_source(
     mutations: Sequence[Mutation],
     ignored_classes: set[str] | None = None,
     ignored_functions: set[str] | None = None,
-    mutate_enums: bool = True,
 ) -> tuple[str, Sequence[str]]:
     """Create mutated functions and trampolines for all mutations and compile them to a single source code.
 
@@ -260,7 +252,6 @@ def combine_mutations_to_source(
     :param mutations: Mutations that should be applied.
     :param ignored_classes: Class names to skip transformation for (e.g., enums with pragma: no mutate class)
     :param ignored_functions: Function names to skip transformation for (pragma: no mutate function)
-    :param mutate_enums: Whether to mutate enum classes (True) or skip them entirely (False)
     :return: Mutated code and list of mutation names"""
     ignored_classes = ignored_classes or set()
     ignored_functions = ignored_functions or set()
@@ -292,17 +283,10 @@ def combine_mutations_to_source(
             mutation_names.extend(mutant_names)
         elif isinstance(statement, cst.ClassDef):
             cls = statement
-            # Skip entire class if it has pragma: no mutate class
-            if cls.name.value in ignored_classes:
-                result.append(cls)
-                continue
             if not isinstance(cls.body, cst.IndentedBlock):
                 # we don't mutate single-line classes, e.g. `class A: a = 1; b = 2`
                 result.append(cls)
             elif is_enum_class(cls):
-                if not mutate_enums:
-                    result.append(cls)
-                    continue
                 external_nodes, modified_cls, enum_mutant_names = enum_trampoline_arrangement(
                     cls, mutations_within_function
                 )
@@ -362,7 +346,10 @@ def _external_method_injection(
     prefix = f"_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name) + "__mutmut"
 
+    stringify = StringifyAnnotations()
+
     orig_func = method.with_changes(name=cst.Name(f"{prefix}_orig"), decorators=[])
+    orig_func = cast(cst.FunctionDef, orig_func.visit(stringify))
     external_nodes.append(orig_func)
 
     for i, mutant in enumerate(mutants):
@@ -372,6 +359,7 @@ def _external_method_injection(
 
         mutated = method.with_changes(name=cst.Name(mutant_func_name), decorators=[])
         mutated = cast(cst.FunctionDef, deep_replace(mutated, mutant.original_node, mutant.mutated_node))
+        mutated = cast(cst.FunctionDef, mutated.visit(stringify))
         external_nodes.append(mutated)
     trampoline_code = build_enum_trampoline(
         class_name=class_name, method_name=method_name, mutant_names=mutant_names, method_type=method_type
@@ -419,21 +407,14 @@ def function_trampoline_arrangement(
         nodes.append(mutated_method)
 
     # trampoline that forwards the calls
-    is_async = function.asynchronous is not None
-    trampoline = list(
-        cst.parse_module(
-            build_function_trampoline(
-                orig_name=name,
-                mutants=mutant_names,
-                class_name=class_name,
-                is_async=is_async,
-                is_async_generator=is_async and _is_generator(function),
-            )
-        ).body
+    mutants_dict_code = build_mutants_dict_and_name(
+        orig_name=name,
+        class_name=class_name,
+        mutants=mutant_names,
     )
-    trampoline[0] = trampoline[0].with_changes(leading_lines=[cst.EmptyLine()])
-
-    nodes.extend(trampoline)
+    mutants_dict_nodes = list(cst.parse_module(mutants_dict_code).body)
+    mutants_dict_nodes[0] = mutants_dict_nodes[0].with_changes(leading_lines=[cst.EmptyLine()])
+    nodes.extend(mutants_dict_nodes)
 
     return nodes, mutant_names
 
@@ -614,6 +595,26 @@ class ChildReplacementTransformer(cst.CSTTransformer):
         return updated_node
 
 
+class StringifyAnnotations(cst.CSTTransformer):
+    """Convert type annotations to string literals to avoid NameError from forward references.
+
+    When methods are extracted from a class body and placed before the class definition,
+    annotations referencing the class (e.g., -> AsyncGenerator[Clazz, None]) would fail.
+    This transformer turns them into string literals (e.g., -> "AsyncGenerator[Clazz, None]").
+
+    This allows for mutations to be placed anywhere in the file, improving the resilience of
+    the mutation process without breaking type checking.
+    """
+
+    _empty_module = cst.parse_module("")
+
+    def leave_Annotation(self, original_node: cst.Annotation, updated_node: cst.Annotation) -> cst.Annotation:
+        if isinstance(updated_node.annotation, (cst.SimpleString, cst.ConcatenatedString, cst.FormattedString)):
+            return updated_node
+        source = self._empty_module.code_for_node(updated_node.annotation)
+        return updated_node.with_changes(annotation=cst.SimpleString(f'"{source}"'))
+
+
 def _is_generator(function: cst.FunctionDef) -> bool:
     """Return True if the function has yield statement(s)."""
     visitor = IsGeneratorVisitor(function)
@@ -709,10 +710,6 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                     (m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None
                 )
                 if mutant is None:
-                    source_lines = source.splitlines()
-                    error_line = source_lines[error.line_number - 1] if error.line_number <= len(source_lines) else ""
-                    if GENERATED_MARKER in error_line:
-                        continue
                     raise Exception(
                         f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). "
                         "Probably, a code mutation influenced types in unexpected locations. "
