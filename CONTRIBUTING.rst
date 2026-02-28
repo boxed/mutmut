@@ -46,6 +46,14 @@ Codebases using Poetry
     # Install dependencies in your Poetry environment
     pip install -r <path_to_mutmut_codebase>/requirements.txt
 
+
+Linting and Formatting
+^^^^^^^^^^^^^^^^^^^^^^
+
+This project primarily uses `ruff` for linting and formatting through `pre-commit`. You can run the linting and formatting locally with `uv run pre-commit run --all-files`.
+
+Additionally (and recommended), you can run `pre-commit install` to install the pre-commit hooks to run automatically when running `git commit`.
+
 Documentation about mutmut's architecture
 -----------------------------------------
 

@@ -2,7 +2,7 @@ default_language_version:
     python: python3.10
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
     -   id: check-docstring-first
         exclude: ^e2e_projects/
@@ -15,21 +15,8 @@ repos:
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
 -   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.15.4
     hooks:
     -   id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-        exclude: ^(docs/_themes/|docs/conf\.py|e2e_projects/|tests/data/test_generation/)
     -   id: ruff-format
-        exclude: ^(docs/_themes/|docs/conf\.py|e2e_projects/|tests/data/test_generation/)
--   repo: https://github.com/wimglenn/reorder-python-imports-black
-    rev: v3.14.0
-    hooks:
-    -   id: reorder-python-imports
-        exclude: ^(docs/_themes/|docs/conf\.py|e2e_projects/|tests/data/test_generation/)
--   repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
-    hooks:
-    -   id: autoflake
-        args: [--remove-all-unused-imports, --in-place]
-        exclude: ^(docs/_themes/|docs/conf\.py|e2e_projects/|tests/data/test_generation/)

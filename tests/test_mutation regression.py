@@ -1,5 +1,6 @@
 import libcst as cst
 from inline_snapshot import snapshot
+
 from mutmut.file_mutation import create_trampoline_wrapper
 from mutmut.file_mutation import mutate_file_contents
 

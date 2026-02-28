@@ -1,13 +1,12 @@
-from inline_snapshot import snapshot
-import pytest
 import sys
+
+import pytest
+from inline_snapshot import snapshot
 
 from tests.e2e.e2e_utils import run_mutmut_on_project
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 14), reason="Can only test python 3.14 features on 3.14"
-)
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Can only test python 3.14 features on 3.14")
 def test_python_3_14_result_snapshot():
     assert run_mutmut_on_project("py3_14_features") == snapshot(
         {

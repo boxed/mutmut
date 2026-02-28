@@ -3,8 +3,8 @@ import platform
 import sys
 from typing import Any
 
-from mutmut.type_checking import run_type_checker
 from mutmut.type_checking import TypeCheckingError
+from mutmut.type_checking import run_type_checker
 
 if platform.system() == "Windows":
     print(
@@ -17,44 +17,37 @@ import gc
 import inspect
 import itertools
 import json
-from multiprocessing import Pool, set_start_method, Lock
 import resource
 import shutil
 import signal
 import subprocess
+import warnings
 from abc import ABC
 from collections import defaultdict
-from configparser import (
-    ConfigParser,
-    NoOptionError,
-    NoSectionError,
-)
+from configparser import ConfigParser
+from configparser import NoOptionError
+from configparser import NoSectionError
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from datetime import (
-    datetime,
-    timedelta,
-)
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import datetime
+from datetime import timedelta
 from difflib import unified_diff
 from io import TextIOBase
 from json import JSONDecodeError
 from math import ceil
-from os import (
-    makedirs,
-    walk,
-)
-from os.path import (
-    isdir,
-    isfile,
-)
+from multiprocessing import Lock
+from multiprocessing import Pool
+from multiprocessing import set_start_method
+from os import makedirs
+from os import walk
+from os.path import isdir
+from os.path import isfile
 from pathlib import Path
 from signal import SIGTERM
 from threading import Thread
-from time import (
-    process_time,
-    sleep,
-)
-import warnings
+from time import process_time
+from time import sleep
 
 import click
 import libcst as cst
@@ -62,7 +55,8 @@ from rich.text import Text
 from setproctitle import setproctitle
 
 import mutmut
-from mutmut.code_coverage import gather_coverage, get_covered_lines_for_file
+from mutmut.code_coverage import gather_coverage
+from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.file_mutation import mutate_file_contents
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
 
@@ -1185,7 +1179,7 @@ def print_time_estimates(mutant_names):
         if not time:
             print("<no tests>", key)
         else:
-            print(f"{int(time*1000)}ms", key)
+            print(f"{int(time * 1000)}ms", key)
 
 
 @cli.command()
@@ -1260,7 +1254,7 @@ def _run(mutant_names: tuple | list, max_children: None | int):
 
     time = datetime.now() - start
     print(
-        f"    done in {round(time.total_seconds()*1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
+        f"    done in {round(time.total_seconds() * 1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
     )
 
     if mutmut.config.type_check_command:
@@ -1571,13 +1565,13 @@ def apply_mutant(mutant_name):
 def browse(show_killed):
     ensure_config_loaded()
 
+    from rich.syntax import Syntax
     from textual.app import App
     from textual.containers import Container
-    from textual.widgets import Footer
-    from textual.widgets import DataTable
-    from textual.widgets import Static
     from textual.widget import Widget
-    from rich.syntax import Syntax
+    from textual.widgets import DataTable
+    from textual.widgets import Footer
+    from textual.widgets import Static
 
     class ResultBrowser(App):
         loading_id = None
