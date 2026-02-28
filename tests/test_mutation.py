@@ -12,13 +12,13 @@ from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
-from mutmut.file_mutation import create_mutations
-from mutmut.file_mutation import mutate_file_contents
-from mutmut.trampoline_templates import mangle_function_name
+from mutmut.mutation.file_mutation import create_mutations
+from mutmut.mutation.file_mutation import mutate_file_contents
+from mutmut.mutation.trampoline_templates import mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
-    module, mutated_nodes = create_mutations(source, covered_lines)
+    module, mutated_nodes, _, _ = create_mutations(source, covered_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants

@@ -22,11 +22,11 @@ def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]
         return None
 
     abs_filename = str((Path("mutants") / filename).absolute())
-    lines = None
+    lines: set[int] = set()
     if abs_filename in covered_lines:
-        lines = covered_lines[abs_filename]
+        lines = set(covered_lines[abs_filename])
 
-    return lines or set()
+    return lines
 
 
 # Gathers coverage for the given source files and
@@ -54,11 +54,8 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> dict[st
 
     for filename in source_files:
         abs_filename = str((mutants_path / filename).absolute())
-        lines = coverage_data.lines(abs_filename)
-        if lines is None:
-            # file was not imported during test run, e.g. because test selection excluded this file
-            lines = []
-        covered_lines[abs_filename] = set(lines)
+        lines = set(coverage_data.lines(abs_filename) or [])
+        covered_lines[abs_filename] = lines
 
     _unload_modules_not_in(modules)
 
