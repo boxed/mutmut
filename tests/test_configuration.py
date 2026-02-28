@@ -302,6 +302,7 @@ pytest_add_cli_args = ["-x", "--tb=short"]
 pytest_add_cli_args_test_selection = ["--no-header"]
 also_copy = ["fixtures"]
 mutate_only_covered_lines = true
+type_check_command = ["mypy", "--strict"]
 """)
         (in_tmp_dir / "src").mkdir()
 
@@ -316,6 +317,7 @@ mutate_only_covered_lines = true
         assert config.pytest_add_cli_args_test_selection == ["--no-header"]
         assert Path("fixtures") in config.also_copy
         assert config.mutate_only_covered_lines is True
+        assert config.type_check_command == ["mypy", "--strict"]
 
     def test_uses_defaults_when_no_config(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
@@ -327,6 +329,7 @@ mutate_only_covered_lines = true
         assert config.paths_to_mutate == [Path("src")]
         assert config.do_not_mutate == []
         assert config.mutate_only_covered_lines is False
+        assert config.type_check_command == []
 
     def test_also_copy_includes_defaults(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()

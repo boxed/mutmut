@@ -75,8 +75,7 @@ def {orig_name}({self_prefix}*args, **kwargs):
 
 {body}
 
-{orig_name}.__signature__ = _mutmut_signature({mangled_name}__mutmut_orig)
-{orig_name}.__annotations__ = {mangled_name}__mutmut_orig.__annotations__
+{orig_name} = _mutmut_wraps({mangled_name}__mutmut_orig)({orig_name})
 {mangled_name}__mutmut_orig.__name__ = '{mangled_name}'
 """)
 
@@ -134,7 +133,7 @@ def {prefix}_trampoline(self, *args, **kwargs):
 # noinspection PyUnresolvedReferences
 # language=python
 trampoline_impl = _mark_generated("""
-from inspect import signature as _mutmut_signature
+from functools import wraps as _mutmut_wraps
 from typing import Annotated
 from typing import Callable
 from typing import ClassVar

@@ -90,7 +90,7 @@ from __future__ import division
 import lib
 
 lib.foo()
-from inspect import signature as _mutmut_signature # mutmut: generated
+from functools import wraps as _mutmut_wraps # mutmut: generated
 from typing import Annotated # mutmut: generated
 from typing import Callable # mutmut: generated
 from typing import ClassVar # mutmut: generated
@@ -160,8 +160,7 @@ def foo(*args, **kwargs): # mutmut: generated
     result = _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs) # mutmut: generated
     return result # mutmut: generated
 
-foo.__signature__ = _mutmut_signature(x_foo__mutmut_orig) # mutmut: generated
-foo.__annotations__ = x_foo__mutmut_orig.__annotations__ # mutmut: generated
+foo = _mutmut_wraps(x_foo__mutmut_orig)(foo) # mutmut: generated
 x_foo__mutmut_orig.__name__ = 'x_foo' # mutmut: generated
 
 def bar():
@@ -183,8 +182,7 @@ def bar(*args, **kwargs): # mutmut: generated
     result = _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs) # mutmut: generated
     return result # mutmut: generated
 
-bar.__signature__ = _mutmut_signature(x_bar__mutmut_orig) # mutmut: generated
-bar.__annotations__ = x_bar__mutmut_orig.__annotations__ # mutmut: generated
+bar = _mutmut_wraps(x_bar__mutmut_orig)(bar) # mutmut: generated
 x_bar__mutmut_orig.__name__ = 'x_bar' # mutmut: generated
 
 class Adder:
@@ -205,8 +203,7 @@ class Adder:
         result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁ__init____mutmut_orig"), object.__getattribute__(self, "xǁAdderǁ__init____mutmut_mutants"), args, kwargs, self) # mutmut: generated
         return result # mutmut: generated
     \n\
-    __init__.__signature__ = _mutmut_signature(xǁAdderǁ__init____mutmut_orig) # mutmut: generated
-    __init__.__annotations__ = xǁAdderǁ__init____mutmut_orig.__annotations__ # mutmut: generated
+    __init__ = _mutmut_wraps(xǁAdderǁ__init____mutmut_orig)(__init__) # mutmut: generated
     xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__' # mutmut: generated
 
     def add(self, value):
@@ -228,8 +225,7 @@ class Adder:
         result = _mutmut_trampoline(object.__getattribute__(self, "xǁAdderǁadd__mutmut_orig"), object.__getattribute__(self, "xǁAdderǁadd__mutmut_mutants"), args, kwargs, self) # mutmut: generated
         return result # mutmut: generated
     \n\
-    add.__signature__ = _mutmut_signature(xǁAdderǁadd__mutmut_orig) # mutmut: generated
-    add.__annotations__ = xǁAdderǁadd__mutmut_orig.__annotations__ # mutmut: generated
+    add = _mutmut_wraps(xǁAdderǁadd__mutmut_orig)(add) # mutmut: generated
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd' # mutmut: generated
 
 print(Adder(1).add(2))\

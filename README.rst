@@ -53,8 +53,33 @@ it will try to figure out where the code to mutate is.
 
 
 You can stop the mutation run at any time and mutmut will restart where you
-left off. It will continue where it left off, and re-test functions that were
-modified since last run.
+left off.
+
+Incremental Testing
+~~~~~~~~~~~~~~~~~~~
+
+Mutmut is designed for incremental workflows. It remembers which mutants have
+been tested and their results, so subsequent runs skip already-tested mutants.
+
+**Function-level change detection:** Mutmut computes a hash of each function's
+source code. When you modify a function, mutmut detects the change and
+automatically re-tests all mutants in that function. Unchanged functions keep
+their previous results.
+
+**Limitation:** Change detection only tracks direct function changes, not
+transitive dependencies. If function A calls function B, and you modify B,
+mutants in A are not automatically re-tested. For significant changes to
+shared utilities, use ``mutmut run "module*"`` to re-test affected modules,
+or delete the ``mutants/`` directory for a full re-run.
+
+This means you can:
+
+- Run ``mutmut run``, stop partway through, and continue later
+- Modify your source code and re-run - only changed functions are re-tested
+- Update your tests and use ``mutmut browse`` to selectively re-test mutants
+
+The mutation data is stored in the ``mutants/`` directory. Delete this
+directory to start completely fresh.
 
 To work with the results, use `mutmut browse` where you can see the mutants,
 retest them when you've updated your tests.
@@ -224,6 +249,92 @@ whitelist lines are:
 - The version string on your library. You really shouldn't have a test for this :P
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
+
+
+Enum Classes and Metaclass Compatibility
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mutmut 3.x fully supports mutating enum classes. Methods inside enum classes
+(``Enum``, ``IntEnum``, ``Flag``, ``IntFlag``, ``StrEnum``) are automatically
+mutated using an external injection pattern that avoids conflicts with the
+enum metaclass.
+
+This means enums with methods like:
+
+.. code-block:: python
+
+    from enum import Enum
+
+    class Color(Enum):
+        RED = 1
+        GREEN = 2
+
+        def describe(self):
+            return self.name.lower()
+
+        @staticmethod
+        def count():
+            return 3
+
+...will have their methods mutated just like regular class methods.
+
+**Disabling Enum Mutation**
+
+If you prefer to skip enum mutation entirely, you can disable it in your config:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    mutate_enums = false
+
+Or skip a specific enum class using the pragma:
+
+.. code-block:: python
+
+    class Color(Enum):  # pragma: no mutate class
+        RED = 1
+        GREEN = 2
+
+        def describe(self):
+            return f"Color is {self.name}"
+
+This tells mutmut to completely skip the class—no mutations will be created
+for any methods.
+
+Both syntax styles are supported:
+
+- ``# pragma: no mutate class``
+- ``# pragma: no mutate: class``
+
+**Note:** The regular ``# pragma: no mutate`` on a class line only prevents
+mutations on that specific line. It does NOT prevent mutations inside methods.
+Use ``# pragma: no mutate class`` to skip the entire class (kept for backward
+compatibility with <v3.5.0).
+
+
+Skipping Entire Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Similarly, you can skip an entire function from mutation using
+``# pragma: no mutate function``:
+
+.. code-block:: python
+
+    def complex_algorithm():  # pragma: no mutate function
+        # This function won't be mutated at all
+        return some_complex_calculation()
+
+Both syntax styles are supported:
+
+- ``# pragma: no mutate function``
+- ``# pragma: no mutate: function``
+
+This is useful for functions that:
+
+- Have complex side effects that make mutation testing impractical
+- Are performance-critical and you want to avoid trampoline overhead
+- Are known to cause issues with the mutation testing framework
 
 
 Modifying pytest arguments
