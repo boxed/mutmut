@@ -2,6 +2,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from typing import cast
 
 
@@ -29,18 +30,18 @@ def run_type_checker(type_check_command: list[str]) -> list[TypeCheckingError]:
         )
 
     if "pyrefly" in type_check_command:
-        errors = parse_pyrefly_report(cast(dict, report))
+        errors = parse_pyrefly_report(cast(dict[str, Any], report))
     elif "mypy" in type_check_command:
         errors = parse_mypy_report(report)
     elif "ty" in type_check_command:
         errors = parse_ty_report(report)
     else:
-        errors = parse_pyright_report(cast(dict, report))
+        errors = parse_pyright_report(cast(dict[str, Any], report))
 
     return errors
 
 
-def parse_pyright_report(result: dict) -> list[TypeCheckingError]:
+def parse_pyright_report(result: dict[str, Any]) -> list[TypeCheckingError]:
     if "generalDiagnostics" not in result:
         raise Exception(f'Invalid pyright report. Could not find key "generalDiagnostics". Found: {set(result.keys())}')
 
@@ -57,7 +58,7 @@ def parse_pyright_report(result: dict) -> list[TypeCheckingError]:
     return errors
 
 
-def parse_pyrefly_report(result: dict) -> list[TypeCheckingError]:
+def parse_pyrefly_report(result: dict[str, Any]) -> list[TypeCheckingError]:
     if "errors" not in result:
         raise Exception(f'Invalid pyrefly report. Could not find key "errors". Found: {set(result.keys())}')
 
@@ -75,7 +76,7 @@ def parse_pyrefly_report(result: dict) -> list[TypeCheckingError]:
     return errors
 
 
-def parse_mypy_report(result: list[dict]) -> list[TypeCheckingError]:
+def parse_mypy_report(result: list[dict[str, Any]]) -> list[TypeCheckingError]:
     errors = []
 
     for diagnostic in result:
@@ -92,7 +93,7 @@ def parse_mypy_report(result: list[dict]) -> list[TypeCheckingError]:
     return errors
 
 
-def parse_ty_report(result: list[dict]) -> list[TypeCheckingError]:
+def parse_ty_report(result: list[dict[str, Any]]) -> list[TypeCheckingError]:
     errors = []
 
     for diagnostic in result:

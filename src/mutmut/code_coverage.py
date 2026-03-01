@@ -1,14 +1,23 @@
+from __future__ import annotations
+
 import importlib
 import sys
+from collections.abc import Iterable
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 import coverage
+from coverage import CoverageData
+
+if TYPE_CHECKING:
+    from mutmut.__main__ import TestRunner
 
 
 # Returns a set of lines that are covered in this file gvein the covered_lines dict
 #  returned by gather_coverage
 # None means it's not enabled, set() means no lines are covered
-def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]):
+def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]] | None) -> set[int] | None:
     if covered_lines is None or filename is None:
         return None
 
@@ -24,7 +33,7 @@ def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]
 # Returns a dict of filenames to sets of lines that are covered
 # Since this is run on the source files before we create mutations,
 # we need to unload any modules that get loaded during the test run
-def gather_coverage(runner, source_files):
+def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> dict[str, set[int]]:
     # We want to unload any python modules that get loaded
     # because we plan to mutate them and want them to be reloaded
     modules = dict(sys.modules)
@@ -35,13 +44,13 @@ def gather_coverage(runner, source_files):
     cov = coverage.Coverage(source=[str(mutants_path.absolute())], data_file=None)
     with cov.collect():
         runner.prepare_main_test_run()
-        runner.run_tests(mutant_name=None, tests=None)
+        runner.run_tests(mutant_name=None, tests=[])
 
     # Build mapping of filenames to covered lines
     # The CoverageData object is a wrapper around sqlite, and this
     # will make it more efficient to access the data
-    covered_lines = {}
-    coverage_data = cov.get_data()
+    covered_lines: dict[str, set[int]] = {}
+    coverage_data: CoverageData = cov.get_data()
 
     for filename in source_files:
         abs_filename = str((mutants_path / filename).absolute())
@@ -49,7 +58,7 @@ def gather_coverage(runner, source_files):
         if lines is None:
             # file was not imported during test run, e.g. because test selection excluded this file
             lines = []
-        covered_lines[abs_filename] = list(lines)
+        covered_lines[abs_filename] = set(lines)
 
     _unload_modules_not_in(modules)
 
@@ -57,7 +66,7 @@ def gather_coverage(runner, source_files):
 
 
 # Unloads modules that are not in the 'modules' list
-def _unload_modules_not_in(modules):
+def _unload_modules_not_in(modules: dict[str, ModuleType]) -> None:
     for name in list(sys.modules):
         if name == "mutmut.code_coverage":
             continue

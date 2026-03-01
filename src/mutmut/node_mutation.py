@@ -233,6 +233,7 @@ def operator_assignment(
     if not node.value:
         # do not mutate `a: sometype` to an assignment `a: sometype = ""`
         return
+    mutated_value: cst.BaseExpression
     if m.matches(node.value, m.Name("None")):
         mutated_value = cst.SimpleString('""')
     else:
@@ -250,8 +251,8 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
 
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
-    (cst.BaseNumber, operator_number),
-    (cst.BaseString, operator_string),
+    (cst.BaseNumber, operator_number),  # type: ignore[type-abstract]
+    (cst.BaseString, operator_string),  # type: ignore[type-abstract]
     (cst.Name, operator_name),
     (cst.Assign, operator_assignment),
     (cst.AnnAssign, operator_assignment),
@@ -262,8 +263,8 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.Call, operator_symmetric_string_methods_swap),
     (cst.Call, operator_unsymmetrical_string_methods_swap),
     (cst.Lambda, operator_lambda),
-    (cst.CSTNode, operator_keywords),
-    (cst.CSTNode, operator_swap_op),
+    (cst.CSTNode, operator_keywords),  # type: ignore[type-abstract]
+    (cst.CSTNode, operator_swap_op),  # type: ignore[type-abstract]
     (cst.Match, operator_match),
 ]
 
