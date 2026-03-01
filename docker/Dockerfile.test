@@ -1,0 +1,14 @@
+FROM python:3.10.19-slim-trixie AS base
+
+WORKDIR /mutmut
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+
+COPY . .
+
+RUN uv sync --group dev
+
+ENTRYPOINT ["uv", "run", "pytest"]
+CMD ["--verbose"]
