@@ -25,6 +25,15 @@ We use `inline-snapshot` for E2E and integration tests, to prevent unexpected ch
 
 If pytest terminates before reporting the test failures, it likely hit a case where mutmut calls `os._exit(...)`. Try looking at these calls first for troubleshooting.
 
+Running the tests in a container
+--------------------------------
+
+Tests are run in CI using a Linux container, if you are not running natively on Linux, you can run the tests in a container using the following script:
+
+.. code-block:: console
+
+    ./scripts/run_tests.sh
+
 Running your local version of Mutmut against a test codebase
 ------------------------------------------------------------
 
