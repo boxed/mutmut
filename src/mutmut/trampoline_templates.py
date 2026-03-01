@@ -1,7 +1,7 @@
 CLASS_NAME_SEPARATOR = "ǁ"
 
 
-def create_trampoline_lookup(*, orig_name, mutants, class_name):
+def create_trampoline_lookup(*, orig_name: str, mutants: list[str], class_name: str | None) -> str:
     mangled_name = mangle_function_name(name=orig_name, class_name=class_name)
 
     mutants_dict = (
@@ -15,7 +15,7 @@ def create_trampoline_lookup(*, orig_name, mutants, class_name):
 """
 
 
-def mangle_function_name(*, name, class_name):
+def mangle_function_name(*, name: str, class_name: str | None) -> str:
     assert CLASS_NAME_SEPARATOR not in name
     if class_name:
         assert CLASS_NAME_SEPARATOR not in class_name

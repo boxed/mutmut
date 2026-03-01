@@ -26,7 +26,7 @@ NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
 class Mutation:
     original_node: cst.CSTNode
     mutated_node: cst.CSTNode
-    contained_by_top_level_function: cst.FunctionDef | None
+    contained_by_top_level_function: cst.CSTNode | None
 
 
 def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
@@ -51,7 +51,7 @@ def create_mutations(code: str, covered_lines: set[int] | None = None) -> tuple[
     return module, visitor.mutations
 
 
-class OuterFunctionProvider(cst.BatchableMetadataProvider):
+class OuterFunctionProvider(cst.BatchableMetadataProvider[cst.CSTNode | None]):
     """Link all nodes to the top-level function or method that contains them.
 
     For instance given this module:
@@ -65,10 +65,10 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider):
     Then `self.get_metadata(OuterFunctionProvider, <x>)` returns `<foo>`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
-    def visit_Module(self, node: cst.Module):
+    def visit_Module(self, node: cst.Module) -> bool | None:
         for child in node.body:
             if isinstance(child, cst.FunctionDef):
                 # mark all nodes inside the function to belong to this function
@@ -90,7 +90,7 @@ class OuterFunctionVisitor(cst.CSTVisitor):
         self.top_level_node = top_level_node
         super().__init__()
 
-    def on_visit(self, node: cst.CSTNode):
+    def on_visit(self, node: cst.CSTNode) -> bool:
         self.provider.set_metadata(node, self.top_level_node)
         return True
 
@@ -109,7 +109,7 @@ class MutationVisitor(cst.CSTVisitor):
         self._ignored_lines = ignore_lines
         self._covered_lines = covered_lines
 
-    def on_visit(self, node):
+    def on_visit(self, node: cst.CSTNode) -> bool:
         if self._skip_node_and_children(node):
             return False
 
@@ -119,18 +119,18 @@ class MutationVisitor(cst.CSTVisitor):
         # continue to mutate children
         return True
 
-    def _create_mutations(self, node: cst.CSTNode):
+    def _create_mutations(self, node: cst.CSTNode) -> None:
         for t, operator in self._operators:
             if isinstance(node, t):
                 for mutated_node in operator(node):
                     mutation = Mutation(
                         original_node=node,
                         mutated_node=mutated_node,
-                        contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None),  # type: ignore
+                        contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None),
                     )
                     self.mutations.append(mutation)
 
-    def _should_mutate_node(self, node: cst.CSTNode):
+    def _should_mutate_node(self, node: cst.CSTNode) -> bool:
         # currently, the position metadata does not always exist
         # (see https://github.com/Instagram/LibCST/issues/1322)
         position = self.get_metadata(PositionProvider, node, None)
@@ -145,7 +145,7 @@ class MutationVisitor(cst.CSTVisitor):
 
         return True
 
-    def _skip_node_and_children(self, node: cst.CSTNode):
+    def _skip_node_and_children(self, node: cst.CSTNode) -> bool:
         if (
             isinstance(node, cst.Call)
             and isinstance(node.func, cst.Name)
@@ -266,9 +266,9 @@ def function_trampoline_arrangement(
     for i, mutant in enumerate(mutants):
         mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
-        mutated_method = function.with_changes(name=cst.Name(mutant_name))
-        mutated_method = deep_replace(mutated_method, mutant.original_node, mutant.mutated_node)
-        nodes.append(mutated_method)  # type: ignore
+        mutated_method_base = function.with_changes(name=cst.Name(mutant_name))
+        mutated_method_result = deep_replace(mutated_method_base, mutant.original_node, mutant.mutated_node)
+        nodes.append(mutated_method_result)  # type: ignore[arg-type]
 
     mutants_dict = list(
         cst.parse_module(create_trampoline_lookup(orig_name=name, mutants=mutant_names, class_name=class_name)).body
@@ -330,7 +330,7 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
         is_generator = _is_generator(function)
         if is_generator:
             # async for i in _mutmut_trampoline(...): yield i
-            result_statement = cst.For(
+            result_statement = cst.For(  # type: ignore[assignment]
                 target=cst.Name("i"),
                 iter=result,
                 body=cst.IndentedBlock([cst.SimpleStatementLine([cst.Expr(cst.Yield(cst.Name("i")))])]),
@@ -356,7 +356,7 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
     """Get all statements until we encounter the first function or class definition"""
-    result = []
+    result: list[MODULE_STATEMENT] = []
 
     for stmt in statements:
         if m.matches(stmt, m.FunctionDef() | m.ClassDef()):
@@ -385,7 +385,7 @@ def pragma_no_mutate_lines(source: str) -> set[int]:
 
 def deep_replace(tree: cst.CSTNode, old_node: cst.CSTNode, new_node: cst.CSTNode) -> cst.CSTNode:
     """Like the CSTNode.deep_replace method, except that we only replace up to one occurrence of old_node."""
-    return tree.visit(ChildReplacementTransformer(old_node, new_node))  # type: ignore
+    return tree.visit(ChildReplacementTransformer(old_node, new_node))  # type: ignore[return-value]
 
 
 class ChildReplacementTransformer(cst.CSTTransformer):
@@ -400,7 +400,7 @@ class ChildReplacementTransformer(cst.CSTTransformer):
         # Also, we stop recursion when we already replaced the node.
         return not (self.replaced_node or node is self.old_node)
 
-    def on_leave(self, original_node: cst.CSTNode, updated_node: cst.CSTNode) -> cst.CSTNode:
+    def on_leave(self, original_node: cst.CSTNode, updated_node: cst.CSTNode) -> cst.CSTNode:  # type: ignore[override]
         if original_node is self.old_node:
             self.replaced_node = True
             return self.new_node
@@ -422,11 +422,12 @@ class IsGeneratorVisitor(cst.CSTVisitor):
         self.is_generator = False
         self.original_function: cst.FunctionDef = original_function
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
         # do not recurse into inner function definitions
         if self.original_function != node:
             return False
+        return None
 
-    def visit_Yield(self, node):
+    def visit_Yield(self, node: cst.Yield) -> bool:
         self.is_generator = True
         return False
