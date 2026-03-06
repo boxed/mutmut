@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any
 from typing import cast
 
@@ -12,13 +13,48 @@ import libcst.matchers as m
 
 OPERATORS_TYPE = Sequence[
     tuple[
-        type[cst.CSTNode],
+        type,
         Callable[[Any], Iterable[cst.CSTNode]],
     ]
 ]
 
 # pattern to match (nearly) all chars in a string that are not part of an escape sequence
 NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
+
+
+class MethodType(Enum):
+    """Type of method based on its decorator."""
+
+    STATICMETHOD = "staticmethod"
+    CLASSMETHOD = "classmethod"
+    INSTANCE = "instance"
+
+
+def get_method_type(method: cst.FunctionDef) -> MethodType | None:
+    """Determine the method type based on decorators.
+
+    Returns:
+        MethodType.STATICMETHOD - for @staticmethod
+        MethodType.CLASSMETHOD - for @classmethod
+        MethodType.INSTANCE - for no decorators (regular instance method)
+        None - for other/multiple decorators (should be skipped)
+    """
+    if not method.decorators:
+        return MethodType.INSTANCE
+
+    if len(method.decorators) != 1:
+        # Multiple decorators - skip
+        return None
+
+    decorator = method.decorators[0].decorator
+    if isinstance(decorator, cst.Name):
+        if decorator.value == "staticmethod":
+            return MethodType.STATICMETHOD
+        elif decorator.value == "classmethod":
+            return MethodType.CLASSMETHOD
+
+    # Other decorator - skip
+    return None
 
 
 def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
@@ -233,11 +269,10 @@ def operator_assignment(
     if not node.value:
         # do not mutate `a: sometype` to an assignment `a: sometype = ""`
         return
-    mutated_value: cst.BaseExpression
     if m.matches(node.value, m.Name("None")):
         mutated_value = cst.SimpleString('""')
     else:
-        mutated_value = cst.Name("None")
+        mutated_value = cst.Name("None")  # type: ignore[assignment]
 
     yield node.with_changes(value=mutated_value)
 
@@ -251,8 +286,8 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
 
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
-    (cst.BaseNumber, operator_number),  # type: ignore[type-abstract]
-    (cst.BaseString, operator_string),  # type: ignore[type-abstract]
+    (cst.BaseNumber, operator_number),
+    (cst.BaseString, operator_string),
     (cst.Name, operator_name),
     (cst.Assign, operator_assignment),
     (cst.AnnAssign, operator_assignment),
@@ -263,8 +298,8 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.Call, operator_symmetric_string_methods_swap),
     (cst.Call, operator_unsymmetrical_string_methods_swap),
     (cst.Lambda, operator_lambda),
-    (cst.CSTNode, operator_keywords),  # type: ignore[type-abstract]
-    (cst.CSTNode, operator_swap_op),  # type: ignore[type-abstract]
+    (cst.CSTNode, operator_keywords),
+    (cst.CSTNode, operator_swap_op),
     (cst.Match, operator_match),
 ]
 
@@ -279,3 +314,5 @@ def _simple_mutation_mapping(
 
 
 # TODO: detect regexes and mutate them in nasty ways? Maybe mutate all strings as if they are regexes
+
+# TODO: implement removal of inner decorators

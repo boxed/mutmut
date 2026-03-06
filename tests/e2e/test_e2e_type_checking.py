@@ -16,8 +16,8 @@ def test_type_checking_result_snapshot():
                 "type_checking.xǁPersonǁset_name__mutmut_1": 37,
                 "type_checking.x_mutate_me__mutmut_1": 37,
                 "type_checking.x_mutate_me__mutmut_2": 37,
-                "type_checking.x_mutate_me__mutmut_3": 1,
-                "type_checking.x_mutate_me__mutmut_4": 1,
+                "type_checking.x_mutate_me__mutmut_3": 37,
+                "type_checking.x_mutate_me__mutmut_4": 37,
                 "type_checking.x_mutate_me__mutmut_5": 37,
             }
         }
