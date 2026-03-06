@@ -208,6 +208,25 @@ to failing tests.
     debug=true
 
 
+Disable setproctitle (macOS)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mutmut uses ``setproctitle`` to show the current mutant name in the process
+list, which is helpful for monitoring long runs. However, ``setproctitle``
+uses CoreFoundation APIs on macOS that are not fork-safe, causing segfaults
+in child processes.
+
+By default, mutmut automatically disables ``setproctitle`` on macOS and
+enables it on other platforms. If you need to override this (e.g. to enable it on
+macOS at your own risk, or to disable it on other platforms), set ``use_setproctitle``:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    use_setproctitle = false
+
+
 Whitelisting
 ~~~~~~~~~~~~
 

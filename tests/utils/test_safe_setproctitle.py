@@ -8,18 +8,17 @@ When setproctitle is fixed upstream, this test will fail and we can remove the w
 import os
 import platform
 import signal
-import sys
 
 import pytest
 from setproctitle import setproctitle
 
 from mutmut.utils.safe_setproctitle import safe_setproctitle
 
-# Only run this test on macOS with Python 3.14+
-IS_MACOS_314 = sys.version_info >= (3, 14) and platform.system() == "Darwin"
+# Only run this test on macOS
+IS_MACOS = platform.system() == "Darwin"
 
 
-@pytest.mark.skipif(not IS_MACOS_314, reason="setproctitle only crashes after fork on macOS Python 3.14+")
+@pytest.mark.skipif(not IS_MACOS, reason="setproctitle only crashes after fork on macOS")
 def test_setproctitle_crashes_after_fork_with_corefoundation_loaded():
     """Verify setproctitle segfaults after fork when CoreFoundation is loaded.
 
@@ -63,7 +62,7 @@ def test_setproctitle_crashes_after_fork_with_corefoundation_loaded():
             )
 
 
-@pytest.mark.skipif(not IS_MACOS_314, reason="safe_setproctitle workaround only applies to macOS Python 3.14+")
+@pytest.mark.skipif(not IS_MACOS, reason="safe_setproctitle workaround only applies to macOS")
 def test_safe_setproctitle_does_not_crash_after_fork():
     """Verify our safe_setproctitle wrapper doesn't crash after fork."""
     pid = os.fork()

@@ -6,16 +6,14 @@ Calling setproctitle after fork() causes segfaults in the child process.
 This module provides a safe_setproctitle() function that:
 - Works normally on Linux
 - Is a no-op on macOS to avoid crashes after fork()
+
+Related: https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055
 """
 
-import platform
-import sys
+from mutmut.configuration import Config
 
-from setproctitle import setproctitle as _setproctitle
-
-_use_setproctitle = not (sys.version_info >= (3, 10) and platform.system() == "Darwin")
-
-if _use_setproctitle:
+if Config.get().use_setproctitle:
+    from setproctitle import setproctitle as _setproctitle
 
     def safe_setproctitle(title: str) -> None:
         """Set the process title."""

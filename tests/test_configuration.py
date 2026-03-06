@@ -65,6 +65,7 @@ class TestShouldIgnoreForMutation:
             tests_dir=[],
             mutate_only_covered_lines=False,
             type_check_command=[],
+            use_setproctitle=False,
         )
         assert config.should_ignore_for_mutation("foo.txt") is True
         assert config.should_ignore_for_mutation("foo.js") is True
@@ -82,6 +83,7 @@ class TestShouldIgnoreForMutation:
             tests_dir=[],
             mutate_only_covered_lines=False,
             type_check_command=[],
+            use_setproctitle=False,
         )
         assert config.should_ignore_for_mutation("foo.py") is False
         assert config.should_ignore_for_mutation("src/foo.py") is False
@@ -98,6 +100,7 @@ class TestShouldIgnoreForMutation:
             tests_dir=[],
             mutate_only_covered_lines=False,
             type_check_command=[],
+            use_setproctitle=False,
         )
         assert config.should_ignore_for_mutation("foo.py") is True
         assert config.should_ignore_for_mutation("bar.py") is False
@@ -114,6 +117,7 @@ class TestShouldIgnoreForMutation:
             tests_dir=[],
             mutate_only_covered_lines=False,
             type_check_command=[],
+            use_setproctitle=False,
         )
         assert config.should_ignore_for_mutation("tests/test_foo.py") is True
         assert config.should_ignore_for_mutation("src/ignore_me.py") is True
@@ -131,6 +135,7 @@ class TestShouldIgnoreForMutation:
             tests_dir=[],
             mutate_only_covered_lines=False,
             type_check_command=[],
+            use_setproctitle=False,
         )
         assert config.should_ignore_for_mutation(Path("foo.py")) is True
         assert config.should_ignore_for_mutation(Path("bar.py")) is False

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import platform
 import sys
 from collections.abc import Callable
 from configparser import ConfigParser
@@ -110,6 +111,9 @@ def _load_config() -> Config:
         pytest_add_cli_args=s("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=s("pytest_add_cli_args_test_selection", []),
         type_check_command=s("type_check_command", []),
+        use_setproctitle=s(
+            "use_setproctitle", not platform.system() == "Darwin"
+        ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
     )
 
 
@@ -128,6 +132,7 @@ class Config:
     tests_dir: list[str]
     mutate_only_covered_lines: bool
     type_check_command: list[str]
+    use_setproctitle: bool
 
     def should_ignore_for_mutation(self, path: Path | str) -> bool:
         path_str = str(path)
