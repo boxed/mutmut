@@ -57,6 +57,7 @@ from time import sleep
 import click
 import libcst as cst
 from rich.text import Text
+from setproctitle import setproctitle
 
 import mutmut
 from mutmut.code_coverage import gather_coverage
@@ -613,6 +614,14 @@ class PytestRunner(TestRunner):
             raise BadTestExecutionCommandsException(params)
         return exit_code
 
+    def _pytest_args_regular_run(self, tests: Iterable[str]) -> list[str]:
+        pytest_args = ["-x", "-q", "-p", "no:randomly", "-p", "no:random-order"]
+        if tests:
+            pytest_args += list(tests)
+        else:
+            pytest_args += self._pytest_add_cli_args_test_selection
+        return pytest_args
+
     def run_stats(self, *, tests: Iterable[str]) -> int:
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
@@ -632,40 +641,20 @@ class PytestRunner(TestRunner):
 
         stats_collector = StatsCollector()
 
-        pytest_args = ["-x", "-q"]
-        if tests:
-            pytest_args += list(tests)
-        else:
-            pytest_args += self._pytest_add_cli_args_test_selection
         with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args, plugins=[stats_collector]))
+            return int(self.execute_pytest(self._pytest_args_regular_run(tests), plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
-        pytest_args = ["-x", "-q", "-p", "no:randomly", "-p", "no:random-order"]
-        if tests:
-            pytest_args += list(tests)
-        else:
-            pytest_args += self._pytest_add_cli_args_test_selection
         with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args))
+            return int(self.execute_pytest(self._pytest_args_regular_run(tests)))
 
     def collect_main_test_coverage(self, cov: Coverage) -> int:
         with change_cwd("mutants"), cov.collect():
             self.prepare_main_test_run()
-            pytest_args = [
-                "-x",
-                "-q",
-                "-p",
-                "no:randomly",
-                "-p",
-                "no:random-order",
-            ] + self._pytest_add_cli_args_test_selection
-            return int(self.execute_pytest(pytest_args))
+            return int(self.execute_pytest(self._pytest_args_regular_run([])))
 
     def run_forced_fail(self) -> int:
-        pytest_args = ["-x", "-q"] + self._pytest_add_cli_args_test_selection
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(pytest_args))
+        return self.run_tests(mutant_name=None, tests=[])
 
     def list_all_tests(self) -> ListAllTestsResult:
         class TestsCollector:
@@ -996,6 +985,7 @@ def load_config() -> Config:
             Path("setup.cfg"),
             Path("pyproject.toml"),
             Path("pytest.ini"),
+            Path(".coveragerc"),
             Path(".gitignore"),
         ]
         + list(Path(".").glob("test*.py")),
@@ -1389,6 +1379,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             if not pid:
                 # In the child
                 os.environ["MUTANT_UNDER_TEST"] = mutant_name
+                setproctitle(f"mutmut: {mutant_name}")
 
                 # Run fast tests first
                 sorted_tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
