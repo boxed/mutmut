@@ -56,7 +56,6 @@ from time import sleep
 import click
 import libcst as cst
 from rich.text import Text
-from setproctitle import setproctitle
 
 import mutmut
 from mutmut.code_coverage import gather_coverage
@@ -641,6 +640,19 @@ class PytestRunner(TestRunner):
         else:
             pytest_args += self._pytest_add_cli_args_test_selection
         with change_cwd("mutants"):
+            return int(self.execute_pytest(pytest_args))
+
+    def collect_main_test_coverage(self, cov: Any) -> int:
+        with change_cwd("mutants"), cov.collect():
+            self.prepare_main_test_run()
+            pytest_args = [
+                "-x",
+                "-q",
+                "-p",
+                "no:randomly",
+                "-p",
+                "no:random-order",
+            ] + self._pytest_add_cli_args_test_selection
             return int(self.execute_pytest(pytest_args))
 
     def run_forced_fail(self) -> int:
@@ -1370,7 +1382,6 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             if not pid:
                 # In the child
                 os.environ["MUTANT_UNDER_TEST"] = mutant_name
-                setproctitle(f"mutmut: {mutant_name}")
 
                 # Run fast tests first
                 sorted_tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])

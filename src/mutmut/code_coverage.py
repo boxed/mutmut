@@ -41,10 +41,8 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> dict[st
     mutants_path = Path("mutants")
 
     # Run the tests and gather coverage
-    cov = coverage.Coverage(source=[str(mutants_path.absolute())], data_file=None)
-    with cov.collect():
-        runner.prepare_main_test_run()
-        runner.run_tests(mutant_name=None, tests=[])
+    cov = coverage.Coverage(data_file=None)
+    runner.collect_main_test_coverage(cov)
 
     # Build mapping of filenames to covered lines
     # The CoverageData object is a wrapper around sqlite, and this

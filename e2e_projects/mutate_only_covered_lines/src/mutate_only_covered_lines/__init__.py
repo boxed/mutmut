@@ -1,3 +1,5 @@
+from mutate_only_covered_lines.omit_me import this_function_shall_NOT_be_mutated
+
 def hello_mutate_only_covered_lines(simple_branch: bool) -> str:
     if simple_branch:
         return "Hello from mutate_only_covered_lines! (true)"
@@ -40,3 +42,6 @@ def mutate_only_covered_lines_multiline(simple_branch: bool) -> str:
         ]
         return f"Hello from mutate_only_covered_lines!" \
             f" (false) {x} {y}"
+
+def do_not_mutate_external_ommited_function():
+    return this_function_shall_NOT_be_mutated()
