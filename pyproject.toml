@@ -95,7 +95,6 @@ ignore = [
     "F402",  # import shadowed by loop variable
     "F841",  # local variable assigned but never used
     "UP007", # use X | Y for type annotations
-    "UP038", # use X | Y in isinstance
 ]
 
 [tool.ruff.lint.isort]

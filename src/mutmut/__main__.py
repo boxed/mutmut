@@ -5,6 +5,7 @@ import platform
 import sys
 from collections.abc import Iterable
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 from typing import Any
 
 from mutmut.type_checking import TypeCheckingError
@@ -62,6 +63,9 @@ from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.file_mutation import mutate_file_contents
 from mutmut.trampoline_templates import CLASS_NAME_SEPARATOR
+
+if TYPE_CHECKING:
+    from coverage import Coverage
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
@@ -539,6 +543,9 @@ class TestRunner(ABC):
     def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
         raise NotImplementedError()
 
+    def collect_main_test_coverage(self, cov: Coverage) -> int:
+        raise NotImplementedError()
+
     def list_all_tests(self) -> ListAllTestsResult:
         raise NotImplementedError()
 
@@ -642,7 +649,7 @@ class PytestRunner(TestRunner):
         with change_cwd("mutants"):
             return int(self.execute_pytest(pytest_args))
 
-    def collect_main_test_coverage(self, cov: Any) -> int:
+    def collect_main_test_coverage(self, cov: Coverage) -> int:
         with change_cwd("mutants"), cov.collect():
             self.prepare_main_test_run()
             pytest_args = [
