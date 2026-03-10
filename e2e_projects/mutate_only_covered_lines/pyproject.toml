@@ -16,6 +16,11 @@ dev = [
     "pytest>=8.3.5",
 ]
 
+[tool.coverage.run]
+omit = [
+    "src/mutate_only_covered_lines/omit_me.py",
+]
+
 [tool.mutmut]
 debug = true
 mutate_only_covered_lines = true

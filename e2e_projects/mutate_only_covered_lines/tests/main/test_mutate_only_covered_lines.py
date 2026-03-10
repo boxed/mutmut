@@ -1,5 +1,5 @@
 from mutate_only_covered_lines.ignore_me import this_function_shall_NOT_be_mutated
-from mutate_only_covered_lines import hello_mutate_only_covered_lines, mutate_only_covered_lines_multiline, function_with_pragma
+from mutate_only_covered_lines import hello_mutate_only_covered_lines, mutate_only_covered_lines_multiline, function_with_pragma, do_not_mutate_external_ommited_function
 
 """This tests the mutate_only_covered_lines feature."""
 
@@ -14,3 +14,6 @@ def test_mutate_only_covered_lines_multiline():
 
 def call_ignored_function():
     assert this_function_shall_NOT_be_mutated() == 3
+
+def test_do_not_mutate_external_ommited_function():
+    assert do_not_mutate_external_ommited_function() == 7

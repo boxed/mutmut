@@ -42,6 +42,7 @@ def test_mutate_only_covered_lines_result_snapshot():
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_30": 1,
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_31": 1,
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_32": 1,
-            }
+            },
+            "mutants/src/mutate_only_covered_lines/omit_me.py.meta": {},
         }
     )
