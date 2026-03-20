@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from mutmut.utils.file_utils import change_cwd
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 from mutmut.utils.format_utils import strip_prefix
 
 if platform.system() == "Windows":
@@ -63,7 +65,6 @@ from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import MutationMetadata
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.threading.timeout import register_timeout
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
 
@@ -574,24 +575,6 @@ class HammettRunner(TestRunner):
 
         hammett.Config.workerinput = dict(workerinput=f"_{mutant_name}")
         return int(hammett.main_run_tests(**self.hammett_kwargs, tests=tests))
-
-
-def mangled_name_from_mutant_name(mutant_name: str) -> str:
-    assert "__mutmut_" in mutant_name, mutant_name
-    return mutant_name.partition("__mutmut_")[0]
-
-
-def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
-    r = mangled_name_from_mutant_name(mutant_name)
-    _, _, r = r.rpartition(".")
-    class_name = None
-    if CLASS_NAME_SEPARATOR in r:
-        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1 : r.rindex(CLASS_NAME_SEPARATOR)]
-        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1 :]
-    else:
-        assert r.startswith("x_"), r
-        r = r[2:]
-    return r, class_name
 
 
 spinner = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")

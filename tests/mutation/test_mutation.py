@@ -13,8 +13,8 @@ from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.mutation.file_mutation import _create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
-from mutmut.mutation.trampoline_templates import mangle_function_name
+from mutmut.utils.format_utils import CLASS_NAME_SEPARATOR
+from mutmut.utils.format_utils import mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
