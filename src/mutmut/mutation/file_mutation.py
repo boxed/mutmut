@@ -27,13 +27,13 @@ from mutmut.mutation.mutators import MethodType
 from mutmut.mutation.mutators import get_method_type
 from mutmut.mutation.mutators import operator_swap_op
 from mutmut.mutation.pragma_handling import PragmaVisitor
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.mutation.trampoline_templates import build_enum_trampoline
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import trampoline_impl
 from mutmut.type_checking import TypeCheckingError
 from mutmut.type_checking import run_type_checker
 from mutmut.utils.file_utils import change_cwd
+from mutmut.utils.format_utils import CLASS_NAME_SEPARATOR
 from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import is_mutated_method_name
 from mutmut.utils.format_utils import mangle_function_name

@@ -1127,11 +1127,15 @@ from __future__ import division
 import lib
 
 lib.foo()
+import os # type: ignore # mutmut generated
 from collections.abc import Sequence # type: ignore # mutmut generated
 from typing import Annotated # type: ignore # mutmut generated
 from typing import Callable # type: ignore # mutmut generated
 from typing import ClassVar # type: ignore # mutmut generated
 from typing import TypeVar # type: ignore # mutmut generated
+from mutmut.core import MutmutProgrammaticFailException # type: ignore # mutmut generated
+from mutmut.core import record_trampoline_hit # type: ignore # mutmut generated
+from mutmut.core import MutmutCallStack # type: ignore # mutmut generated
 
 TReturn = TypeVar('TReturn') # type: ignore # mutmut generated
 MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"] # type: ignore # mutmut generated
@@ -1139,7 +1143,6 @@ MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"] # type: igno
 
 def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_args: Sequence, call_kwargs: dict, self_arg = None) -> TReturn: # type: ignore # mutmut generated
     """Forward call to original or mutated function, depending on the environment""" # type: ignore # mutmut generated
-    import os # type: ignore # mutmut generated
     mutant_under_test = os.environ.get('MUTANT_UNDER_TEST', '') # type: ignore # mutmut generated
     if not mutant_under_test: # type: ignore # mutmut generated
         # No mutant being tested - call original function
@@ -1148,17 +1151,40 @@ def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_a
         else: # type: ignore # mutmut generated
             return orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
     if mutant_under_test == 'fail': # type: ignore # mutmut generated
-        from mutmut.__main__ import MutmutProgrammaticFailException # type: ignore # mutmut generated
         raise MutmutProgrammaticFailException('Failed programmatically') # type: ignore # mutmut generated
     elif mutant_under_test == 'stats': # type: ignore # mutmut generated
-        from mutmut.__main__ import record_trampoline_hit # type: ignore # mutmut generated
-        record_trampoline_hit(orig.__module__ + '.' + orig.__name__) # type: ignore # mutmut generated
-        # Check if orig is a bound method (has __self__) or plain function
-        if self_arg is not None and not hasattr(orig, '__self__'): # type: ignore # mutmut generated
-            result = orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+        my_name = orig.__module__ + '.' + orig.__name__ # type: ignore # mutmut generated
+        # Normalize module names - strip 'mutants.' prefix for consistency with test mappings
+        if my_name.startswith('mutants.'): # type: ignore # mutmut generated
+            my_name = my_name[8:]  # len('mutants.') == 8 # type: ignore # mutmut generated
+
+        caller_name, depth = MutmutCallStack.get() # type: ignore # mutmut generated
+
+        # Also normalize caller name
+        if caller_name and caller_name.startswith('mutants.'): # type: ignore # mutmut generated
+            caller_name = caller_name[8:] # type: ignore # mutmut generated
+
+        max_depth = int(os.environ.get("MUTMUT_DEPENDENCY_DEPTH", "-1")) # type: ignore # mutmut generated
+
+        if max_depth == -1 or depth < max_depth: # type: ignore # mutmut generated
+            record_trampoline_hit(my_name, caller=caller_name) # type: ignore # mutmut generated
+
+            token = MutmutCallStack.set((my_name, depth + 1)) # type: ignore # mutmut generated
+            try: # type: ignore # mutmut generated
+                if self_arg is not None and not hasattr(orig, "__self__"): # type: ignore # mutmut generated
+                    result = orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+                else: # type: ignore # mutmut generated
+                    result = orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
+                return result # type: ignore # mutmut generated
+            finally: # type: ignore # mutmut generated
+                MutmutCallStack.reset(token) # type: ignore # mutmut generated
         else: # type: ignore # mutmut generated
-            result = orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
-        return result # type: ignore # mutmut generated
+            # Depth exceeded — still call but don't track deeper
+            if self_arg is not None and not hasattr(orig, "__self__"): # type: ignore # mutmut generated
+                result = orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+            else: # type: ignore # mutmut generated
+                result = orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
+            return result # type: ignore # mutmut generated
     prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_' # type: ignore # mutmut generated
     if not mutant_under_test.startswith(prefix): # type: ignore # mutmut generated
         # Check if orig is a bound method (has __self__) or plain function

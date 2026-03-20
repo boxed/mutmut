@@ -78,16 +78,17 @@ source code. When you modify a function, mutmut detects the change and
 automatically re-tests all mutants in that function. Unchanged functions keep
 their previous results.
 
-**Limitation:** Change detection only tracks direct function changes, not
-transitive dependencies. If function A calls function B, and you modify B,
-mutants in A are not automatically re-tested. For significant changes to
-shared utilities, use ``mutmut run "module*"`` to re-test affected modules,
-or delete the ``mutants/`` directory for a full re-run.
+**Dependency tracking:** Mutmut tracks which functions call which other functions
+during stats collection. When a function changes, mutmut automatically invalidates
+and re-tests mutants in all functions that depend on it (transitively). For example,
+if function A calls B which calls C, and you modify C, mutants in A, B, and C are
+all re-tested.
 
 This means you can:
 
 - Run ``mutmut run``, stop partway through, and continue later
 - Modify your source code and re-run - only changed functions are re-tested
+- Update shared utilities and have dependent functions automatically re-tested
 - Update your tests and use ``mutmut browse`` to selectively re-test mutants
 
 The mutation data is stored in the ``mutants/`` directory. Delete this
@@ -166,6 +167,59 @@ if the stack depth from the test to the function is below some limit. In your
 A lower value will increase mutation speed and lead to more localized tests,
 but will also lead to more surviving mutants that would otherwise have been
 caught.
+
+
+Dependency tracking
+~~~~~~~~~~~~~~~~~~~
+
+Mutmut automatically tracks function call dependencies during stats collection.
+When a function's code changes, all functions that depend on it (transitively)
+are also invalidated and re-tested. This is enabled by default.
+
+To disable dependency tracking:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    track_dependencies = false
+
+You can also limit the depth of dependency tracking (defaults to ``max_stack_depth``):
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    dependency_tracking_depth = 5
+
+The dependency graph is stored in ``mutants/mutmut-stats.json`` under the
+``function_dependencies`` key.
+
+**Config change detection:**
+
+Mutmut automatically detects when dependency tracking configuration changes
+between runs. If you enable/disable tracking or change the depth, mutmut will
+re-collect stats to ensure the dependency graph matches your current settings.
+This avoids both missed invalidations (too few edges) and unnecessary test runs
+(too many edges).
+
+**Performance considerations:**
+
+For large codebases, be aware of the overhead at each phase:
+
+- **Mutant generation:** The BFS expansion runs once per ``mutmut run`` when
+  changes are detected. Complexity is O(changed + edges), typically milliseconds
+  even for graphs with 10,000+ functions.
+
+- **Stats collection:** Adds ~1-5% overhead. Each function call records a single
+  edge (caller → callee) via a ContextVar lookup and set insertion—both O(1).
+  The depth check is a simple integer comparison.
+
+- **Storage:** The dependency graph adds to ``mutmut-stats.json``. A codebase
+  with 10,000 functions and 50,000 call edges adds roughly 1-2 MB.
+
+- **Memory:** The in-memory graph uses ~100 bytes per edge. 50,000 edges ≈ 5 MB.
+
+If you experience issues in very large monorepos, you can limit tracking depth
+with ``dependency_tracking_depth`` or disable entirely with ``track_dependencies = false``.
 
 
 Exclude files from mutation

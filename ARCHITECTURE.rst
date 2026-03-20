@@ -19,7 +19,7 @@ The mutated files contains the original code and the mutants. With the ``MUTANT_
 Collecting tests and stats
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-We collect a list of all tests and execute them. In this test run, we track which tests would execute which mutants, and how long they take. We use both stats for performance optimizations later on. The results are stored in ``mutants/mutmut-stats.json`` and global variables.
+We collect a list of all tests and execute them. In this test run, we track which tests would execute which mutants, and how long they take. We also track function call dependencies (which functions call which other functions) for cascading invalidation when code changes. We use these stats for performance optimizations later on. The results are stored in ``mutants/mutmut-stats.json`` and global variables.
 
 
 Collecting mutation results

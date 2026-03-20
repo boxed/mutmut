@@ -141,6 +141,8 @@ def _load_config() -> Config:
         use_setproctitle=s(
             "use_setproctitle", not platform.system() == "Darwin"
         ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
+        track_dependencies=s("track_dependencies", True),
+        dependency_tracking_depth=s("dependency_tracking_depth", None),
     )
 
 
@@ -162,6 +164,8 @@ class Config:
     timeout_constant: float
     type_check_command: list[str]
     use_setproctitle: bool
+    track_dependencies: bool
+    dependency_tracking_depth: int | None
 
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)
@@ -203,3 +207,7 @@ class Config:
     def reset() -> None:
         global _config
         _config = None
+
+
+class MutmutProgrammaticFailException(Exception):
+    pass
