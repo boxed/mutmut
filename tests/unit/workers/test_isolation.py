@@ -1,9 +1,13 @@
 """Tests for fork_isolation utilities."""
 
 import os
+from unittest.mock import patch
 
 import pytest
 
+from mutmut.models.mutant_status import MutantStatus
+from mutmut.workers.isolation import HotForkRunner
+from mutmut.workers.isolation import MutantResult
 from mutmut.workers.isolation import OrchestratorCrashError
 from mutmut.workers.isolation import run_in_fork
 from mutmut.workers.isolation import run_in_fork_with_result
@@ -177,3 +181,254 @@ class TestOrchestratorCrashError:
         assert exc_info.value.exit_code == 255
         assert exc_info.value.lost_mutants == ["test_mutant"]
         assert exc_info.value.crash_log == "/tmp/crash.log"
+
+
+class TestMutantResult:
+    """Tests for MutantResult dataclass."""
+
+    def test_basic_creation(self):
+        """MutantResult can be created with basic fields."""
+        result = MutantResult(
+            mutant_name="test__mutmut_1",
+            exit_code=0,
+            status=MutantStatus.SURVIVED,
+            duration=1.5,
+        )
+        assert result.mutant_name == "test__mutmut_1"
+        assert result.exit_code == 0
+        assert result.status == MutantStatus.SURVIVED
+        assert result.duration == 1.5
+        assert result.output is None
+
+    def test_with_output(self):
+        """MutantResult can include output."""
+        result = MutantResult(
+            mutant_name="test__mutmut_1",
+            exit_code=1,
+            status=MutantStatus.KILLED,
+            duration=0.5,
+            output="Test failed: assertion error",
+        )
+        assert result.output == "Test failed: assertion error"
+
+
+class TestHotForkRunner:
+    """Tests for HotForkRunner."""
+
+    @pytest.fixture
+    def mock_test_runner_class(self):
+        """Create a mock test runner class."""
+
+        class MockRunner:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def run_tests(self, mutant_name, tests):
+                # Return 0 for killed, 1 for survived
+                if "survive" in mutant_name:
+                    return 1
+                return 0
+
+            def warm_up(self):
+                pass
+
+        return MockRunner
+
+    def test_init_sets_attributes(self, mock_test_runner_class):
+        """__init__ sets all expected attributes."""
+        runner = HotForkRunner(
+            max_workers=4,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={"foo": "bar"},
+            debug=True,
+            max_restarts=5,
+        )
+
+        assert runner.max_workers == 4
+        assert runner.test_runner_class == mock_test_runner_class
+        assert runner.test_runner_args == {"foo": "bar"}
+        assert runner.debug is True
+        assert runner.max_restarts == 5
+
+    def test_init_defaults(self, mock_test_runner_class):
+        """__init__ has sensible defaults."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        assert runner.debug is False
+        assert runner.max_restarts == HotForkRunner.DEFAULT_MAX_RESTARTS
+        assert runner._pending == set()
+        assert runner._pending_work == {}
+        assert runner._shutting_down is False
+        assert runner._restart_count == 0
+
+    def test_has_capacity_respects_max_workers(self, mock_test_runner_class):
+        """has_capacity() is False when at max pending."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        runner._pending = set()
+        assert runner.has_capacity() is True
+
+        runner._pending = {"m1"}
+        assert runner.has_capacity() is True
+
+        runner._pending = {"m1", "m2"}
+        assert runner.has_capacity() is False
+
+        runner._pending = {"m1", "m2", "m3"}
+        assert runner.has_capacity() is False
+
+    def test_pending_count(self, mock_test_runner_class):
+        """pending_count() returns number of in-flight mutants."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        runner._pending = set()
+        assert runner.pending_count() == 0
+
+        runner._pending = {"a", "b", "c"}
+        assert runner.pending_count() == 3
+
+    def test_get_orchestrator_restart_count(self, mock_test_runner_class):
+        """get_orchestrator_restart_count() returns restart counter."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        assert runner.get_orchestrator_restart_count() == 0
+
+        runner._restart_count = 3
+        assert runner.get_orchestrator_restart_count() == 3
+
+    def test_get_active_workers_empty_when_no_orchestrator(self, mock_test_runner_class):
+        """get_active_workers() returns empty list when no orchestrator."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        assert runner.get_active_workers() == []
+
+    @pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
+    def test_startup_creates_orchestrator(self, mock_test_runner_class):
+        """startup() forks an orchestrator process."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        with patch("os.fork") as mock_fork:
+            mock_fork.return_value = 12345  # Parent sees child PID
+            with patch("os.pipe") as mock_pipe:
+                mock_pipe.side_effect = [(3, 4), (5, 6)]
+                with patch("os.close"):
+                    runner.startup()
+
+        assert runner.orchestrator_pid == 12345
+
+    def test_signal_work_complete_closes_pipe(self, mock_test_runner_class):
+        """signal_work_complete() closes the work pipe."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+
+        # Simulate that startup has been called
+        runner.work_pipe_write = 999
+
+        with patch("os.close") as mock_close:
+            runner.signal_work_complete()
+            mock_close.assert_called_once_with(999)
+
+        assert runner.work_pipe_write is None
+
+    def test_signal_work_complete_noop_when_already_closed(self, mock_test_runner_class):
+        """signal_work_complete() is a no-op when pipe already closed."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+        )
+        runner.work_pipe_write = None
+
+        with patch("os.close") as mock_close:
+            runner.signal_work_complete()  # Should not raise
+            mock_close.assert_not_called()
+
+    def test_orchestrator_crash_detection(self, mock_test_runner_class):
+        """Orchestrator crash raises OrchestratorCrashError after max restarts."""
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=mock_test_runner_class,
+            test_runner_args={},
+            max_restarts=0,  # No restarts allowed
+        )
+        runner.orchestrator_pid = 99999
+        runner._pending = {"lost_mutant"}
+
+        with patch("os.waitpid") as mock_wait:
+            # Simulate orchestrator exited with code 1
+            mock_wait.return_value = (99999, 256)  # exit code 1
+
+            with pytest.raises(OrchestratorCrashError) as exc_info:
+                runner._check_orchestrator_alive()
+
+            assert "lost_mutant" in exc_info.value.lost_mutants
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
+class TestHotForkRunnerIntegration:
+    """Integration tests for HotForkRunner (actually forks)."""
+
+    def test_full_lifecycle(self, tmp_path, monkeypatch):
+        """Full startup -> submit -> wait -> shutdown cycle."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mutants").mkdir()
+
+        class SimpleRunner:
+            def __init__(self):
+                pass
+
+            def run_tests(self, mutant_name, tests):
+                # Return 1 for killed (test fails), 0 for survived (test passes)
+                return 1 if "kill" in mutant_name else 0
+
+            def warm_up(self):
+                pass
+
+        runner = HotForkRunner(
+            max_workers=2,
+            test_runner_class=SimpleRunner,
+            test_runner_args={},
+        )
+
+        runner.startup()
+
+        try:
+            runner.submit("mutant_kill_1", ["test"], cpu_time_limit=30, estimated_time=1.0)
+
+            # Signal work complete before waiting for results
+            runner.signal_work_complete()
+
+            result = runner.wait_for_result(timeout=10.0)
+
+            assert result.mutant_name == "mutant_kill_1"
+            assert result.exit_code == 1  # killed (test failed)
+            assert result.status == MutantStatus.KILLED
+        finally:
+            runner.shutdown()

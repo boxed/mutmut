@@ -10,10 +10,36 @@ from configparser import ConfigParser
 from configparser import NoOptionError
 from configparser import NoSectionError
 from dataclasses import dataclass
+from enum import Enum
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 from typing import Any
+
+
+class ProcessIsolation(str, Enum):
+    """Valid values for process_isolation config.
+
+    Using str, Enum allows direct string comparison while providing
+    validation and IDE support.
+    """
+
+    FORK = "fork"  # Default: current behavior
+    HOT_FORK = "hot-fork"  # Fork-safe for gevent/grpc
+
+
+class HotForkWarmup(str, Enum):
+    """Warmup strategies for hot-fork orchestrator.
+
+    Controls what the orchestrator does before forking grandchildren:
+    - COLLECT: Run pytest --collect-only to pre-load test infrastructure (DEFAULT)
+    - IMPORT: Import modules from a file (useful when test collection has side effects)
+    - NONE: Just import pytest, no test collection
+    """
+
+    COLLECT = "collect"
+    IMPORT = "import"
+    NONE = "none"
 
 
 def _config_reader() -> Callable[[str, Any], Any]:
@@ -118,6 +144,21 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
+    isolation_str = s("process_isolation", "fork")
+    try:
+        process_isolation = ProcessIsolation(isolation_str)
+    except ValueError:
+        valid = [e.value for e in ProcessIsolation]
+        raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
+
+    # Validate hot_fork_warmup (default: collect)
+    warmup_str = s("hot_fork_warmup", "collect")
+    try:
+        hot_fork_warmup = HotForkWarmup(warmup_str)
+    except ValueError:
+        valid = [e.value for e in HotForkWarmup]
+        raise ValueError(f"Invalid hot_fork_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
+
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
@@ -143,6 +184,10 @@ def _load_config() -> Config:
         ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
         track_dependencies=s("track_dependencies", True),
         dependency_tracking_depth=s("dependency_tracking_depth", None),
+        process_isolation=process_isolation,
+        max_orchestrator_restarts=s("max_orchestrator_restarts", 3),
+        hot_fork_warmup=hot_fork_warmup,
+        preload_modules_file=s("preload_modules_file", None),
     )
 
 
@@ -163,6 +208,10 @@ class Config:
     use_setproctitle: bool
     track_dependencies: bool
     dependency_tracking_depth: int | None
+    process_isolation: ProcessIsolation
+    max_orchestrator_restarts: int
+    hot_fork_warmup: HotForkWarmup
+    preload_modules_file: str | None
 
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)

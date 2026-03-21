@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from mutmut.configuration import Config
+from mutmut.configuration import HotForkWarmup
+from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
 from mutmut.configuration import _load_config
@@ -64,6 +66,10 @@ class TestShouldMutateFile:
             use_setproctitle=False,
             track_dependencies=False,
             dependency_tracking_depth=None,
+            process_isolation=ProcessIsolation.FORK,
+            max_orchestrator_restarts=3,
+            hot_fork_warmup=HotForkWarmup.COLLECT,
+            preload_modules_file=None,
         )
 
     def test_ignores_non_python_files(self):

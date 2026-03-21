@@ -26,6 +26,10 @@ class MutmutState:
         tests_by_mangled_function_name: Maps mangled function names to tests that cover them.
         _stats: Set of stats identifiers (internal use).
         _covered_lines: Maps filenames to covered line numbers.
+        mutant_generation_time: Time taken for mutant generation phase (s).
+        clean_tests_time: Time taken for clean tests phase (s).
+        forced_fail_time: Time taken for forced fail test phase (s).
+        mutation_testing_time: Time taken for mutation testing phase (s).
     """
 
     # Hashes from previous run (loaded from JSON)
@@ -38,11 +42,17 @@ class MutmutState:
     function_dependencies: defaultdict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
 
     # Migrated from __init__.py (formerly module-level globals)
-    stats_time: float | None = None
+    stats_time: float = 0.0
     duration_by_test: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     tests_by_mangled_function_name: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     _stats: set[str] = field(default_factory=set)
     _covered_lines: dict[str, set[int]] = field(default_factory=dict)
+
+    # Phase timing data (in seconds)
+    mutant_generation_time: float = 0.0
+    clean_tests_time: float = 0.0
+    forced_fail_time: float = 0.0
+    mutation_testing_time: float = 0.0
 
 
 _state: MutmutState | None = None

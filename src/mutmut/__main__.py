@@ -7,11 +7,9 @@ import sys
 from collections.abc import Iterable
 
 from mutmut.stats import calculate_summary_stats
-from mutmut.stats import emoji_by_status
 from mutmut.stats import load_stats
 from mutmut.stats import print_stats
 from mutmut.stats import save_stats
-from mutmut.stats import status_by_exit_code
 from mutmut.ui.terminal import print_status
 
 if platform.system() == "Windows":
@@ -48,6 +46,7 @@ from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import config
 from mutmut.core import MutmutProgrammaticFailException
+from mutmut.models.mutant_status import MutantStatus
 from mutmut.models.mutation import MutationMetadata
 from mutmut.models.results import FileMutationResult
 from mutmut.models.results import MutantGenerationStats
@@ -60,6 +59,7 @@ from mutmut.runners.harness import TestRunner
 from mutmut.runners.harness import collected_test_names
 from mutmut.runners.harness import strip_prefix
 from mutmut.state import state
+from mutmut.stats import write_summary_file
 from mutmut.utils.file_utils import copy_also_copy_files
 from mutmut.utils.file_utils import copy_src_dir
 from mutmut.utils.file_utils import setup_source_paths
@@ -535,7 +535,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     if max_children is None:
         max_children = os.cpu_count() or 4
 
-    start = datetime.now()
+    generation_start = datetime.now()
     makedirs(Path("mutants"), exist_ok=True)
     with CatchOutput(spinner_title="Generating mutants"):
         copy_src_dir()
@@ -544,9 +544,10 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         store_lines_covered_by_tests()
         stats = create_mutants(max_children)
 
-    time = datetime.now() - start
+    generation_time = datetime.now() - generation_start
+    state().mutant_generation_time = generation_time.total_seconds()
     print(
-        f"    done in {round(time.total_seconds() * 1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
+        f"    done in {round(generation_time.total_seconds() * 1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
     )
 
     if config().type_check_command:
@@ -567,6 +568,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     os.environ["MUTANT_UNDER_TEST"] = ""
+    clean_tests_start = datetime.now()
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
@@ -575,10 +577,13 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             output_catcher.dump_output()
             print("Failed to run clean test")
             exit(1)
+    state().clean_tests_time = (datetime.now() - clean_tests_start).total_seconds()
     print("    done")
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
+    forced_fail_start = datetime.now()
     run_forced_fail_test(runner)
+    state().forced_fail_time = (datetime.now() - forced_fail_start).total_seconds()
 
     runner.prepare_main_test_run()
 
@@ -595,7 +600,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
     mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]))
-    start = datetime.now()
+    mutation_test_start = datetime.now()
     try:
         gc.freeze()
         print("Running mutation testing")
@@ -674,11 +679,26 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     finally:
         gc.unfreeze()
 
-    elapsed_time = datetime.now() - start
+    mutation_test_time = datetime.now() - mutation_test_start
+    state().mutation_testing_time = mutation_test_time.total_seconds()
 
     print_stats(source_file_mutation_data_by_path, force_output=True)
     print()
-    print(f"{count_tried / elapsed_time.total_seconds():.2f} mutations/second")
+    print(f"{count_tried / mutation_test_time.total_seconds():.2f} mutations/second")
+
+    # Calculate count_unchanged: mutants that were skipped because they already had results
+    count_unchanged = sum(1 for _, _, result in mutants if result is not None and not mutant_names)
+
+    # Write summary file for programmatic consumption
+    summary_stats = calculate_summary_stats(source_file_mutation_data_by_path)
+    write_summary_file(
+        source_file_mutation_data_by_path,
+        summary_stats,
+        mutation_test_time.total_seconds(),
+        count_unchanged,
+        mangled_name_from_mutant_name,
+        orig_function_and_class_names_from_key,
+    )
 
     if mutant_names:
         print()
@@ -690,7 +710,8 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             exit_code_by_key[mutant_name] = m.exit_code_by_key[mutant_name]
 
         for mutant_name, exit_code in sorted(exit_code_by_key.items()):
-            print(emoji_by_status.get(status_by_exit_code[exit_code], "?"), mutant_name)
+            status = MutantStatus.from_exit_code(exit_code)
+            print(status.emoji, mutant_name)
 
         print()
 
@@ -717,10 +738,10 @@ def results(all: bool) -> None:
         m = SourceFileMutationData(path=path)
         m.load()
         for k, v in m.exit_code_by_key.items():
-            status = status_by_exit_code[v]
-            if status == "killed" and not all:
+            status = MutantStatus.from_exit_code(v)
+            if status is MutantStatus.KILLED and not all:
                 continue
-            print(f"    {k}: {status}")
+            print(f"    {k}: {status.text}")
 
 
 def read_mutants_module(path: Path | str) -> cst.Module:
@@ -783,9 +804,9 @@ def get_diff_for_mutant(
     if path is None:
         m = find_mutant(mutant_name)
         path = m.path
-        status = status_by_exit_code[m.exit_code_by_key[mutant_name]]
+        status = MutantStatus.from_exit_code(m.exit_code_by_key[mutant_name]).text
     else:
-        status = "not checked"
+        status = MutantStatus.NOT_CHECKED.text
 
     print(f"# {mutant_name}: {status}")
 

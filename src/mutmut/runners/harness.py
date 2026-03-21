@@ -16,6 +16,7 @@ from typing import Any
 
 from coverage import Coverage
 
+from mutmut.configuration import HotForkWarmup
 from mutmut.configuration import config
 from mutmut.state import state
 from mutmut.stats import save_stats
@@ -116,11 +117,77 @@ class TestRunner(ABC):
         """List all tests in the test suite."""
         raise NotImplementedError()
 
+    def get_init_args(self) -> dict[str, object]:
+        """Return the arguments needed to reconstruct this runner in a subprocess.
+
+        For subprocess workers to instantiate the same runner, they need to know
+        what arguments to pass. The default implementation returns an empty dict,
+        which works for runners that read config from mutmut.config in __init__.
+        """
+        return {}
+
+    def warm_up(self) -> None:
+        """Pre-import expensive modules so forked children inherit them.
+
+        Called by HotForkRunner after creating the test runner in the orchestrator.
+        Importing pytest and running test collection here means grandchildren
+        fork with pytest already in memory, saving ~4 seconds per mutant.
+
+        Default implementation is a no-op for runners that don't need it.
+        """
+        return
+
 
 class PytestRunner(TestRunner):
     def __init__(self) -> None:
         self._pytest_add_cli_args: list[str] = config().pytest_add_cli_args
         self._pytest_add_cli_args_test_selection: list[str] = config().pytest_add_cli_args_test_selection
+
+    def warm_up(self) -> None:
+        """Pre-load modules in current execution context so forked children inherit them.
+
+        Behavior is controlled by hot_fork_warmup config:
+
+        1. hot_fork_warmup = "collect" (default):
+           Runs pytest --collect-only which loads conftest.py, plugins, and
+           discovers all tests. Provides ~5x speedup. Best for most projects.
+
+        2. hot_fork_warmup = "import":
+           Imports modules listed in preload_modules_file. Useful when test
+           collection has side effects that shouldn't be shared.
+
+        3. hot_fork_warmup = "none":
+           Just import pytest without collection. Minimal warmup.
+        """
+
+        warmup = config().hot_fork_warmup
+
+        if warmup == HotForkWarmup.COLLECT:
+            # Run pytest --collect-only to pre-load test infrastructure
+            import pytest
+
+            with change_cwd("mutants"):
+                pytest.main(
+                    ["--collect-only", "-q", "--rootdir=."] + self._pytest_add_cli_args_test_selection,
+                )
+        elif warmup == HotForkWarmup.IMPORT:
+            # Import modules from preload file
+            preload_file = config().preload_modules_file
+            if preload_file:
+                import importlib
+
+                with open(preload_file) as f:
+                    for line in f:
+                        module_name = line.strip()
+                        if module_name and not module_name.startswith("#"):
+                            try:
+                                importlib.import_module(module_name)
+                            except ImportError:
+                                pass  # Best effort
+        else:
+            # warmup == HotForkWarmup.NONE - just import pytest (required to run tests
+            # in a forked process)
+            import pytest  # noqa: F401
 
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:

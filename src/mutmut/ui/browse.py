@@ -21,10 +21,9 @@ from textual.widgets import DataTable
 from textual.widgets import Footer
 from textual.widgets import Static
 
+from mutmut.models.mutant_status import MutantStatus
 from mutmut.models.source_file_mutation_data import SourceFileMutationData
 from mutmut.stats import collect_stat
-from mutmut.stats import emoji_by_status
-from mutmut.stats import status_by_exit_code
 from mutmut.utils.file_utils import walk_mutatable_files
 
 
@@ -41,8 +40,6 @@ def run_result_browser(
 
     Args:
         show_killed: Whether to show killed mutants in the list.
-        status_by_exit_code: Mapping from exit codes to status strings.
-        emoji_by_status: Mapping from status strings to emoji.
         walk_source_files: Generator yielding source file paths.
         collect_stat: Function to collect stats for a mutation data object.
         get_diff_for_mutant: Function to get the diff for a mutant.
@@ -63,7 +60,7 @@ def run_result_browser(
 
         columns = [
             ("path", "Path"),
-        ] + [(status, Text(emoji, justify="right")) for status, emoji in emoji_by_status.items()]
+        ] + [(s.text, Text(s.emoji, justify="right")) for s in MutantStatus]
 
         cursor_type = "row"
         source_file_mutation_data_and_stat_by_path: dict[str, tuple[SourceFileMutationData, object]] = {}
@@ -133,9 +130,9 @@ def run_result_browser(
                 mutants_table.clear()
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]  # type: ignore[attr-defined]
                 for k, v in source_file_mutation_data.exit_code_by_key.items():
-                    status = status_by_exit_code[v]
-                    if status not in ("killed", "caught by type check") or show_killed:
-                        mutants_table.add_row(k, emoji_by_status[status], key=k)
+                    status = MutantStatus.from_exit_code(v)
+                    if status not in (MutantStatus.KILLED, MutantStatus.TYPECHECK) or show_killed:
+                        mutants_table.add_row(k, status.emoji, key=k)
             else:
                 assert event.data_table.id == "mutants"  # type: ignore[attr-defined]
                 # noinspection PyTypeChecker
@@ -146,7 +143,7 @@ def run_result_browser(
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[str(path)]
 
                 exit_code = source_file_mutation_data.exit_code_by_key[mutant_name]
-                status = status_by_exit_code[exit_code]
+                status = MutantStatus.from_exit_code(exit_code)
                 estimated_duration = source_file_mutation_data.estimated_time_of_tests_by_mutant.get(mutant_name, "?")
                 duration = source_file_mutation_data.durations_by_key.get(mutant_name, "?")
                 type_check_error = source_file_mutation_data.type_check_error_by_key.get(mutant_name, "?")
@@ -154,32 +151,32 @@ def run_result_browser(
                 view_tests_description = "(press t to view tests executed for this mutant)"
 
                 match status:
-                    case "killed":
+                    case MutantStatus.KILLED:
                         description = f"Killed ({exit_code=}): Mutant caused a test to fail 🎉"
-                    case "survived":
+                    case MutantStatus.SURVIVED:
                         description = f"Survived ({exit_code=}): No test detected this mutant. {view_tests_description}"
-                    case "skipped":
+                    case MutantStatus.SKIPPED:
                         description = f"Skipped ({exit_code=})"
-                    case "check was interrupted by user":
+                    case MutantStatus.CHECK_INTERRUPTED_BY_USER:
                         description = f"User interrupted ({exit_code=})"
-                    case "caught by type check":
+                    case MutantStatus.TYPECHECK:
                         description = f"Caught by type checker ({exit_code=}): {type_check_error}"
-                    case "timeout":
+                    case MutantStatus.TIMEOUT:
                         description = (
                             f"Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. "
                             f"Tests without mutation took {estimated_duration:.3f} seconds. {view_tests_description}"
                         )
-                    case "no tests":
+                    case MutantStatus.NO_TESTS:
                         description = (
                             f"Untested ({exit_code=}): Skipped because selected tests do not execute this code."
                         )
-                    case "segfault":
+                    case MutantStatus.SEGFAULT:
                         description = f"Segfault ({exit_code=}): Running pytest with this mutant segfaulted."
-                    case "suspicious":
+                    case MutantStatus.SUSPICIOUS:
                         description = (
                             f"Unknown ({exit_code=}): Running pytest with this mutant resulted in an unknown exit code."
                         )
-                    case "not checked":
+                    case MutantStatus.NOT_CHECKED:
                         description = "Not checked in the last mutmut run."
                     case _:
                         description = f"Unknown status ({exit_code=}, {status=})"
