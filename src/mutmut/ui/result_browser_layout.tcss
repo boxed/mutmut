@@ -6,6 +6,25 @@ Screen {
     height: 50%;
 }
 
+#mutants_container {
+    layout: vertical;
+    width: 1fr;
+}
+
+#mutants {
+    height: 1fr;
+}
+
+#depth_options {
+    layout: horizontal;
+    height: 50%;
+}
+
+#dependencies {
+    width: 2fr;
+    height: 100%;
+    color: #808080;
+}
 
 DataTable {
     color: #c0c0c0;
@@ -26,7 +45,8 @@ DataTable:focus .datatable--cursor {
 }
 
 #diff_view_widget {
-    height: 50%;
+    width: 3fr;
+    height: 100%;
     overflow-y: scroll;
 }
 

@@ -88,7 +88,8 @@ def _compute_mutated_function_hashes(
     and comments. If the function's logic changes, the hash will change
     and mutmut knows to re-test all mutants for that function.
 
-    :param module: The parsed module
+    :param source_code: The original source code string
+    :param module: The parsed CST module (used to resolve class membership)
     :param mutations: List of mutations (used to identify which functions were mutated)
     :return: Dict mapping function name to its hash
     """

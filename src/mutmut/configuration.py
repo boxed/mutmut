@@ -231,6 +231,14 @@ class Config:
                 return True
         return False
 
+    def get_effective_dependency_depth(self) -> int:
+        """Get the effective dependency tracking depth, clamped to max_stack_depth."""
+        if self.dependency_tracking_depth is None:
+            return self.max_stack_depth
+        if self.max_stack_depth == -1:
+            return self.dependency_tracking_depth
+        return min(self.dependency_tracking_depth, self.max_stack_depth)
+
     def _should_ignore_for_mutation(self, path: Path | str) -> bool:
         path_str = str(path)
         if not path_str.endswith(".py"):

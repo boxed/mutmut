@@ -70,6 +70,25 @@ def mangled_name_from_mutant_name(mutant_name: str) -> str:
     return mutant_name.partition("__mutmut_")[0]
 
 
+def raw_func_name_from_mangled(mangled: str) -> str:
+    """Convert a mangled name to its raw (canonical) form.
+
+    Converts 'module.x_funcname' to 'module.funcname' for dependency lookup.
+    Also handles class methods: 'module.xǁClassǁmethod' -> 'module.Class.method'
+
+    :param mangled: A mangled name like "module.x_foo" or "module.xǁClassǁmethod"
+    :return: The raw name like "module.foo" or "module.Class.method"
+    """
+    module_part, _, func_part = mangled.rpartition(".")
+    if CLASS_NAME_SEPARATOR in func_part:
+        class_name = func_part[func_part.index(CLASS_NAME_SEPARATOR) + 1 : func_part.rindex(CLASS_NAME_SEPARATOR)]
+        method_name = func_part[func_part.rindex(CLASS_NAME_SEPARATOR) + 1 :]
+        func_part = f"{class_name}.{method_name}"
+    elif func_part.startswith("x_"):
+        func_part = func_part[2:]
+    return f"{module_part}.{func_part}" if module_part else func_part
+
+
 def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
     r = mangled_name_from_mutant_name(mutant_name)
     _, _, r = r.rpartition(".")
