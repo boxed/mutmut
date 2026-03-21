@@ -57,7 +57,7 @@ dev = [
     "pre-commit>=4.5.1",
     "pyrefly>=0.59.1",
     "pytest-asyncio>=1.0.0",
-    "ruff>=0.15.1",
+    "ruff>=0.15.7",
 ]
 
 [tool.pytest.ini_options]
