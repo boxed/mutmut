@@ -57,6 +57,8 @@ class TestShouldMutateFile:
             max_stack_depth=-1,
             debug=False,
             source_paths=[],
+            log_to_file=False,
+            log_file_path="mutants/mutmut-debug.log",
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             mutate_only_covered_lines=False,

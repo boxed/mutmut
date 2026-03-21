@@ -48,3 +48,109 @@ We finally check, which mutations are caught by the test suite.
 For each mutant, we execute the test suite. If any of the tests fails, we successfully killed the mutant. To optimize performance, we only execute the tests that could cover the mutant and sort them by mutation time. We also skip mutants, which already have a result from a previous run.
 
 The results are stored in the ``.meta`` files.
+
+
+Process Isolation Models
+------------------------
+
+Mutmut supports two process isolation strategies for running mutation tests.
+The choice affects compatibility with fork-unsafe libraries (gevent, grpc, torch)
+and crash recovery behavior.
+
+
+ForkRunner (default)
+^^^^^^^^^^^^^^^^^^^^
+
+::
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                    MutMut Process                       │
+    │  (imports pytest, loads conftest.py, runs stats)        │
+    └─────────────────────────┬───────────────────────────────┘
+                              │ os.fork() per mutant
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+        ┌──────────┐    ┌──────────┐    ┌──────────┐
+        │ Child 1  │    │ Child 2  │    │ Child N  │
+        │ mutant_1 │    │ mutant_2 │    │ mutant_N │
+        └──────────┘    └──────────┘    └──────────┘
+
+1. Parent process imports pytest and runs stats collection
+2. For each mutant, parent calls ``os.fork()`` to create a child
+3. Child inherits parent's memory (copy-on-write) and runs tests
+4. Child exits with test result code
+5. Parent reaps child and records result
+
+**Pros:**
+
+- Fastest startup and per-mutant execution
+- Memory efficient via copy-on-write sharing
+- Simple architecture
+
+**Cons:**
+
+- Fork-unsafe libraries (gevent, grpc, torch) may cause segfaults
+- No automatic crash recovery
+
+
+HotForkRunner
+^^^^^^^^^^^^^
+
+::
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                 MutMut Process (Clean)                  │
+    │       (never imports pytest - stays fork-safe)          │
+    └─────────────────────────┬───────────────────────────────┘
+                              │ os.fork() for each phase
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+        ┌──────────┐    ┌──────────┐    ┌─────────────────────┐
+        │  Stats   │    │  Clean   │    │    Orchestrator     │
+        │ (fork)   │    │  (fork)  │    │  (imports pytest)   │
+        └──────────┘    └──────────┘    └──────────┬──────────┘
+                                                   │ os.fork() per mutant
+                                   ┌───────────────┼───────────────┐
+                                   ▼               ▼               ▼
+                             ┌──────────┐    ┌──────────┐    ┌──────────┐
+                             │Grandchild│    │Grandchild│    │Grandchild│
+                             │ mutant_1 │    │ mutant_2 │    │ mutant_N │
+                             └──────────┘    └──────────┘    └──────────┘
+
+1. Stats collection runs in a forked child (isolated from parent)
+2. Clean test and forced fail run in forked children (parent stays clean)
+3. Parent forks a **orchestrator** process that imports pytest
+4. Parent sends work via pipe, orchestrator forks grandchildren per mutant
+5. Grandchildren run tests and exit (inherit orchestrator's memory via COW)
+6. Orchestrator sends results back to parent via pipe
+7. If orchestrator crashes, parent restarts it and re-submits pending work
+
+**Pros:**
+
+- Fully fork-safe-parent never imports pytest
+- Nearly as fast as ForkRunner (2 additional pytest imports)
+- Automatic crash recovery with orchestrator restart
+
+**Cons:**
+
+- More complex three-level process architecture
+- Slight memory overhead due to orchestrator process
+- Requires pipe-based IPC between parent and orchestrator
+- Requires pytest environment to be re-imported by Stats/Clean/Orchestrator processes (import time heavy projects may see slower startup)
+
+**Why hot-fork?**
+
+The orchestrator process is "hot" (performed all imports) before forking
+grandchildren.
+
+Choosing a Runner
+^^^^^^^^^^^^^^^^^
+"fork" is the default and fastest option. If you experience instability, state corruption,
+or segfaults during mutation testing, consider switching to "hot-fork" mode.
+
+Configure in ``pyproject.toml``:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    process_isolation = "hot-fork"  # or "fork" (default)

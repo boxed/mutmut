@@ -172,6 +172,8 @@ def _load_config() -> Config:
         + list(Path(".").glob("test*.py")),
         max_stack_depth=s("max_stack_depth", -1),
         debug=s("debug", False),
+        log_to_file=s("log_to_file", False),
+        log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
         pytest_add_cli_args=s("pytest_add_cli_args", []),
@@ -199,6 +201,8 @@ class Config:
     max_stack_depth: int
     debug: bool
     source_paths: list[Path]
+    log_to_file: bool
+    log_file_path: str
     pytest_add_cli_args: list[str]
     pytest_add_cli_args_test_selection: list[str]
     mutate_only_covered_lines: bool

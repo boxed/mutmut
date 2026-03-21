@@ -7,7 +7,6 @@ and printing mutation testing statistics.
 
 import json
 from collections import defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass
 from json import JSONDecodeError
 
@@ -21,6 +20,8 @@ from mutmut.models.summary import SummaryStats
 from mutmut.models.summary import SurvivingMutant
 from mutmut.state import state
 from mutmut.ui.terminal import print_status
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 
 @dataclass
@@ -187,8 +188,6 @@ def write_summary_file(
     stats: Stat,
     duration: float,
     count_unchanged: int,
-    mangled_name_from_mutant_name: Callable[[str], str],
-    orig_function_and_class_names_from_key: Callable[[str], tuple[str, str | None]],
 ) -> None:
     """Write a summary.json file for programmatic access to mutation testing results.
 
@@ -200,8 +199,6 @@ def write_summary_file(
         stats: Stats object with aggregated statistics.
         duration: Total duration of the run in seconds.
         count_unchanged: Number of mutants skipped because they had results from previous runs.
-        mangled_name_from_mutant_name: Function to convert mutant name to mangled name.
-        orig_function_and_class_names_from_key: Function to extract function/class names from key.
     """
     surviving: list[SurvivingMutant] = []
     not_checked: list[NotCheckedMutant] = []

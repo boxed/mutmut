@@ -133,3 +133,35 @@ class WorkerResult:
             },
             errors=data.get("errors", []),
         )
+
+
+@dataclass
+class StatsResult:
+    """Result of stats collection from a forked child process."""
+
+    exit_code: int
+    tests_by_mangled_function_name: dict[str, set[str]]
+    duration_by_test: dict[str, float]
+    stats_time: float
+    function_dependencies: dict[str, set[str]]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a picklable dict."""
+        return {
+            "exit_code": self.exit_code,
+            "tests_by_mangled_function_name": {k: list(v) for k, v in self.tests_by_mangled_function_name.items()},
+            "duration_by_test": self.duration_by_test,
+            "stats_time": self.stats_time,
+            "function_dependencies": {k: list(v) for k, v in self.function_dependencies.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StatsResult":
+        """Deserialize from a dict."""
+        return cls(
+            exit_code=data["exit_code"],
+            tests_by_mangled_function_name={k: set(v) for k, v in data["tests_by_mangled_function_name"].items()},
+            duration_by_test=data["duration_by_test"],
+            stats_time=data["stats_time"],
+            function_dependencies={k: set(v) for k, v in data["function_dependencies"].items()},
+        )

@@ -28,7 +28,7 @@ dependencies = [
     "coverage>=7.3.0",
     "libcst>=1.8.5",
     "pytest>=6.2.5",
-    "setproctitle>=1.1.0",
+    "setproctitle>=1.2.2",
     "textual>=1.0.0",
     "toml>=0.10.2 ; python_full_version < '3.11'",
 ]

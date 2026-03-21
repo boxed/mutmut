@@ -1,3 +1,5 @@
+import re
+
 from inline_snapshot import snapshot
 
 from mutmut.mutation.file_mutation import mutate_file_contents
@@ -216,3 +218,60 @@ x_foo__mutmut_mutants : MutantDict = { # type: ignore # mutmut generated
 
 x_foo__mutmut_orig.__name__ = 'x_foo' # type: ignore # mutmut generated
 ''')
+
+
+def test_staticmethod_trampoline_has_no_self_parameter():
+    """Regression test: staticmethod trampolines must not have 'self' parameter.
+
+    When a @staticmethod is mutated, the generated trampoline function should
+    NOT have 'self' as its first parameter. If it does, calling the method
+    will fail with: TypeError: missing 1 required positional argument: 'self'
+    """
+    source = """
+class MyService:
+    @staticmethod
+    def process(value: int) -> int:
+        return value + 1
+"""
+    result = mutated_module(source)
+
+    # Find the trampoline function definition
+    # It should be: def xǁMyServiceǁprocess__mutmut_trampoline(*args, **kwargs):
+    # NOT:          def xǁMyServiceǁprocess__mutmut_trampoline(self, *args, **kwargs):
+    trampoline_match = re.search(r"def xǁMyServiceǁprocess__mutmut_trampoline\(([^)]*)\):", result)
+    assert trampoline_match is not None, "Trampoline function not found in output"
+
+    params = trampoline_match.group(1)
+    assert "self" not in params, f"staticmethod trampoline should not have 'self' parameter, got: ({params})"
+    assert params == "*args, **kwargs", f"staticmethod trampoline should have (*args, **kwargs), got: ({params})"
+
+    # Also verify the class uses staticmethod() wrapper
+    assert "process = staticmethod(xǁMyServiceǁprocess__mutmut_trampoline)" in result, (
+        "Class should wrap trampoline with staticmethod()"
+    )
+
+
+def test_classmethod_trampoline_has_cls_parameter():
+    """Verify classmethod trampolines have 'cls' as first parameter."""
+    source = """
+class MyService:
+    @classmethod
+    def create(cls, value: int) -> int:
+        return value + 1
+"""
+    result = mutated_module(source)
+
+    # Find the trampoline function definition
+    # It should be: def xǁMyServiceǁcreate__mutmut_trampoline(cls, *args, **kwargs):
+    trampoline_match = re.search(r"def xǁMyServiceǁcreate__mutmut_trampoline\(([^)]*)\):", result)
+    assert trampoline_match is not None, "Trampoline function not found in output"
+
+    params = trampoline_match.group(1)
+    assert params == "cls, *args, **kwargs", (
+        f"classmethod trampoline should have (cls, *args, **kwargs), got: ({params})"
+    )
+
+    # Also verify the class uses classmethod() wrapper
+    assert "create = classmethod(xǁMyServiceǁcreate__mutmut_trampoline)" in result, (
+        "Class should wrap trampoline with classmethod()"
+    )

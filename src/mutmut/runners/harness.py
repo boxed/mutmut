@@ -10,6 +10,7 @@ from abc import ABC
 from collections import defaultdict
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -93,7 +94,7 @@ class ListAllTestsResult:
 class TestRunner(ABC):
     """Abstract base class for test runners."""
 
-    def run_stats(self, *, tests: Iterable[str]) -> int:
+    def run_stats(self, *, tests: Iterable[str] | None = None) -> int:
         """Run tests and collect statistics."""
         raise NotImplementedError()
 
@@ -163,12 +164,11 @@ class PytestRunner(TestRunner):
         warmup = config().hot_fork_warmup
 
         if warmup == HotForkWarmup.COLLECT:
-            # Run pytest --collect-only to pre-load test infrastructure
-            import pytest
-
+            # Full test collection - loads conftest.py, plugins, test modules
+            # Suppress stdout completely during warmup collection
             with change_cwd("mutants"):
-                pytest.main(
-                    ["--collect-only", "-q", "--rootdir=."] + self._pytest_add_cli_args_test_selection,
+                self.execute_pytest(
+                    ["--collect-only", "-qqq", "--rootdir=."] + self._pytest_add_cli_args_test_selection,
                 )
         elif warmup == HotForkWarmup.IMPORT:
             # Import modules from preload file
@@ -184,27 +184,24 @@ class PytestRunner(TestRunner):
                                 importlib.import_module(module_name)
                             except ImportError:
                                 pass  # Best effort
-        else:
-            # warmup == HotForkWarmup.NONE - just import pytest (required to run tests
-            # in a forked process)
-            import pytest  # noqa: F401
+        # warmup == HotForkWarmup.NONE - noop
 
     # noinspection PyMethodMayBeStatic
-    def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
+    def execute_pytest(self, params: list[str], plugins: Sequence[object] | None = None) -> int:
         import pytest
 
-        params = ["--rootdir=.", "--tb=native"] + params + self._pytest_add_cli_args
+        params = ["--rootdir=.", "-q", "--tb=native"] + params + self._pytest_add_cli_args
         if config().debug:
             params = ["-vv"] + params
             print("python -m pytest ", " ".join([f'"{param}"' for param in params]))
-        exit_code = int(pytest.main(params, **kwargs))
+        exit_code = int(pytest.main(params, plugins=plugins))
         if config().debug:
             print("    exit code", exit_code)
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
         return exit_code
 
-    def _pytest_args_regular_run(self, tests: Iterable[str]) -> list[str]:
+    def _pytest_args_regular_run(self, tests: Iterable[str] | None = None) -> list[str]:
         pytest_args = ["-x", "-q", "-p", "no:randomly", "-p", "no:random-order"]
         if tests:
             pytest_args += list(tests)
@@ -212,7 +209,7 @@ class PytestRunner(TestRunner):
             pytest_args += self._pytest_add_cli_args_test_selection
         return pytest_args
 
-    def run_stats(self, *, tests: Iterable[str]) -> int:
+    def run_stats(self, *, tests: Iterable[str] | None = None) -> int:
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_logstart(self, nodeid: str, location: object) -> None:
@@ -275,7 +272,7 @@ class HammettRunner(TestRunner):
     def __init__(self) -> None:
         self.hammett_kwargs: Any = None
 
-    def run_stats(self, *, tests: Iterable[str]) -> int:
+    def run_stats(self, *, tests: Iterable[str] | None = None) -> int:
         import hammett
 
         print("Running hammett stats...")

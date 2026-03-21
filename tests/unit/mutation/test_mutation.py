@@ -6,13 +6,13 @@ import libcst as cst
 import pytest
 from inline_snapshot import snapshot
 
-from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.mutation.file_mutation import _create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
+from mutmut.ui.terminal import CatchOutput
 from mutmut.utils.format_utils import CLASS_NAME_SEPARATOR
 from mutmut.utils.format_utils import mangle_function_name
 

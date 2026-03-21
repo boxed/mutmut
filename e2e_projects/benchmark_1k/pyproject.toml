@@ -12,4 +12,8 @@ build-backend = "hatchling.build"
 packages = ["src/benchmark"]
 
 [tool.mutmut]
+log_to_file = true
+paths_to_mutate = ["src/"]
+process_isolation = "hot-fork"
 debug = false
+hot_fork_warmup = "none"

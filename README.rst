@@ -21,6 +21,7 @@ Some highlight features:
 - Knows which tests to execute, speeding up mutation testing
 - Interactive terminal based UI
 - Parallel and fast execution
+- Configurable process isolation for compatibility with gevent, grpc, torch
 
 .. image:: browse_screenshot.png
 
@@ -311,6 +312,216 @@ macOS at your own risk, or to disable it on other platforms), set ``use_setproct
     # pyproject.toml
     [tool.mutmut]
     use_setproctitle = false
+
+
+Debug file logging
+~~~~~~~~~~~~~~~~~~
+
+For debugging child processes (which can't easily log to the console), you can
+enable file-based logging:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    log_to_file = true
+    log_file_path = "mutants/mutmut-debug.log"  # default path
+
+Logs are written as a rotating file (10 MB max, 3 backups). This is useful for
+diagnosing issues with forked worker processes.
+
+
+
+Process Isolation Mode
+~~~~~~~~~~~~~~~~~~~~~~
+
+By default, mutmut uses ``fork`` for fast worker spawning. However, certain libraries
+don't survive fork correctly and will cause segfaults:
+
+- **gevent** - Event loop and hub state becomes corrupted after fork
+- **grpc** - Thread state, signal handlers, and connections break
+- **torch/tensorflow** - GPU handles and thread pools corrupt
+
+If you see segfaults during mutation testing (exit code -11), you can switch to
+``hot-fork`` mode which adopts a safer forking strategy to prevent corruption of
+state in fork-unsafe libraries.
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    process_isolation = "hot-fork"
+
+Or in `setup.cfg`:
+
+.. code-block:: ini
+
+    [mutmut]
+    process_isolation=hot-fork
+
+**How it works:**
+
+- ``fork`` mode: The main mutmut process forks directly for each mutant. Fast but
+  inherits any fork-unsafe library state from the parent.
+- ``hot-fork`` mode: Mutmut spawns a fresh orchestrator subprocess that imports
+  pytest/tests, then forks from there for each mutant. The orchestrator has clean
+  library state, avoiding fork corruption issues.
+
+Both modes use ``os.fork()`` internally—the difference is *what* gets forked.
+Hot-fork mode is nearly as fast as fork mode since the orchestrator only starts once
+and subsequent forks are cheap.
+
+See `ARCHITECTURE.rst <ARCHITECTURE.rst>`_ for detailed diagrams of each isolation model.
+
+**Crash recovery (hot-fork only):**
+
+If the orchestrator crashes, mutmut automatically restarts it and re-submits any
+pending mutants. By default, it will retry up to 3 times. You can configure this:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    process_isolation = "hot-fork"
+    max_orchestrator_restarts = 5  # default: 3
+
+
+Hot-Fork Warmup Strategies
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When using ``hot-fork`` mode, the orchestrator can "warm up" before forking
+grandchildren to significantly improve performance. The warmup strategy controls
+what happens in the orchestrator before it starts forking workers.
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    process_isolation = "hot-fork"
+    hot_fork_warmup = "collect"  # default
+
+**Available strategies:**
+
+- ``collect`` (default, recommended): Runs ``pytest --collect-only`` in the
+  orchestrator to pre-load pytest, your conftest.py, and all test infrastructure.
+  This is then inherited by all forked grandchildren, avoiding redundant imports.
+
+- ``import``: Imports specific modules from a file. Use this when test collection
+  has side effects that cause issues (e.g., starting servers, connecting to
+  databases).
+
+- ``none``: Only imports pytest itself. Use this for maximum compatibility or
+  when debugging warmup-related issues.
+
+**Performance comparison:**
+
+Benchmarking performed with the `/mutmut/e2e_projects/benchmark_1k` project
+(1000 mutants, 143 tests, 10 workers).
+
+Syntetic import, collection, and test delays were added to help illustrate
+the performance impact of each warmup strategy. Real-world results will vary
+greatly but the trends should hold.
+
+_Note:_ preformance impact is most felt on the initial mutation testing run. Subsequent
+runs benefit from selective execution of the mutants based on code changes, greatly reducing
+the number of tests run per mutant, with larger projects seeing the most benefits.
+
+The warmup strategy has a dramatic impact on throughput. Benchmarks on a 1000-mutant
+project with simulated import delays (100ms pytest import, 100ms conftest):
+
+================================================================================
+RESULTS SUMMARY
+================================================================================
+
+--- Delay: import=0.1s, conftest=0.1s ---
+Strategy       Avg. Mut/s   % of Max   Mut Test  Wall Time
+------------------------------------------------------------
+fork              105.7/s       100%      9.5s     26.0s
+collect            92.0/s        87%     10.9s     28.8s
+import             45.0/s        43%     22.2s     39.9s
+none               30.6/s        29%     32.7s     50.6s
+
+--- Delay: import=0.5s, conftest=0.5s ---
+Strategy       Avg. Mut/s   % of Max   Mut Test  Wall Time
+------------------------------------------------------------
+fork              106.5/s       100%      9.4s     27.3s
+collect            86.8/s        81%     11.5s     31.8s
+import             14.8/s        14%     67.5s     87.7s
+none                7.9/s         7%    127.0s    147.4s
+
+--- Delay: import=1.0s, conftest=1.0s ---
+Strategy       Avg. Mut/s   % of Max   Mut Test  Wall Time
+------------------------------------------------------------
+fork              106.6/s       100%      9.4s     28.4s
+collect            79.8/s        75%     12.5s     35.8s
+import              8.3/s         8%    119.8s    142.9s
+none                4.1/s         4%    242.1s    265.5s
+
+================================================================================
+MUTATION THROUGHPUT COMPARISON ACROSS ALL DELAY CONFIGS
+================================================================================
+
+Strategy       0.1s delay     0.5s delay     1.0s delay
+---------------------------------------------------------
+fork              105.7/s        106.5/s        106.6/s
+collect            92.0/s         86.8/s         79.8/s
+import             45.0/s         14.8/s          8.3/s
+none               30.6/s          7.9/s          4.1/s
+
+
+For comparison, ``fork`` mode achieves ~105 mut/s but requires libraries and
+test suites that can be run multiple times from within the same process.
+
+The ``collect`` strategy provides the comparable performance (~75-90% of fork mode
+in synthetic tests) while being compatible with most libraries due to the preservation
+of a clean parent process state.
+
+In real-world applications where each tests's runtime is greater (>500ms), the
+the fork vs hot-fork with collect difference becomes negligible since the
+overhead is amortized over the longer test execution time.
+
+Without warmup, each grandchild must re-import pytest and load conftest.py,
+which dominates test runtime for most unit tests, though providing
+the highest level of isolation and compatibility.
+
+**Using the import strategy:**
+
+If your conftest.py has side effects that cause problems during collection,
+you can use the ``import`` strategy with a custom module list:
+
+.. code-block:: toml
+
+    [tool.mutmut]
+    process_isolation = "hot-fork"
+    hot_fork_warmup = "import"
+    preload_modules_file = "mutmut_preload.txt"
+
+The file supports pip requirements format, so you can reuse existing requirements
+files or use version specifiers (which are stripped when importing):
+
+.. code-block:: text
+
+    # Simple module names
+    pytest
+    gevent.monkey
+    grpc
+
+    # pip requirements format also works (versions stripped)
+    flask>=2.0
+    requests[security]==2.28.0
+    sqlalchemy~=2.0
+
+This gives you control over exactly what gets loaded, avoiding problematic
+imports while still benefiting from pre-warming.
+
+**Note:** Package names with dashes are converted to underscores for import
+(e.g., ``google-auth`` becomes ``google_auth``). Some packages have different
+import names than their pip names - in those cases, use the import name directly.
+
+**Troubleshooting warmup issues:**
+
+If you experience crashes or hangs with the default ``collect`` strategy:
+
+1. Try ``hot_fork_warmup = "none"`` to verify the issue is warmup-related
+2. Check your conftest.py for operations at module level that may corrupt the state if forked
+3. Use ``import`` with a minimal module list and gradually add modules
+4. Enable debug mode to see detailed logs: ``debug = true``
 
 
 Whitelisting

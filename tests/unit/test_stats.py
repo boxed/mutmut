@@ -114,6 +114,15 @@ class TestCalculateStatsByMutationType:
 class TestWriteSummaryFile:
     """Tests for write_summary_file function."""
 
+    @pytest.fixture(autouse=True)
+    def mock_name_helpers(self):
+        """Mock the name-resolution helpers used inside write_summary_file."""
+        with (
+            patch("mutmut.stats.mangled_name_from_mutant_name", side_effect=lambda n: n.partition("__mutmut_")[0]),
+            patch("mutmut.stats.orig_function_and_class_names_from_key", side_effect=lambda n: ("func", None)),
+        ):
+            yield
+
     @pytest.fixture
     def mock_state(self):
         """Mock state() to provide phase timings."""
@@ -168,8 +177,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=5,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         from pathlib import Path
@@ -208,8 +215,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=0,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         with open("mutants/summary.json") as f:
@@ -242,8 +247,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=0,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         with open("mutants/summary.json") as f:
@@ -277,8 +280,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=0,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         with open("mutants/summary.json") as f:
@@ -310,8 +311,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=0,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         with open("mutants/summary.json") as f:
@@ -342,8 +341,6 @@ class TestWriteSummaryFile:
             stats=stats,
             duration=120.0,
             count_unchanged=0,
-            mangled_name_from_mutant_name=lambda n: n.partition("__mutmut_")[0],
-            orig_function_and_class_names_from_key=lambda n: ("func", None),
         )
 
         with open("mutants/summary.json") as f:

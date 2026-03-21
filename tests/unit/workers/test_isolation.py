@@ -1,14 +1,18 @@
 """Tests for fork_isolation utilities."""
 
 import os
+from datetime import datetime
+from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
 
 from mutmut.models.mutant_status import MutantStatus
+from mutmut.workers.isolation import ForkRunner
 from mutmut.workers.isolation import HotForkRunner
 from mutmut.workers.isolation import MutantResult
 from mutmut.workers.isolation import OrchestratorCrashError
+from mutmut.workers.isolation import RunningWorker
 from mutmut.workers.isolation import run_in_fork
 from mutmut.workers.isolation import run_in_fork_with_result
 
@@ -399,6 +403,13 @@ class TestHotForkRunnerIntegration:
         """Full startup -> submit -> wait -> shutdown cycle."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "mutants").mkdir()
+        # Create src directory so config() doesn't fail when guessing paths_to_mutate
+        (tmp_path / "src").mkdir()
+
+        # Reset the config singleton so it re-loads from the new directory
+        import mutmut.configuration
+
+        monkeypatch.setattr(mutmut.configuration, "_config", None)
 
         class SimpleRunner:
             def __init__(self):
@@ -432,3 +443,248 @@ class TestHotForkRunnerIntegration:
             assert result.status == MutantStatus.KILLED
         finally:
             runner.shutdown()
+
+
+class TestRunningWorker:
+    """Tests for RunningWorker NamedTuple."""
+
+    def test_basic_creation(self):
+        """RunningWorker can be created with required fields."""
+        now = datetime.now()
+        worker = RunningWorker(mutant_name="test__mutmut_1", start_time=now, estimated_time=2.5)
+
+        assert worker.mutant_name == "test__mutmut_1"
+        assert worker.start_time == now
+        assert worker.estimated_time == 2.5
+
+    def test_is_namedtuple(self):
+        """RunningWorker is a NamedTuple with accessible fields."""
+        now = datetime.now()
+        worker = RunningWorker("m1", now, 1.0)
+
+        # Access by index
+        assert worker[0] == "m1"
+        assert worker[1] == now
+        assert worker[2] == 1.0
+
+        # Access by name
+        assert worker.mutant_name == "m1"
+
+
+class TestForkRunner:
+    """Tests for ForkRunner."""
+
+    def test_init_sets_attributes(self):
+        """__init__ sets all expected attributes."""
+        mock_runner = Mock()
+        runner = ForkRunner(
+            max_workers=4,
+            test_runner=mock_runner,
+            debug=True,
+        )
+
+        assert runner.max_workers == 4
+        assert runner.test_runner == mock_runner
+        assert runner.debug is True
+        assert runner._running == {}
+
+    def test_init_defaults(self):
+        """__init__ has sensible defaults."""
+        mock_runner = Mock()
+        runner = ForkRunner(max_workers=2, test_runner=mock_runner)
+
+        assert runner.debug is False
+        assert runner._running == {}
+
+    def test_has_capacity_empty(self):
+        """has_capacity() is True when no workers running."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        assert runner.has_capacity() is True
+
+    def test_has_capacity_below_limit(self):
+        """has_capacity() is True when below max_workers."""
+        runner = ForkRunner(max_workers=4, test_runner=Mock(), debug=False)
+        runner._running = {
+            1: RunningWorker("m1", datetime.now(), 1.0),
+            2: RunningWorker("m2", datetime.now(), 1.0),
+        }
+        assert runner.has_capacity() is True
+
+    def test_has_capacity_at_limit(self):
+        """has_capacity() is False when at max_workers."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        runner._running = {
+            1: RunningWorker("m1", datetime.now(), 1.0),
+            2: RunningWorker("m2", datetime.now(), 1.0),
+        }
+        assert runner.has_capacity() is False
+
+    def test_has_capacity_over_limit(self):
+        """has_capacity() is False when over max_workers."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        runner._running = {
+            1: RunningWorker("m1", datetime.now(), 1.0),
+            2: RunningWorker("m2", datetime.now(), 1.0),
+            3: RunningWorker("m3", datetime.now(), 1.0),
+        }
+        assert runner.has_capacity() is False
+
+    def test_pending_count_empty(self):
+        """pending_count() returns 0 when no workers running."""
+        runner = ForkRunner(max_workers=4, test_runner=Mock(), debug=False)
+        assert runner.pending_count() == 0
+
+    def test_pending_count_with_workers(self):
+        """pending_count() returns number of running workers."""
+        runner = ForkRunner(max_workers=4, test_runner=Mock(), debug=False)
+        runner._running = {
+            1: RunningWorker("m1", datetime.now(), 1.0),
+            2: RunningWorker("m2", datetime.now(), 1.0),
+            3: RunningWorker("m3", datetime.now(), 1.0),
+        }
+        assert runner.pending_count() == 3
+
+    def test_get_active_workers_empty(self):
+        """get_active_workers() returns empty list when no workers."""
+        runner = ForkRunner(max_workers=4, test_runner=Mock(), debug=False)
+        assert runner.get_active_workers() == []
+
+    def test_get_active_workers_format(self):
+        """get_active_workers() returns list of ActiveWorker with correct data."""
+        runner = ForkRunner(max_workers=4, test_runner=Mock(), debug=False)
+        now = datetime.now()
+        runner._running = {
+            123: RunningWorker("mutant_1", now, 2.5),
+            456: RunningWorker("mutant_2", now, 3.0),
+        }
+
+        workers = runner.get_active_workers()
+
+        assert len(workers) == 2
+        # Find the worker with pid 123
+        worker_123 = next(w for w in workers if w.pid == 123)
+        assert worker_123.mutant_name == "mutant_1"
+        assert worker_123.estimated_time == 2.5
+        assert worker_123.start_time == now
+
+    def test_get_orchestrator_restart_count_always_zero(self):
+        """ForkRunner has no orchestrator, always returns 0."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        assert runner.get_orchestrator_restart_count() == 0
+
+    def test_startup_freezes_gc(self):
+        """startup() freezes gc for ForkRunner."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        runner.startup()  # Should not raise
+        assert runner._running == {}
+        # Clean up: unfreeze gc
+        import gc
+
+        gc.unfreeze()
+
+    def test_signal_work_complete_is_noop(self):
+        """signal_work_complete() is a no-op for ForkRunner."""
+        runner = ForkRunner(max_workers=2, test_runner=Mock(), debug=False)
+        runner.signal_work_complete()  # Should not raise
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
+class TestForkRunnerIntegration:
+    """Integration tests for ForkRunner (actually forks).
+
+    Uses the real state() singleton (survives fork) and patches out C extensions
+    (setproctitle) and thread-spawning helpers (register_timeout) that are
+    unsafe or unnecessary in the test environment.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_fork_env(self):
+        """Set up real state and patch fork-unsafe helpers."""
+        from mutmut.state import reset_state
+        from mutmut.state import state
+
+        reset_state()
+        state().duration_by_test = {"test_one": 0.1, "test": 0.1}
+        with (
+            patch("mutmut.workers.isolation.setproctitle", lambda *a, **kw: None),
+            patch("mutmut.workers.isolation.register_timeout", lambda *a, **kw: None),
+        ):
+            yield
+        reset_state()
+
+    def test_submit_and_wait_killed(self, tmp_path, monkeypatch):
+        """Submit a mutant that gets killed (test fails)."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mutants").mkdir()
+
+        class SimpleRunner:
+            def run_tests(self, mutant_name, tests):
+                return 1  # Test fails = mutant killed
+
+        runner = ForkRunner(max_workers=2, test_runner=SimpleRunner(), debug=False)
+
+        runner.submit("mutant_1", ["test_one"], cpu_time_limit=30, estimated_time=1.0)
+
+        result = runner.wait_for_result()
+
+        assert result.mutant_name == "mutant_1"
+        assert result.exit_code == 1
+        assert result.status == MutantStatus.KILLED
+        assert result.duration > 0
+
+    def test_submit_and_wait_survived(self, tmp_path, monkeypatch):
+        """Submit a mutant that survives (test passes)."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mutants").mkdir()
+
+        class SimpleRunner:
+            def run_tests(self, mutant_name, tests):
+                return 0  # Test passes = mutant survived
+
+        runner = ForkRunner(max_workers=2, test_runner=SimpleRunner(), debug=False)
+
+        runner.submit("mutant_1", ["test_one"], cpu_time_limit=30, estimated_time=1.0)
+
+        result = runner.wait_for_result()
+
+        assert result.mutant_name == "mutant_1"
+        assert result.exit_code == 0
+        assert result.status == MutantStatus.SURVIVED
+
+    def test_no_tests_exit_code(self, tmp_path, monkeypatch):
+        """Empty tests list results in exit code 33 (NO_TESTS)."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mutants").mkdir()
+
+        class SimpleRunner:
+            def run_tests(self, mutant_name, tests):
+                return 0
+
+        runner = ForkRunner(max_workers=2, test_runner=SimpleRunner(), debug=False)
+
+        runner.submit("mutant_1", [], cpu_time_limit=30, estimated_time=1.0)
+
+        result = runner.wait_for_result()
+
+        assert result.exit_code == 33
+        assert result.status == MutantStatus.NO_TESTS
+
+    def test_shutdown_waits_for_children(self, tmp_path, monkeypatch):
+        """shutdown() waits for all running children to complete."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "mutants").mkdir()
+
+        class SimpleRunner:
+            def run_tests(self, mutant_name, tests):
+                return 1
+
+        runner = ForkRunner(max_workers=4, test_runner=SimpleRunner(), debug=False)
+
+        runner.submit("mutant_1", ["test"], cpu_time_limit=30, estimated_time=1.0)
+        runner.submit("mutant_2", ["test"], cpu_time_limit=30, estimated_time=1.0)
+
+        assert runner.pending_count() == 2
+
+        runner.shutdown()
+
+        assert runner.pending_count() == 0
