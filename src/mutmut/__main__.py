@@ -40,6 +40,7 @@ from io import TextIOBase
 from json import JSONDecodeError
 from math import ceil
 from multiprocessing import Pool
+from multiprocessing import get_start_method
 from multiprocessing import set_start_method
 from os import makedirs
 from os import walk
@@ -927,8 +928,18 @@ def stop_all_children(mutants: list[tuple[SourceFileMutationData, str, int | Non
         m.stop_children()
 
 
-# used to copy the global mutmut.config to subprocesses
-set_start_method("fork")
+# Guard against "context has already been set" when mutmut.__main__ is
+# re-executed (see GH-466).
+if get_start_method(allow_none=True) is None:
+    set_start_method("fork")
+elif "mutmut.__main__" not in sys.modules:
+    warnings.warn(
+        "mutmut.__main__ was re-executed because it was not cached in "
+        "sys.modules. Use `mutmut run` instead of `python -m mutmut run` "
+        "to avoid this.",
+        stacklevel=1,
+    )
+
 
 
 @cli.command()
