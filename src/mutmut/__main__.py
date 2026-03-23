@@ -1777,7 +1777,7 @@ def browse(show_killed: bool) -> None:
         def get_mutant_name_from_selection(self) -> str | None:
             # noinspection PyTypeChecker
             mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-            if mutants_table.cursor_row is None:
+            if mutants_table.cursor_row is None or not mutants_table.is_valid_row_index(mutants_table.cursor_row):
                 return
 
             return str(mutants_table.get_row_at(mutants_table.cursor_row)[0])
@@ -1801,7 +1801,7 @@ def browse(show_killed: bool) -> None:
             ensure_config_loaded()
             # noinspection PyTypeChecker
             mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-            if mutants_table.cursor_row is None:
+            if mutants_table.cursor_row is None or not mutants_table.is_valid_row_index(mutants_table.cursor_row):
                 return
             apply_mutant(mutants_table.get_row_at(mutants_table.cursor_row)[0])
 
