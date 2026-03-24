@@ -242,6 +242,23 @@ def operator_assignment(
     yield node.with_changes(value=mutated_value)
 
 
+def _wrap_low_precedence_expression(expression: cst.BaseExpression) -> cst.BaseExpression:
+    """Wrap low-precedence expressions before appending boolean operators."""
+    if expression.lpar or expression.rpar:
+        return expression
+
+    if isinstance(expression, cst.BooleanOperation | cst.IfExp | cst.Lambda | cst.NamedExpr):
+        return expression.with_changes(lpar=[cst.LeftParen()], rpar=[cst.RightParen()])
+
+    return expression
+
+
+def operator_if_exp(node: cst.IfExp) -> Iterable[cst.IfExp]:
+    test = _wrap_low_precedence_expression(node.test)
+    yield node.with_changes(test=cst.BooleanOperation(left=test, operator=cst.And(), right=cst.Name("False")))
+    yield node.with_changes(test=cst.BooleanOperation(left=test, operator=cst.Or(), right=cst.Name("True")))
+
+
 def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
     """Drop the case statements in a match."""
     if len(node.cases) > 1:
@@ -263,6 +280,7 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.Call, operator_symmetric_string_methods_swap),
     (cst.Call, operator_unsymmetrical_string_methods_swap),
     (cst.Lambda, operator_lambda),
+    (cst.IfExp, operator_if_exp),
     (cst.CSTNode, operator_keywords),  # type: ignore[type-abstract]
     (cst.CSTNode, operator_swap_op),  # type: ignore[type-abstract]
     (cst.Match, operator_match),

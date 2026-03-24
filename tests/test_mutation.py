@@ -244,6 +244,7 @@ def mutated_module(source: str) -> str:
         ("foo is not foo", "foo is foo"),
         ("a or b", "a and b"),
         ("a and b", "a or b"),
+        ("a if b else c", ["a if b and False else c", "a if b or True else c"]),
         ("not a", "a"),
         ("a < b", ["a <= b"]),
         ("a <= b", ["a < b"]),
@@ -325,6 +326,13 @@ def foo() -> int:
     assert not mutants
 
 
+def test_ternary_mutation_preserves_boolean_precedence():
+    mutants = mutants_for_source("a if b or c else d")
+
+    assert "a if (b or c) and False else d" in mutants
+    assert "a if (b or c) or True else d" in mutants
+
+
 def test_do_not_mutate_specific_functions():
     source = """
 class A:
@@ -401,13 +409,15 @@ def test_function_with_annotation():
     mutated_code = mutated_module(source)
     print(mutated_code)
 
-    expected_defs = [
-        "def x_capitalize__mutmut_1(s : str):\n    return s[0].title() - s[1:] if s else s",
-        "def x_capitalize__mutmut_2(s : str):\n    return s[1].title() + s[1:] if s else s",
-        "def x_capitalize__mutmut_3(s : str):\n    return s[0].title() + s[2:] if s else s",
+    expected_snippets = [
+        "return s[0].title() + s[1:] if s and False else s",
+        "return s[0].title() + s[1:] if s or True else s",
+        "return s[0].title() - s[1:] if s else s",
+        "return s[1].title() + s[1:] if s else s",
+        "return s[0].title() + s[2:] if s else s",
     ]
 
-    for expected in expected_defs:
+    for expected in expected_snippets:
         print(expected)
         assert expected in mutated_code
 
