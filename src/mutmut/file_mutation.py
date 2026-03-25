@@ -323,26 +323,38 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             cst.Arg(cst.Name("None" if class_name is None else "self")),
         ],
     )
-    # for non-async functions, simply return the value or generator
-    result_statement = cst.SimpleStatementLine([cst.Return(result)])
-
-    if function.asynchronous:
-        is_generator = _is_generator(function)
-        if is_generator:
-            # async for i in _mutmut_trampoline(...): yield i
-            result_statement = cst.For(  # type: ignore[assignment]
-                target=cst.Name("i"),
-                iter=result,
-                body=cst.IndentedBlock([cst.SimpleStatementLine([cst.Expr(cst.Yield(cst.Name("i")))])]),
-                asynchronous=cst.Asynchronous(),
-            )
-        else:
-            # return await _mutmut_trampoline(...)
-            result_statement = cst.SimpleStatementLine([cst.Return(cst.Await(result))])
 
     type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment("# type: ignore"))
 
-    function.whitespace_after_type_parameters
+    result_statement: cst.SimpleStatementLine | cst.For
+    if not function.asynchronous:
+        # for non-async functions, simply return the value or generator
+        result_statement = cst.SimpleStatementLine(
+            [cst.Return(result)],
+            trailing_whitespace=type_ignore_whitespace,
+        )
+    elif not _is_generator(function):
+        # return await _mutmut_trampoline(...)
+        result_statement = cst.SimpleStatementLine(
+            [cst.Return(cst.Await(result))],
+            trailing_whitespace=type_ignore_whitespace,
+        )
+    else:
+        # async for i in _mutmut_trampoline(...): yield i
+        result_statement = cst.For(
+            target=cst.Name("i"),
+            iter=result,
+            body=cst.IndentedBlock(
+                [
+                    cst.SimpleStatementLine(
+                        [cst.Expr(cst.Yield(cst.Name("i")))],
+                        trailing_whitespace=type_ignore_whitespace,
+                    )
+                ]
+            ),
+            asynchronous=cst.Asynchronous(),
+        )
+
     return function.with_changes(
         body=cst.IndentedBlock(
             [
