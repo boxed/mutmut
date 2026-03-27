@@ -2,15 +2,19 @@ import os
 import signal
 import threading
 import time
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from mutmut.threading import timeout
 
 
 @pytest.fixture(autouse=True)
 def clear_heap():
-        timeout._timeout_heap.clear()
+    timeout._timeout_heap.clear()
+    yield
+    timeout._timeout_heap.clear()
+
 
 class TestRegisterTimeout:
     """Tests for register_timeout function."""
@@ -18,12 +22,15 @@ class TestRegisterTimeout:
     def test_adds_entry_to_heap(self) -> None:
         """Verify that registering a timeout adds an entry to the heap."""
         assert len(timeout._timeout_heap) == 0
-        timeout.register_timeout(pid=12345, timeout_s=0.5)
+
+        timeout.register_timeout(pid=99999999, timeout_s=60)
 
         assert len(timeout._timeout_heap) == 1
-        deadline, pid = timeout._timeout_heap[0]
-        assert pid == 12345
+        deadline, pid = timeout._timeout_heap.pop()
+        assert pid == 99999999
         assert deadline > time.time()  # Deadline should be in the future
+        # this is redundant but it makes sure that we won't try and reap a random process
+        assert len(timeout._timeout_heap) == 0
 
     def test_deadline_calculation(self) -> None:
         """Verify deadline is calculated as now + timeout_seconds."""
@@ -38,9 +45,9 @@ class TestRegisterTimeout:
     def test_heap_ordering(self) -> None:
         """Verify heap maintains min-heap property (earliest deadline first)."""
         # Add in reverse order
-        timeout.register_timeout(pid=3, timeout_s=30.0)
-        timeout.register_timeout(pid=1, timeout_s=10.0)
-        timeout.register_timeout(pid=2, timeout_s=20.0)
+        timeout.register_timeout(pid=3, timeout_s=80.0)
+        timeout.register_timeout(pid=1, timeout_s=60.0)
+        timeout.register_timeout(pid=2, timeout_s=70.0)
 
         # Heap root should be earliest deadline (pid=1)
         _, root_pid = timeout._timeout_heap[0]
@@ -149,7 +156,7 @@ class TestLazyStart:
         """Verify the checker thread starts automatically on first register_timeout call."""
         timeout._checker_started = False
 
-        timeout.register_timeout(pid=12345, timeout_s=10.0)
+        timeout.register_timeout(pid=12345, timeout_s=60.0)
         assert timeout._checker_started is True
 
     def test_multiple_registrations_dont_start_multiple_threads(self) -> None:
@@ -157,9 +164,9 @@ class TestLazyStart:
         timeout._checker_started = False
         pid = 999999  # Dummy PID for naming
         with patch.object(timeout.os, "getpid", return_value=pid):
-            timeout.register_timeout(pid=1, timeout_s=10.0)
-            timeout.register_timeout(pid=2, timeout_s=10.0)
-            timeout.register_timeout(pid=3, timeout_s=10.0)
+            timeout.register_timeout(pid=1, timeout_s=60.0)
+            timeout.register_timeout(pid=2, timeout_s=60.0)
+            timeout.register_timeout(pid=3, timeout_s=60.0)
 
         # Count timeout checker threads
         checker_threads = [t for t in threading.enumerate() if f"{pid}-mutmut-timeout-checker" in t.name]

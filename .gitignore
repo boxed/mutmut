@@ -60,5 +60,5 @@ docs/tri*.rst
 results/
 test_projects/
 
-# Core dump/segfault 
+# Core dump/segfault
 core
