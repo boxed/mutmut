@@ -20,7 +20,7 @@ from mutmut.mutation.mutators import OPERATORS_TYPE
 from mutmut.mutation.mutators import MethodType
 from mutmut.mutation.mutators import get_method_type
 from mutmut.mutation.mutators import mutation_operators
-from mutmut.mutation.pragma_handling import parse_pragma_lines
+from mutmut.mutation.pragma_handling import PragmaVisitor
 from mutmut.mutation.trampoline_templates import build_enum_trampoline
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import mangle_function_name
@@ -45,8 +45,8 @@ class Mutation:
 def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
-    :return: A tuple of (mutated code, list of mutant function names)"""
-    module, mutations, ignored_classes, ignored_functions = create_mutations(code, covered_lines)
+    :return: A tuple of (mutated code, list of mutant function names)."""
+    module, mutations, ignored_classes, ignored_functions = create_mutations(filename, code, covered_lines)
 
     mutated_code, mutant_names = combine_mutations_to_source(module, mutations, ignored_classes, ignored_functions)
 
@@ -56,18 +56,25 @@ def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | Non
 
 
 def create_mutations(
-    code: str, covered_lines: set[int] | None = None
+    filename: str, code: str, covered_lines: set[int] | None = None
 ) -> tuple[cst.Module, list[Mutation], set[str], set[str]]:
     """Parse the code and create mutations.
 
-    :return: A tuple of (module, mutations, ignored_classes, ignored_functions)"""
-    ignored_lines, ignored_class_lines, ignored_function_lines = parse_pragma_lines(code)
-
+    :param filename: File path forwarded to :class:`PragmaVisitor` for error messages.
+    :param code: Python source code to parse and mutate.
+    :param covered_lines: If provided, only lines in this set are considered for mutation.
+    :return: A tuple of (module, mutations, ignored_classes, ignored_functions)."""
     module = cst.parse_module(code)
-
     metadata_wrapper = MetadataWrapper(module)
+
+    pragma_visitor = PragmaVisitor(filename)
+    metadata_wrapper.visit(pragma_visitor)
+
     visitor = MutationVisitor(
-        mutation_operators, ignored_lines, covered_lines, ignored_class_lines, ignored_function_lines
+        mutation_operators,
+        pragma_visitor.no_mutate_lines,
+        covered_lines,
+        pragma_visitor.ignore_node_lines,
     )
     module = metadata_wrapper.visit(visitor)
 
@@ -85,8 +92,7 @@ class OuterFunctionProvider(cst.BatchableMetadataProvider[cst.CSTNode | None]):
             x = 1
     ```
 
-    Then `self.get_metadata(OuterFunctionProvider, <x>)` returns `<foo>`.
-    """
+    Then `self.get_metadata(OuterFunctionProvider, <x>)` returns `<foo>`."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -120,7 +126,11 @@ class OuterFunctionVisitor(cst.CSTVisitor):
 
 class MutationVisitor(cst.CSTVisitor):
     """Iterate through all nodes in the module and create mutations for them.
-    Ignore nodes at lines `ignore_lines` and several other cases (e.g. nodes within type annotations).
+
+    Lines in *ignore_lines* are skipped outright.  Lines in *ignored_node_lines*
+    cause the enclosing AST node (and its children) to be skipped, which is used
+    for inline ``# pragma: no mutate block`` pragmas.  Several other cases are
+    also skipped (e.g. nodes within type annotations).
 
     The created mutations will be accessible at `self.mutations`."""
 
@@ -131,15 +141,13 @@ class MutationVisitor(cst.CSTVisitor):
         operators: OPERATORS_TYPE,
         ignore_lines: set[int],
         covered_lines: set[int] | None = None,
-        ignored_class_lines: set[int] | None = None,
-        ignored_function_lines: set[int] | None = None,
+        ignored_node_lines: set[int] | None = None,
     ):
         self.mutations: list[Mutation] = []
         self._operators = operators
         self._ignored_lines = ignore_lines
         self._covered_lines = covered_lines
-        self._ignored_class_lines = ignored_class_lines or set()
-        self._ignored_function_lines = ignored_function_lines or set()
+        self._ignored_node_lines = ignored_node_lines or set()
         self.ignored_classes: set[str] = set()
         self.ignored_functions: set[str] = set()
 
@@ -173,6 +181,9 @@ class MutationVisitor(cst.CSTVisitor):
             if position.start.line in self._ignored_lines:
                 return False
 
+            if position.start.line in self._ignored_node_lines:
+                return False
+
             # do not mutate nodes that are not covered
             if self._covered_lines is not None and position.start.line not in self._covered_lines:
                 return False
@@ -180,19 +191,15 @@ class MutationVisitor(cst.CSTVisitor):
         return True
 
     def _skip_node_and_children(self, node: cst.CSTNode) -> bool:
-        # Check if this is a class with pragma: no mutate class
-        if isinstance(node, cst.ClassDef):
-            position = self.get_metadata(PositionProvider, node, None)
-            if position and position.start.line in self._ignored_class_lines:
+        position = self.get_metadata(PositionProvider, node, None)
+        if position and position.start.line in self._ignored_node_lines:
+            if isinstance(node, cst.ClassDef):
                 self.ignored_classes.add(node.name.value)
                 return True
-
-        # Check if this is a function with pragma: no mutate function
-        if isinstance(node, cst.FunctionDef):
-            position = self.get_metadata(PositionProvider, node, None)
-            if position and position.start.line in self._ignored_function_lines:
+            elif isinstance(node, cst.FunctionDef):
                 self.ignored_functions.add(node.name.value)
                 return True
+            # other types of nodes (if, elif, for, while, ...) get treated on a line-by-line basis
 
         if (
             isinstance(node, cst.Call)
@@ -248,11 +255,11 @@ def combine_mutations_to_source(
 ) -> tuple[str, Sequence[str]]:
     """Create mutated functions and trampolines for all mutations and compile them to a single source code.
 
-    :param module: The original parsed module
+    :param module: The original parsed module.
     :param mutations: Mutations that should be applied.
-    :param ignored_classes: Class names to skip transformation for (e.g., enums with pragma: no mutate class)
-    :param ignored_functions: Function names to skip transformation for (pragma: no mutate function)
-    :return: Mutated code and list of mutation names"""
+    :param ignored_classes: Class names to skip transformation for (e.g., enums with pragma: no mutate class).
+    :param ignored_functions: Function names to skip transformation for (pragma: no mutate function).
+    :return: Mutated code and list of mutation names."""
     ignored_classes = ignored_classes or set()
     ignored_functions = ignored_functions or set()
 
@@ -334,12 +341,11 @@ def _external_method_injection(
     This moves mutation code outside the class and uses a simple assignment
     inside the class body. Works for staticmethod, classmethod, and instance methods.
 
-    :param method: The method to create external trampoline for
-    :param mutants: The mutations for this method
-    :param class_name: The containing class name
-    :param method_type: MethodType.STATICMETHOD, MethodType.CLASSMETHOD, or MethodType.INSTANCE
-    :return: A tuple of (external_nodes, class_body_assignment, mutant_names)
-    """
+    :param method: The method to create external trampoline for.
+    :param mutants: The mutations for this method.
+    :param class_name: The containing class name.
+    :param method_type: MethodType.STATICMETHOD, MethodType.CLASSMETHOD, or MethodType.INSTANCE.
+    :return: A tuple of (external_nodes, class_body_assignment, mutant_names)."""
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     method_name = method.name.value
@@ -480,8 +486,6 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             result_statement = cst.SimpleStatementLine([cst.Return(cst.Await(result))])
 
     type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment("# type: ignore"))
-
-    function.whitespace_after_type_parameters
     return function.with_changes(
         body=cst.IndentedBlock(
             [
@@ -502,10 +506,9 @@ def enum_trampoline_arrangement(
     avoiding the enum metaclass conflict that occurs when class-level attributes
     are added. The enum class only contains simple method assignments.
 
-    :param cls: The enum class definition
-    :param mutations_by_method: Mapping of method nodes to their mutations
-    :return: A tuple of (external_nodes, modified_class, mutant_names)
-    """
+    :param cls: The enum class definition.
+    :param mutations_by_method: Mapping of method nodes to their mutations.
+    :return: A tuple of (external_nodes, modified_class, mutant_names)."""
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     new_body: list[cst.BaseStatement | cst.BaseSmallStatement] = []
@@ -603,8 +606,7 @@ class StringifyAnnotations(cst.CSTTransformer):
     This transformer turns them into string literals (e.g., -> "AsyncGenerator[Clazz, None]").
 
     This allows for mutations to be placed anywhere in the file, improving the resilience of
-    the mutation process without breaking type checking.
-    """
+    the mutation process without breaking type checking."""
 
     _empty_module = cst.parse_module("")
 
@@ -624,7 +626,9 @@ def _is_generator(function: cst.FunctionDef) -> bool:
 
 class IsGeneratorVisitor(cst.CSTVisitor):
     """Check if a function is a generator.
-    We do so by checking if any child is a Yield statement, but not looking into inner function definitions."""
+
+    We do so by checking if any child is a Yield statement, but not looking
+    into inner function definitions."""
 
     def __init__(self, original_function: cst.FunctionDef):
         self.is_generator = False

@@ -244,28 +244,106 @@ whitelist lines are:
   to continue, but it's slower.
 
 
-Skipping Entire Functions
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Skipping Code Blocks
+~~~~~~~~~~~~~~~~~~~~
 
-Similarly, you can skip an entire function from mutation using
-``# pragma: no mutate function``:
-
-.. code-block:: python
-
-    def complex_algorithm():  # pragma: no mutate function
-        # This function won't be mutated at all
-        return some_complex_calculation()
+You can skip an entire indentation block from mutation using
+``# pragma: no mutate block``. This works on any compound statement --
+functions, classes, ``if``/``elif``/``else``, loops, context managers, etc.
 
 Both syntax styles are supported:
 
-- ``# pragma: no mutate function``
-- ``# pragma: no mutate: function``
+- ``# pragma: no mutate block``
+- ``# pragma: no mutate: block``
 
-This is useful for functions that:
+**Skipping an entire function or class** -- place the pragma inline on the
+definition line. The entire node (including all children) is skipped and no
+trampoline is generated:
 
-- Have complex side effects that make mutation testing impractical
-- Are performance-critical and you want to avoid trampoline overhead
-- Are known to cause issues with the mutation testing framework
+.. code-block:: python
+
+    def complex_algorithm():  # pragma: no mutate block
+        return some_complex_calculation()
+
+    class MySettings:  # pragma: no mutate block
+        DEBUG = True
+        MAX_RETRIES = 3
+
+**Skipping only the body of a function** -- place the pragma on its own line
+inside the function. The function definition (including default arguments) is
+still mutable, but the body is suppressed:
+
+.. code-block:: python
+
+    def foo(val=1):
+        # pragma: no mutate block
+        x = 1
+        y = complex_calculation()
+        z = x + y
+
+    def bar():
+        # this function is still mutated normally
+        return 42
+
+**Skipping an ``if`` branch without affecting ``elif``/``else``** -- place
+the pragma inline on the ``if``. Only the ``if`` condition and its indented
+body are suppressed; sibling branches (``elif``, ``else``) remain mutable
+because they exit the original indentation scope:
+
+.. code-block:: python
+
+    if error_condition:  # pragma: no mutate block
+        log_error()
+        send_alert()
+    elif other_condition:
+        # still mutated -- this branch is outside the block scope
+        handle_other()
+    else:
+        # still mutated
+        handle_success()
+
+The same principle applies to ``for``/``else``, ``while``/``else``,
+``try``/``except``/``finally``, and ``match``/``case``.
+
+This is useful for:
+
+- Functions or classes that should be excluded from mutation entirely
+- Error-handling branches that are hard to unit test in isolation
+- Logging or telemetry blocks that don't affect program correctness
+- Generated or boilerplate code within an otherwise mutable function
+
+
+Skipping Code Regions
+~~~~~~~~~~~~~~~~~~~~~
+
+For suppressing mutations across a range of lines regardless of indentation,
+use ``# pragma: no mutate start`` and ``# pragma: no mutate end``:
+
+.. code-block:: python
+
+    a = mutate_this()
+
+    # pragma: no mutate start
+    b = skip_this()
+    c = skip_this_too()
+    # pragma: no mutate end
+
+    d = mutate_this_too()
+
+Every line between the markers (inclusive) is suppressed. This works inside
+functions, classes, or at module level, and ignores indentation entirely.
+
+An unmatched ``# pragma: no mutate end`` without a preceding ``start`` raises
+a ``PragmaParseError`` at parse time.  An unclosed ``# pragma: no mutate start``
+(no matching ``end`` before end-of-file) raises a ``PragmaParseError``.
+Both errors include the filename and line number.
+
+**Nesting restriction:** opening a new ``block`` or ``start`` context while
+another context is already active is not allowed and raises a
+``PragmaParseError``.  The error message includes both the offending line and
+the line where the existing context was opened.  Close the current context
+first (dedent for ``block``, or ``# pragma: no mutate end`` for ``start``)
+before opening a new one.
 
 
 Modifying pytest arguments

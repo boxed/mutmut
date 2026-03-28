@@ -6,7 +6,7 @@ import ctypes
 import asyncio
 
 
-def my_decorator(func):  # pragma: no mutate: function
+def my_decorator(func):  # pragma: no mutate block
     return func
 
 
@@ -19,10 +19,10 @@ def badly_tested() -> str:
 def untested() -> str:
     return "Mutants for this method should survive"
 
-def skip_this_function() -> int:  # pragma: no mutate: function
+def skip_this_function() -> int:  # pragma: no mutate block
     return 1 + 2 * 3
 
-def also_skip_this_function() -> str:  # pragma: no mutate function
+def also_skip_this_function() -> str:  # pragma: no mutate block
     return "should" + " not" + " mutate"
 
 
@@ -101,21 +101,21 @@ class Point:
         return self.x, self.y
 
     @staticmethod
-    def skip_static_decorator_pragma(a: int, b: int) -> int:  # pragma: no mutate: function
+    def skip_static_decorator_pragma(a: int, b: int) -> int:  # pragma: no mutate block
         return a + b * 2
 
     @classmethod
-    def skip_class_decorator_pragma(cls, value: int) -> "Point":  # pragma: no mutate: function
+    def skip_class_decorator_pragma(cls, value: int) -> "Point":  # pragma: no mutate block
         return cls(value + 1, value * 2)
 
-    def skip_instance_method_pragma(self) -> int:  # pragma: no mutate: function
+    def skip_instance_method_pragma(self) -> int:  # pragma: no mutate block
         return self.x + self.y * 2
 
-    @staticmethod  # pragma: no mutate: function
+    @staticmethod  # pragma: no mutate block
     def pragma_on_staticmethod_decorator(a: int, b: int) -> int:
         return a + b * 2
 
-    @classmethod  # pragma: no mutate: function
+    @classmethod  # pragma: no mutate block
     def pragma_on_classmethod_decorator(cls, value: int) -> "Point":
         return cls(value + 1, value * 2)
 
@@ -186,7 +186,7 @@ class Color(Enum):
         return cls.RED
 
 
-class SkipThisClass:  # pragma: no mutate: class
+class SkipThisClass:  # pragma: no mutate block
     def method_one(self) -> int:
         return 1 + 2
 
@@ -197,9 +197,10 @@ class SkipThisClass:  # pragma: no mutate: class
     def static_method() -> int:
         return 3 * 4
 
-
-class AlsoSkipThisClass:  # pragma: no mutate class
+# pragma: no mutate start
+class AlsoSkipThisClass:
     VALUE = 10 + 20
 
     def compute(self) -> int:
         return self.VALUE * 2
+# pragma: no mutate end
