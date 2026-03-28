@@ -17,7 +17,7 @@ from mutmut.mutation.trampoline_templates import mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
-    module, mutated_nodes, _, _ = create_mutations(source, covered_lines)
+    module, mutated_nodes, _, _ = create_mutations("test.py", source, covered_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants
@@ -431,25 +431,23 @@ def foo(): # pragma: no mutate
     assert mutants
 
 
-def test_pragma_no_mutate_class():
-    """Test that pragma: no mutate class skips entire class from mutation."""
+def test_pragma_no_mutate_block_class():
+    """Test that pragma: no mutate block skips entire class from mutation."""
     source = """
-class Foo:  # pragma: no mutate class
+class Foo:  # pragma: no mutate block
     def method(self):
         return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Should not have any mutant versions or trampoline attributes
     assert "xǁFooǁmethod__mutmut" not in mutated_code
-    # Original class should be preserved unchanged
     assert "def method(self):" in mutated_code
     assert "return 1 + 1" in mutated_code
 
 
-def test_pragma_no_mutate_class_with_colon():
-    """Test that pragma: no mutate: class also works (alternative syntax)."""
+def test_pragma_no_mutate_block_class_with_colon():
+    """Test that pragma: no mutate: block also works (alternative syntax)."""
     source = """
-class Bar:  # pragma: no mutate: class
+class Bar:  # pragma: no mutate: block
     def method(self):
         return 2 + 2
 """.strip()
@@ -458,10 +456,10 @@ class Bar:  # pragma: no mutate: class
     assert "def method(self):" in mutated_code
 
 
-def test_pragma_no_mutate_class_does_not_affect_other_classes():
-    """Test that pragma: no mutate class only affects the annotated class."""
+def test_pragma_no_mutate_block_does_not_affect_other_classes():
+    """Test that pragma: no mutate block only affects the annotated class."""
     source = """
-class Skipped:  # pragma: no mutate class
+class Skipped:  # pragma: no mutate block
     def method(self):
         return 1
 
@@ -470,13 +468,11 @@ class Mutated:
         return 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Skipped class should not have mutants
     assert "xǁSkippedǁmethod__mutmut" not in mutated_code
-    # Mutated class should have mutants
     assert "xǁMutatedǁmethod__mutmut_orig" in mutated_code
 
 
-def test_pragma_no_mutate_vs_no_mutate_class():
+def test_pragma_no_mutate_vs_no_mutate_block_class():
     """Test that regular pragma: no mutate does NOT skip entire class (only that line)."""
     source = """
 class Foo:  # pragma: no mutate
@@ -484,16 +480,15 @@ class Foo:  # pragma: no mutate
         return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Regular pragma should NOT skip the class - methods should still be mutated
     assert "xǁFooǁmethod__mutmut" in mutated_code
 
 
-def test_pragma_no_mutate_class_for_enum():
-    """Test the enum use case - pragma prevents trampoline attribute injection."""
+def test_pragma_no_mutate_block_enum():
+    """Test the enum use case - block pragma prevents trampoline attribute injection."""
     source = """
 from enum import Enum
 
-class Color(Enum):  # pragma: no mutate class
+class Color(Enum):  # pragma: no mutate block
     RED = 1
     GREEN = 2
 
@@ -501,33 +496,29 @@ class Color(Enum):  # pragma: no mutate class
         return self.name.lower()
 """.strip()
     mutated_code = mutated_module(source)
-    # No mutant attributes should be added to the enum class
     assert "__mutmut_mutants" not in mutated_code
     assert "xǁColorǁdescribe__mutmut" not in mutated_code
-    # Original enum should be preserved
     assert "class Color(Enum):" in mutated_code
     assert "RED = 1" in mutated_code
 
 
-def test_pragma_no_mutate_function():
-    """Test that pragma: no mutate function skips entire function from mutation."""
+def test_pragma_no_mutate_block_function():
+    """Test that pragma: no mutate block skips entire function from mutation."""
     source = """
-def foo():  # pragma: no mutate function
+def foo():  # pragma: no mutate block
     return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Should not have any mutant versions or trampoline
     assert "x_foo__mutmut" not in mutated_code
     assert "__mutmut_mutants" not in mutated_code
-    # Original function should be preserved
     assert "def foo():" in mutated_code
     assert "return 1 + 1" in mutated_code
 
 
-def test_pragma_no_mutate_function_with_colon():
-    """Test that pragma: no mutate: function also works (alternative syntax)."""
+def test_pragma_no_mutate_block_function_with_colon():
+    """Test that pragma: no mutate: block also works for functions."""
     source = """
-def bar():  # pragma: no mutate: function
+def bar():  # pragma: no mutate: block
     return 2 + 2
 """.strip()
     mutated_code = mutated_module(source)
@@ -535,31 +526,124 @@ def bar():  # pragma: no mutate: function
     assert "def bar():" in mutated_code
 
 
-def test_pragma_no_mutate_function_does_not_affect_other_functions():
-    """Test that pragma: no mutate function only affects the annotated function."""
+def test_pragma_no_mutate_block_does_not_affect_other_functions():
+    """Test that pragma: no mutate block only affects the annotated function."""
     source = """
-def skipped():  # pragma: no mutate function
+def skipped():  # pragma: no mutate block
     return 1
 
 def mutated():
     return 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Skipped function should not have mutants
     assert "x_skipped__mutmut" not in mutated_code
-    # Mutated function should have mutants
     assert "x_mutated__mutmut_orig" in mutated_code
 
 
-def test_pragma_no_mutate_vs_no_mutate_function():
+def test_pragma_no_mutate_vs_no_mutate_block_function():
     """Test that regular pragma: no mutate does NOT skip entire function."""
     source = """
 def foo():  # pragma: no mutate
     return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
-    # Regular pragma should NOT skip the function - it should still be mutated
     assert "x_foo__mutmut" in mutated_code
+
+
+def test_pragma_no_mutate_block_standalone_body_only():
+    """Standalone block pragma inside a function body suppresses the body
+    but leaves the def line (including default args) mutable."""
+    source = """
+def buzz(val=1):
+    # pragma: no mutate block
+    return val + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_buzz__mutmut_orig" in mutated_code
+    assert "return val + 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_inline_if_allows_elif():
+    """Inline block pragma on an if-statement suppresses only that branch;
+    the elif/else branches remain mutable because they exit the if scope."""
+    source = """
+def top_level(a, b):
+    if a > b:  # pragma: no mutate block
+        return a
+    elif b > a:
+        return b
+    return a + b
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_top_level__mutmut_orig" in mutated_code
+    # elif condition IS mutated (b > a -> b >= a)
+    assert "b >= a" in mutated_code
+    # if condition is NOT mutated (suppressed by inline block pragma)
+    assert "a >= b" not in mutated_code
+
+
+def test_pragma_no_mutate_start_end_function():
+    """Test that start/end markers suppress all mutations within a function."""
+    source = """
+# pragma: no mutate start
+def foo():
+    return 1 + 1
+# pragma: no mutate end
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut" not in mutated_code
+    assert "__mutmut_mutants" not in mutated_code
+    assert "def foo():" in mutated_code
+    assert "return 1 + 1" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_does_not_affect_outside():
+    """Test that code outside start/end markers is still mutated."""
+    source = """
+# pragma: no mutate start
+def skipped():
+    return 1 + 1
+# pragma: no mutate end
+
+def mutated():
+    return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_skipped__mutmut" not in mutated_code
+    assert "x_mutated__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_class_method():
+    """Test that start/end inside a class suppresses only the wrapped method."""
+    source = """
+class Foo:
+    # pragma: no mutate start
+    def skipped(self):
+        return 1 + 1
+    # pragma: no mutate end
+
+    def mutated(self):
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁFooǁskipped__mutmut" not in mutated_code
+    assert "xǁFooǁmutated__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_partial_function():
+    """Test that start/end around part of a function suppresses only those lines."""
+    source = """
+def foo():
+    x = 1 + 1
+    # pragma: no mutate start
+    y = 2 + 2
+    # pragma: no mutate end
+    z = 3 + 3
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut_orig" in mutated_code
+    assert "1 + 1" not in mutated_code or "x_foo__mutmut" in mutated_code
+    assert "3 + 3" not in mutated_code or "x_foo__mutmut" in mutated_code
 
 
 def test_enum_mutation_uses_external_injection():

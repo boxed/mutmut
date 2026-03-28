@@ -1,41 +1,192 @@
-"""Pragma comment parsing for mutation control."""
+"""Pragma comment parsing for mutation control via LibCST."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+import libcst as cst
+from libcst.metadata import PositionProvider
 
 
-def parse_pragma_lines(source: str) -> tuple[set[int], set[int], set[int]]:
-    """Parse all pragma: no mutate variants.
+class PragmaParseError(Exception):
+    pass
 
-    Each set is mutually exclusive.
 
-    Supported pragmas:
-        - ``# pragma: no mutate`` - skip this line only
-        - ``# pragma: no mutate class`` - skip entire class
-        - ``# pragma: no mutate: class`` - skip entire class (alternative syntax)
-        - ``# pragma: no mutate function`` - skip entire function
-        - ``# pragma: no mutate: function`` - skip entire function (alternative syntax)
+def _parse_pragma_token(comment: cst.Comment | None) -> str | None:
+    """Return 'block', 'start', 'end', 'bare', or None."""
+    if comment is None:
+        return None
+    text = comment.value
+    if "# pragma:" not in text or "no mutate" not in text:
+        return None
+    tail = text.partition("no mutate")[-1].strip()
+    tokens = tail.lstrip(": ").split(",", 1)[0].split()
+    tok = tokens[0] if tokens else None
+    if tok in ("block", "start", "end"):
+        return tok
+    return "bare"
 
-    :return: A tuple of (no_mutate_lines, class_lines, function_lines)
-    """
-    no_mutate_lines: set[int] = set()
-    class_lines: set[int] = set()
-    function_lines: set[int] = set()
 
-    for i, line in enumerate(source.split("\n")):
-        if "# pragma:" not in line:
-            continue
+class PragmaVisitor(cst.CSTVisitor):
+    """Walk a LibCST tree to collect pragma-suppressed line numbers.
 
-        pragma_content = line.partition("# pragma:")[-1]
-        line_num = i + 1
+    After visiting, ``no_mutate_lines`` contains lines where individual
+    mutations should be suppressed, and ``ignore_node_lines`` contains
+    lines where entire AST nodes (and their children) should be skipped."""
 
-        if "no mutate" not in pragma_content:
-            continue
+    METADATA_DEPENDENCIES = (PositionProvider,)
 
-        # Check for specific variants first (more specific matches)
-        if "no mutate class" in pragma_content or "no mutate: class" in pragma_content:
-            class_lines.add(line_num)
-        elif "no mutate function" in pragma_content or "no mutate: function" in pragma_content:
-            function_lines.add(line_num)
-        else:
-            # Generic "no mutate" (not class or function)
-            no_mutate_lines.add(line_num)
+    def __init__(self, filename: str):
+        self.filename = filename
+        self.no_mutate_lines: set[int] = set()
+        self.ignore_node_lines: set[int] = set()
+        self._context_type: str | None = None
+        self._context_start_line: int | None = None
 
-    return no_mutate_lines, class_lines, function_lines
+    def _open_context(self, kind: str, line_num: int) -> None:
+        if self._context_type is not None:
+            raise PragmaParseError(
+                f"Cannot open no mutate context at {self.filename}:{line_num}\n"
+                f"\tPragma context already opened at {self.filename}:{self._context_start_line}"
+            )
+        self._context_type = kind
+        self._context_start_line = line_num
+
+    def _close_context(self) -> None:
+        self._context_type = None
+        self._context_start_line = None
+
+    def _scan_empty_lines(self, lines: Sequence[cst.EmptyLine]) -> list[tuple[str, int]]:
+        """Scan EmptyLine nodes for pragma comments.
+
+        :param lines: The lines to scan for pragma comments.
+        :return: (token, line_number) pairs so callers like ``_scan_body_stmts``
+            can react to ``block`` tokens by marking sibling ranges."""
+        results: list[tuple[str, int]] = []
+        for line in lines:
+            if line.comment is None:
+                continue
+            tok = _parse_pragma_token(line.comment)
+            if tok is None:
+                continue
+            line_num = self.get_metadata(PositionProvider, line).start.line
+            if tok == "block":
+                self._open_context("block", line_num)
+                self.no_mutate_lines.add(line_num)
+            elif tok == "start":
+                self._open_context("selection", line_num)
+                self.no_mutate_lines.add(line_num)
+            elif tok == "end":
+                if self._context_type != "selection":
+                    raise PragmaParseError(
+                        f"# pragma: no mutate end at {self.filename}:{line_num} without a # pragma: no mutate start"
+                        + (
+                            f"\n\tCurrent no mutate context started at {self.filename}:{self._context_start_line}"
+                            if self._context_type is not None
+                            else ""
+                        )
+                    )
+                if self._context_start_line is None:
+                    raise ValueError("Context start line cannot be None")
+                self.no_mutate_lines.update(range(self._context_start_line, line_num + 1))
+                self._close_context()
+            else:
+                self.no_mutate_lines.add(line_num)
+            results.append((tok, line_num))
+        return results
+
+    def _scan_body_stmts(
+        self,
+        body: Sequence[cst.BaseStatement | cst.BaseCompoundStatement | cst.SimpleStatementLine],
+    ) -> None:
+        """Scan ``leading_lines`` of each statement for standalone pragmas.
+
+        Shared by ``visit_Module`` (module-level body) and
+        ``visit_IndentedBlock`` (block-level body)."""
+        block_from_idx: int | None = None
+        for i, stmt in enumerate(body):
+            found = self._scan_empty_lines(getattr(stmt, "leading_lines", []))
+            for tok, _ in found:
+                if tok == "block" and block_from_idx is None:
+                    block_from_idx = i
+        if block_from_idx is not None:
+            for j in range(block_from_idx, len(body)):
+                pos = self.get_metadata(PositionProvider, body[j])
+                self.no_mutate_lines.update(range(pos.start.line, pos.end.line + 1))
+            self._close_context()
+
+    def visit_Module(self, node: cst.Module) -> bool | None:
+        self._scan_empty_lines(node.header)
+        self._scan_body_stmts(node.body)
+        return True
+
+    def leave_Module(self, node: cst.Module) -> None:
+        self._scan_empty_lines(node.footer)
+        if self._context_type == "selection":
+            raise PragmaParseError(
+                f"Missing no mutate end for start block at {self.filename}:{self._context_start_line}"
+            )
+
+    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> bool | None:
+        tok = _parse_pragma_token(node.trailing_whitespace.comment)
+        if tok is not None:
+            line = self.get_metadata(PositionProvider, node).start.line
+            self.no_mutate_lines.add(line)
+        return True
+
+    def _visit_compound_header(self, node: cst.CSTNode) -> None:
+        body = getattr(node, "body", None)
+        if isinstance(body, cst.IndentedBlock):
+            tok = _parse_pragma_token(body.header.comment)
+            if tok is None:
+                return
+            node_line = self.get_metadata(PositionProvider, node).start.line
+            if tok == "block":
+                body_pos = self.get_metadata(PositionProvider, body)
+                self.ignore_node_lines.add(node_line)
+                self.ignore_node_lines.update(range(body_pos.start.line, body_pos.end.line + 1))
+            else:
+                self.no_mutate_lines.add(node_line)
+        elif isinstance(body, cst.SimpleStatementSuite):
+            tok = _parse_pragma_token(body.trailing_whitespace.comment)
+            if tok is None:
+                return
+            node_line = self.get_metadata(PositionProvider, node).start.line
+            self.no_mutate_lines.add(node_line)
+
+    def visit_If(self, node: cst.If) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_For(self, node: cst.For) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_While(self, node: cst.While) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_With(self, node: cst.With) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_Try(self, node: cst.Try) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_Match(self, node: cst.CSTNode) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_IndentedBlock(self, node: cst.IndentedBlock) -> bool | None:
+        self._scan_body_stmts(node.body)
+        self._scan_empty_lines(node.footer)
+        return True
