@@ -614,7 +614,23 @@ class StringifyAnnotations(cst.CSTTransformer):
         if isinstance(updated_node.annotation, (cst.SimpleString, cst.ConcatenatedString, cst.FormattedString)):
             return updated_node
         source = self._empty_module.code_for_node(updated_node.annotation)
-        return updated_node.with_changes(annotation=cst.SimpleString(f'"{source}"'))
+        return updated_node.with_changes(annotation=cst.SimpleString(self._format_source(source)))
+
+    def _format_source(self, source: str):
+        """Format the source annotation accounting for types with quotes inside the outer annotation
+
+        EX: List[ "NewClass" ] -> "List[ \"NewClass\" ]"
+
+        Attempts to default to more readable approaches but falls-safe to a globally
+        compatible approach regardless of quote style (including the seldom-used in this context triple quote).
+        """
+        if '"' not in source:
+            return f'"{source}"'
+        elif "'" not in source:
+            return f"'{source}'"
+        else:
+            escaped = source.replace('"', '\\"')
+            return f'"{escaped}"'
 
 
 def _is_generator(function: cst.FunctionDef) -> bool:

@@ -48,6 +48,55 @@ class Color(Enum):
             del os.environ["MUTANT_UNDER_TEST"]
 
 
+def test_type_annotation_runtime_execution():
+    """Test that forward and quoted annotations can be executed
+
+    We don't really care about any mutations, we just care if the annotations are processed properly.
+    """
+    source = """
+from enum import Enum
+from typing import List, Literal
+
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+
+    def describe(self) -> Literal[ "red" | 'green' | \"""blue\""" ]: # worst case type annotation
+        return self.name.lower()
+
+    @classmethod
+    def from_name(cls, name: str) -> Color:
+        name = name.upper()
+        vals = {
+            Color.RED.name: Color.RED,
+            Color.GREEN.name: Color.GREEN,
+            Color.BLUE.name: Color.BLUE
+        }
+        return vals[name]
+""".strip()
+
+    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    assert len(mutant_names) > 0, "Should have at least one mutant"
+
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    try:
+        os.environ["MUTANT_UNDER_TEST"] = "none"
+        namespace = {"__name__": "test_module"}
+        exec(mutated_code, namespace)
+        Color = namespace["Color"]
+
+        assert Color.RED.value == 1
+        assert Color.RED.describe() == "red"
+
+        assert Color.from_name("green") == Color.GREEN
+    finally:
+        if old_env is not None:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+        elif "MUTANT_UNDER_TEST" in os.environ:
+            del os.environ["MUTANT_UNDER_TEST"]
+
+
 def test_regular_class_staticmethod_runtime():
     """Test that staticmethod mutation in regular classes works at runtime."""
     source = """
