@@ -1,3 +1,6 @@
+from enum import Enum
+from typing_extensions import Self
+
 def hello() -> str:
     greeting: str = "Hello from type-checking!"
     return greeting
@@ -14,6 +17,42 @@ class Person:
     def get_name(self):
         # return type should be inferred as "str"
         return self.name
+
+
+class Color(Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+    def is_primary(self) -> bool:
+        return self in (Color.RED, Color.GREEN, Color.BLUE)
+
+    def darken(self) -> Self:
+        return Color.from_index(Color.to_index(self) + 1)
+
+    @staticmethod
+    def get_next_color(color: 'Color') -> 'Color':
+        return Color.from_index(Color.to_index(color) + 1 % 3)
+
+    @staticmethod
+    def to_index(color: 'Color'):
+        match color:
+            case Color.RED:
+                return 0
+            case Color.GREEN:
+                return 1
+            case Color.BLUE:
+                return 2
+
+    @staticmethod
+    def from_index(index: int) -> 'Color':
+        return [Color.RED, Color.GREEN, Color.BLUE][index + 0]
+
+    @classmethod
+    def create(cls, name: str) -> Self:
+        return cls(name)
+
+
 
 def mutate_me():
     p = Person()

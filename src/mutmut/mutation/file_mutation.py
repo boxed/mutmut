@@ -223,6 +223,14 @@ class MutationVisitor(cst.CSTVisitor):
         ):
             return True
 
+        if Config.get().type_check_command:
+            if isinstance(node, cst.ClassDef) and is_enum_class(node):
+                # Currently, mutating enums breaks typing see type_checking E2E test for some examples
+                return True
+            if isinstance(node, cst.FunctionDef) and node.decorators:
+                # Currently, mutating staticmethod and classmethod breaks typing see type_checking E2E test for some examples
+                return True
+
         # ignore decorated functions, because
         # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
