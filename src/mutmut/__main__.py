@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 import platform
 import sys
@@ -187,6 +188,41 @@ def copy_src_dir() -> None:
             # copy mtime, so we later know that when source_mtime == target_mtime, the file is not (yet) mutated.
             shutil.copy2(source_path, target_path)
 
+    # Ensure every parent package directory also has its __init__.py
+    # copied into the mutants tree so that the package structure is
+    # complete for import resolution.
+    _copy_parent_init_files()
+
+
+def _copy_parent_init_files() -> None:
+    """Copy ``__init__.py`` for every package directory in the mutants tree.
+
+    When ``paths_to_mutate`` targets individual files (e.g.
+    ``["pkg/sub/module.py"]``), mutmut creates ``mutants/pkg/sub/module.py``
+    but does *not* copy the ``__init__.py`` files in ``pkg/`` or ``pkg/sub/``.
+    Without them Python's import system cannot recognise ``pkg`` as a package
+    and falls back to the copy installed in site-packages, skipping the
+    trampoline-injected mutant code entirely.
+    """
+    mutants_root = Path("mutants")
+    for init_file in mutants_root.rglob("__init__.py"):
+        # Already present — nothing to do.
+        pass  # pragma: no cover (defensive)
+
+    # Walk every directory that exists in mutants/ and check whether an
+    # __init__.py is missing but present in the original source tree.
+    for dirpath in sorted(mutants_root.rglob("*")):
+        if not dirpath.is_dir():
+            continue
+        init_in_mutants = dirpath / "__init__.py"
+        if init_in_mutants.exists():
+            continue
+        # Compute the corresponding original path.
+        rel = dirpath.relative_to(mutants_root)
+        original_init = rel / "__init__.py"
+        if original_init.exists():
+            shutil.copy2(original_init, init_in_mutants)
+
 
 @dataclass
 class FileMutationResult:
@@ -240,16 +276,92 @@ def create_file_mutants(path: Path) -> FileMutationResult:
 def setup_source_paths() -> None:
     # ensure that the mutated source code can be imported by the tests
     source_code_paths = [Path("."), Path("src"), Path("source")]
+    mutated_roots: list[str] = []
     for path in source_code_paths:
         mutated_path = Path("mutants") / path
         if mutated_path.exists():
-            sys.path.insert(0, str(mutated_path.absolute()))
+            abs_path = str(mutated_path.absolute())
+            sys.path.insert(0, abs_path)
+            mutated_roots.append(abs_path)
 
     # ensure that the original code CANNOT be imported by the tests
     for path in source_code_paths:
         for i in range(len(sys.path)):
             while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
                 del sys.path[i]
+
+    # When the package-under-test is also installed in site-packages
+    # (non-editable install), Python may have already imported the
+    # original (non-mutated) source.  Patch __path__ on imported
+    # packages so submodule lookups prefer the mutants tree, and flush
+    # leaf modules so they get re-imported with trampoline code.
+    if mutated_roots:
+        _patch_imported_packages(mutated_roots)
+
+
+def _patch_imported_packages(mutated_roots: list[str]) -> None:
+    """Make already-imported packages resolve submodules from mutants first.
+
+    For each top-level package that exists in both ``sys.modules`` (from
+    site-packages) and the mutants tree, prepend the mutants path to the
+    package's ``__path__``.  Then flush leaf modules (non-packages) whose
+    mutated ``.py`` file exists, so they get re-imported from the mutants
+    directory with trampoline code.
+    """
+    # Discover top-level package names present in the mutants tree.
+    mutated_packages: dict[str, str] = {}  # pkg_name -> mutants_root
+    for root in mutated_roots:
+        root_path = Path(root)
+        if not root_path.is_dir():
+            continue
+        for child in root_path.iterdir():
+            if child.is_dir() and (child / "__init__.py").exists():
+                mutated_packages[child.name] = root
+
+    if not mutated_packages:
+        return
+
+    # Patch __path__ on top-level and nested packages already in sys.modules.
+    for mod_name, mod in list(sys.modules.items()):
+        top = mod_name.split(".")[0]
+        if top not in mutated_packages or not hasattr(mod, "__path__"):
+            continue
+        root = mutated_packages[top]
+        parts = mod_name.split(".")
+        mutant_dir = str(Path(root, *parts).absolute())
+        if Path(mutant_dir).is_dir() and mutant_dir not in mod.__path__:
+            mod.__path__.insert(0, mutant_dir)
+
+    # Flush leaf modules so they get re-imported from the mutants path.
+    to_remove = [
+        name
+        for name, mod in sys.modules.items()
+        if (
+            name.split(".")[0] in mutated_packages
+            and mod is not None
+            and not hasattr(mod, "__path__")  # leaf module, not a package
+            and _has_mutant_file(name, mutated_packages)
+        )
+    ]
+    for name in to_remove:
+        del sys.modules[name]
+
+    if to_remove:
+        importlib.invalidate_caches()
+
+
+def _has_mutant_file(mod_name: str, mutated_packages: dict[str, str]) -> bool:
+    """Check whether a mutated .py file exists for the given module."""
+    top = mod_name.split(".")[0]
+    root = mutated_packages.get(top, "")
+    if not root:
+        return False
+    parts = mod_name.split(".")
+    if len(parts) > 1:
+        candidate = Path(root, *parts[:-1], parts[-1] + ".py")
+    else:
+        candidate = Path(root, parts[0] + ".py")
+    return candidate.exists()
 
 
 def store_lines_covered_by_tests() -> None:
