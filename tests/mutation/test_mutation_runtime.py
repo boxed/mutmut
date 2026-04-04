@@ -62,7 +62,7 @@ class Color(Enum):
     GREEN = 2
     BLUE = 3
 
-    def describe(self) -> Literal[ "red" | 'green' | \"""blue\""" ]: # worst case type annotation
+    def describe(self) -> Literal[ "red", 'green', \"""blue\""" ]: # worst case type annotation
         return self.name.lower()
 
     @classmethod
