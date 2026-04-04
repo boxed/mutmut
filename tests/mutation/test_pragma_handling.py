@@ -157,6 +157,16 @@ def bar():
         no_mutate, _ = parse_pragmas("test.py", source)
         assert no_mutate == {3, 4, 5}
 
+    def test_does_not_affect_code_before_comment(self):
+        source = """
+def foo():
+    x = 1
+    # pragma: no mutate block
+    y = 2
+"""
+        no_mutate, _ = parse_pragmas("test.py", source)
+        assert no_mutate == {4, 5}
+
     def test_includes_nested_indentation(self):
         source = """
 def foo():
