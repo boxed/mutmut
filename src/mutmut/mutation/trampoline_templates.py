@@ -54,7 +54,7 @@ def build_mutants_dict_and_name(
 
 def build_enum_trampoline(
     *, class_name: str, method_name: str, mutant_names: list[str], method_type: MethodType
-) -> str:
+) -> tuple[str, str]:
     """Generate external trampoline code for enum methods.
 
     This pattern moves all mutation-related code OUTSIDE the enum class body,
@@ -65,7 +65,7 @@ def build_enum_trampoline(
     :param method_name: The method being mutated
     :param mutant_names: List of mutant function names (mangled)
     :param method_type: 'instance', 'static', or 'classmethod'
-    :return: String containing the external functions and mutants dict
+    :return: (trampoline code, mutants dict and orign name fix code)
     """
     prefix = f"_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name)
@@ -102,7 +102,7 @@ def {prefix}_trampoline(self, *args, **kwargs):
 {prefix}_trampoline.__name__ = '{method_name}'
 """
 
-    return _mark_generated(f"\n\n{orig_name_fix}\n\n{mutants_dict}\n\n{trampoline}")
+    return _mark_generated(f"\n\n{trampoline}"), _mark_generated(f"\n\n{orig_name_fix}\n\n{mutants_dict}")
 
 
 # noinspection PyUnresolvedReferences

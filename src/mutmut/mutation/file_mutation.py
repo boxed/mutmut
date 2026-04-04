@@ -294,14 +294,16 @@ def combine_mutations_to_source(
                 # we don't mutate single-line classes, e.g. `class A: a = 1; b = 2`
                 result.append(cls)
             elif is_enum_class(cls):
-                external_nodes, modified_cls, enum_mutant_names = enum_trampoline_arrangement(
+                trampoline_nodes, external_nodes, modified_cls, enum_mutant_names = enum_trampoline_arrangement(
                     cls, mutations_within_function
                 )
-                result.extend(external_nodes)
+                result.extend(trampoline_nodes)
                 result.append(modified_cls)
+                result.extend(external_nodes)
                 mutation_names.extend(enum_mutant_names)
             else:
-                external_nodes_for_class: list[MODULE_STATEMENT] = []
+                pre_class_nodes: list[MODULE_STATEMENT] = []
+                post_class_nodes: list[MODULE_STATEMENT] = []
                 mutated_body = []
                 for method in cls.body.body:
                     method_mutants = mutations_within_function.get(method)
@@ -311,10 +313,11 @@ def combine_mutations_to_source(
 
                     method_type = get_method_type(method)
                     if method_type in (MethodType.STATICMETHOD, MethodType.CLASSMETHOD):
-                        ext_nodes, assignment, method_mutant_names = _external_method_injection(
+                        trampoline_nodes, ext_nodes, assignment, method_mutant_names = _external_method_injection(
                             method, method_mutants, cls.name.value, method_type
                         )
-                        external_nodes_for_class.extend(ext_nodes)
+                        pre_class_nodes.extend(trampoline_nodes)
+                        post_class_nodes.extend(ext_nodes)
                         mutated_body.append(assignment)
                         mutation_names.extend(method_mutant_names)
                     else:
@@ -324,8 +327,9 @@ def combine_mutations_to_source(
                         mutated_body.extend(nodes)
                         mutation_names.extend(mutant_names)
 
-                result.extend(external_nodes_for_class)
+                result.extend(pre_class_nodes)
                 result.append(cls.with_changes(body=cls.body.with_changes(body=mutated_body)))
+                result.extend(post_class_nodes)
         else:
             result.append(statement)
 
@@ -335,7 +339,7 @@ def combine_mutations_to_source(
 
 def _external_method_injection(
     method: cst.FunctionDef, mutants: Sequence[Mutation], class_name: str, method_type: MethodType
-) -> tuple[Sequence[MODULE_STATEMENT], cst.SimpleStatementLine, Sequence[str]]:
+) -> tuple[Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], cst.SimpleStatementLine, Sequence[str]]:
     """Create external trampoline for a method using external injection pattern.
 
     This moves mutation code outside the class and uses a simple assignment
@@ -345,17 +349,14 @@ def _external_method_injection(
     :param mutants: The mutations for this method.
     :param class_name: The containing class name.
     :param method_type: MethodType.STATICMETHOD, MethodType.CLASSMETHOD, or MethodType.INSTANCE.
-    :return: A tuple of (external_nodes, class_body_assignment, mutant_names)."""
+    :return: A tuple of (trampoline_method_nodes, external_nodes, class_body_assignment, mutant_names)."""
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     method_name = method.name.value
     prefix = f"_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name) + "__mutmut"
 
-    stringify = StringifyAnnotations()
-
     orig_func = method.with_changes(name=cst.Name(f"{prefix}_orig"), decorators=[])
-    orig_func = cast(cst.FunctionDef, orig_func.visit(stringify))
     external_nodes.append(orig_func)
 
     for i, mutant in enumerate(mutants):
@@ -365,13 +366,13 @@ def _external_method_injection(
 
         mutated = method.with_changes(name=cst.Name(mutant_func_name), decorators=[])
         mutated = cast(cst.FunctionDef, deep_replace(mutated, mutant.original_node, mutant.mutated_node))
-        mutated = cast(cst.FunctionDef, mutated.visit(stringify))
         external_nodes.append(mutated)
-    trampoline_code = build_enum_trampoline(
+    trampoline_code, mutants_dict_code = build_enum_trampoline(
         class_name=class_name, method_name=method_name, mutant_names=mutant_names, method_type=method_type
     )
     trampoline_nodes = list(cst.parse_module(trampoline_code).body)
-    external_nodes.extend(trampoline_nodes)
+    mutants_dict_nodes = list(cst.parse_module(mutants_dict_code).body)
+    external_nodes.extend(mutants_dict_nodes)
 
     if method_type == MethodType.STATICMETHOD:
         assignment_code = f"{method_name} = staticmethod({prefix}_trampoline)"
@@ -382,7 +383,7 @@ def _external_method_injection(
 
     assignment = cast(cst.SimpleStatementLine, cst.parse_statement(assignment_code))
 
-    return external_nodes, assignment, mutant_names
+    return trampoline_nodes, external_nodes, assignment, mutant_names
 
 
 def function_trampoline_arrangement(
@@ -412,7 +413,7 @@ def function_trampoline_arrangement(
         mutated_method = cast(cst.FunctionDef, deep_replace(mutated_method, mutant.original_node, mutant.mutated_node))
         nodes.append(mutated_method)
 
-    # trampoline that forwards the calls
+    # mapping of mutant to the mutated method
     mutants_dict_code = build_mutants_dict_and_name(
         orig_name=name,
         class_name=class_name,
@@ -499,7 +500,7 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
 
 def enum_trampoline_arrangement(
     cls: cst.ClassDef, mutations_by_method: Mapping[cst.CSTNode, Sequence[Mutation]]
-) -> tuple[Sequence[MODULE_STATEMENT], cst.ClassDef, Sequence[str]]:
+) -> tuple[Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], cst.ClassDef, Sequence[str]]:
     """Create external functions and minimal enum class for enum mutation.
 
     This pattern moves all mutation-related code OUTSIDE the enum class body,
@@ -508,7 +509,8 @@ def enum_trampoline_arrangement(
 
     :param cls: The enum class definition.
     :param mutations_by_method: Mapping of method nodes to their mutations.
-    :return: A tuple of (external_nodes, modified_class, mutant_names)."""
+    :return: A tuple of (trampoline_nodes, external_nodes, modified_class, mutant_names)."""
+    trampoline_nodes: list[MODULE_STATEMENT] = []
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     new_body: list[cst.BaseStatement | cst.BaseSmallStatement] = []
@@ -531,16 +533,17 @@ def enum_trampoline_arrangement(
             new_body.append(method)
             continue
 
-        ext_nodes, assignment, method_mutant_names = _external_method_injection(
+        tramp_nodes, ext_nodes, assignment, method_mutant_names = _external_method_injection(
             method, method_mutants, class_name, method_type
         )
+        trampoline_nodes.extend(tramp_nodes)
         external_nodes.extend(ext_nodes)
         new_body.append(assignment)
         mutant_names.extend(method_mutant_names)
 
     modified_cls = cls.with_changes(body=cls.body.with_changes(body=new_body))
 
-    return external_nodes, modified_cls, mutant_names
+    return trampoline_nodes, external_nodes, modified_cls, mutant_names
 
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
@@ -596,41 +599,6 @@ class ChildReplacementTransformer(cst.CSTTransformer):
             self.replaced_node = True
             return self.new_node
         return updated_node
-
-
-class StringifyAnnotations(cst.CSTTransformer):
-    """Convert type annotations to string literals to avoid NameError from forward references.
-
-    When methods are extracted from a class body and placed before the class definition,
-    annotations referencing the class (e.g., -> AsyncGenerator[Clazz, None]) would fail.
-    This transformer turns them into string literals (e.g., -> "AsyncGenerator[Clazz, None]").
-
-    This allows for mutations to be placed anywhere in the file, improving the resilience of
-    the mutation process without breaking type checking."""
-
-    _empty_module = cst.parse_module("")
-
-    def leave_Annotation(self, original_node: cst.Annotation, updated_node: cst.Annotation) -> cst.Annotation:
-        if isinstance(updated_node.annotation, (cst.SimpleString, cst.ConcatenatedString, cst.FormattedString)):
-            return updated_node
-        source = self._empty_module.code_for_node(updated_node.annotation)
-        return updated_node.with_changes(annotation=cst.SimpleString(self._format_source(source)))
-
-    def _format_source(self, source: str):
-        """Format the source annotation accounting for types with quotes inside the outer annotation
-
-        EX: List[ "NewClass" ] -> "List[ \"NewClass\" ]"
-
-        Attempts to default to more readable approaches but falls-safe to a globally
-        compatible approach regardless of quote style (including the seldom-used in this context triple quote).
-        """
-        if '"' not in source:
-            return f'"{source}"'
-        elif "'" not in source:
-            return f"'{source}'"
-        else:
-            escaped = source.replace('"', '\\"')
-            return f'"{escaped}"'
 
 
 def _is_generator(function: cst.FunctionDef) -> bool:
