@@ -1,8 +1,8 @@
 import libcst as cst
 from inline_snapshot import snapshot
 
-from mutmut.file_mutation import create_trampoline_wrapper
-from mutmut.file_mutation import mutate_file_contents
+from mutmut.mutation.file_mutation import create_trampoline_wrapper
+from mutmut.mutation.file_mutation import mutate_file_contents
 
 
 def _get_trampoline_wrapper(source: str, mangled_name: str, class_name: str | None = None) -> str:
@@ -90,37 +90,53 @@ from __future__ import division
 import lib
 
 lib.foo()
-from typing import Annotated
-from typing import Callable
-from typing import ClassVar
+from collections.abc import Sequence # type: ignore # mutmut generated
+from typing import Annotated # type: ignore # mutmut generated
+from typing import Callable # type: ignore # mutmut generated
+from typing import ClassVar # type: ignore # mutmut generated
+from typing import TypeVar # type: ignore # mutmut generated
 
-MutantDict = Annotated[dict[str, Callable], "Mutant"] # type: ignore
+TReturn = TypeVar('TReturn') # type: ignore # mutmut generated
+MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"] # type: ignore # mutmut generated
 
 
-def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None): # type: ignore
-    """Forward call to original or mutated function, depending on the environment"""
-    import os # type: ignore
-    mutant_under_test = os.environ['MUTANT_UNDER_TEST'] # type: ignore
-    if mutant_under_test == 'fail': # type: ignore
-        from mutmut.__main__ import MutmutProgrammaticFailException # type: ignore
-        raise MutmutProgrammaticFailException('Failed programmatically')       # type: ignore
-    elif mutant_under_test == 'stats': # type: ignore
-        from mutmut.__main__ import record_trampoline_hit # type: ignore
-        record_trampoline_hit(orig.__module__ + '.' + orig.__name__) # type: ignore
-        # (for class methods, orig is bound and thus does not need the explicit self argument)
-        result = orig(*call_args, **call_kwargs) # type: ignore
-        return result # type: ignore
-    prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_' # type: ignore
-    if not mutant_under_test.startswith(prefix): # type: ignore
-        result = orig(*call_args, **call_kwargs) # type: ignore
-        return result # type: ignore
-    mutant_name = mutant_under_test.rpartition('.')[-1] # type: ignore
-    if self_arg is not None: # type: ignore
+def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_args: Sequence, call_kwargs: dict, self_arg = None) -> TReturn: # type: ignore # mutmut generated
+    """Forward call to original or mutated function, depending on the environment""" # type: ignore # mutmut generated
+    import os # type: ignore # mutmut generated
+    mutant_under_test = os.environ.get('MUTANT_UNDER_TEST', '') # type: ignore # mutmut generated
+    if not mutant_under_test: # type: ignore # mutmut generated
+        # No mutant being tested - call original function
+        if self_arg is not None and not hasattr(orig, '__self__'): # type: ignore # mutmut generated
+            return orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+        else: # type: ignore # mutmut generated
+            return orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
+    if mutant_under_test == 'fail': # type: ignore # mutmut generated
+        from mutmut.__main__ import MutmutProgrammaticFailException # type: ignore # mutmut generated
+        raise MutmutProgrammaticFailException('Failed programmatically') # type: ignore # mutmut generated
+    elif mutant_under_test == 'stats': # type: ignore # mutmut generated
+        from mutmut.__main__ import record_trampoline_hit # type: ignore # mutmut generated
+        record_trampoline_hit(orig.__module__ + '.' + orig.__name__) # type: ignore # mutmut generated
+        # Check if orig is a bound method (has __self__) or plain function
+        if self_arg is not None and not hasattr(orig, '__self__'): # type: ignore # mutmut generated
+            result = orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+        else: # type: ignore # mutmut generated
+            result = orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
+        return result # type: ignore # mutmut generated
+    prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_' # type: ignore # mutmut generated
+    if not mutant_under_test.startswith(prefix): # type: ignore # mutmut generated
+        # Check if orig is a bound method (has __self__) or plain function
+        if self_arg is not None and not hasattr(orig, '__self__'): # type: ignore # mutmut generated
+            result = orig(self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+        else: # type: ignore # mutmut generated
+            result = orig(*call_args, **call_kwargs) # type: ignore # mutmut generated
+        return result # type: ignore # mutmut generated
+    mutant_name = mutant_under_test.rpartition('.')[-1] # type: ignore # mutmut generated
+    if self_arg is not None: # type: ignore # mutmut generated
         # call to a class method where self is not bound
-        result = mutants[mutant_name](self_arg, *call_args, **call_kwargs) # type: ignore
-    else:
-        result = mutants[mutant_name](*call_args, **call_kwargs) # type: ignore
-    return result # type: ignore
+        result = mutants[mutant_name](self_arg, *call_args, **call_kwargs) # type: ignore # mutmut generated
+    else: # type: ignore # mutmut generated
+        result = mutants[mutant_name](*call_args, **call_kwargs) # type: ignore # mutmut generated
+    return result # type: ignore # mutmut generated
 
 def foo(a: list[int], b):
     args = [a, b]# type: ignore
@@ -136,11 +152,12 @@ def x_foo__mutmut_1(a: list[int], b):
 def x_foo__mutmut_2(a: list[int], b):
     return a[0] >= b
 
-x_foo__mutmut_mutants : ClassVar[MutantDict] = { # type: ignore
-'x_foo__mutmut_1': x_foo__mutmut_1, \n\
-    'x_foo__mutmut_2': x_foo__mutmut_2
-}
-x_foo__mutmut_orig.__name__ = 'x_foo'
+x_foo__mutmut_mutants : MutantDict = { # type: ignore # mutmut generated
+    'x_foo__mutmut_1': x_foo__mutmut_1, # type: ignore # mutmut generated
+    'x_foo__mutmut_2': x_foo__mutmut_2 # type: ignore # mutmut generated
+} # type: ignore # mutmut generated
+
+x_foo__mutmut_orig.__name__ = 'x_foo' # type: ignore # mutmut generated
 
 def bar():
     args = []# type: ignore
@@ -153,10 +170,11 @@ def x_bar__mutmut_orig():
 def x_bar__mutmut_1():
     yield 2
 
-x_bar__mutmut_mutants : ClassVar[MutantDict] = { # type: ignore
-'x_bar__mutmut_1': x_bar__mutmut_1
-}
-x_bar__mutmut_orig.__name__ = 'x_bar'
+x_bar__mutmut_mutants : MutantDict = { # type: ignore # mutmut generated
+    'x_bar__mutmut_1': x_bar__mutmut_1 # type: ignore # mutmut generated
+} # type: ignore # mutmut generated
+
+x_bar__mutmut_orig.__name__ = 'x_bar' # type: ignore # mutmut generated
 
 class Adder:
     def __init__(self, amount):
@@ -168,10 +186,11 @@ class Adder:
     def xǁAdderǁ__init____mutmut_1(self, amount):
         self.amount = None
     \n\
-    xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = { # type: ignore
-    'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1
-    }
-    xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__'
+    xǁAdderǁ__init____mutmut_mutants : ClassVar[MutantDict] = { # type: ignore # mutmut generated
+        'xǁAdderǁ__init____mutmut_1': xǁAdderǁ__init____mutmut_1 # type: ignore # mutmut generated
+    } # type: ignore # mutmut generated
+    \n\
+    xǁAdderǁ__init____mutmut_orig.__name__ = 'xǁAdderǁ__init__' # type: ignore # mutmut generated
 
     def add(self, value):
         args = [value]# type: ignore
@@ -184,10 +203,11 @@ class Adder:
     def xǁAdderǁadd__mutmut_1(self, value):
         return self.amount - value
     \n\
-    xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = { # type: ignore
-    'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1
-    }
-    xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd'
+    xǁAdderǁadd__mutmut_mutants : ClassVar[MutantDict] = { # type: ignore # mutmut generated
+        'xǁAdderǁadd__mutmut_1': xǁAdderǁadd__mutmut_1 # type: ignore # mutmut generated
+    } # type: ignore # mutmut generated
+    \n\
+    xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd' # type: ignore # mutmut generated
 
 print(Adder(1).add(2))\
 ''')

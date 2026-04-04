@@ -53,8 +53,7 @@ it will try to figure out where the code to mutate is.
 
 
 You can stop the mutation run at any time and mutmut will restart where you
-left off. It will continue where it left off, and re-test functions that were
-modified since last run.
+left off.
 
 To work with the results, use `mutmut browse` where you can see the mutants,
 retest them when you've updated your tests.
@@ -175,9 +174,10 @@ For instance, mutmut mutates `x: str = 'foo'` to `x: str = None` which can easil
 
 Using this filter can improve performance and reduce noise, however it can also hide a few relevant mutations:
 
-1. `x: str = None` may not be valid, but if your tests do not detect such a change it indicates that
+1. We currently cannot mutate enums, staticmethods and classmethods in a type safe way. These won't be mutated.
+2. `x: str = None` may not be valid, but if your tests do not detect such a change it indicates that
     the value of `x` is not properly tested (even if your type checker would catch this particular modification)
-2. In some edge cases with class properties (usually in the `__init__` method), the way `mypy` and `pyrefly` infer types does not work well
+3. In some edge cases with class properties (usually in the `__init__` method), the way `mypy` and `pyrefly` infer types does not work well
     with the way mutmut mutates code. Some valid mutations like changing `self.x = 123` to `self.x = None` can
     be filtered out, even though the may be valid.
 
@@ -209,6 +209,25 @@ to failing tests.
     debug=true
 
 
+Disable setproctitle (macOS)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mutmut uses ``setproctitle`` to show the current mutant name in the process
+list, which is helpful for monitoring long runs. However, ``setproctitle``
+uses CoreFoundation APIs on macOS that are not fork-safe, causing segfaults
+in child processes.
+
+By default, mutmut automatically disables ``setproctitle`` on macOS and
+enables it on other platforms. If you need to override this (e.g. to enable it on
+macOS at your own risk, or to disable it on other platforms), set ``use_setproctitle``:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    use_setproctitle = false
+
+
 Whitelisting
 ~~~~~~~~~~~~
 
@@ -224,6 +243,108 @@ whitelist lines are:
 - The version string on your library. You really shouldn't have a test for this :P
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
+
+
+Skipping Code Blocks
+~~~~~~~~~~~~~~~~~~~~
+
+You can skip an entire indentation block from mutation using
+``# pragma: no mutate block``. This works on any compound statement --
+functions, classes, ``if``/``elif``/``else``, loops, context managers, etc.
+
+Both syntax styles are supported:
+
+- ``# pragma: no mutate block``
+- ``# pragma: no mutate: block``
+
+**Skipping an entire function or class** -- place the pragma inline on the
+definition line. The entire node (including all children) is skipped and no
+trampoline is generated:
+
+.. code-block:: python
+
+    def complex_algorithm():  # pragma: no mutate block
+        return some_complex_calculation()
+
+    class MySettings:  # pragma: no mutate block
+        DEBUG = True
+        MAX_RETRIES = 3
+
+**Skipping only the body of a function** -- place the pragma on its own line
+inside the function. The function definition (including default arguments) is
+still mutable, but the body is suppressed:
+
+.. code-block:: python
+
+    def foo(val=1):
+        # pragma: no mutate block
+        x = 1
+        y = complex_calculation()
+        z = x + y
+
+    def bar():
+        # this function is still mutated normally
+        return 42
+
+**Skipping an ``if`` branch without affecting ``elif``/``else``** -- place
+the pragma inline on the ``if``. Only the ``if`` condition and its indented
+body are suppressed; sibling branches (``elif``, ``else``) remain mutable
+because they exit the original indentation scope:
+
+.. code-block:: python
+
+    if error_condition:  # pragma: no mutate block
+        log_error()
+        send_alert()
+    elif other_condition:
+        # still mutated -- this branch is outside the block scope
+        handle_other()
+    else:
+        # still mutated
+        handle_success()
+
+The same principle applies to ``for``/``else``, ``while``/``else``,
+``try``/``except``/``finally``, and ``match``/``case``.
+
+This is useful for:
+
+- Functions or classes that should be excluded from mutation entirely
+- Error-handling branches that are hard to unit test in isolation
+- Logging or telemetry blocks that don't affect program correctness
+- Generated or boilerplate code within an otherwise mutable function
+
+
+Skipping Code Regions
+~~~~~~~~~~~~~~~~~~~~~
+
+For suppressing mutations across a range of lines regardless of indentation,
+use ``# pragma: no mutate start`` and ``# pragma: no mutate end``:
+
+.. code-block:: python
+
+    a = mutate_this()
+
+    # pragma: no mutate start
+    b = skip_this()
+    c = skip_this_too()
+    # pragma: no mutate end
+
+    d = mutate_this_too()
+
+Every line between the markers (inclusive) is suppressed. This works inside
+functions, classes, or at module level, and ignores indentation entirely.
+
+An unmatched ``# pragma: no mutate end`` without a preceding ``start`` raises
+a ``PragmaParseError`` at parse time.  An unclosed ``# pragma: no mutate start``
+(no matching ``end`` before end-of-file) raises a ``PragmaParseError``.
+Both errors include the filename and line number.
+
+**Nesting restriction:** opening a new ``block`` or ``start`` context while
+another context is already active is not allowed and raises a
+``PragmaParseError``.  The error message includes both the offending line and
+the line where the existing context was opened.  Close the current context
+first (dedent for ``block``, or ``# pragma: no mutate end`` for ``start``)
+before opening a new one.
 
 
 Modifying pytest arguments

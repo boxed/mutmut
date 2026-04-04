@@ -1,8 +1,13 @@
 from collections.abc import Callable
+from enum import Enum
 from functools import cache
-from typing import Union
+from typing import AsyncGenerator, Union
 import ctypes
 import asyncio
+
+
+def my_decorator(func):  # pragma: no mutate block
+    return func
 
 
 def hello() -> str:
@@ -13,6 +18,13 @@ def badly_tested() -> str:
 
 def untested() -> str:
     return "Mutants for this method should survive"
+
+def skip_this_function() -> int:  # pragma: no mutate block
+    return 1 + 2 * 3
+
+def also_skip_this_function() -> str:  # pragma: no mutate block
+    return "should" + " not" + " mutate"
+
 
 def make_greeter(name: Union[str, None]) -> Callable[[], str]:
     def hi():
@@ -88,6 +100,30 @@ class Point:
     def coords(self):
         return self.x, self.y
 
+    @staticmethod
+    def skip_static_decorator_pragma(a: int, b: int) -> int:  # pragma: no mutate block
+        return a + b * 2
+
+    @classmethod
+    def skip_class_decorator_pragma(cls, value: int) -> "Point":  # pragma: no mutate block
+        return cls(value + 1, value * 2)
+
+    def skip_instance_method_pragma(self) -> int:  # pragma: no mutate block
+        return self.x + self.y * 2
+
+    @staticmethod  # pragma: no mutate block
+    def pragma_on_staticmethod_decorator(a: int, b: int) -> int:
+        return a + b * 2
+
+    @classmethod  # pragma: no mutate block
+    def pragma_on_classmethod_decorator(cls, value: int) -> "Point":
+        return cls(value + 1, value * 2)
+
+    @my_decorator
+    @classmethod
+    def skip_multi_decorator(cls, value: int) -> "Point":
+        return cls(value + 1, value * 2)
+
 
 def escape_sequences():
     return "foo" \
@@ -111,3 +147,60 @@ def func_with_star(a, /, b, *, c, **kwargs):
 def func_with_arbitrary_args_clone(*args, **kwargs): pass  # pragma: no mutate
 def func_with_arbitrary_args(*args, **kwargs):
     return len(args) + len(kwargs)
+
+
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+
+    async def async_get(self) -> int:
+        await asyncio.sleep(0.001)
+        return self.value
+
+    @staticmethod
+    async def async_get_all() -> AsyncGenerator[Color, None]:
+        """return type hint here is "wrong" (it's technically AsyncGenerator[int, None])
+        but using Color in this context allows us to have a forward reference to the Color class
+        that doesn't require quoting the class name (eg. "Color") in the type hint
+        that we otherwise would not be able to have in py3.10, and allows us to test that
+        trampoline templates are resilient to forward references when using the external trampoline
+        pattern.
+        """
+        for i in (Color.RED, Color.GREEN, Color.BLUE):
+            await asyncio.sleep(0.001)
+            yield i
+
+    def is_primary(self) -> bool:
+        return self in (Color.RED, Color.GREEN, Color.BLUE)
+
+    def darken(self) -> int:
+        return self.value - 1
+
+    @staticmethod
+    def from_name(name: str) -> "Color":
+        return Color[name.upper()]
+
+    @classmethod
+    def default(cls) -> "Color":
+        return cls.RED
+
+
+class SkipThisClass:  # pragma: no mutate block
+    def method_one(self) -> int:
+        return 1 + 2
+
+    def method_two(self) -> str:
+        return "hello" + " world"
+
+    @staticmethod
+    def static_method() -> int:
+        return 3 * 4
+
+# pragma: no mutate start
+class AlsoSkipThisClass:
+    VALUE = 10 + 20
+
+    def compute(self) -> int:
+        return self.VALUE * 2
+# pragma: no mutate end

@@ -5,20 +5,19 @@ from unittest.mock import patch
 import libcst as cst
 import pytest
 
-import mutmut
-from mutmut.__main__ import CLASS_NAME_SEPARATOR
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
-from mutmut.file_mutation import create_mutations
-from mutmut.file_mutation import mutate_file_contents
-from mutmut.trampoline_templates import mangle_function_name
+from mutmut.mutation.file_mutation import create_mutations
+from mutmut.mutation.file_mutation import mutate_file_contents
+from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+from mutmut.mutation.trampoline_templates import mangle_function_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
-    module, mutated_nodes = create_mutations(source, covered_lines)
+    module, mutated_nodes, _, _ = create_mutations("test.py", source, covered_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants
@@ -432,6 +431,364 @@ def foo(): # pragma: no mutate
     assert mutants
 
 
+def test_pragma_no_mutate_block_class():
+    """Test that pragma: no mutate block skips entire class from mutation."""
+    source = """
+class Foo:  # pragma: no mutate block
+    def method(self):
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁFooǁmethod__mutmut" not in mutated_code
+    assert "def method(self):" in mutated_code
+    assert "return 1 + 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_class_with_colon():
+    """Test that pragma: no mutate: block also works (alternative syntax)."""
+    source = """
+class Bar:  # pragma: no mutate: block
+    def method(self):
+        return 2 + 2
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁBarǁmethod__mutmut" not in mutated_code
+    assert "def method(self):" in mutated_code
+
+
+def test_pragma_no_mutate_block_does_not_affect_other_classes():
+    """Test that pragma: no mutate block only affects the annotated class."""
+    source = """
+class Skipped:  # pragma: no mutate block
+    def method(self):
+        return 1
+
+class Mutated:
+    def method(self):
+        return 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁSkippedǁmethod__mutmut" not in mutated_code
+    assert "xǁMutatedǁmethod__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_vs_no_mutate_block_class():
+    """Test that regular pragma: no mutate does NOT skip entire class (only that line)."""
+    source = """
+class Foo:  # pragma: no mutate
+    def method(self):
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁFooǁmethod__mutmut" in mutated_code
+
+
+def test_pragma_no_mutate_block_enum():
+    """Test the enum use case - block pragma prevents trampoline attribute injection."""
+    source = """
+from enum import Enum
+
+class Color(Enum):  # pragma: no mutate block
+    RED = 1
+    GREEN = 2
+
+    def describe(self):
+        return self.name.lower()
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "__mutmut_mutants" not in mutated_code
+    assert "xǁColorǁdescribe__mutmut" not in mutated_code
+    assert "class Color(Enum):" in mutated_code
+    assert "RED = 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_function():
+    """Test that pragma: no mutate block skips entire function from mutation."""
+    source = """
+def foo():  # pragma: no mutate block
+    return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut" not in mutated_code
+    assert "__mutmut_mutants" not in mutated_code
+    assert "def foo():" in mutated_code
+    assert "return 1 + 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_function_with_colon():
+    """Test that pragma: no mutate: block also works for functions."""
+    source = """
+def bar():  # pragma: no mutate: block
+    return 2 + 2
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_bar__mutmut" not in mutated_code
+    assert "def bar():" in mutated_code
+
+
+def test_pragma_no_mutate_block_does_not_affect_other_functions():
+    """Test that pragma: no mutate block only affects the annotated function."""
+    source = """
+def skipped():  # pragma: no mutate block
+    return 1
+
+def mutated():
+    return 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_skipped__mutmut" not in mutated_code
+    assert "x_mutated__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_vs_no_mutate_block_function():
+    """Test that regular pragma: no mutate does NOT skip entire function."""
+    source = """
+def foo():  # pragma: no mutate
+    return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut" in mutated_code
+
+
+def test_pragma_no_mutate_block_standalone_body_only():
+    """Standalone block pragma inside a function body suppresses the body
+    but leaves the def line (including default args) mutable."""
+    source = """
+def buzz(val=1):
+    # pragma: no mutate block
+    return val + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_buzz__mutmut_orig" in mutated_code
+    assert "return val + 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_inline_if_allows_elif():
+    """Inline block pragma on an if-statement suppresses only that branch;
+    the elif/else branches remain mutable because they exit the if scope."""
+    source = """
+def top_level(a, b):
+    if a > b:  # pragma: no mutate block
+        return a
+    elif b > a:
+        return b
+    return a + b
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_top_level__mutmut_orig" in mutated_code
+    # elif condition IS mutated (b > a -> b >= a)
+    assert "b >= a" in mutated_code
+    # if condition is NOT mutated (suppressed by inline block pragma)
+    assert "a >= b" not in mutated_code
+
+
+def test_pragma_no_mutate_start_end_function():
+    """Test that start/end markers suppress all mutations within a function."""
+    source = """
+# pragma: no mutate start
+def foo():
+    return 1 + 1
+# pragma: no mutate end
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut" not in mutated_code
+    assert "__mutmut_mutants" not in mutated_code
+    assert "def foo():" in mutated_code
+    assert "return 1 + 1" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_does_not_affect_outside():
+    """Test that code outside start/end markers is still mutated."""
+    source = """
+# pragma: no mutate start
+def skipped():
+    return 1 + 1
+# pragma: no mutate end
+
+def mutated():
+    return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_skipped__mutmut" not in mutated_code
+    assert "x_mutated__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_class_method():
+    """Test that start/end inside a class suppresses only the wrapped method."""
+    source = """
+class Foo:
+    # pragma: no mutate start
+    def skipped(self):
+        return 1 + 1
+    # pragma: no mutate end
+
+    def mutated(self):
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "xǁFooǁskipped__mutmut" not in mutated_code
+    assert "xǁFooǁmutated__mutmut_orig" in mutated_code
+
+
+def test_pragma_no_mutate_start_end_partial_function():
+    """Test that start/end around part of a function suppresses only those lines."""
+    source = """
+def foo():
+    x = 1 + 1
+    # pragma: no mutate start
+    y = 2 + 2
+    # pragma: no mutate end
+    z = 3 + 3
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_foo__mutmut_orig" in mutated_code
+    assert "1 + 1" not in mutated_code or "x_foo__mutmut" in mutated_code
+    assert "3 + 3" not in mutated_code or "x_foo__mutmut" in mutated_code
+
+
+def test_enum_mutation_uses_external_injection():
+    """Test that enum classes use external injection pattern to avoid metaclass conflicts."""
+    source = """
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+
+    def describe(self):
+        return self.name.lower()
+""".strip()
+    mutated_code = mutated_module(source)
+    # Should NOT have mutant attributes injected INTO the class body (breaks enums)
+    # The mutant dict should be OUTSIDE the class (before the class definition)
+    assert "_Color_describe_mutants" in mutated_code
+    # External trampoline function should exist
+    assert "_Color_describe_trampoline" in mutated_code
+    # The method inside the class should be a simple assignment
+    assert "describe = _Color_describe_trampoline" in mutated_code
+    # Ensure no ClassVar inside the class (which would break enum)
+    # Split to get just the class body
+    class_start = mutated_code.find("class Color(Enum):")
+    assert class_start > mutated_code.find("_Color_describe_mutants")  # mutants dict is BEFORE class
+
+
+def test_enum_mutation_with_staticmethod():
+    """Test that @staticmethod in enum classes works correctly."""
+    source = """
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+
+    @staticmethod
+    def helper():
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    # Should have external trampoline
+    assert "_Color_helper_trampoline" in mutated_code
+    # Assignment should use staticmethod wrapper
+    assert "helper = staticmethod(_Color_helper_trampoline)" in mutated_code
+
+
+def test_enum_mutation_with_classmethod():
+    """Test that @classmethod in enum classes works correctly."""
+    source = """
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+
+    @classmethod
+    def from_string(cls):
+        return 1 + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    # Should have external trampoline
+    assert "_Color_from_string_trampoline" in mutated_code
+    # Assignment should use classmethod wrapper
+    assert "from_string = classmethod(_Color_from_string_trampoline)" in mutated_code
+
+
+def test_enum_mutation_preserves_enum_members():
+    """Test that enum members are preserved when methods are mutated."""
+    source = """
+from enum import Enum
+
+class Status(Enum):
+    PENDING = 'pending'
+    ACTIVE = 'active'
+    DONE = 'done'
+
+    def is_active(self):
+        return self == Status.ACTIVE
+""".strip()
+    mutated_code = mutated_module(source)
+    # Enum members should be unchanged
+    assert "PENDING = 'pending'" in mutated_code
+    assert "ACTIVE = 'active'" in mutated_code
+    assert "DONE = 'done'" in mutated_code
+    # But method should be mutated externally
+    assert "_Status_is_active_trampoline" in mutated_code
+
+
+def test_regular_class_staticmethod_mutation():
+    """Test that @staticmethod in regular classes is now mutated using external injection."""
+    source = """
+class Calculator:
+    @staticmethod
+    def add(a, b):
+        return a + b
+""".strip()
+    mutated_code = mutated_module(source)
+    # Should use external injection pattern
+    assert "_Calculator_add_trampoline" in mutated_code
+    assert "_Calculator_add_orig" in mutated_code
+    # Assignment should use staticmethod wrapper
+    assert "add = staticmethod(_Calculator_add_trampoline)" in mutated_code
+
+
+def test_regular_class_classmethod_mutation():
+    """Test that @classmethod in regular classes is now mutated using external injection."""
+    source = """
+class Factory:
+    @classmethod
+    def create(cls, value):
+        return value + 1
+""".strip()
+    mutated_code = mutated_module(source)
+    # Should use external injection pattern
+    assert "_Factory_create_trampoline" in mutated_code
+    assert "_Factory_create_orig" in mutated_code
+    # Assignment should use classmethod wrapper
+    assert "create = classmethod(_Factory_create_trampoline)" in mutated_code
+
+
+def test_regular_class_mixed_methods():
+    """Test that regular classes correctly handle mix of instance, static, and class methods."""
+    source = """
+class MyClass:
+    def instance_method(self):
+        return 1 + 1
+
+    @staticmethod
+    def static_method():
+        return 2 + 2
+
+    @classmethod
+    def class_method(cls):
+        return 3 + 3
+""".strip()
+    mutated_code = mutated_module(source)
+    # Instance method uses internal trampoline (inside class)
+    assert "xǁMyClassǁinstance_method__mutmut_orig" in mutated_code
+    # Static and class methods use external injection
+    assert "_MyClass_static_method_trampoline" in mutated_code
+    assert "_MyClass_class_method_trampoline" in mutated_code
+    assert "static_method = staticmethod(_MyClass_static_method_trampoline)" in mutated_code
+    assert "class_method = classmethod(_MyClass_class_method_trampoline)" in mutated_code
+
+
 def test_mutate_only_covered_lines_none():
     source = """def foo():\n    return 1+1\n""".strip()
     mutants = mutants_for_source(source, covered_lines=set())
@@ -644,7 +1001,6 @@ def foo():
 @patch.object(CatchOutput, "stop")
 @patch.object(CatchOutput, "start")
 def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, capfd):
-    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(return_value=1)
 
     run_forced_fail_test(runner)
@@ -663,7 +1019,6 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
 @patch.object(CatchOutput, "stop")
 @patch.object(CatchOutput, "start")
 def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
-    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
 
     run_forced_fail_test(runner)
@@ -678,7 +1033,6 @@ def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _s
 @patch.object(CatchOutput, "stop")
 @patch.object(CatchOutput, "start")
 def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output, capfd):
-    mutmut._reset_globals()
     runner = _mocked_runner_run_forced_failed(return_value=0)
 
     with pytest.raises(SystemExit) as error:

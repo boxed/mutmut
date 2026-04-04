@@ -8,8 +8,8 @@ from typing import Any
 import mutmut
 from mutmut.__main__ import SourceFileMutationData
 from mutmut.__main__ import _run
-from mutmut.__main__ import ensure_config_loaded
 from mutmut.__main__ import walk_source_files
+from mutmut.configuration import Config
 
 
 @contextmanager
@@ -25,11 +25,12 @@ def change_cwd(path):
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files"""
     with change_cwd(project_path):
-        ensure_config_loaded()
+        Config.reset()
+        Config.ensure_loaded()
 
         stats = {}
         for p in walk_source_files():
-            if mutmut.config.should_ignore_for_mutation(p):  # type: ignore
+            if Config.get().should_ignore_for_mutation(p):
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
@@ -46,19 +47,25 @@ def read_json_file(path: Path):
 def write_json_file(path: Path, data: Any):
     with open(path, "w") as file:
         json.dump(data, file, indent=2)
+        file.write("\n")  # ensure newline at end of file for POSIX compliance
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+E2E_PROJECTS = REPO_ROOT / "e2e_projects"
 
 
 def run_mutmut_on_project(project: str) -> dict:
     """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
     mutmut._reset_globals()
 
-    project_path = Path("..").parent / "e2e_projects" / project
+    project_path = E2E_PROJECTS / project
 
     mutants_path = project_path / "mutants"
     shutil.rmtree(mutants_path, ignore_errors=True)
 
     # mutmut run
     with change_cwd(project_path):
+        mutmut._reset_globals()
         _run([], None)
 
     return read_all_stats_for_project(project_path)

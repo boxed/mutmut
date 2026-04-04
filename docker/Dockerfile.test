@@ -1,14 +1,21 @@
-FROM python:3.10.19-slim-trixie AS base
+ARG PYTHON_VERSION=3.10
+
+FROM python:${PYTHON_VERSION}-slim-trixie AS base
 
 WORKDIR /mutmut
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ARG PYTHON_VERSION
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_PREFERENCE=only-system \
+    UV_PYTHON=${PYTHON_VERSION}
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --group dev --no-install-project
 
 COPY . .
-
-RUN uv sync --group dev
 
 ENTRYPOINT ["uv", "run", "pytest"]
 CMD ["--verbose"]
