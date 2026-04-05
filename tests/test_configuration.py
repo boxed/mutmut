@@ -335,6 +335,8 @@ timeout_constant = 0.5
         assert Path("fixtures") in config.also_copy
         assert config.mutate_only_covered_lines is True
         assert config.type_check_command == ["mypy", "--strict"]
+        assert config.timeout_multiplier == 5.0
+        assert config.timeout_constant == 0.5
 
     def test_uses_defaults_when_no_config(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
