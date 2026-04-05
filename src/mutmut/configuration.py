@@ -55,6 +55,8 @@ def _config_reader() -> Callable[[str, Any], Any]:
                 return [result]
         elif isinstance(default, bool):
             return result.lower() in ("1", "t", "true")
+        elif isinstance(default, float):
+            return float(result)
         elif isinstance(default, int):
             return int(result)
         return result
@@ -110,6 +112,8 @@ def _load_config() -> Config:
         tests_dir=s("tests_dir", []),
         pytest_add_cli_args=s("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=s("pytest_add_cli_args_test_selection", []),
+        timeout_multiplier=s("timeout_multiplier", 15.0),
+        timeout_constant=s("timeout_constant", 1.0),
         type_check_command=s("type_check_command", []),
         use_setproctitle=s(
             "use_setproctitle", not platform.system() == "Darwin"
@@ -131,6 +135,8 @@ class Config:
     pytest_add_cli_args_test_selection: list[str]
     tests_dir: list[str]
     mutate_only_covered_lines: bool
+    timeout_multiplier: float
+    timeout_constant: float
     type_check_command: list[str]
     use_setproctitle: bool
 
