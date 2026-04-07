@@ -34,6 +34,8 @@ from typing import ClassVar
 
 MutantDict = Annotated[dict[str, Callable], "Mutant"] # type: ignore
 
+_MUTMUT_UNSET = object() # type: ignore
+
 
 def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None): # type: ignore
     \"""Forward call to original or mutated function, depending on the environment\"""

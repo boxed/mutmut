@@ -390,6 +390,31 @@ def _has_mutant_file(mod_name: str, mutated_packages: dict[str, str]) -> bool:
     return candidate.exists()
 
 
+def _flush_test_modules() -> None:
+    """Remove cached test modules from sys.modules so they get re-imported.
+
+    Called in the forked child process when testing a mutant that targets
+    import-time code (e.g. __init_subclass__).  Without this, the child
+    inherits cached modules from the parent (stats phase) and
+    __init_subclass__ never fires again with the mutant active.
+
+    Only non-package modules under ``tests`` (or ``conftest``) are flushed.
+    The mutated package itself stays cached — its trampolines dynamically
+    check ``MUTANT_UNDER_TEST`` on each call.
+    """
+    to_remove = [
+        name
+        for name in sys.modules
+        if name == "conftest"
+        or name.startswith("conftest.")
+        or name.startswith("tests.")
+        or name.startswith("tests_")
+    ]
+    for name in to_remove:
+        del sys.modules[name]
+    importlib.invalidate_caches()
+
+
 def store_lines_covered_by_tests() -> None:
     assert mutmut.config is not None
     if mutmut.config.mutate_only_covered_lines:
@@ -741,11 +766,22 @@ class PytestRunner(TestRunner):
                 mutmut.duration_by_test[nodeid] = 0
 
             # noinspection PyMethodMayBeStatic
+            def pytest_collection_finish(self, session: Any) -> None:
+                unused(session)
+                # Snapshot trampoline hits from import-time code (e.g. __init_subclass__).
+                # These fired during collection before any test ran.
+                mutmut._pre_test_stats = mutmut._stats.copy()
+
+            # noinspection PyMethodMayBeStatic
             def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
                 unused(nextitem)
                 for function in mutmut._stats:
                     mutmut.tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
                 mutmut._stats.clear()
+                # Import-time code (e.g. __init_subclass__) runs once during collection.
+                # Attribute those hits to every test since any test might detect the mutation.
+                for function in mutmut._pre_test_stats:
+                    mutmut.tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item: Any, call: Any) -> None:
@@ -804,10 +840,21 @@ class HammettRunner(TestRunner):
 
         print("Running hammett stats...")
 
+        first_test_seen = False
+
         def post_test_callback(_name: str, **_: Any) -> None:
+            nonlocal first_test_seen
+            if not first_test_seen:
+                # Snapshot import-time trampoline hits before the first test clears them.
+                mutmut._pre_test_stats = mutmut._stats.copy()
+                first_test_seen = True
             for function in mutmut._stats:
                 mutmut.tests_by_mangled_function_name[function].add(_name)
             mutmut._stats.clear()
+            # Import-time code (e.g. __init_subclass__) runs once at import.
+            # Attribute those hits to every test since any test might detect the mutation.
+            for function in mutmut._pre_test_stats:
+                mutmut.tests_by_mangled_function_name[function].add(_name)
 
         return int(
             hammett.main(
@@ -1195,7 +1242,7 @@ def load_stats() -> bool:
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
             mutmut.duration_by_test = data.pop("duration_by_test")
             mutmut.stats_time = data.pop("stats_time")
-            assert not data, data
+            mutmut._pre_test_stats = set(data.pop("pre_test_stats", []))
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
         pass
@@ -1209,6 +1256,7 @@ def save_stats() -> None:
                 tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
                 duration_by_test=mutmut.duration_by_test,
                 stats_time=mutmut.stats_time,
+                pre_test_stats=sorted(mutmut._pre_test_stats),
             ),
             f,
             indent=4,
@@ -1342,7 +1390,10 @@ def stop_all_children(mutants: list[tuple[SourceFileMutationData, str, int | Non
 
 
 # used to copy the global mutmut.config to subprocesses
-set_start_method("fork")
+try:
+    set_start_method("fork")
+except RuntimeError:
+    pass  # already set (e.g. re-imported from trampoline during stats collection)
 START_TIMES_BY_PID_LOCK = Lock()
 
 
@@ -1492,6 +1543,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 # In the child
                 os.environ["MUTANT_UNDER_TEST"] = mutant_name
                 setproctitle(f"mutmut: {mutant_name}")
+
 
                 # Run fast tests first
                 sorted_tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])

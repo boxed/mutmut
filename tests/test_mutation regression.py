@@ -42,9 +42,13 @@ def test_create_trampoline_wrapper_with_positionals_only_args():
     source = "def foo(p1, p2=None, /, p_or_kw=None, *, kw): pass"
 
     assert _get_trampoline_wrapper(source, "x_foo__mutmut") == snapshot("""\
-def foo(p1, p2=None, /, p_or_kw=None, *, kw):
-    args = [p1, p2, p_or_kw]# type: ignore
+def foo(p1, p2=_MUTMUT_UNSET, /, p_or_kw=_MUTMUT_UNSET, *, kw):
+    args = [p1]# type: ignore
     kwargs = {'kw': kw}# type: ignore
+    if p2 is not _MUTMUT_UNSET:
+        kwargs['p2'] = p2
+    if p_or_kw is not _MUTMUT_UNSET:
+        kwargs['p_or_kw'] = p_or_kw
     return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)\
 """)
 
@@ -95,6 +99,8 @@ from typing import Callable
 from typing import ClassVar
 
 MutantDict = Annotated[dict[str, Callable], "Mutant"] # type: ignore
+
+_MUTMUT_UNSET = object() # type: ignore
 
 
 def _mutmut_trampoline(orig, mutants, call_args, call_kwargs, self_arg = None): # type: ignore

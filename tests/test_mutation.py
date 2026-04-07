@@ -718,6 +718,186 @@ class A(Enum):
     assert not mutants
 
 
+def test_init_subclass_trampoline():
+    """__init_subclass__ is an implicit classmethod — the trampoline must use 'cls' not 'self'
+    and look up orig/mutants via the class name rather than object.__getattribute__."""
+    source = """
+class Base:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._registered = True
+    """.strip()
+
+    mutated_code = mutated_module(source)
+
+    # The trampoline wrapper must reference 'cls', not 'self'
+    assert "self" not in mutated_code.split("def __init_subclass__")[1].split("\n    def ")[0], (
+        "Trampoline for __init_subclass__ must use 'cls', not 'self'"
+    )
+
+    # Mutant copies should be generated (the method is not skipped)
+    assert "xǁBaseǁ__init_subclass____mutmut_orig" in mutated_code
+    assert "xǁBaseǁ__init_subclass____mutmut_1" in mutated_code
+
+    # Lookup must use ClassName.attr, not object.__getattribute__
+    assert "Base.xǁBaseǁ__init_subclass____mutmut_orig" in mutated_code
+    assert "Base.xǁBaseǁ__init_subclass____mutmut_mutants" in mutated_code
+
+    # orig must be bound via __get__ so the trampoline can call it without prepending cls
+    assert "Base.xǁBaseǁ__init_subclass____mutmut_orig.__get__(cls)" in mutated_code
+
+
+def test_init_subclass_runtime():
+    """Verify the generated trampoline actually works at runtime."""
+    source = """
+class Base:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._registered = True
+    """.strip()
+
+    mutated_code = mutated_module(source)
+
+    import os
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    # Use a non-matching mutant name so the trampoline calls the original function
+    os.environ["MUTANT_UNDER_TEST"] = "none"
+    try:
+        ns: dict = {"__name__": "test_runtime"}
+        exec(mutated_code, ns)  # noqa: S102
+        Base = ns["Base"]
+
+        # Creating a subclass must trigger __init_subclass__ through the trampoline
+        class Child(Base):
+            pass
+
+        assert getattr(Child, "_registered", False), "Trampoline did not propagate __init_subclass__"
+    finally:
+        if old_env is None:
+            os.environ.pop("MUTANT_UNDER_TEST", None)
+        else:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+
+
+def test_class_getitem_trampoline():
+    """__class_getitem__ is also an implicit classmethod."""
+    source = """
+class MyGeneric:
+    def __class_getitem__(cls, item):
+        return 1
+    """.strip()
+
+    mutated_code = mutated_module(source)
+
+    # Must use cls, not self
+    assert "MyGeneric.xǁMyGenericǁ__class_getitem____mutmut_orig" in mutated_code
+    assert "self" not in mutated_code.split("def __class_getitem__")[1].split("\n    def ")[0]
+
+
+def test_default_parameter_mutation_is_exercisable():
+    """Verify that mutated default parameter values are actually exercisable.
+
+    When a mutant changes a default (e.g., x=1 -> x=2), the wrapper must use a
+    sentinel instead of hardcoding the original default. Otherwise, the wrapper
+    always passes the original default explicitly, and the mutant never gets to
+    use its own default value.
+    """
+    source = """
+class Foo:
+    def bar(self, x=1):
+        return x
+""".strip()
+    mutated_code = mutated_module(source)
+    # The wrapper should use sentinel, not hardcode x=1
+    assert "_MUTMUT_UNSET" in mutated_code
+
+    # Verify runtime behavior: calling bar() without args should still return 1
+    # when no mutant is active (the original function resolves its own default)
+    import os
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    os.environ["MUTANT_UNDER_TEST"] = "none"
+    try:
+        ns: dict = {"__name__": "test"}
+        exec(mutated_code, ns)  # noqa: S102
+        foo = ns["Foo"]()
+        assert foo.bar() == 1
+    finally:
+        if old_env is None:
+            os.environ.pop("MUTANT_UNDER_TEST", None)
+        else:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+
+
+def test_default_parameter_sentinel_free_function():
+    """Verify sentinel behavior for free functions (not class methods)."""
+    source = """
+def greet(name="world"):
+    return "hello " + name
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "_MUTMUT_UNSET" in mutated_code
+
+    import os
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    os.environ["MUTANT_UNDER_TEST"] = "none"
+    try:
+        ns: dict = {"__name__": "test"}
+        exec(mutated_code, ns)  # noqa: S102
+        assert ns["greet"]() == "hello world"
+        assert ns["greet"]("there") == "hello there"
+    finally:
+        if old_env is None:
+            os.environ.pop("MUTANT_UNDER_TEST", None)
+        else:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+
+
+def test_default_parameter_sentinel_kwonly():
+    """Verify sentinel behavior for keyword-only parameters with defaults."""
+    source = """
+def process(a, *, timeout=30):
+    return timeout
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "_MUTMUT_UNSET" in mutated_code
+
+    import os
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    os.environ["MUTANT_UNDER_TEST"] = "none"
+    try:
+        ns: dict = {"__name__": "test"}
+        exec(mutated_code, ns)  # noqa: S102
+        assert ns["process"](1) == 30
+        assert ns["process"](1, timeout=60) == 60
+    finally:
+        if old_env is None:
+            os.environ.pop("MUTANT_UNDER_TEST", None)
+        else:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+
+
+def test_no_sentinel_for_required_params():
+    """Required parameters (no default) should NOT get sentinel treatment."""
+    source = """
+def add(a, b):
+    return a + b
+""".strip()
+    mutated_code = mutated_module(source)
+
+    import os
+    old_env = os.environ.get("MUTANT_UNDER_TEST")
+    os.environ["MUTANT_UNDER_TEST"] = "none"
+    try:
+        ns: dict = {"__name__": "test"}
+        exec(mutated_code, ns)  # noqa: S102
+        assert ns["add"](3, 4) == 7
+    finally:
+        if old_env is None:
+            os.environ.pop("MUTANT_UNDER_TEST", None)
+        else:
+            os.environ["MUTANT_UNDER_TEST"] = old_env
+
+
 @pytest.mark.skip(reason="Feature not yet implemented")
 def test_decorated_inner_functions_mutation():
     source = """

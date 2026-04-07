@@ -21,6 +21,11 @@ from mutmut.trampoline_templates import trampoline_impl
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
 
+# Methods that Python treats as implicit classmethods (no @classmethod needed).
+# Their first parameter is the class (cls), not an instance (self), and attribute
+# lookups must go through the class hierarchy rather than object.__getattribute__.
+IMPLICIT_CLASSMETHOD_NAMES = {"__init_subclass__", "__class_getitem__"}
+
 
 @dataclass
 class Mutation:
@@ -47,6 +52,28 @@ def create_mutations(code: str, covered_lines: set[int] | None = None) -> tuple[
     metadata_wrapper = MetadataWrapper(module)
     visitor = MutationVisitor(mutation_operators, ignored_lines, covered_lines)
     module = metadata_wrapper.visit(visitor)
+
+    if ignored_lines:
+        # Post-filter: for multiline nodes, the start.line check in
+        # _should_mutate_node may miss pragmas on inner lines.  Compare
+        # the original and mutated source to find the actual changed line
+        # and drop the mutation if that line carries a pragma.
+        orig_lines = module.code.split("\n")
+        filtered: list[Mutation] = []
+        for m in visitor.mutations:
+            try:
+                replaced = module.deep_replace(m.original_node, m.mutated_node)
+                new_lines = replaced.code.split("\n")
+                changed_line = next(
+                    (i + 1 for i, (o, n) in enumerate(zip(orig_lines, new_lines)) if o != n),
+                    None,
+                )
+                if changed_line is not None and changed_line in ignored_lines:
+                    continue  # pragma on the mutated line — skip
+            except Exception:  # noqa: BLE001
+                pass  # keep the mutation if we can't determine the line
+            filtered.append(m)
+        visitor.mutations = filtered
 
     return module, visitor.mutations
 
@@ -243,6 +270,20 @@ def combine_mutations_to_source(module: cst.Module, mutations: Sequence[Mutation
     return mutated_module.code, mutation_names
 
 
+def _any_param_has_default(function: cst.FunctionDef) -> bool:
+    """Return True if any parameter in the function has a default value."""
+    for p in function.params.posonly_params:
+        if _has_default(p):
+            return True
+    for p in function.params.params:
+        if _has_default(p):
+            return True
+    for p in function.params.kwonly_params:
+        if _has_default(p):
+            return True
+    return False
+
+
 def function_trampoline_arrangement(
     function: cst.FunctionDef, mutants: Iterable[Mutation], class_name: str | None
 ) -> tuple[Sequence[MODULE_STATEMENT], Sequence[str]]:
@@ -260,7 +301,14 @@ def function_trampoline_arrangement(
     nodes.append(create_trampoline_wrapper(function, mangled_name, class_name))
 
     # copy of original function
-    nodes.append(function.with_changes(name=cst.Name(mangled_name + "_orig")))
+    orig_name = mangled_name + "_orig"
+    nodes.append(function.with_changes(name=cst.Name(orig_name)))
+
+    # When sentinel defaults are used, set __wrapped__ so that inspect.signature()
+    # follows it and reports the original (human-readable) signature.
+    if _any_param_has_default(function):
+        wrapped_stmt = cst.parse_statement(f"{name}.__wrapped__ = {orig_name}\n")
+        nodes.append(wrapped_stmt)
 
     # mutated versions of the function
     for i, mutant in enumerate(mutants):
@@ -280,47 +328,139 @@ def function_trampoline_arrangement(
     return nodes, mutant_names
 
 
+def _has_default(param: cst.Param) -> bool:
+    """Return True if the parameter has a default value."""
+    return param.default is not None and not isinstance(param.default, cst.MaybeSentinel)
+
+
+def _replace_default_with_sentinel(param: cst.Param) -> cst.Param:
+    """Replace the parameter's default value with _MUTMUT_UNSET sentinel."""
+    return param.with_changes(default=cst.Name("_MUTMUT_UNSET"))
+
+
+def _sentinel_if_stmt(param_name: str, target: str) -> cst.If:
+    """Create: if <param> is not _MUTMUT_UNSET: <target>['<param>'] = <param>"""
+    return cst.If(
+        test=cst.Comparison(
+            left=cst.Name(param_name),
+            comparisons=[cst.ComparisonTarget(cst.IsNot(), cst.Name("_MUTMUT_UNSET"))],
+        ),
+        body=cst.IndentedBlock([
+            cst.SimpleStatementLine([
+                cst.Assign(
+                    [cst.AssignTarget(cst.Subscript(
+                        value=cst.Name(target),
+                        slice=[cst.SubscriptElement(cst.Index(cst.SimpleString(f"'{param_name}'")))],
+                    ))],
+                    cst.Name(param_name),
+                ),
+            ]),
+        ]),
+        leading_lines=[],
+    )
+
+
 def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, class_name: str | None) -> cst.FunctionDef:
+    is_implicit_classmethod = (
+        class_name is not None and function.name.value in IMPLICIT_CLASSMETHOD_NAMES
+    )
+
+    # Track which positional params have defaults and need sentinel treatment.
+    # We'll move defaulted positional params to kwargs conditionally.
     args: list[cst.Element | cst.StarredElement] = []
+    # Params with defaults that need conditional forwarding via kwargs
+    sentinel_params: list[str] = []
+
     for pos_only_param in function.params.posonly_params:
-        args.append(cst.Element(pos_only_param.name))
+        if _has_default(pos_only_param):
+            sentinel_params.append(pos_only_param.name.value)
+        else:
+            args.append(cst.Element(pos_only_param.name))
     for param in function.params.params:
-        args.append(cst.Element(param.name))
+        if _has_default(param):
+            sentinel_params.append(param.name.value)
+        else:
+            args.append(cst.Element(param.name))
     if isinstance(function.params.star_arg, cst.Param):
         args.append(cst.StarredElement(function.params.star_arg.name))
 
+    # Get the actual first parameter name (usually 'self' or 'cls')
+    first_param_name = "self"
     if class_name is not None:
-        # remove self arg (handled by the trampoline function)
+        if function.params.posonly_params:
+            first_param_name = function.params.posonly_params[0].name.value
+        elif function.params.params:
+            first_param_name = function.params.params[0].name.value
+        # remove first arg (self/cls — handled by the trampoline function)
         args = args[1:]
 
     args_assignemnt = cst.Assign([cst.AssignTarget(cst.Name(value="args"))], cst.List(args))
 
     kwargs: list[cst.DictElement | cst.StarredDictElement] = []
+    # Keyword-only params without defaults are always forwarded
+    kwonly_sentinel_params: list[str] = []
     for param in function.params.kwonly_params:
-        kwargs.append(cst.DictElement(cst.SimpleString(f"'{param.name.value}'"), param.name))
+        if _has_default(param):
+            kwonly_sentinel_params.append(param.name.value)
+        else:
+            kwargs.append(cst.DictElement(cst.SimpleString(f"'{param.name.value}'"), param.name))
     if isinstance(function.params.star_kwarg, cst.Param):
         kwargs.append(cst.StarredDictElement(function.params.star_kwarg.name))
 
     kwargs_assignment = cst.Assign([cst.AssignTarget(cst.Name(value="kwargs"))], cst.Dict(kwargs))
 
-    def _get_local_name(func_name: str) -> cst.BaseExpression:
+    # Build conditional statements for sentinel params
+    sentinel_stmts: list[cst.If] = []
+    for pname in sentinel_params:
+        sentinel_stmts.append(_sentinel_if_stmt(pname, "kwargs"))
+    for pname in kwonly_sentinel_params:
+        sentinel_stmts.append(_sentinel_if_stmt(pname, "kwargs"))
+
+    # Replace defaults with sentinel in the function signature
+    new_posonly_params = [
+        _replace_default_with_sentinel(p) if _has_default(p) else p
+        for p in function.params.posonly_params
+    ]
+    new_params = [
+        _replace_default_with_sentinel(p) if _has_default(p) else p
+        for p in function.params.params
+    ]
+    new_kwonly_params = [
+        _replace_default_with_sentinel(p) if _has_default(p) else p
+        for p in function.params.kwonly_params
+    ]
+
+    def _get_local_name(func_name: str, *, bind: bool = False) -> cst.BaseExpression:
         # for top level, simply return the name
         if class_name is None:
             return cst.Name(func_name)
-        # for class methods, use object.__getattribute__(self, name)
+        if is_implicit_classmethod:
+            # For implicit classmethods (__init_subclass__, __class_getitem__), the first
+            # arg is a class, not an instance. object.__getattribute__(cls, ...) would search
+            # the metaclass MRO instead of the class hierarchy. Access via ClassName.attr instead.
+            attr = cst.Attribute(cst.Name(class_name), cst.Name(func_name))
+            if bind:
+                # Bind the first parameter so the trampoline can call orig(*args) without
+                # prepending cls — matching the bound-method convention of regular methods.
+                return cst.Call(
+                    func=cst.Attribute(value=attr, attr=cst.Name("__get__")),
+                    args=[cst.Arg(cst.Name(first_param_name))],
+                )
+            return attr
+        # for regular methods, use object.__getattribute__(self, name)
         return cst.Call(
             func=cst.Attribute(cst.Name("object"), cst.Name("__getattribute__")),
-            args=[cst.Arg(cst.Name("self")), cst.Arg(cst.SimpleString(f"'{func_name}'"))],
+            args=[cst.Arg(cst.Name(first_param_name)), cst.Arg(cst.SimpleString(f"'{func_name}'"))],
         )
 
     result: cst.BaseExpression = cst.Call(
         func=cst.Name("_mutmut_trampoline"),
         args=[
-            cst.Arg(_get_local_name(f"{mangled_name}_orig")),
+            cst.Arg(_get_local_name(f"{mangled_name}_orig", bind=True)),
             cst.Arg(_get_local_name(f"{mangled_name}_mutants")),
             cst.Arg(cst.Name("args")),
             cst.Arg(cst.Name("kwargs")),
-            cst.Arg(cst.Name("None" if class_name is None else "self")),
+            cst.Arg(cst.Name("None" if class_name is None else first_param_name)),
         ],
     )
     # for non-async functions, simply return the value or generator
@@ -342,15 +482,24 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
 
     type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment("# type: ignore"))
 
+    body_stmts: list[cst.BaseStatement] = [
+        cst.SimpleStatementLine([args_assignemnt], trailing_whitespace=type_ignore_whitespace),
+        cst.SimpleStatementLine([kwargs_assignment], trailing_whitespace=type_ignore_whitespace),
+    ]
+    body_stmts.extend(sentinel_stmts)
+    body_stmts.append(result_statement)
+
+    # Replace defaults with sentinel in the function signature
+    new_function_params = function.params.with_changes(
+        posonly_params=new_posonly_params,
+        params=new_params,
+        kwonly_params=new_kwonly_params,
+    )
+
     function.whitespace_after_type_parameters
     return function.with_changes(
-        body=cst.IndentedBlock(
-            [
-                cst.SimpleStatementLine([args_assignemnt], trailing_whitespace=type_ignore_whitespace),
-                cst.SimpleStatementLine([kwargs_assignment], trailing_whitespace=type_ignore_whitespace),
-                result_statement,
-            ],
-        ),
+        params=new_function_params,
+        body=cst.IndentedBlock(body_stmts),
     )
 
 
