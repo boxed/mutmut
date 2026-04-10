@@ -18,6 +18,28 @@ class Person:
         # type of self.name should be str and compatible with return type
         return self.name
 
+    @classmethod
+    def create(cls, name: str) -> Self:
+        person = cls()
+        person.set_name(name)
+        return person
+
+class Employee(Person):
+    EMPLOYEE_NUM = 0
+
+    def __init__(self) -> None:
+        self.EMPLOYEE_NUM += 1
+        self.number = self.EMPLOYEE_NUM
+
+    def set_number(self, number: int) -> Self:
+        self.number = number
+        return self
+
+    @classmethod
+    def new(cls, name: str) -> Self:
+        employee = cls()
+        employee.set_name(name)
+        return employee
 
 class Color(Enum):
     RED = "red"

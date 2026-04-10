@@ -174,10 +174,9 @@ For instance, mutmut mutates `x: str = 'foo'` to `x: str = None` which can easil
 
 Using this filter can improve performance and reduce noise, however it can also hide a few relevant mutations:
 
-1. We currently cannot mutate enums, staticmethods and classmethods in a type safe way. These won't be mutated.
-2. `x: str = None` may not be valid, but if your tests do not detect such a change it indicates that
+1. `x: str = None` may not be valid, but if your tests do not detect such a change it indicates that
     the value of `x` is not properly tested (even if your type checker would catch this particular modification)
-3. In some edge cases with class properties (usually in the `__init__` method), the way `mypy` and `pyrefly` infer types does not work well
+2. In some edge cases with class properties (usually in the `__init__` method), the way `mypy` and `pyrefly` infer types does not work well
     with the way mutmut mutates code. Some valid mutations like changing `self.x = 123` to `self.x = None` can
     be filtered out, even though the may be valid.
 
