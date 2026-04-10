@@ -941,7 +941,6 @@ elif "mutmut.__main__" not in sys.modules:
     )
 
 
-
 @cli.command()
 @click.option("--max-children", type=int)
 @click.argument("mutant_names", required=False, nargs=-1)

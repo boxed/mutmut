@@ -21,7 +21,7 @@ from mutmut.mutation.mutators import MethodType
 from mutmut.mutation.mutators import get_method_type
 from mutmut.mutation.mutators import mutation_operators
 from mutmut.mutation.pragma_handling import PragmaVisitor
-from mutmut.mutation.trampoline_templates import build_enum_trampoline
+from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR, build_enum_trampoline
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.mutation.trampoline_templates import trampoline_impl
@@ -223,14 +223,6 @@ class MutationVisitor(cst.CSTVisitor):
         ):
             return True
 
-        if Config.get().type_check_command:
-            if isinstance(node, cst.ClassDef) and is_enum_class(node):
-                # Currently, mutating enums breaks typing see type_checking E2E test for some examples
-                return True
-            if isinstance(node, cst.FunctionDef) and node.decorators:
-                # Currently, mutating staticmethod and classmethod breaks typing see type_checking E2E test for some examples
-                return True
-
         # ignore decorated functions, because
         # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
@@ -313,6 +305,7 @@ def combine_mutations_to_source(
                 pre_class_nodes: list[MODULE_STATEMENT] = []
                 post_class_nodes: list[MODULE_STATEMENT] = []
                 mutated_body = []
+                emitted_typevars: set[str] = set()
                 for method in cls.body.body:
                     method_mutants = mutations_within_function.get(method)
                     if not isinstance(method, cst.FunctionDef) or not method_mutants:
@@ -322,7 +315,7 @@ def combine_mutations_to_source(
                     method_type = get_method_type(method)
                     if method_type in (MethodType.STATICMETHOD, MethodType.CLASSMETHOD):
                         trampoline_nodes, ext_nodes, assignment, method_mutant_names = _external_method_injection(
-                            method, method_mutants, cls.name.value, method_type
+                            method, method_mutants, cls.name.value, method_type, emitted_typevars
                         )
                         pre_class_nodes.extend(trampoline_nodes)
                         post_class_nodes.extend(ext_nodes)
@@ -345,8 +338,77 @@ def combine_mutations_to_source(
     return mutated_module.code, mutation_names
 
 
+class SelfAnnotationReplacer(cst.CSTTransformer):
+    """Replace `Self` type annotations with a TypeVar bound to the class.
+
+    Only replaces `Self` inside `cst.Annotation` nodes to avoid
+    accidentally renaming variables or other identifiers named `Self`.
+    """
+
+    def __init__(self, class_name: str):
+        self.class_name = class_name
+        self.typevar_name = f"_Tx{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
+        self.had_self = False
+        self._in_annotation = False
+
+    def visit_Annotation(self, node: cst.Annotation) -> bool:
+        self._in_annotation = True
+        return True
+
+    def leave_Annotation(self, orig_node: cst.Annotation, updated_node: cst.Annotation) -> cst.Annotation:
+        self._in_annotation = False
+        return updated_node
+
+    def leave_Name(self, orig_node: cst.Name, updated_node: cst.Name) -> cst.Name:
+        if self._in_annotation and updated_node.value == "Self":
+            self.had_self = True
+            return updated_node.with_changes(value=self.typevar_name)
+        return updated_node
+
+    def leave_SimpleString(self, orig_node: cst.SimpleString, updated_node: cst.SimpleString) -> cst.SimpleString:
+        if self._in_annotation and updated_node.value in ('"Self"', "'Self'"):
+            self.had_self = True
+            quote = updated_node.value[0]
+            return updated_node.with_changes(value=f"{quote}{self.typevar_name}{quote}")
+        return updated_node
+
+
+def _annotate_first_param(func: cst.FunctionDef, method_type: MethodType, typevar_name: str) -> cst.FunctionDef:
+    """Add a type annotation to the first parameter (cls/self) using the given TypeVar.
+
+    For classmethods, annotates cls as `type[_TClass]`.
+    For instance methods, annotates self as `_TClass`.
+    Only modifies the parameter if it has no existing annotation.
+    """
+    params = func.params
+    if method_type == MethodType.CLASSMETHOD and params.params:
+        first = params.params[0]
+        if first.annotation is None:
+            annotation = cst.Annotation(
+                annotation=cst.Subscript(
+                    value=cst.Name("type"),
+                    slice=[cst.SubscriptElement(slice=cst.Index(value=cst.Name(typevar_name)))],
+                )
+            )
+            new_first = first.with_changes(annotation=annotation)
+            new_params = params.with_changes(params=(new_first, *params.params[1:]))
+            return func.with_changes(params=new_params)
+    elif method_type == MethodType.INSTANCE and params.params:
+        first = params.params[0]
+        if first.annotation is None:
+            annotation = cst.Annotation(annotation=cst.Name(typevar_name))
+            new_first = first.with_changes(annotation=annotation)
+            new_params = params.with_changes(params=(new_first, *params.params[1:]))
+            return func.with_changes(params=new_params)
+    return func
+
+
 def _external_method_injection(
-    method: cst.FunctionDef, mutants: Sequence[Mutation], class_name: str, method_type: MethodType
+    method: cst.FunctionDef,
+    mutants: Sequence[Mutation],
+    class_name: str,
+    method_type: MethodType,
+    emitted_typevars: set[str] | None = None,
 ) -> tuple[Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], cst.SimpleStatementLine, Sequence[str]]:
     """Create external trampoline for a method using external injection pattern.
 
@@ -357,24 +419,46 @@ def _external_method_injection(
     :param mutants: The mutations for this method.
     :param class_name: The containing class name.
     :param method_type: MethodType.STATICMETHOD, MethodType.CLASSMETHOD, or MethodType.INSTANCE.
+    :param emitted_typevars: Shared set tracking which TypeVar names have already been emitted
+        for this class, to avoid duplicate declarations when multiple methods use Self.
     :return: A tuple of (trampoline_method_nodes, external_nodes, class_body_assignment, mutant_names)."""
+    if emitted_typevars is None:
+        emitted_typevars = set()
+
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     method_name = method.name.value
-    prefix = f"_mutmut_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name) + "__mutmut"
 
-    orig_func = method.with_changes(name=cst.Name(f"{prefix}_orig"), decorators=[])
+    replacer = SelfAnnotationReplacer(class_name)
+
+    orig_func = method.with_changes(name=cst.Name(f"{mangled_name}_orig"), decorators=[])
+    orig_func = cast(cst.FunctionDef, orig_func.visit(replacer))
     external_nodes.append(orig_func)
 
     for i, mutant in enumerate(mutants):
-        mutant_func_name = f"{prefix}_mutant_{i + 1}"
         full_mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(full_mutant_name)
 
-        mutated = method.with_changes(name=cst.Name(mutant_func_name), decorators=[])
+        mutated = method.with_changes(name=cst.Name(full_mutant_name), decorators=[])
         mutated = cast(cst.FunctionDef, deep_replace(mutated, mutant.original_node, mutant.mutated_node))
+        mutated = cast(cst.FunctionDef, mutated.visit(replacer))
         external_nodes.append(mutated)
+
+    if replacer.had_self:
+        if replacer.typevar_name not in emitted_typevars:
+            emitted_typevars.add(replacer.typevar_name)
+            typevar_decl = cst.parse_statement(
+                f"{replacer.typevar_name} = TypeVar('{replacer.typevar_name}', bound='{class_name}')"
+            )
+            external_nodes.insert(0, typevar_decl)
+        external_nodes = [
+            _annotate_first_param(node, method_type, replacer.typevar_name)
+            if isinstance(node, cst.FunctionDef)
+            else node
+            for node in external_nodes
+        ]
+
     trampoline_code, mutants_dict_code = build_enum_trampoline(
         class_name=class_name, method_name=method_name, mutant_names=mutant_names, method_type=method_type
     )
@@ -383,11 +467,11 @@ def _external_method_injection(
     external_nodes.extend(mutants_dict_nodes)
 
     if method_type == MethodType.STATICMETHOD:
-        assignment_code = f"{method_name} = staticmethod({prefix}_trampoline)"
+        assignment_code = f"{method_name} = staticmethod({mangled_name}_trampoline)"
     elif method_type == MethodType.CLASSMETHOD:
-        assignment_code = f"{method_name} = classmethod({prefix}_trampoline)"
+        assignment_code = f"{method_name} = classmethod({mangled_name}_trampoline)"
     else:
-        assignment_code = f"{method_name} = {prefix}_trampoline"
+        assignment_code = f"{method_name} = {mangled_name}_trampoline"
 
     assignment = cast(cst.SimpleStatementLine, cst.parse_statement(assignment_code))
 
@@ -534,6 +618,7 @@ def enum_trampoline_arrangement(
     mutant_names: list[str] = []
     new_body: list[cst.BaseStatement | cst.BaseSmallStatement] = []
     class_name = cls.name.value
+    emitted_typevars: set[str] = set()
 
     for item in cls.body.body:
         if not isinstance(item, cst.FunctionDef):
@@ -553,7 +638,7 @@ def enum_trampoline_arrangement(
             continue
 
         tramp_nodes, ext_nodes, assignment, method_mutant_names = _external_method_injection(
-            method, method_mutants, class_name, method_type
+            method, method_mutants, class_name, method_type, emitted_typevars
         )
         trampoline_nodes.extend(tramp_nodes)
         external_nodes.extend(ext_nodes)
@@ -718,9 +803,9 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                 )
                 if mutant is None:
                     raise Exception(
-                        f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). "
-                        "Probably, a code mutation influenced types in unexpected locations. "
-                        "If your project normally has no type errors and uses mypy/pyrefly, please file an issue with steps to reproduce on github."
+                        f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). \n"
+                        "Probably, a code mutation influenced types in unexpected locations. \n"
+                        "If your project normally has no type errors and uses mypy/pyrefly, please file an issue with steps to reproduce on github.\n"
                     )
 
                 mutant_name = get_mutant_name(path.relative_to(Path(".").absolute()), mutant.function_name)
