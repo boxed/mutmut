@@ -67,39 +67,39 @@ def build_enum_trampoline(
     :param method_type: 'instance', 'static', or 'classmethod'
     :return: (trampoline code, mutants dict and orign name fix code)
     """
-    prefix = f"_{class_name}_{method_name}"
-    mangled_name = mangle_function_name(name=method_name, class_name=class_name)
+    orig_mangled = mangle_function_name(name=method_name, class_name=class_name)
+    mangled_name = orig_mangled + "__mutmut"
 
     # Build mutants dict
-    mutants_dict_entries = ",\n".join(f"    {repr(m)}: {prefix}_mutant_{i + 1}" for i, m in enumerate(mutant_names))
-    mutants_dict = f"{prefix}_mutants: MutantDict = {{\n{mutants_dict_entries}\n}}"
+    mutants_dict_entries = ",\n".join(f"    {repr(m)}: {mangled_name}_{i + 1}" for i, m in enumerate(mutant_names))
+    mutants_dict = f"{mangled_name}_mutants: MutantDict = {{\n{mutants_dict_entries}\n}}"
 
-    orig_name_fix = f"{prefix}_orig.__name__ = '{mangled_name}'"
+    orig_name_fix = f"{mangled_name}_orig.__name__ = '{orig_mangled}'"
 
     # Build trampoline based on method type
     if method_type == MethodType.STATICMETHOD:
         trampoline = f"""
 
-def {prefix}_trampoline(*args, **kwargs):
-    return _mutmut_trampoline({prefix}_orig, {prefix}_mutants, args, kwargs)
+def {mangled_name}_trampoline(*args, **kwargs):
+    return _mutmut_trampoline({mangled_name}_orig, {mangled_name}_mutants, args, kwargs)
 
-{prefix}_trampoline.__name__ = '{method_name}'
+{mangled_name}_trampoline.__name__ = '{method_name}'
 """
     elif method_type == MethodType.CLASSMETHOD:
         trampoline = f"""
 
-def {prefix}_trampoline(cls, *args, **kwargs):
-    return _mutmut_trampoline({prefix}_orig, {prefix}_mutants, args, kwargs, cls)
+def {mangled_name}_trampoline(cls, *args, **kwargs):
+    return _mutmut_trampoline({mangled_name}_orig, {mangled_name}_mutants, args, kwargs, cls)
 
-{prefix}_trampoline.__name__ = '{method_name}'
+{mangled_name}_trampoline.__name__ = '{method_name}'
 """
     else:  # instance method
         trampoline = f"""
 
-def {prefix}_trampoline(self, *args, **kwargs):
-    return _mutmut_trampoline({prefix}_orig, {prefix}_mutants, args, kwargs, self)
+def {mangled_name}_trampoline(self, *args, **kwargs):
+    return _mutmut_trampoline({mangled_name}_orig, {mangled_name}_mutants, args, kwargs, self)
 
-{prefix}_trampoline.__name__ = '{method_name}'
+{mangled_name}_trampoline.__name__ = '{method_name}'
 """
 
     return _mark_generated(f"\n\n{trampoline}"), _mark_generated(f"\n\n{orig_name_fix}\n\n{mutants_dict}")

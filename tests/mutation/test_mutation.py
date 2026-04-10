@@ -659,17 +659,18 @@ class Color(Enum):
         return self.name.lower()
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="describe", class_name="Color")
     # Should NOT have mutant attributes injected INTO the class body (breaks enums)
     # The mutant dict should be OUTSIDE the class (before the class definition)
-    assert "_Color_describe_mutants" in mutated_code
+    assert f"{mang_name}__mutmut_mutants" in mutated_code
     # External trampoline function should exist
-    assert "_Color_describe_trampoline" in mutated_code
+    assert f"{mang_name}__mutmut_trampoline" in mutated_code
     # The method inside the class should be a simple assignment
-    assert "describe = _Color_describe_trampoline" in mutated_code
+    assert f"describe = {mang_name}__mutmut_trampoline" in mutated_code
     # Ensure no ClassVar inside the class (which would break enum)
     # Split to get just the class body
     class_start = mutated_code.find("class Color(Enum):")
-    assert class_start > mutated_code.find("_Color_describe_mutants")  # mutants dict is BEFORE class
+    assert class_start > mutated_code.find(f"{mang_name}__mutmut_mutants")
 
 
 def test_enum_mutation_with_staticmethod():
@@ -685,10 +686,11 @@ class Color(Enum):
         return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="helper", class_name="Color")
     # Should have external trampoline
-    assert "_Color_helper_trampoline" in mutated_code
+    assert mang_name in mutated_code
     # Assignment should use staticmethod wrapper
-    assert "helper = staticmethod(_Color_helper_trampoline)" in mutated_code
+    assert f"helper = staticmethod({mang_name}__mutmut_trampoline)" in mutated_code
 
 
 def test_enum_mutation_with_classmethod():
@@ -704,10 +706,11 @@ class Color(Enum):
         return 1 + 1
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="from_string", class_name="Color")
     # Should have external trampoline
-    assert "_Color_from_string_trampoline" in mutated_code
+    assert mang_name in mutated_code
     # Assignment should use classmethod wrapper
-    assert "from_string = classmethod(_Color_from_string_trampoline)" in mutated_code
+    assert f"from_string = classmethod({mang_name}__mutmut_trampoline)" in mutated_code
 
 
 def test_enum_mutation_preserves_enum_members():
@@ -724,12 +727,13 @@ class Status(Enum):
         return self == Status.ACTIVE
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="is_active", class_name="Status")
     # Enum members should be unchanged
     assert "PENDING = 'pending'" in mutated_code
     assert "ACTIVE = 'active'" in mutated_code
     assert "DONE = 'done'" in mutated_code
     # But method should be mutated externally
-    assert "_Status_is_active_trampoline" in mutated_code
+    assert f"{mang_name}__mutmut_trampoline" in mutated_code
 
 
 def test_regular_class_staticmethod_mutation():
@@ -741,11 +745,12 @@ class Calculator:
         return a + b
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="add", class_name="Calculator")
     # Should use external injection pattern
-    assert "_Calculator_add_trampoline" in mutated_code
-    assert "_Calculator_add_orig" in mutated_code
+    assert f"{mang_name}__mutmut_trampoline" in mutated_code
+    assert f"{mang_name}__mutmut_orig" in mutated_code
     # Assignment should use staticmethod wrapper
-    assert "add = staticmethod(_Calculator_add_trampoline)" in mutated_code
+    assert f"add = staticmethod({mang_name}__mutmut_trampoline)" in mutated_code
 
 
 def test_regular_class_classmethod_mutation():
@@ -757,11 +762,12 @@ class Factory:
         return value + 1
 """.strip()
     mutated_code = mutated_module(source)
+    mang_name = mangle_function_name(name="create", class_name="Factory")
     # Should use external injection pattern
-    assert "_Factory_create_trampoline" in mutated_code
-    assert "_Factory_create_orig" in mutated_code
+    assert f"{mang_name}__mutmut_trampoline" in mutated_code
+    assert f"{mang_name}__mutmut_orig" in mutated_code
     # Assignment should use classmethod wrapper
-    assert "create = classmethod(_Factory_create_trampoline)" in mutated_code
+    assert f"create = classmethod({mang_name}__mutmut_trampoline)" in mutated_code
 
 
 def test_regular_class_mixed_methods():
@@ -780,13 +786,15 @@ class MyClass:
         return 3 + 3
 """.strip()
     mutated_code = mutated_module(source)
+    static_mang = mangle_function_name(name="static_method", class_name="MyClass")
+    class_mang = mangle_function_name(name="class_method", class_name="MyClass")
     # Instance method uses internal trampoline (inside class)
     assert "xǁMyClassǁinstance_method__mutmut_orig" in mutated_code
     # Static and class methods use external injection
-    assert "_MyClass_static_method_trampoline" in mutated_code
-    assert "_MyClass_class_method_trampoline" in mutated_code
-    assert "static_method = staticmethod(_MyClass_static_method_trampoline)" in mutated_code
-    assert "class_method = classmethod(_MyClass_class_method_trampoline)" in mutated_code
+    assert f"{static_mang}__mutmut_trampoline" in mutated_code
+    assert f"{class_mang}__mutmut_trampoline" in mutated_code
+    assert f"static_method = staticmethod({static_mang}__mutmut_trampoline)" in mutated_code
+    assert f"class_method = classmethod({class_mang}__mutmut_trampoline)" in mutated_code
 
 
 def test_mutate_only_covered_lines_none():
