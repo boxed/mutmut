@@ -67,7 +67,7 @@ def build_enum_trampoline(
     :param method_type: 'instance', 'static', or 'classmethod'
     :return: (trampoline code, mutants dict and orign name fix code)
     """
-    prefix = f"_{class_name}_{method_name}"
+    prefix = f"_mutmut_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name)
 
     # Build mutants dict
