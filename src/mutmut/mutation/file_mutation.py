@@ -361,7 +361,7 @@ def _external_method_injection(
     external_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
     method_name = method.name.value
-    prefix = f"_{class_name}_{method_name}"
+    prefix = f"_mutmut_{class_name}_{method_name}"
     mangled_name = mangle_function_name(name=method_name, class_name=class_name) + "__mutmut"
 
     orig_func = method.with_changes(name=cst.Name(f"{prefix}_orig"), decorators=[])
