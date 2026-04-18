@@ -188,7 +188,7 @@ To enable this filtering, configure the `type_check_command` to output json resu
     # for pyrefly
     type_check_command = ['pyrefly', 'check', '--output-format=json']
     # for mypy
-    type_check_command = ['mypy', 'traces_parser', '--output', 'json', '--disable-error-code', 'unused-ignore']
+    type_check_command = ['mypy', 'your_source_dir', '--output', 'json', '--disable-error-code', 'unused-ignore']
 
 Currently, only `pyrefly` and `mypy` are supported.
 With `pyright` and `ty`, mutating a class method `Foo.bar()` can break the types of all methods of `Foo`,

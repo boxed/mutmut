@@ -18,7 +18,7 @@ def test_create_trampoline_wrapper_async_method():
 async def foo(a: str, b, *args, **kwargs) -> dict[str, int]:
     args = [a, b, *args]# type: ignore
     kwargs = {**kwargs}# type: ignore
-    return await _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)\
+    return await _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)# type: ignore\
 """)
 
 
@@ -34,7 +34,7 @@ async def foo():
     args = []# type: ignore
     kwargs = {}# type: ignore
     async for i in _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None):
-        yield i\
+        yield i# type: ignore\
 """)
 
 
@@ -45,7 +45,7 @@ def test_create_trampoline_wrapper_with_positionals_only_args():
 def foo(p1, p2=None, /, p_or_kw=None, *, kw):
     args = [p1, p2, p_or_kw]# type: ignore
     kwargs = {'kw': kw}# type: ignore
-    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)\
+    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)# type: ignore\
 """)
 
 
@@ -56,7 +56,7 @@ def test_create_trampoline_wrapper_for_class_method():
 def foo(self, a, b):
     args = [a, b]# type: ignore
     kwargs = {}# type: ignore
-    return _mutmut_trampoline(object.__getattribute__(self, 'x_foo__mutmut_orig'), object.__getattribute__(self, 'x_foo__mutmut_mutants'), args, kwargs, self)\
+    return _mutmut_trampoline(object.__getattribute__(self, 'x_foo__mutmut_orig'), object.__getattribute__(self, 'x_foo__mutmut_mutants'), args, kwargs, self)# type: ignore\
 """)
 
 
@@ -141,7 +141,7 @@ def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_a
 def foo(a: list[int], b):
     args = [a, b]# type: ignore
     kwargs = {}# type: ignore
-    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)
+    return _mutmut_trampoline(x_foo__mutmut_orig, x_foo__mutmut_mutants, args, kwargs, None)# type: ignore
 
 def x_foo__mutmut_orig(a: list[int], b):
     return a[0] > b
@@ -162,7 +162,7 @@ x_foo__mutmut_orig.__name__ = 'x_foo' # type: ignore # mutmut generated
 def bar():
     args = []# type: ignore
     kwargs = {}# type: ignore
-    return _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs, None)
+    return _mutmut_trampoline(x_bar__mutmut_orig, x_bar__mutmut_mutants, args, kwargs, None)# type: ignore
 
 def x_bar__mutmut_orig():
     yield 1
@@ -180,7 +180,7 @@ class Adder:
     def __init__(self, amount):
         args = [amount]# type: ignore
         kwargs = {}# type: ignore
-        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_mutants'), args, kwargs, self)
+        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁ__init____mutmut_mutants'), args, kwargs, self)# type: ignore
     def xǁAdderǁ__init____mutmut_orig(self, amount):
         self.amount = amount
     def xǁAdderǁ__init____mutmut_1(self, amount):
@@ -195,7 +195,7 @@ class Adder:
     def add(self, value):
         args = [value]# type: ignore
         kwargs = {}# type: ignore
-        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁadd__mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁadd__mutmut_mutants'), args, kwargs, self)
+        return _mutmut_trampoline(object.__getattribute__(self, 'xǁAdderǁadd__mutmut_orig'), object.__getattribute__(self, 'xǁAdderǁadd__mutmut_mutants'), args, kwargs, self)# type: ignore
 
     def xǁAdderǁadd__mutmut_orig(self, value):
         return self.amount + value

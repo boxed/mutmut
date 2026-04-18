@@ -477,8 +477,12 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             cst.Arg(cst.Name("None" if class_name is None else "self")),
         ],
     )
+    type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment("# type: ignore"))
+
     # for non-async functions, simply return the value or generator
-    result_statement: cst.BaseStatement = cst.SimpleStatementLine([cst.Return(result)])
+    result_statement: cst.BaseStatement = cst.SimpleStatementLine(
+        [cst.Return(result)], trailing_whitespace=type_ignore_whitespace
+    )
 
     if function.asynchronous:
         is_generator = _is_generator(function)
@@ -487,14 +491,21 @@ def create_trampoline_wrapper(function: cst.FunctionDef, mangled_name: str, clas
             result_statement = cst.For(
                 target=cst.Name("i"),
                 iter=result,
-                body=cst.IndentedBlock([cst.SimpleStatementLine([cst.Expr(cst.Yield(cst.Name("i")))])]),
+                body=cst.IndentedBlock(
+                    [
+                        cst.SimpleStatementLine(
+                            [cst.Expr(cst.Yield(cst.Name("i")))], trailing_whitespace=type_ignore_whitespace
+                        )
+                    ]
+                ),
                 asynchronous=cst.Asynchronous(),
             )
         else:
             # return await _mutmut_trampoline(...)
-            result_statement = cst.SimpleStatementLine([cst.Return(cst.Await(result))])
+            result_statement = cst.SimpleStatementLine(
+                [cst.Return(cst.Await(result))], trailing_whitespace=type_ignore_whitespace
+            )
 
-    type_ignore_whitespace = cst.TrailingWhitespace(comment=cst.Comment("# type: ignore"))
     return function.with_changes(
         body=cst.IndentedBlock(
             [
