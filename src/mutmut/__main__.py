@@ -1049,6 +1049,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 mutation_data.save()
                 continue
 
+            config = Config.get()
             pid = os.fork()
             if pid == 0:
                 # In the child
@@ -1060,7 +1061,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 if not sorted_tests:
                     os._exit(33)
 
-                cpu_time_limit_s = ceil((estimated_time_of_tests + 1) * 30 + process_time())
+                cpu_time_limit_s = ceil((estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier * 2 + process_time())
                 # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit_s, cpu_time_limit_s + 1))
 
@@ -1072,7 +1073,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 os._exit(result)
             else:
                 # in the parent
-                wall_time_limit_s = (estimated_time_of_tests + 1) * 15
+                wall_time_limit_s = (estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier
                 register_timeout(pid=pid, timeout_s=wall_time_limit_s)
                 source_file_mutation_data_by_pid[pid] = mutation_data
                 mutation_data.register_pid(pid=pid, key=mutant_name)

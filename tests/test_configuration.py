@@ -64,6 +64,8 @@ class TestShouldIgnoreForMutation:
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
             mutate_only_covered_lines=False,
+            timeout_multiplier=15.0,
+            timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
         )
@@ -82,6 +84,8 @@ class TestShouldIgnoreForMutation:
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
             mutate_only_covered_lines=False,
+            timeout_multiplier=15.0,
+            timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
         )
@@ -99,6 +103,8 @@ class TestShouldIgnoreForMutation:
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
             mutate_only_covered_lines=False,
+            timeout_multiplier=15.0,
+            timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
         )
@@ -116,6 +122,8 @@ class TestShouldIgnoreForMutation:
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
             mutate_only_covered_lines=False,
+            timeout_multiplier=15.0,
+            timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
         )
@@ -134,6 +142,8 @@ class TestShouldIgnoreForMutation:
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
             mutate_only_covered_lines=False,
+            timeout_multiplier=15.0,
+            timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
         )
@@ -308,6 +318,8 @@ pytest_add_cli_args_test_selection = ["--no-header"]
 also_copy = ["fixtures"]
 mutate_only_covered_lines = true
 type_check_command = ["mypy", "--strict"]
+timeout_multiplier = 5.0
+timeout_constant = 0.5
 """)
         (in_tmp_dir / "src").mkdir()
 
@@ -323,6 +335,8 @@ type_check_command = ["mypy", "--strict"]
         assert Path("fixtures") in config.also_copy
         assert config.mutate_only_covered_lines is True
         assert config.type_check_command == ["mypy", "--strict"]
+        assert config.timeout_multiplier == 5.0
+        assert config.timeout_constant == 0.5
 
     def test_uses_defaults_when_no_config(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
@@ -334,6 +348,8 @@ type_check_command = ["mypy", "--strict"]
         assert config.paths_to_mutate == [Path("src")]
         assert config.do_not_mutate == []
         assert config.mutate_only_covered_lines is False
+        assert config.timeout_multiplier == 15.0
+        assert config.timeout_constant == 1.0
         assert config.type_check_command == []
 
     def test_also_copy_includes_defaults(self, in_tmp_dir: Path):
