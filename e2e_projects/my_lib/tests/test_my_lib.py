@@ -1,5 +1,6 @@
 import inspect
 from my_lib import *
+from my_lib import _PrivateClass
 import pytest
 import asyncio
 
@@ -158,3 +159,11 @@ async def test_color_async_get_all():
     async for color in Color.async_get_all():
         results.append(color)
     assert results == [Color.RED, Color.GREEN, Color.BLUE]
+
+
+def test_private_class_method():
+    assert len(_PrivateClass().get_question()) > 0
+
+
+def test_private_class_classmethod():
+    assert _PrivateClass().get_answer() > 0

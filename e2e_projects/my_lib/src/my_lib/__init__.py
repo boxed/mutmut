@@ -204,3 +204,12 @@ class AlsoSkipThisClass:
     def compute(self) -> int:
         return self.VALUE * 2
 # pragma: no mutate end
+
+class _PrivateClass:
+    # see issue https://github.com/boxed/mutmut/issues/498
+    def get_question(self):
+        return "What is the answer to all and everything?"
+
+    @classmethod
+    def get_answer(cls):
+        return 42

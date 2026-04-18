@@ -104,6 +104,10 @@ def test_my_lib_result_snapshot():
                 "my_lib.xǁColorǁdarken__mutmut_1": 0,
                 "my_lib.xǁColorǁdarken__mutmut_2": 1,
                 "my_lib.xǁColorǁfrom_name__mutmut_1": 1,
+                "my_lib.xǁ_PrivateClassǁget_question__mutmut_1": 0,
+                "my_lib.xǁ_PrivateClassǁget_question__mutmut_2": 0,
+                "my_lib.xǁ_PrivateClassǁget_question__mutmut_3": 0,
+                "my_lib.xǁ_PrivateClassǁget_answer__mutmut_1": 0,
             }
         }
     )
