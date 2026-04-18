@@ -54,6 +54,7 @@ source-include = ["HISTORY.rst"]
 [dependency-groups]
 dev = [
     "inline-snapshot>=0.32.0",
+    "mypy>=1.20.1",
     "pre-commit>=4.5.1",
     "pyrefly>=0.59.1",
     "pytest-asyncio>=1.0.0",

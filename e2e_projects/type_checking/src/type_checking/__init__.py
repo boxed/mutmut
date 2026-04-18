@@ -11,11 +11,11 @@ def a_hello_wrapper() -> str:
     return hello() + "2"
 
 class Person:
-    def set_name(self, name: str):
+    def set_name(self, name: str) -> None:
         self.name = name
 
-    def get_name(self):
-        # return type should be inferred as "str"
+    def get_name(self) -> str:
+        # type of self.name should be str and compatible with return type
         return self.name
 
 
@@ -35,7 +35,7 @@ class Color(Enum):
         return Color.from_index(Color.to_index(color) + 1 % 3)
 
     @staticmethod
-    def to_index(color: 'Color'):
+    def to_index(color: 'Color') -> int:
         match color:
             case Color.RED:
                 return 0
@@ -54,7 +54,7 @@ class Color(Enum):
 
 
 
-def mutate_me():
+def mutate_me() -> str:
     p = Person()
     p.set_name('charlie')
     # Verify that p.get_name keeps the return type str

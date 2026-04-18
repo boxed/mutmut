@@ -20,6 +20,7 @@ dev = [
 
 [tool.mutmut]
 debug = true
+# also checked with mypy, but via monkeypatching the type_check_command
 type_check_command = ["pyrefly", "check", "--output-format=json"]
 
 [tool.pyrefly]
@@ -27,6 +28,9 @@ project-includes = [
     "**/*.py*",
     "**/*.ipynb",
 ]
+
+[tool.mypy]
+strict = true
 
 [tool.pyright]
 typeCheckingMode = "strict"
