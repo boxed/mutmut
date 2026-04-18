@@ -367,6 +367,20 @@ You can add and override pytest arguments:
     also_copy = ["mutmut_pytest.ini"]
 
 
+Unstable configs
+~~~~~~~~~~~~~~~~
+
+Following configurations exist, but may be changed in any minor version.
+If you use them, expect that a new version could change or break this feature.
+
+
+.. code-block:: toml
+
+    # Configure how long mutmut waits before killing a slow mutation
+    # Currently calculated as (duration_of_original_tests + timeout_constant) * timeout_multiplier seconds
+    timeout_constant = 1.0
+    timeout_multiplier = 15.0
+
 
 Example mutations
 -----------------
