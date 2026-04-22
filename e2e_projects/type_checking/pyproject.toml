@@ -15,7 +15,7 @@ build-backend = "uv_build"
 dev = [
     "pyrefly>=0.52.0",
     "pyright>=1.1.408",
-    "pytest>=8.2.0",
+    "pytest>=9.0.3",
 ]
 
 [tool.mutmut]
