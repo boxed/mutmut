@@ -4,6 +4,7 @@ import fnmatch
 import os
 import platform
 import sys
+import warnings
 from collections.abc import Callable
 from configparser import ConfigParser
 from configparser import NoOptionError
@@ -64,7 +65,7 @@ def _config_reader() -> Callable[[str, Any], Any]:
     return setup_cfg_conf
 
 
-def _guess_paths_to_mutate() -> list[str]:
+def _guess_source_paths() -> list[str]:
     """Guess the path to source code to mutate
 
     :rtype: str
@@ -88,12 +89,18 @@ def _guess_paths_to_mutate() -> list[str]:
         return [this_dir + ".py"]
     raise FileNotFoundError(
         "Could not figure out where the code to mutate is. "
-        'Please specify it by adding "paths_to_mutate=code_dir" in setup.cfg to the [mutmut] section.'
+        'Please specify it by adding "source_paths=code_dir" in setup.cfg to the [mutmut] section.'
     )
 
 
 def _load_config() -> Config:
     s = _config_reader()
+
+    paths_to_mutate = [Path(path) for path in s("paths_to_mutate", [])]
+    if paths_to_mutate:
+        warnings.warn("The config paths_to_mutate is deprecated. Please rename it to source_paths")
+    source_paths = [Path(path) for path in s("source_paths", [])]
+    source_paths = source_paths or paths_to_mutate or [Path(path) for path in _guess_source_paths()]
 
     return Config(
         do_not_mutate=s("do_not_mutate", []),
@@ -108,7 +115,7 @@ def _load_config() -> Config:
         max_stack_depth=s("max_stack_depth", -1),
         debug=s("debug", False),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
-        paths_to_mutate=[Path(y) for y in s("paths_to_mutate", [])] or [Path(p) for p in _guess_paths_to_mutate()],
+        source_paths=source_paths,
         tests_dir=s("tests_dir", []),
         pytest_add_cli_args=s("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=s("pytest_add_cli_args_test_selection", []),
@@ -130,7 +137,7 @@ class Config:
     do_not_mutate: list[str]
     max_stack_depth: int
     debug: bool
-    paths_to_mutate: list[Path]
+    source_paths: list[Path]
     pytest_add_cli_args: list[str]
     pytest_add_cli_args_test_selection: list[str]
     tests_dir: list[str]

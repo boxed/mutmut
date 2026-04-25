@@ -88,7 +88,7 @@ In `setup.cfg` in the root of your project you can configure mutmut if you need 
 .. code-block:: ini
 
     [mutmut]
-    paths_to_mutate=src/
+    source_paths=src/
     pytest_add_cli_args_test_selection=tests/
 
 If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutmut` section:
@@ -96,7 +96,7 @@ If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutm
 .. code-block:: toml
 
     [tool.mutmut]
-    paths_to_mutate = [ "src/" ]
+    source_paths = [ "src/" ]
     pytest_add_cli_args_test_selection= [ "tests/" ]
 
 See below for more options for configuring mutmut.

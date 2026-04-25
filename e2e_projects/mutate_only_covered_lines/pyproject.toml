@@ -26,7 +26,7 @@ debug = true
 mutate_only_covered_lines = true
 tests_dir = [ "tests/main/" ]
 do_not_mutate = [ "*ignore*" ]
-# do not add paths_to_mutate because we want to test src guessing
+# do not add source_paths because we want to test src guessing
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
