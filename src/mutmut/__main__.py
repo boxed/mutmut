@@ -149,6 +149,13 @@ def walk_source_files() -> Iterator[Path]:
             yield Path(root) / filename
 
 
+def walk_mutatable_files() -> Iterator[Path]:
+    config = Config.get()
+    for path in walk_source_files():
+        if config.should_mutate(path):
+            yield path
+
+
 class MutmutProgrammaticFailException(Exception):
     pass
 
@@ -228,11 +235,11 @@ def create_file_mutants(path: Path) -> FileMutationResult:
         output_path = Path("mutants") / path
         makedirs(output_path.parent, exist_ok=True)
 
-        if Config.get().should_ignore_for_mutation(path):
+        if Config.get().should_mutate(path):
+            return create_mutants_for_file(path, output_path)
+        else:
             shutil.copy(path, output_path)
             return FileMutationResult(ignored=True)
-        else:
-            return create_mutants_for_file(path, output_path)
     except Exception as e:
         return FileMutationResult(error=e)
 
@@ -823,10 +830,7 @@ def export_cicd_stats() -> None:
 
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
 
-    for path in walk_source_files():
-        if Config.get().should_ignore_for_mutation(path):
-            continue
-
+    for path in walk_mutatable_files():
         meta_path = Path("mutants") / (str(path) + ".meta")
         if not meta_path.exists():
             continue
@@ -854,9 +858,7 @@ def collect_source_file_mutation_data(
 ]:
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
 
-    for path in walk_source_files():
-        if Config.get().should_ignore_for_mutation(path):
-            continue
+    for path in walk_mutatable_files():
         assert str(path) not in source_file_mutation_data_by_path
         m = SourceFileMutationData(path=path)
         m.load()
@@ -1130,9 +1132,7 @@ def tests_for_mutant_names(mutant_names: tuple[str, ...] | list[str]) -> set[str
 @click.option("--all", default=False)
 def results(all: bool) -> None:
     Config.ensure_loaded()
-    for path in walk_source_files():
-        if not str(path).endswith(".py"):
-            continue
+    for path in walk_mutatable_files():
         m = SourceFileMutationData(path=path)
         m.load()
         for k, v in m.exit_code_by_key.items():
@@ -1185,10 +1185,7 @@ def read_mutant_function(module: cst.Module, mutant_name: str) -> cst.FunctionDe
 
 
 def find_mutant(mutant_name: str) -> SourceFileMutationData:
-    for path in walk_source_files():
-        if Config.get().should_ignore_for_mutation(path):
-            continue
-
+    for path in walk_mutatable_files():
         m = SourceFileMutationData(path=path)
         m.load()
         if mutant_name in m.exit_code_by_key:
@@ -1331,9 +1328,7 @@ def browse(show_killed: bool) -> None:
             self.source_file_mutation_data_and_stat_by_path = {}
             self.path_by_name: dict[str, Path] = {}
 
-            for p in walk_source_files():
-                if Config.get().should_ignore_for_mutation(p):
-                    continue
+            for p in walk_mutatable_files():
                 source_file_mutation_data = SourceFileMutationData(path=p)
                 source_file_mutation_data.load()
                 stat = collect_stat(source_file_mutation_data)

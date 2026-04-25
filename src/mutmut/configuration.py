@@ -109,8 +109,18 @@ def _load_config() -> Config:
         )
     pytest_add_cli_args_test_selection = s("pytest_add_cli_args_test_selection", []) + tests_dir
 
+    only_mutate = s("only_mutate", [])
+    do_not_mutate = s("do_not_mutate", [])
+    # only patterns for python files are valid: must end with ".py" or "*"
+    invalid_patterns = [p for p in only_mutate + do_not_mutate if not (p.endswith("*") or p.endswith(".py"))]
+    if invalid_patterns:
+        warnings.warn(
+            f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
+        )
+
     return Config(
-        do_not_mutate=s("do_not_mutate", []),
+        only_mutate=only_mutate,
+        do_not_mutate=do_not_mutate,
         also_copy=[Path(y) for y in s("also_copy", [])]
         + [
             Path("tests/"),
@@ -140,6 +150,7 @@ _config: Config | None = None
 @dataclass
 class Config:
     also_copy: list[Path]
+    only_mutate: list[str]
     do_not_mutate: list[str]
     max_stack_depth: int
     debug: bool
@@ -152,7 +163,21 @@ class Config:
     type_check_command: list[str]
     use_setproctitle: bool
 
-    def should_ignore_for_mutation(self, path: Path | str) -> bool:
+    def should_mutate(self, path: Path | str) -> bool:
+        return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)
+
+    def _should_include_for_mutation(self, path: Path | str) -> bool:
+        if not self.only_mutate:
+            return True
+        path_str = str(path)
+        if not path_str.endswith(".py"):
+            return True
+        for p in self.only_mutate:
+            if fnmatch.fnmatch(path_str, p):
+                return True
+        return False
+
+    def _should_ignore_for_mutation(self, path: Path | str) -> bool:
         path_str = str(path)
         if not path_str.endswith(".py"):
             return True

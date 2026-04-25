@@ -52,11 +52,14 @@ class TestConfigSingleton:
         assert config1 is config2
 
 
-class TestShouldIgnoreForMutation:
-    def test_ignores_non_python_files(self):
-        config = Config(
+class TestShouldMutateFile:
+    @staticmethod
+    def _get_config(only_mutate: list[str], do_not_mutate: list[str]) -> Config:
+        # only the "only_mutate" and "do_not_mutate" configs are important for these tests
+        return Config(
+            only_mutate=only_mutate,
+            do_not_mutate=do_not_mutate,
             also_copy=[],
-            do_not_mutate=[],
             max_stack_depth=-1,
             debug=False,
             source_paths=[],
@@ -68,82 +71,71 @@ class TestShouldIgnoreForMutation:
             type_check_command=[],
             use_setproctitle=False,
         )
-        assert config.should_ignore_for_mutation("foo.txt") is True
-        assert config.should_ignore_for_mutation("foo.js") is True
-        assert config.should_ignore_for_mutation("foo") is True
 
-    def test_does_not_ignore_python_files(self):
-        config = Config(
-            also_copy=[],
+    def test_ignores_non_python_files(self):
+        config = self._get_config(
+            only_mutate=[],
             do_not_mutate=[],
-            max_stack_depth=-1,
-            debug=False,
-            source_paths=[],
-            pytest_add_cli_args=[],
-            pytest_add_cli_args_test_selection=[],
-            mutate_only_covered_lines=False,
-            timeout_multiplier=15.0,
-            timeout_constant=1.0,
-            type_check_command=[],
-            use_setproctitle=False,
         )
-        assert config.should_ignore_for_mutation("foo.py") is False
-        assert config.should_ignore_for_mutation("src/foo.py") is False
+        assert config.should_mutate("foo.txt") is False
+        assert config.should_mutate("foo.js") is False
+        assert config.should_mutate("foo") is False
+
+    def test_includes_python_files(self):
+        config = self._get_config(
+            only_mutate=[],
+            do_not_mutate=[],
+        )
+        assert config.should_mutate("foo.py") is True
+        assert config.should_mutate("src/foo.py") is True
 
     def test_respects_do_not_mutate_exact_match(self):
-        config = Config(
-            also_copy=[],
+        config = self._get_config(
+            only_mutate=[],
             do_not_mutate=["foo.py"],
-            max_stack_depth=-1,
-            debug=False,
-            source_paths=[],
-            pytest_add_cli_args=[],
-            pytest_add_cli_args_test_selection=[],
-            mutate_only_covered_lines=False,
-            timeout_multiplier=15.0,
-            timeout_constant=1.0,
-            type_check_command=[],
-            use_setproctitle=False,
         )
-        assert config.should_ignore_for_mutation("foo.py") is True
-        assert config.should_ignore_for_mutation("bar.py") is False
+        assert config.should_mutate("foo.py") is False
+        assert config.should_mutate("bar.py") is True
 
     def test_respects_do_not_mutate_glob_pattern(self):
-        config = Config(
-            also_copy=[],
+        config = self._get_config(
+            only_mutate=[],
             do_not_mutate=["**/test_*.py", "src/ignore_*.py"],
-            max_stack_depth=-1,
-            debug=False,
-            source_paths=[],
-            pytest_add_cli_args=[],
-            pytest_add_cli_args_test_selection=[],
-            mutate_only_covered_lines=False,
-            timeout_multiplier=15.0,
-            timeout_constant=1.0,
-            type_check_command=[],
-            use_setproctitle=False,
         )
-        assert config.should_ignore_for_mutation("tests/test_foo.py") is True
-        assert config.should_ignore_for_mutation("src/ignore_me.py") is True
-        assert config.should_ignore_for_mutation("src/keep_me.py") is False
+        assert config.should_mutate("tests/test_foo.py") is False
+        assert config.should_mutate("src/ignore_me.py") is False
+        assert config.should_mutate("src/keep_me.py") is True
+
+    def test_respects_only_mutate(self):
+        config = self._get_config(
+            # without a glob, the `src/` is pointless
+            only_mutate=["src/", "foo/*"],
+            do_not_mutate=[],
+        )
+        assert config.should_mutate("tests/test_foo.py") is False
+        assert config.should_mutate("src/main.py") is False
+        assert config.should_mutate("foo/main.py") is True
+        assert config.should_mutate("foo/nested/main.py") is True
+
+    def test_respects_only_mutate_with_do_not_mutate(self):
+        config = self._get_config(
+            only_mutate=["src/api/*"],
+            do_not_mutate=["src/api/models/*"],
+        )
+        # matched by only_mutate
+        assert config.should_mutate("src/api/endpoints/user.py") is True
+        # matched by only_mutate but excluded by do_not_mutate
+        assert config.should_mutate("src/api/models/user.py") is False
+        # not matched by only_mutate
+        assert config.should_mutate("src/services/user.py") is False
 
     def test_accepts_path_objects(self):
-        config = Config(
-            also_copy=[],
+        config = self._get_config(
+            only_mutate=[],
             do_not_mutate=["foo.py"],
-            max_stack_depth=-1,
-            debug=False,
-            source_paths=[],
-            pytest_add_cli_args=[],
-            pytest_add_cli_args_test_selection=[],
-            mutate_only_covered_lines=False,
-            timeout_multiplier=15.0,
-            timeout_constant=1.0,
-            type_check_command=[],
-            use_setproctitle=False,
         )
-        assert config.should_ignore_for_mutation(Path("foo.py")) is True
-        assert config.should_ignore_for_mutation(Path("bar.py")) is False
+        assert config.should_mutate(Path("foo.py")) is False
+        assert config.should_mutate(Path("bar.py")) is True
 
 
 class TestConfigReaderPyprojectToml:
@@ -306,6 +298,7 @@ class TestLoadConfig:
 debug = true
 max_stack_depth = 10
 source_paths = ["src"]
+only_mutate=["**/foo.py"]
 do_not_mutate = ["**/test_*.py"]
 pytest_add_cli_args = ["-x", "--tb=short"]
 pytest_add_cli_args_test_selection = ["--no-header"]
@@ -322,6 +315,7 @@ timeout_constant = 0.5
         assert config.debug is True
         assert config.max_stack_depth == 10
         assert config.source_paths == [Path("src")]
+        assert config.only_mutate == ["**/foo.py"]
         assert config.do_not_mutate == ["**/test_*.py"]
         assert config.pytest_add_cli_args == ["-x", "--tb=short"]
         assert config.pytest_add_cli_args_test_selection == ["--no-header"]
@@ -339,6 +333,7 @@ timeout_constant = 0.5
         assert config.debug is False
         assert config.max_stack_depth == -1
         assert config.source_paths == [Path("src")]
+        assert config.only_mutate == []
         assert config.do_not_mutate == []
         assert config.mutate_only_covered_lines is False
         assert config.timeout_multiplier == 15.0

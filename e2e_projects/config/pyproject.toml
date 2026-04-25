@@ -25,6 +25,7 @@ dev = [
 [tool.mutmut]
 debug = true
 source_paths = [ "config_pkg/" ]
+only_mutate = [ "config_pkg/logic/*" ]
 do_not_mutate = [ "*ignore*" ]
 also_copy = [ "data" ]
 max_stack_depth=8 # Includes frames by mutmut, see https://github.com/boxed/mutmut/issues/378
