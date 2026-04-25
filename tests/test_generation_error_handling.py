@@ -25,7 +25,7 @@ def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
         source_dir / "invalid_syntax.py",
     ]
     monkeypatch.setattr(mutmut.__main__, "walk_source_files", lambda: source_files)
-    monkeypatch.setattr(Config.get(), "should_ignore_for_mutation", lambda _path: False)
+    monkeypatch.setattr(Config.get(), "should_mutate", lambda _path: True)
 
     # should raise an exception, because we copy the invalid_syntax.py file and then verify
     # if it is valid syntax

@@ -30,7 +30,7 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
 
         stats = {}
         for p in walk_source_files():
-            if Config.get().should_ignore_for_mutation(p):
+            if not Config.get().should_mutate(p):
                 continue
             data = SourceFileMutationData(path=p)
             data.load()

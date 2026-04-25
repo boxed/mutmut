@@ -143,10 +143,14 @@ caught.
 Exclude files from mutation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+By default mutmut mutates all python files in `source_paths`.
 You can exclude files from mutation in `setup.cfg`:
 
 .. code-block::
 
+    only_mutate=
+        src/api/*
+        src/services/*
     do_not_mutate=
         *__tests.py
 
