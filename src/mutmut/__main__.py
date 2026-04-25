@@ -388,10 +388,6 @@ class PytestRunner(TestRunner):
         self._pytest_add_cli_args: list[str] = Config.get().pytest_add_cli_args
         self._pytest_add_cli_args_test_selection: list[str] = Config.get().pytest_add_cli_args_test_selection
 
-        # tests_dir is a special case of a test selection option,
-        # so also use pytest_add_cli_args_test_selection for the implementation
-        self._pytest_add_cli_args_test_selection += Config.get().tests_dir
-
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
         import pytest
@@ -463,7 +459,6 @@ class PytestRunner(TestRunner):
 
         collector = TestsCollector()
 
-        tests_dir = Config.get().tests_dir
         pytest_args = ["-x", "-q", "--collect-only"] + self._pytest_add_cli_args_test_selection
 
         with change_cwd("mutants"):
