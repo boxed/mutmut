@@ -24,7 +24,7 @@ dev = [
 
 [tool.mutmut]
 debug = true
-paths_to_mutate = [ "config_pkg/" ]
+source_paths = [ "config_pkg/" ]
 do_not_mutate = [ "*ignore*" ]
 also_copy = [ "data" ]
 max_stack_depth=8 # Includes frames by mutmut, see https://github.com/boxed/mutmut/issues/378

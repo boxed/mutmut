@@ -133,7 +133,7 @@ def record_trampoline_hit(name: str) -> None:
 
 
 def walk_all_files() -> Iterator[tuple[str, str]]:
-    for path in Config.get().paths_to_mutate:
+    for path in Config.get().source_paths:
         if not isdir(path):
             if isfile(path):
                 yield "", str(path)
@@ -1060,7 +1060,9 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 if not sorted_tests:
                     os._exit(33)
 
-                cpu_time_limit_s = ceil((estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier * 2 + process_time())
+                cpu_time_limit_s = ceil(
+                    (estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier * 2 + process_time()
+                )
                 # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit_s, cpu_time_limit_s + 1))
 

@@ -4,7 +4,7 @@ import pytest
 
 from mutmut.configuration import Config
 from mutmut.configuration import _config_reader
-from mutmut.configuration import _guess_paths_to_mutate
+from mutmut.configuration import _guess_source_paths
 from mutmut.configuration import _load_config
 
 
@@ -59,7 +59,7 @@ class TestShouldIgnoreForMutation:
             do_not_mutate=[],
             max_stack_depth=-1,
             debug=False,
-            paths_to_mutate=[],
+            source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
@@ -79,7 +79,7 @@ class TestShouldIgnoreForMutation:
             do_not_mutate=[],
             max_stack_depth=-1,
             debug=False,
-            paths_to_mutate=[],
+            source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
@@ -98,7 +98,7 @@ class TestShouldIgnoreForMutation:
             do_not_mutate=["foo.py"],
             max_stack_depth=-1,
             debug=False,
-            paths_to_mutate=[],
+            source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
@@ -117,7 +117,7 @@ class TestShouldIgnoreForMutation:
             do_not_mutate=["**/test_*.py", "src/ignore_*.py"],
             max_stack_depth=-1,
             debug=False,
-            paths_to_mutate=[],
+            source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
@@ -137,7 +137,7 @@ class TestShouldIgnoreForMutation:
             do_not_mutate=["foo.py"],
             max_stack_depth=-1,
             debug=False,
-            paths_to_mutate=[],
+            source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             tests_dir=[],
@@ -157,13 +157,13 @@ class TestConfigReaderPyprojectToml:
 [tool.mutmut]
 debug = true
 max_stack_depth = 10
-paths_to_mutate = ["src", "lib"]
+source_paths = ["src", "lib"]
 do_not_mutate = ["**/migrations/*"]
 """)
         reader = _config_reader()
         assert reader("debug", False) is True
         assert reader("max_stack_depth", -1) == 10
-        assert reader("paths_to_mutate", []) == ["src", "lib"]
+        assert reader("source_paths", []) == ["src", "lib"]
         assert reader("do_not_mutate", []) == ["**/migrations/*"]
 
     def test_returns_default_for_missing_key(self, in_tmp_dir: Path):
@@ -191,12 +191,12 @@ class TestConfigReaderSetupCfg:
 [mutmut]
 debug = true
 max_stack_depth = 5
-paths_to_mutate = src
+source_paths = src
 """)
         reader = _config_reader()
         assert reader("debug", False) is True
         assert reader("max_stack_depth", -1) == 5
-        assert reader("paths_to_mutate", []) == ["src"]
+        assert reader("source_paths", []) == ["src"]
 
     def test_parses_multiline_list(self, in_tmp_dir: Path):
         (in_tmp_dir / "setup.cfg").write_text("""
@@ -277,31 +277,31 @@ debug = false
 class TestGuessPathsToMutate:
     def test_guesses_lib_directory(self, in_tmp_dir: Path):
         (in_tmp_dir / "lib").mkdir()
-        assert _guess_paths_to_mutate() == ["lib"]
+        assert _guess_source_paths() == ["lib"]
 
     def test_guesses_src_directory(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
-        assert _guess_paths_to_mutate() == ["src"]
+        assert _guess_source_paths() == ["src"]
 
     def test_prefers_lib_over_src(self, in_tmp_dir: Path):
         (in_tmp_dir / "lib").mkdir()
         (in_tmp_dir / "src").mkdir()
-        assert _guess_paths_to_mutate() == ["lib"]
+        assert _guess_source_paths() == ["lib"]
 
     def test_guesses_directory_matching_cwd_name(self, in_tmp_dir: Path):
         # tmp_path has a random name, create a subdir matching it
         dir_name = in_tmp_dir.name
         (in_tmp_dir / dir_name).mkdir()
-        assert _guess_paths_to_mutate() == [dir_name]
+        assert _guess_source_paths() == [dir_name]
 
     def test_guesses_py_file_matching_cwd_name(self, in_tmp_dir: Path):
         dir_name = in_tmp_dir.name
         (in_tmp_dir / f"{dir_name}.py").touch()
-        assert _guess_paths_to_mutate() == [f"{dir_name}.py"]
+        assert _guess_source_paths() == [f"{dir_name}.py"]
 
     def test_raises_when_cannot_guess(self, in_tmp_dir: Path):
         with pytest.raises(FileNotFoundError, match="Could not figure out"):
-            _guess_paths_to_mutate()
+            _guess_source_paths()
 
 
 class TestLoadConfig:
@@ -310,7 +310,7 @@ class TestLoadConfig:
 [tool.mutmut]
 debug = true
 max_stack_depth = 10
-paths_to_mutate = ["src"]
+source_paths = ["src"]
 do_not_mutate = ["**/test_*.py"]
 tests_dir = ["tests/unit"]
 pytest_add_cli_args = ["-x", "--tb=short"]
@@ -327,7 +327,7 @@ timeout_constant = 0.5
 
         assert config.debug is True
         assert config.max_stack_depth == 10
-        assert config.paths_to_mutate == [Path("src")]
+        assert config.source_paths == [Path("src")]
         assert config.do_not_mutate == ["**/test_*.py"]
         assert config.tests_dir == ["tests/unit"]
         assert config.pytest_add_cli_args == ["-x", "--tb=short"]
@@ -345,7 +345,7 @@ timeout_constant = 0.5
 
         assert config.debug is False
         assert config.max_stack_depth == -1
-        assert config.paths_to_mutate == [Path("src")]
+        assert config.source_paths == [Path("src")]
         assert config.do_not_mutate == []
         assert config.mutate_only_covered_lines is False
         assert config.timeout_multiplier == 15.0
