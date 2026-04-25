@@ -1,3 +1,4 @@
+import pytest
 import inspect
 from my_lib import *
 from my_lib import _PrivateClass
@@ -167,3 +168,7 @@ def test_private_class_method():
 
 def test_private_class_classmethod():
     assert _PrivateClass().get_answer() > 0
+
+def test_divide():
+    with pytest.raises(Exception, match='.*cannot be 0!!!'):
+        divide(1, 0)
