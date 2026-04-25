@@ -231,25 +231,56 @@ macOS at your own risk, or to disable it on other platforms), set ``use_setproct
     use_setproctitle = false
 
 
-Whitelisting
-~~~~~~~~~~~~
+Disabling mutation on specific code
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can mark lines like this:
+If you do not want to mutate specific parts of your code, you can disable mutation
+via the following options. Examples where this could be relevant:
+
+- If you don't want to test exact log messages (e.g. `logging.info("Foo")` versus the mutated `logging.info("XXFooXX")`)
+- Optimizing break instead of continue. The code runs fine when mutating break
+  to continue, but it's slower.
+
+Skipping via regex
+^^^^^^^^^^^^^^^^^^
+
+You can use a regex on the source code, to tell mutmut which expressions it should not mutate:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    do_not_mutate_patterns = [
+        # disable mutations of all logger.info/debug/... statements
+        'logger\.\w+',
+        # disable mutating exceptions
+        'raise \w+',
+    ]
+
+Mutmut will match the regex on the source code
+and skip mutating any expression on the matched lines.
+
+Skipping via code comments
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can use following comments to disable mutation:
+
+- `# pragma: no mutate`: disable mutation on this single line
+- `# pragma: no mutate block`: disable mutation in the whole intendation block
+- `# pragma: no mutate start/end`: disable mutation between the start and end comments
+
+Skipping single lines
+^^^^^^^^^^^^^^^^^^^^^
+
+You can mark lines like this to stop mutating them:
 
 .. code-block:: python
 
     some_code_here()  # pragma: no mutate
 
-to stop mutation on those lines. Some cases we've found where you need to
-whitelist lines are:
-
-- The version string on your library. You really shouldn't have a test for this :P
-- Optimizing break instead of continue. The code runs fine when mutating break
-  to continue, but it's slower.
-
 
 Skipping Code Blocks
-~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^
 
 You can skip an entire indentation block from mutation using
 ``# pragma: no mutate block``. This works on any compound statement --
@@ -318,7 +349,7 @@ This is useful for:
 
 
 Skipping Code Regions
-~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^
 
 For suppressing mutations across a range of lines regardless of indentation,
 use ``# pragma: no mutate start`` and ``# pragma: no mutate end``:
