@@ -24,7 +24,7 @@ omit = [
 [tool.mutmut]
 debug = true
 mutate_only_covered_lines = true
-tests_dir = [ "tests/main/" ]
+pytest_add_cli_args_test_selection = [ "tests/main/" ]
 do_not_mutate = [ "*ignore*" ]
 # do not add source_paths because we want to test src guessing
 

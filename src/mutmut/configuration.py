@@ -102,6 +102,13 @@ def _load_config() -> Config:
     source_paths = [Path(path) for path in s("source_paths", [])]
     source_paths = source_paths or paths_to_mutate or [Path(path) for path in _guess_source_paths()]
 
+    tests_dir = s("tests_dir", [])
+    if tests_dir:
+        warnings.warn(
+            "The config tests_dir is deprecated. Please add the path to pytest_add_cli_args_test_selection instead"
+        )
+    pytest_add_cli_args_test_selection = s("pytest_add_cli_args_test_selection", []) + tests_dir
+
     return Config(
         do_not_mutate=s("do_not_mutate", []),
         also_copy=[Path(y) for y in s("also_copy", [])]
@@ -116,9 +123,8 @@ def _load_config() -> Config:
         debug=s("debug", False),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
-        tests_dir=s("tests_dir", []),
         pytest_add_cli_args=s("pytest_add_cli_args", []),
-        pytest_add_cli_args_test_selection=s("pytest_add_cli_args_test_selection", []),
+        pytest_add_cli_args_test_selection=pytest_add_cli_args_test_selection,
         timeout_multiplier=s("timeout_multiplier", 15.0),
         timeout_constant=s("timeout_constant", 1.0),
         type_check_command=s("type_check_command", []),
@@ -140,7 +146,6 @@ class Config:
     source_paths: list[Path]
     pytest_add_cli_args: list[str]
     pytest_add_cli_args_test_selection: list[str]
-    tests_dir: list[str]
     mutate_only_covered_lines: bool
     timeout_multiplier: float
     timeout_constant: float

@@ -62,7 +62,6 @@ class TestShouldIgnoreForMutation:
             source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
-            tests_dir=[],
             mutate_only_covered_lines=False,
             timeout_multiplier=15.0,
             timeout_constant=1.0,
@@ -82,7 +81,6 @@ class TestShouldIgnoreForMutation:
             source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
-            tests_dir=[],
             mutate_only_covered_lines=False,
             timeout_multiplier=15.0,
             timeout_constant=1.0,
@@ -101,7 +99,6 @@ class TestShouldIgnoreForMutation:
             source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
-            tests_dir=[],
             mutate_only_covered_lines=False,
             timeout_multiplier=15.0,
             timeout_constant=1.0,
@@ -120,7 +117,6 @@ class TestShouldIgnoreForMutation:
             source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
-            tests_dir=[],
             mutate_only_covered_lines=False,
             timeout_multiplier=15.0,
             timeout_constant=1.0,
@@ -140,7 +136,6 @@ class TestShouldIgnoreForMutation:
             source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
-            tests_dir=[],
             mutate_only_covered_lines=False,
             timeout_multiplier=15.0,
             timeout_constant=1.0,
@@ -312,7 +307,6 @@ debug = true
 max_stack_depth = 10
 source_paths = ["src"]
 do_not_mutate = ["**/test_*.py"]
-tests_dir = ["tests/unit"]
 pytest_add_cli_args = ["-x", "--tb=short"]
 pytest_add_cli_args_test_selection = ["--no-header"]
 also_copy = ["fixtures"]
@@ -329,7 +323,6 @@ timeout_constant = 0.5
         assert config.max_stack_depth == 10
         assert config.source_paths == [Path("src")]
         assert config.do_not_mutate == ["**/test_*.py"]
-        assert config.tests_dir == ["tests/unit"]
         assert config.pytest_add_cli_args == ["-x", "--tb=short"]
         assert config.pytest_add_cli_args_test_selection == ["--no-header"]
         assert Path("fixtures") in config.also_copy
