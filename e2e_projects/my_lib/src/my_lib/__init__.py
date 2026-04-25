@@ -203,6 +203,11 @@ class AlsoSkipThisClass:
 
     def compute(self) -> int:
         return self.VALUE * 2
+
+class Logger:
+    def info(*args, **kwargs): pass
+    def debug(*args, **kwargs): pass
+    def error(*args, **kwargs): pass
 # pragma: no mutate end
 
 class _PrivateClass:
@@ -213,3 +218,26 @@ class _PrivateClass:
     @classmethod
     def get_answer(cls):
         return 42
+
+
+logger = Logger()
+
+def divide(a: int, b: int):
+    # test that logging statements are filtered because of the regex filter in the config
+    logger.info(f"Computing {a=} / {b=}")
+    logger.debug(
+        "This is some very informational"
+        "multiline debug statement"
+    )
+
+    try:
+        return a / b
+    except ZeroDivisionError as e:
+        logger.error(
+            e,
+            extra = dict(
+                code = 400,
+                reason = f'{b=}'
+            ),
+        )
+        raise Exception(f'Cannot divide if {b=} cannot be 0!!!')

@@ -18,6 +18,12 @@ dev = [
 
 [tool.mutmut]
 debug = true
+do_not_mutate_patterns = [
+    # disable mutations of all logger.info/debug/... statements
+    'logger\.\w+',
+    # disable mutating exceptions
+    'raise \w+',
+]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

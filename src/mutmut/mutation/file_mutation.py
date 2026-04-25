@@ -20,8 +20,10 @@ from mutmut.mutation.mutators import OPERATORS_TYPE
 from mutmut.mutation.mutators import MethodType
 from mutmut.mutation.mutators import get_method_type
 from mutmut.mutation.mutators import mutation_operators
-from mutmut.mutation.pragma_handling import PragmaVisitor
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR, build_enum_trampoline
+from mutmut.mutation.pragma_handling import IgnoredCode
+from mutmut.mutation.pragma_handling import get_ignored_lines
+from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+from mutmut.mutation.trampoline_templates import build_enum_trampoline
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.mutation.trampoline_templates import trampoline_impl
@@ -67,14 +69,12 @@ def create_mutations(
     module = cst.parse_module(code)
     metadata_wrapper = MetadataWrapper(module)
 
-    pragma_visitor = PragmaVisitor(filename)
-    metadata_wrapper.visit(pragma_visitor)
+    ignored_code = get_ignored_lines(filename, code, metadata_wrapper)
 
     visitor = MutationVisitor(
         mutation_operators,
-        pragma_visitor.no_mutate_lines,
+        ignored_code,
         covered_lines,
-        pragma_visitor.ignore_node_lines,
     )
     module = metadata_wrapper.visit(visitor)
 
@@ -139,15 +139,15 @@ class MutationVisitor(cst.CSTVisitor):
     def __init__(
         self,
         operators: OPERATORS_TYPE,
-        ignore_lines: set[int],
+        ignored_code: IgnoredCode,
         covered_lines: set[int] | None = None,
-        ignored_node_lines: set[int] | None = None,
     ):
         self.mutations: list[Mutation] = []
         self._operators = operators
-        self._ignored_lines = ignore_lines
+        self._ignored_lines = ignored_code.no_mutate_lines
         self._covered_lines = covered_lines
-        self._ignored_node_lines = ignored_node_lines or set()
+        self._ignored_node_lines = ignored_code.ignore_node_lines
+        self._ignored_pattern_lines = ignored_code.ignore_pattern_lines
         self.ignored_classes: set[str] = set()
         self.ignored_functions: set[str] = set()
 
@@ -200,6 +200,10 @@ class MutationVisitor(cst.CSTVisitor):
                 self.ignored_functions.add(node.name.value)
                 return True
             # other types of nodes (if, elif, for, while, ...) get treated on a line-by-line basis
+
+        if position and position.start.line in self._ignored_pattern_lines:
+            if isinstance(node, cst.BaseExpression):
+                return True
 
         if (
             isinstance(node, cst.Call)

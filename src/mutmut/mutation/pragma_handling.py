@@ -2,10 +2,47 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import libcst as cst
 from libcst.metadata import PositionProvider
+
+from mutmut.configuration import Config
+
+
+@dataclass
+class IgnoredCode:
+    """1-indexed line numbers"""
+
+    no_mutate_lines: set[int]
+    ignore_node_lines: set[int]
+    ignore_pattern_lines: set[int]
+
+
+def get_ignored_lines(filename: str, source: str, metadata_wrapper: cst.MetadataWrapper) -> IgnoredCode:
+    pragma_visitor = PragmaVisitor(filename)
+    metadata_wrapper.visit(pragma_visitor)
+
+    lines_ignored_by_pattern = get_lines_ignored_by_pattern(source)
+
+    return IgnoredCode(
+        no_mutate_lines=pragma_visitor.no_mutate_lines,
+        ignore_node_lines=pragma_visitor.ignore_node_lines,
+        ignore_pattern_lines=lines_ignored_by_pattern,
+    )
+
+
+def get_lines_ignored_by_pattern(source: str) -> set[int]:
+    matching_lines = set()
+    for pattern in Config.get().do_not_mutate_patterns:
+        compiled_pattern = re.compile(pattern)
+        for i, line in enumerate(source.splitlines()):
+            if compiled_pattern.search(line):
+                matching_lines.add(i + 1)
+
+    return matching_lines
 
 
 class PragmaParseError(Exception):

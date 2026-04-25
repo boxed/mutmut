@@ -59,6 +59,7 @@ class TestShouldMutateFile:
         return Config(
             only_mutate=only_mutate,
             do_not_mutate=do_not_mutate,
+            do_not_mutate_patterns=[],
             also_copy=[],
             max_stack_depth=-1,
             debug=False,
@@ -293,13 +294,14 @@ class TestGuessPathsToMutate:
 
 class TestLoadConfig:
     def test_loads_all_config_values(self, in_tmp_dir: Path):
-        (in_tmp_dir / "pyproject.toml").write_text("""
+        (in_tmp_dir / "pyproject.toml").write_text(r"""
 [tool.mutmut]
 debug = true
 max_stack_depth = 10
 source_paths = ["src"]
 only_mutate=["**/foo.py"]
 do_not_mutate = ["**/test_*.py"]
+do_not_mutate_patterns = ['logger\.\w+\(']
 pytest_add_cli_args = ["-x", "--tb=short"]
 pytest_add_cli_args_test_selection = ["--no-header"]
 also_copy = ["fixtures"]
@@ -317,6 +319,7 @@ timeout_constant = 0.5
         assert config.source_paths == [Path("src")]
         assert config.only_mutate == ["**/foo.py"]
         assert config.do_not_mutate == ["**/test_*.py"]
+        assert config.do_not_mutate_patterns == [r"logger\.\w+\("]
         assert config.pytest_add_cli_args == ["-x", "--tb=short"]
         assert config.pytest_add_cli_args_test_selection == ["--no-header"]
         assert Path("fixtures") in config.also_copy

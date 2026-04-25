@@ -121,6 +121,7 @@ def _load_config() -> Config:
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
+        do_not_mutate_patterns=s("do_not_mutate_patterns", []),
         also_copy=[Path(y) for y in s("also_copy", [])]
         + [
             Path("tests/"),
@@ -152,6 +153,7 @@ class Config:
     also_copy: list[Path]
     only_mutate: list[str]
     do_not_mutate: list[str]
+    do_not_mutate_patterns: list[str]
     max_stack_depth: int
     debug: bool
     source_paths: list[Path]

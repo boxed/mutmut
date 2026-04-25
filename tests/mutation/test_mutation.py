@@ -1080,6 +1080,65 @@ class A(Enum):
     assert not mutants
 
 
+def test_do_not_mutate_pattern_single_line(patch_config):
+    source = 'logger.info("hello")'
+    patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])
+
+    mutants = mutants_for_source(source)
+    assert not mutants
+
+
+def test_do_not_mutate_pattern_multiline(patch_config):
+    source = """
+logger.info(
+    "hello"
+)
+"""
+    patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])
+
+    mutants = mutants_for_source(source)
+    assert not mutants
+
+
+def test_do_not_mutate_pattern_mutates_other_code(patch_config):
+    # ignoring the logging statement should not prevent mutatoin of code around the logging statement
+    source = """
+def foo():
+    a = 1
+    logger.info(
+        "hello"
+    )
+    b = 1
+"""
+    patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])
+
+    mutants = set(mutants_for_source(source))
+    a_mutants = {m for m in mutants if "a = 1" not in m}
+    b_mutants = {m for m in mutants if "b = 1" not in m}
+    remaining_mutants = mutants - a_mutants - b_mutants
+    # we mutated a = 1 and b = 1
+    assert a_mutants
+    assert b_mutants
+    # we did not do any other mutation (logger.info should not be mutated)
+    assert not remaining_mutants
+
+
+def test_do_not_mutate_pattern_only_skips_if_condition(patch_config):
+    # we should not skip the if body, only the line of the condition
+    source = """
+def foo():
+    if some_comparison(1, 2, 3, 4):
+        return 1
+"""
+    patch_config("do_not_mutate_patterns", [r"some_comparison"])
+
+    mutants = set(mutants_for_source(source))
+    return_mutants = {m for m in mutants if "return 1" not in m}
+    # we should only mutate the if body (not the comparison)
+    assert return_mutants
+    assert return_mutants == mutants
+
+
 @pytest.mark.skip(reason="Feature not yet implemented")
 def test_decorated_inner_functions_mutation():
     source = """
