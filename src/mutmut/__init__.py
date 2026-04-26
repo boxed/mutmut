@@ -5,6 +5,7 @@ import warnings
 from collections import defaultdict
 
 from mutmut.configuration import Config
+from mutmut.state import reset_state
 
 __version__ = importlib.metadata.version("mutmut")
 
@@ -40,3 +41,4 @@ def _reset_globals() -> None:
     _stats = set()
     tests_by_mangled_function_name = defaultdict(set)
     _covered_lines = None
+    reset_state()

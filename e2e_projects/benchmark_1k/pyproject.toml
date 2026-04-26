@@ -1,0 +1,15 @@
+[project]
+name = "benchmark-1k"
+version = "0.1.0"
+description = "Benchmark project for mutmut warmup strategy comparison (~1000 mutants)"
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/benchmark"]
+
+[tool.mutmut]
+debug = false

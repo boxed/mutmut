@@ -6,7 +6,12 @@ via mutate_file_contents and then exec() it to verify runtime behavior.
 
 import os
 
-from mutmut.mutation.file_mutation import mutate_file_contents
+from src.mutmut.mutation.file_mutation import mutate_file_contents
+
+
+def mutate_source(source: str):
+    code, names, _, _ = mutate_file_contents("test.py", source)
+    return code, names
 
 
 def test_enum_mutation_runtime_execution():
@@ -22,7 +27,7 @@ class Color(Enum):
         return self.name.lower()
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names = mutate_source(source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     old_env = os.environ.get("MUTANT_UNDER_TEST")
@@ -76,7 +81,7 @@ class Color(Enum):
         return vals[name]
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names = mutate_source(source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     old_env = os.environ.get("MUTANT_UNDER_TEST")
@@ -106,7 +111,7 @@ class Calculator:
         return a + b
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names = mutate_source(source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     old_env = os.environ.get("MUTANT_UNDER_TEST")
@@ -116,11 +121,14 @@ class Calculator:
         exec(mutated_code, namespace)
         Calculator = namespace["Calculator"]
 
+        # Verify original works
         assert Calculator.add(2, 3) == 5
 
+        # Test mutant activation (a + b -> a - b)
         mutant_name = "test_module." + mutant_names[0]
         os.environ["MUTANT_UNDER_TEST"] = mutant_name
 
+        # Mutant should change + to -
         assert Calculator.add(5, 3) == 2
     finally:
         if old_env is not None:

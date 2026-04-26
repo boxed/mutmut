@@ -1,6 +1,5 @@
 from mutmut.mutation.mutators import MethodType
-
-CLASS_NAME_SEPARATOR = "ǁ"
+from mutmut.utils.format_utils import mangle_function_name
 
 GENERATED_MARKER = "# type: ignore # mutmut generated"
 
@@ -14,16 +13,6 @@ def _mark_generated(code: str) -> str:
             line = f"{line} {GENERATED_MARKER}"
         lines.append(line)
     return "\n".join(lines)
-
-
-def mangle_function_name(*, name: str, class_name: str | None) -> str:
-    assert CLASS_NAME_SEPARATOR not in name
-    if class_name:
-        assert CLASS_NAME_SEPARATOR not in class_name
-        prefix = f"x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
-    else:
-        prefix = "x_"
-    return f"{prefix}{name}"
 
 
 def build_mutants_dict_and_name(
@@ -108,11 +97,15 @@ def {mangled_name}_trampoline(self, *args, **kwargs):
 # noinspection PyUnresolvedReferences
 # language=python
 trampoline_impl = _mark_generated("""
+import os
 from collections.abc import Sequence
 from typing import Annotated
 from typing import Callable
 from typing import ClassVar
 from typing import TypeVar
+from mutmut.core import MutmutProgrammaticFailException
+from mutmut.core import record_trampoline_hit
+from mutmut.core import MutmutCallStack
 
 TReturn = TypeVar('TReturn')
 MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"]
@@ -120,7 +113,6 @@ MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"]
 
 def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_args: Sequence, call_kwargs: dict, self_arg = None) -> TReturn:
     \"""Forward call to original or mutated function, depending on the environment\"""
-    import os
     mutant_under_test = os.environ.get('MUTANT_UNDER_TEST', '')
     if not mutant_under_test:
         # No mutant being tested - call original function
@@ -129,17 +121,40 @@ def _mutmut_trampoline(orig: Callable[..., TReturn], mutants: MutantDict, call_a
         else:
             return orig(*call_args, **call_kwargs)
     if mutant_under_test == 'fail':
-        from mutmut.__main__ import MutmutProgrammaticFailException
         raise MutmutProgrammaticFailException('Failed programmatically')
     elif mutant_under_test == 'stats':
-        from mutmut.__main__ import record_trampoline_hit
-        record_trampoline_hit(orig.__module__ + '.' + orig.__name__)
-        # Check if orig is a bound method (has __self__) or plain function
-        if self_arg is not None and not hasattr(orig, '__self__'):
-            result = orig(self_arg, *call_args, **call_kwargs)
+        my_name = orig.__module__ + '.' + orig.__name__
+        # Normalize module names - strip 'mutants.' prefix for consistency with test mappings
+        if my_name.startswith('mutants.'):
+            my_name = my_name[8:]  # len('mutants.') == 8
+
+        caller_name, depth = MutmutCallStack.get()
+
+        # Also normalize caller name
+        if caller_name and caller_name.startswith('mutants.'):
+            caller_name = caller_name[8:]
+
+        max_depth = int(os.environ.get("MUTMUT_DEPENDENCY_DEPTH", "-1"))
+
+        if max_depth == -1 or depth < max_depth:
+            record_trampoline_hit(my_name, caller=caller_name)
+
+            token = MutmutCallStack.set((my_name, depth + 1))
+            try:
+                if self_arg is not None and not hasattr(orig, "__self__"):
+                    result = orig(self_arg, *call_args, **call_kwargs)
+                else:
+                    result = orig(*call_args, **call_kwargs)
+                return result
+            finally:
+                MutmutCallStack.reset(token)
         else:
-            result = orig(*call_args, **call_kwargs)
-        return result
+            # Depth exceeded — still call but don't track deeper
+            if self_arg is not None and not hasattr(orig, "__self__"):
+                result = orig(self_arg, *call_args, **call_kwargs)
+            else:
+                result = orig(*call_args, **call_kwargs)
+            return result
     prefix = orig.__module__ + '.' + orig.__name__ + '__mutmut_'
     if not mutant_under_test.startswith(prefix):
         # Check if orig is a bound method (has __self__) or plain function

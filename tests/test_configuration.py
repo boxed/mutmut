@@ -70,6 +70,8 @@ class TestShouldMutateFile:
             timeout_constant=1.0,
             type_check_command=[],
             use_setproctitle=False,
+            track_dependencies=False,
+            dependency_tracking_depth=None,
         )
 
     def test_ignores_non_python_files(self):

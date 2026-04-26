@@ -3,24 +3,18 @@ from __future__ import annotations
 import os
 import platform
 import sys
-from collections.abc import Iterable
-from collections.abc import Iterator
-from typing import TYPE_CHECKING
-from typing import Any
-
-from mutmut.utils.file_utils import change_cwd
-from mutmut.utils.format_utils import get_mutant_name
-from mutmut.utils.format_utils import strip_prefix
 
 if platform.system() == "Windows":
     print(
         "To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue https://github.com/boxed/mutmut/issues/397"
     )
     sys.exit(1)
+
 import ast
 import fnmatch
 import gc
 import inspect
+import io
 import itertools
 import json
 import resource
@@ -30,6 +24,7 @@ import warnings
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable
+from collections.abc import Iterable
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
@@ -43,13 +38,13 @@ from multiprocessing import Pool
 from multiprocessing import get_start_method
 from multiprocessing import set_start_method
 from os import makedirs
-from os import walk
 from os.path import isdir
-from os.path import isfile
 from pathlib import Path
 from threading import Thread
 from time import process_time
 from types import TracebackType
+from typing import TYPE_CHECKING
+from typing import Any
 
 import click
 import libcst as cst
@@ -59,11 +54,21 @@ import mutmut
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import Config
+from mutmut.core import MutmutProgrammaticFailException
 from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.file_mutation import MutationMetadata
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+from mutmut.state import state
 from mutmut.threading.timeout import register_timeout
+from mutmut.utils.file_utils import change_cwd
+from mutmut.utils.file_utils import walk_all_files
+from mutmut.utils.file_utils import walk_mutatable_files
+from mutmut.utils.file_utils import walk_source_files
+from mutmut.utils.format_utils import get_module_from_key
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
+from mutmut.utils.format_utils import strip_prefix
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
 
 if TYPE_CHECKING:
@@ -132,34 +137,6 @@ def record_trampoline_hit(name: str) -> None:
     mutmut._stats.add(name)
 
 
-def walk_all_files() -> Iterator[tuple[str, str]]:
-    for path in Config.get().source_paths:
-        if not isdir(path):
-            if isfile(path):
-                yield "", str(path)
-                continue
-        for root, dirs, files in walk(path):
-            for filename in files:
-                yield root, filename
-
-
-def walk_source_files() -> Iterator[Path]:
-    for root, filename in walk_all_files():
-        if filename.endswith(".py"):
-            yield Path(root) / filename
-
-
-def walk_mutatable_files() -> Iterator[Path]:
-    config = Config.get()
-    for path in walk_source_files():
-        if config.should_mutate(path):
-            yield path
-
-
-class MutmutProgrammaticFailException(Exception):
-    pass
-
-
 class CollectTestsFailedException(Exception):
     pass
 
@@ -191,7 +168,9 @@ def copy_src_dir() -> None:
             shutil.copytree(source_path, target_path)
         else:
             target_path.parent.mkdir(exist_ok=True, parents=True)
-            # copy mtime, so we later know that when source_mtime == target_mtime, the file is not (yet) mutated.
+            # copy2 preserves mtime so source_mtime == target_mtime after copy.
+            # This matters: create_mutants_for_file skips when source_mtime < mutant_mtime,
+            # so a fresh copy (equal mtime) correctly triggers mutation on the first run.
             shutil.copy2(source_path, target_path)
 
 
@@ -203,6 +182,8 @@ class FileMutationResult:
     error: Exception | None = None
     unmodified: bool = False
     ignored: bool = False
+    changed_functions: set[str] | None = None
+    current_hashes: dict[str, str] | None = None
 
 
 @dataclass
@@ -226,6 +207,8 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
                 stats.ignored += 1
             else:
                 stats.mutated += 1
+            if result.current_hashes:
+                state().current_function_hashes.update(result.current_hashes)
     return stats
 
 
@@ -278,39 +261,32 @@ def copy_also_copy_files() -> None:
             shutil.copytree(path, destination, dirs_exist_ok=True)
 
 
-def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationResult:
+def create_mutants_for_file(source_path: Path, output_path: Path) -> FileMutationResult:
     warnings: list[Warning] = []
 
     try:
-        source_mtime = os.path.getmtime(filename)
+        source_mtime = os.path.getmtime(source_path)
         mutant_mtime = os.path.getmtime(output_path)
-        # We have three possible cases here:
-        # source_mtime > mutant_mtime: the source file was modified after the mutant has been created
-        # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
-        # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
+        # If the source is older than the mutant output, it hasn't been touched
+        # since we last generated mutants — skip the expensive regeneration.
         if source_mtime < mutant_mtime:
-            # reset the mutation stats
-            source_file_mutation_data = SourceFileMutationData(path=filename)
-            source_file_mutation_data.load()
-            for key in source_file_mutation_data.exit_code_by_key:
-                source_file_mutation_data.exit_code_by_key[key] = None
-            source_file_mutation_data.save()
-
             return FileMutationResult(unmodified=True)
     except OSError:
         pass
 
-    with open(filename) as f:
+    with open(source_path) as f:
         source = f.read()
 
     with open(output_path, "w") as out:
         try:
-            mutant_names = write_all_mutants_to_file(out=out, source=source, filename=filename)
+            mutant_names, hash_by_function_name, metadata_by_name = write_all_mutants_to_file(
+                out=out, source=source, filename=source_path
+            )
         except cst.ParserSyntaxError as e:
             # if libcst cannot parse it, then copy the source without any mutations
-            warnings.append(SyntaxWarning(f"Unsupported syntax in {filename} ({str(e)}), skipping"))
+            warnings.append(SyntaxWarning(f"Unsupported syntax in {source_path} ({str(e)}), skipping"))
             out.write(source)
-            mutant_names = []
+            mutant_names, hash_by_function_name, metadata_by_name = [], {}, {}
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -321,22 +297,73 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             invalid_syntax_error.__cause__ = e
             return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
-    source_file_mutation_data = SourceFileMutationData(path=filename)
-    source_file_mutation_data.exit_code_by_key = {
-        get_mutant_name(filename, mutant_name): None for mutant_name in mutant_names
+    source_file_mutation_data = SourceFileMutationData(path=source_path)
+    source_file_mutation_data.load()
+    module_name = strip_prefix(str(source_path)[: -len(source_path.suffix)].replace(os.sep, "."), prefix="src.")
+
+    old_hashes = source_file_mutation_data.hash_by_function_name
+
+    changed_functions_local = {
+        func_name for func_name, new_hash in hash_by_function_name.items() if old_hashes.get(func_name) != new_hash
     }
+
+    new_keys = {".".join([module_name, x]).replace(".__init__.", "."): None for x in mutant_names}
+
+    # Merge: keep existing results for mutants that still exist, add None for new ones
+    # BUT: if the function's hash changed, reset the mutant to None (needs re-testing)
+    merged_exit_codes: dict[str, int | None] = {}
+    for key in new_keys:
+        mangled_func = mangled_name_from_mutant_name(key)
+        # Extract just the function key (e.g., "x_add") for comparison with hash_by_function_name keys
+        _, _, func_name = mangled_func.rpartition(".")
+
+        if func_name in changed_functions_local:
+            merged_exit_codes[key] = None
+        elif key in source_file_mutation_data.exit_code_by_key:
+            merged_exit_codes[key] = source_file_mutation_data.exit_code_by_key[key]
+        else:
+            merged_exit_codes[key] = None
+
+    source_file_mutation_data.exit_code_by_key = merged_exit_codes
+    source_file_mutation_data.hash_by_function_name = hash_by_function_name
+    assert None not in hash_by_function_name
+
+    # Build fully-qualified function names for return to parent
+    # Keys are fully qualified: foo.bar.x_baz
+    current_hashes_qualified: dict[str, str] = {}
+    for mangled_name, hash_value in hash_by_function_name.items():
+        full_name = f"{module_name}.{mangled_name}".replace(".__init__.", ".")
+        current_hashes_qualified[full_name] = hash_value
+
+    # Build fully-qualified changed function names for return to parent
+    changed_functions_qualified = {
+        f"{module_name}.{func_name}".replace(".__init__.", ".") for func_name in changed_functions_local
+    }
+
+    # Build metadata with full module-qualified keys
+    source_file_mutation_data.mutation_metadata_by_module_name = {
+        ".".join([module_name, k]).replace(".__init__.", "."): v for k, v in metadata_by_name.items()
+    }
+
     source_file_mutation_data.save()
 
-    return FileMutationResult(warnings=warnings)
-
-
-def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> Sequence[str]:
-    result, mutant_names = mutate_file_contents(
-        str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
+    return FileMutationResult(
+        warnings=warnings,
+        changed_functions=changed_functions_qualified,
+        current_hashes=current_hashes_qualified,
     )
-    out.write(result)
 
-    return mutant_names
+
+def write_all_mutants_to_file(
+    *, out: io.TextIOWrapper, source: str, filename: Path
+) -> tuple[Sequence[str], dict[str, str], dict[str, MutationMetadata]]:
+    filename_str = str(filename)
+    mutated_code, mutant_names, hash_by_function_name, metadata_by_name = mutate_file_contents(
+        filename_str, source, get_covered_lines_for_file(filename_str, mutmut._covered_lines)
+    )
+    out.write(mutated_code)
+
+    return mutant_names, hash_by_function_name, metadata_by_name
 
 
 def unused(*_: object) -> None:
@@ -525,24 +552,6 @@ class HammettRunner(TestRunner):
 
         hammett.Config.workerinput = dict(workerinput=f"_{mutant_name}")
         return int(hammett.main_run_tests(**self.hammett_kwargs, tests=tests))
-
-
-def mangled_name_from_mutant_name(mutant_name: str) -> str:
-    assert "__mutmut_" in mutant_name, mutant_name
-    return mutant_name.partition("__mutmut_")[0]
-
-
-def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
-    r = mangled_name_from_mutant_name(mutant_name)
-    _, _, r = r.rpartition(".")
-    class_name = None
-    if CLASS_NAME_SEPARATOR in r:
-        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1 : r.rindex(CLASS_NAME_SEPARATOR)]
-        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1 :]
-    else:
-        assert r.startswith("x_"), r
-        r = r[2:]
-    return r, class_name
 
 
 spinner = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -748,13 +757,22 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
     save_stats()
 
 
-def collect_or_load_stats(runner: TestRunner) -> None:
+def collect_or_load_stats(runner: TestRunner, invalidate_stale_callers: bool = True) -> None:
     did_load = load_stats()
 
     if not did_load:
         # Run full stats
         run_stats_collection(runner)
     else:
+        # Clean up stats for deleted source files
+        _cleanup_stale_stats()
+
+        if Config.get().track_dependencies and invalidate_stale_callers:
+            _invalidate_stale_dependency_edges()
+
+        # Save to persist the cleanup
+        save_stats()
+
         # Run incremental stats
         with CatchOutput(spinner_title="Listing all tests") as output_catcher:
             os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
@@ -778,11 +796,15 @@ def load_stats() -> bool:
     did_load = False
     try:
         with open("mutants/mutmut-stats.json") as f:
-            data = json.load(f)
-            for k, v in data.pop("tests_by_mangled_function_name").items():
+            data: dict[str, object] = json.load(f)
+            for k, v in data.pop("tests_by_mangled_function_name").items():  # type: ignore[attr-defined]
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
-            mutmut.duration_by_test = data.pop("duration_by_test")
-            mutmut.stats_time = data.pop("stats_time")
+            mutmut.duration_by_test = data.pop("duration_by_test")  # type: ignore[assignment]
+            mutmut.stats_time = data.pop("stats_time")  # type: ignore[assignment]
+            # Load function hashes and dependencies (backwards compatible)
+            state().old_function_hashes = data.pop("function_hashes", {})  # type: ignore[assignment]
+            for k, v in data.pop("function_dependencies", {}).items():  # type: ignore[attr-defined]
+                state().function_dependencies[k] = set(v)
             assert not data, data
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
@@ -793,11 +815,15 @@ def load_stats() -> bool:
 def save_stats() -> None:
     with open("mutants/mutmut-stats.json", "w") as f:
         json.dump(
-            dict(
-                tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
-                duration_by_test=mutmut.duration_by_test,
-                stats_time=mutmut.stats_time,
-            ),
+            {
+                "tests_by_mangled_function_name": {
+                    k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()
+                },
+                "duration_by_test": mutmut.duration_by_test,
+                "stats_time": mutmut.stats_time,
+                "function_hashes": state().current_function_hashes,
+                "function_dependencies": {k: list(v) for k, v in state().function_dependencies.items()},
+            },
             f,
             indent=4,
         )
@@ -1224,6 +1250,68 @@ def get_diff_for_mutant(
             )
         ]
     )
+
+
+def _cleanup_stale_stats() -> None:
+    """Remove stats entries for source files that no longer exist."""
+    # Derive valid modules from current_function_hashes (populated during mutant generation)
+    valid_modules = {get_module_from_key(key) for key in state().current_function_hashes}
+
+    def _is_valid_key(key: str) -> bool:
+        """Check if the key's module exists in current source files."""
+        module = get_module_from_key(key)
+        return module in valid_modules
+
+    # Clean up tests_by_mangled_function_name - O(n) with set lookup
+    stale_keys = [k for k in mutmut.tests_by_mangled_function_name if not _is_valid_key(k)]
+    for k in stale_keys:
+        del mutmut.tests_by_mangled_function_name[k]
+
+    # Clean up function_dependencies (both keys and values)
+    stale_dep_keys = [k for k in state().function_dependencies if not _is_valid_key(k)]
+    for k in stale_dep_keys:
+        del state().function_dependencies[k]
+
+    # Also clean up stale callers in dependency values
+    for _, callers in state().function_dependencies.items():
+        stale_callers = {c for c in callers if not _is_valid_key(c)}
+        callers -= stale_callers
+
+
+def _invalidate_stale_dependency_edges() -> set[str]:
+    """Remove changed functions from all caller sets in function_dependencies.
+
+    When a function's code changes (hash differs), its outgoing call edges may
+    have changed. We remove it from all callers_of[*] sets so stats collection
+    can rebuild the correct edges.
+
+    Returns the set of changed function names.
+    """
+    old_hashes = state().old_function_hashes
+    new_hashes = state().current_function_hashes
+
+    if not old_hashes:
+        # First run or no previous stats - nothing to invalidate
+        return set()
+
+    # Find functions whose code changed (different hash) or were added/removed
+    all_functions = old_hashes.keys() | new_hashes.keys()
+    changed_functions = {f for f in all_functions if old_hashes.get(f) != new_hashes.get(f)}
+
+    if not changed_functions:
+        return set()
+
+    # Remove changed functions from all caller sets
+    # (their outgoing edges are now unknown/stale)
+    for callers in state().function_dependencies.values():
+        callers -= changed_functions
+
+    # Also remove keys for deleted functions
+    deleted_functions = old_hashes.keys() - new_hashes.keys()
+    for f in deleted_functions:
+        state().function_dependencies.pop(f, None)
+
+    return changed_functions
 
 
 @cli.command()
