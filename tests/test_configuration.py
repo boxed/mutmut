@@ -6,14 +6,8 @@ from mutmut.configuration import Config
 from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
 from mutmut.configuration import _load_config
-
-
-@pytest.fixture(autouse=True)
-def reset_config():
-    """Reset config singleton before and after each test."""
-    Config.reset()
-    yield
-    Config.reset()
+from mutmut.configuration import config
+from mutmut.configuration import reset_config
 
 
 @pytest.fixture
@@ -26,29 +20,27 @@ def in_tmp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 class TestConfigSingleton:
     def test_get_loads_config(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
-        config = Config.get()
-        assert config is not None
-        assert isinstance(config, Config)
+        conf = config()
+        assert conf is not None
+        assert isinstance(conf, Config)
 
     def test_get_returns_same_instance(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
-        config1 = Config.get()
-        config2 = Config.get()
+        config1 = config()
+        config2 = config()
         assert config1 is config2
 
     def test_reset_clears_singleton(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
-        config1 = Config.get()
-        Config.reset()
-        config2 = Config.get()
+        config1 = config()
+        reset_config()
+        config2 = config()
         assert config1 is not config2
 
-    def test_ensure_loaded_is_idempotent(self, in_tmp_dir: Path):
+    def test_idempotent(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()
-        Config.ensure_loaded()
-        config1 = Config.get()
-        Config.ensure_loaded()
-        config2 = Config.get()
+        config1 = config()
+        config2 = config()
         assert config1 is config2
 
 

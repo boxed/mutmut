@@ -58,6 +58,9 @@ output/*/index.html
 docs/_build
 docs/tri*.rst
 
+# Core dumps from segfaults
+core
+
 # tests
 results/
 test_projects/

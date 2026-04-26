@@ -14,11 +14,12 @@ if TYPE_CHECKING:
     from mutmut.__main__ import TestRunner
 
 
-# Returns a set of lines that are covered in this file gvein the covered_lines dict
-#  returned by gather_coverage
-# None means it's not enabled, set() means no lines are covered
-def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]] | None) -> set[int] | None:
-    if covered_lines is None or filename is None:
+def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]) -> set[int] | None:
+    """Return covered lines for a file, or None if coverage filtering is not active.
+
+    An empty dict means coverage is not enabled (mutate everything).
+    A populated dict means only mutate covered lines."""
+    if not covered_lines or filename is None:
         return None
 
     abs_filename = str((Path("mutants") / filename).absolute())

@@ -3,8 +3,7 @@ from contextvars import ContextVar
 from contextvars import Token
 from typing import ClassVar
 
-import mutmut
-from mutmut.configuration import Config
+from mutmut.configuration import config
 from mutmut.state import state
 
 
@@ -32,9 +31,9 @@ class MutmutCallStack:
 
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
-    if Config.get().max_stack_depth != -1:
+    if config().max_stack_depth != -1:
         f = inspect.currentframe()
-        c = Config.get().max_stack_depth
+        c = config().max_stack_depth
         while c and f:
             filename = f.f_code.co_filename
             if "pytest" in filename or "hammett" in filename or "unittest" in filename:
@@ -45,7 +44,7 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
         if not c:
             return
 
-    mutmut._stats.add(name)
+    state()._stats.add(name)
 
-    if caller is not None and Config.get().track_dependencies:
+    if caller is not None and config().track_dependencies:
         state().function_dependencies[name].add(caller)

@@ -5,11 +5,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import mutmut
 from mutmut.__main__ import SourceFileMutationData
 from mutmut.__main__ import _run
 from mutmut.__main__ import walk_source_files
-from mutmut.configuration import Config
+from mutmut.configuration import config
+from tests.conftest import reset_singletons
 
 
 @contextmanager
@@ -25,12 +25,11 @@ def change_cwd(path):
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files"""
     with change_cwd(project_path):
-        Config.reset()
-        Config.ensure_loaded()
+        reset_singletons()
 
         stats = {}
         for p in walk_source_files():
-            if not Config.get().should_mutate(p):
+            if not config().should_mutate(p):
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
@@ -56,8 +55,7 @@ E2E_PROJECTS = REPO_ROOT / "e2e_projects"
 
 def run_mutmut_on_project(project: str) -> dict:
     """Runs mutmut on this project and verifies that the results stay the same for all mutations."""
-    mutmut._reset_globals()
-
+    
     project_path = E2E_PROJECTS / project
 
     mutants_path = project_path / "mutants"
@@ -65,7 +63,7 @@ def run_mutmut_on_project(project: str) -> dict:
 
     # mutmut run
     with change_cwd(project_path):
-        mutmut._reset_globals()
+        reset_singletons()
         _run([], None)
 
     return read_all_stats_for_project(project_path)

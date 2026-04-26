@@ -18,7 +18,9 @@ import libcst.matchers as m
 from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
 
-from mutmut.configuration import Config
+from mutmut.configuration import config
+from mutmut.models.mutation import Mutation
+from mutmut.models.mutation import MutationMetadata
 from mutmut.mutation.enum_mutation import is_enum_class
 from mutmut.mutation.mutators import MUTATION_OPERATORS
 from mutmut.mutation.mutators import OPERATOR_TO_TYPE
@@ -40,46 +42,6 @@ from mutmut.utils.format_utils import mangle_function_name
 
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
-
-
-@dataclass
-class MutationMetadata:
-    line_number: int
-    mutation_type: str
-    description: str
-
-    def to_dict(self) -> dict[str, int | str]:
-        return {
-            "line_number": self.line_number,
-            "mutation_type": self.mutation_type,
-            "description": self.description,
-        }
-
-    @staticmethod
-    def from_dict(data: dict[str, int | str]) -> "MutationMetadata":
-        return MutationMetadata(
-            line_number=int(data["line_number"]),
-            mutation_type=str(data["mutation_type"]),
-            description=str(data["description"]),
-        )
-
-
-@dataclass
-class Mutation:
-    original_node: cst.CSTNode
-    mutated_node: cst.CSTNode
-    contained_by_top_level_function: cst.FunctionDef | None
-    line_number: int = 0
-    mutation_type: str = "unknown"
-    description: str = ""
-
-    @property
-    def metadata(self) -> "MutationMetadata":
-        return MutationMetadata(
-            line_number=self.line_number,
-            mutation_type=self.mutation_type,
-            description=self.description,
-        )
 
 
 def compute_function_hashes(
@@ -968,7 +930,7 @@ def group_by_path(errors: list[TypeCheckingError]) -> dict[Path, list[TypeChecki
 
 def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
     with change_cwd(Path("mutants")):
-        errors = run_type_checker(Config.get().type_check_command)
+        errors = run_type_checker(config().type_check_command)
         errors_by_path = group_by_path(errors)
 
         mutants_to_skip: dict[str, FailedTypeCheckMutant] = {}

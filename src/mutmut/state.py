@@ -21,6 +21,11 @@ class MutmutState:
             mutant generation). Saved to JSON at end of run.
         function_dependencies: Maps callee function names to the set of caller function
             names. Used to propagate test coverage through call chains.
+        stats_time: CPU time taken for stats collection.
+        duration_by_test: Maps test node IDs to their execution duration.
+        tests_by_mangled_function_name: Maps mangled function names to tests that cover them.
+        _stats: Set of stats identifiers (internal use).
+        _covered_lines: Maps filenames to covered line numbers.
     """
 
     # Hashes from previous run (loaded from JSON)
@@ -31,6 +36,13 @@ class MutmutState:
 
     # callee -> set of callers
     function_dependencies: defaultdict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+    # Migrated from __init__.py (formerly module-level globals)
+    stats_time: float | None = None
+    duration_by_test: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    tests_by_mangled_function_name: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+    _stats: set[str] = field(default_factory=set)
+    _covered_lines: dict[str, set[int]] = field(default_factory=dict)
 
 
 _state: MutmutState | None = None

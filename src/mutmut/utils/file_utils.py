@@ -6,7 +6,7 @@ from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 
-from mutmut.configuration import Config
+from mutmut.configuration import config
 
 
 @contextmanager
@@ -20,7 +20,7 @@ def change_cwd(path: Path | str) -> Iterator[None]:
 
 
 def walk_all_files() -> Iterator[tuple[str, str]]:
-    for path in Config.get().source_paths:
+    for path in config().source_paths:
         if not isdir(path):
             if isfile(path):
                 yield "", str(path)
@@ -38,5 +38,5 @@ def walk_source_files() -> Iterator[Path]:
 
 def walk_mutatable_files() -> Iterator[Path]:
     for path in walk_source_files():
-        if Config.get().should_mutate(path):
+        if config().should_mutate(path):
             yield path
