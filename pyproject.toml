@@ -77,7 +77,7 @@ extend-exclude = [
     "docs/_themes/",
     "docs/conf.py",
     "e2e_projects/",
-    "tests/data/test_generation/",
+    "tests/unit/data/test_generation/",
 ]
 
 [tool.ruff.lint]

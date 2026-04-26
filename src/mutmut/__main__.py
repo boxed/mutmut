@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import io
 import os
 import platform
 import sys
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
-from typing import Any
+
+from mutmut.stats import calculate_summary_stats
+from mutmut.stats import emoji_by_status
+from mutmut.stats import load_stats
+from mutmut.stats import print_stats
+from mutmut.stats import save_stats
+from mutmut.stats import status_by_exit_code
+from mutmut.ui.terminal import print_status
 
 if platform.system() == "Windows":
     print(
@@ -16,38 +23,26 @@ if platform.system() == "Windows":
 import ast
 import fnmatch
 import gc
-import inspect
-import io
-import itertools
 import json
 import resource
 import shutil
-import subprocess
 import warnings
-from abc import ABC
-from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime
-from datetime import timedelta
 from difflib import unified_diff
 from io import TextIOBase
-from json import JSONDecodeError
 from math import ceil
 from multiprocessing import Pool
 from multiprocessing import get_start_method
 from multiprocessing import set_start_method
 from os import makedirs
-from os.path import isdir
 from pathlib import Path
-from threading import Thread
 from time import process_time
 from types import TracebackType
 
 import click
 import libcst as cst
-from rich.text import Text
 
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
@@ -59,93 +54,27 @@ from mutmut.models.results import MutantGenerationStats
 from mutmut.models.source_file_mutation_data import SourceFileMutationData
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
+from mutmut.runners.harness import CollectTestsFailedException
+from mutmut.runners.harness import PytestRunner
+from mutmut.runners.harness import TestRunner
+from mutmut.runners.harness import collected_test_names
+from mutmut.runners.harness import strip_prefix
 from mutmut.state import state
-from mutmut.utils.file_utils import change_cwd
-from mutmut.utils.file_utils import walk_all_files
+from mutmut.utils.file_utils import copy_also_copy_files
+from mutmut.utils.file_utils import copy_src_dir
+from mutmut.utils.file_utils import setup_source_paths
 from mutmut.utils.file_utils import walk_mutatable_files
 from mutmut.utils.file_utils import walk_source_files
 from mutmut.utils.format_utils import get_module_from_key
 from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.utils.format_utils import orig_function_and_class_names_from_key
-from mutmut.utils.format_utils import strip_prefix
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
 from mutmut.workers.timeout import register_timeout
-
-if TYPE_CHECKING:
-    from coverage import Coverage
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
 
 # TODO: pragma no mutate should end up in `skipped` category
-
-
-status_by_exit_code = defaultdict(
-    lambda: "suspicious",
-    {
-        1: "killed",
-        3: "killed",  # internal error in pytest means a kill
-        -24: "killed",
-        0: "survived",
-        5: "no tests",
-        2: "check was interrupted by user",
-        None: "not checked",
-        33: "no tests",
-        34: "skipped",
-        35: "suspicious",
-        36: "timeout",
-        37: "caught by type check",
-        -24: "timeout",  # SIGXCPU
-        24: "timeout",  # SIGXCPU
-        152: "timeout",  # SIGXCPU
-        255: "timeout",
-        -11: "segfault",
-        -9: "segfault",
-    },
-)
-
-emoji_by_status = {
-    "survived": "🙁",
-    "no tests": "🫥",
-    "timeout": "⏰",
-    "suspicious": "🤔",
-    "skipped": "🔇",
-    "caught by type check": "🧙",
-    "check was interrupted by user": "🛑",
-    "not checked": "?",
-    "killed": "🎉",
-    "segfault": "💥",
-}
-
-exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status in status_by_exit_code.items()}
-
-
-def record_trampoline_hit(name: str) -> None:
-    assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
-    if config().max_stack_depth != -1:
-        f = inspect.currentframe()
-        c = config().max_stack_depth
-        while c and f:
-            filename = f.f_code.co_filename
-            if "pytest" in filename or "hammett" in filename or "unittest" in filename:
-                break
-            f = f.f_back
-            c -= 1
-
-        if not c:
-            return
-
-    state()._stats.add(name)
-
-
-class CollectTestsFailedException(Exception):
-    pass
-
-
-class BadTestExecutionCommandsException(Exception):
-    def __init__(self, pytest_args: list[str]) -> None:
-        msg = f"Failed to run pytest with args: {pytest_args}. If your config sets debug=true, the original pytest error should be above."
-        super().__init__(msg)
 
 
 class InvalidGeneratedSyntaxException(Exception):
@@ -155,24 +84,6 @@ class InvalidGeneratedSyntaxException(Exception):
             "If the original file has valid python syntax, please file an issue "
             "with a minimal reproducible example file."
         )
-
-
-def copy_src_dir() -> None:
-    for root, name in walk_all_files():
-        source_path = Path(root) / name
-        target_path = Path("mutants") / root / name
-
-        if target_path.exists():
-            continue
-
-        if isdir(source_path):
-            shutil.copytree(source_path, target_path)
-        else:
-            target_path.parent.mkdir(exist_ok=True, parents=True)
-            # copy2 preserves mtime so source_mtime == target_mtime after copy.
-            # This matters: create_mutants_for_file skips when source_mtime < mutant_mtime,
-            # so a fresh copy (equal mtime) correctly triggers mutation on the first run.
-            shutil.copy2(source_path, target_path)
 
 
 def create_mutants(max_children: int) -> MutantGenerationStats:
@@ -209,38 +120,9 @@ def create_file_mutants(path: Path) -> FileMutationResult:
         return FileMutationResult(error=e)
 
 
-def setup_source_paths() -> None:
-    # ensure that the mutated source code can be imported by the tests
-    source_code_paths = [Path("."), Path("src"), Path("source")]
-    for path in source_code_paths:
-        mutated_path = Path("mutants") / path
-        if mutated_path.exists():
-            sys.path.insert(0, str(mutated_path.absolute()))
-
-    # ensure that the original code CANNOT be imported by the tests
-    for path in source_code_paths:
-        for i in range(len(sys.path)):
-            while i < len(sys.path) and Path(sys.path[i]).resolve() == path.resolve():
-                del sys.path[i]
-
-
 def store_lines_covered_by_tests() -> None:
     if config().mutate_only_covered_lines:
         state()._covered_lines = gather_coverage(PytestRunner(), list(walk_source_files()))
-
-
-def copy_also_copy_files() -> None:
-    assert isinstance(config().also_copy, list)
-    for path in config().also_copy:
-        print("     also copying", path)
-        path = Path(path)
-        destination = Path("mutants") / path
-        if not path.exists():
-            continue
-        if path.is_file():
-            shutil.copy2(path, destination)
-        else:
-            shutil.copytree(path, destination, dirs_exist_ok=True)
 
 
 def create_mutants_for_file(source_path: Path, output_path: Path) -> FileMutationResult:
@@ -348,278 +230,6 @@ def write_all_mutants_to_file(
     return mutant_names, hash_by_function_name, metadata_by_name
 
 
-def unused(*_: object) -> None:
-    pass
-
-
-class TestRunner(ABC):
-    def run_stats(self, *, tests: Iterable[str]) -> int:
-        raise NotImplementedError()
-
-    def run_forced_fail(self) -> int:
-        raise NotImplementedError()
-
-    def prepare_main_test_run(self) -> None:
-        pass
-
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
-        raise NotImplementedError()
-
-    def collect_main_test_coverage(self, cov: Coverage) -> int:
-        raise NotImplementedError()
-
-    def list_all_tests(self) -> ListAllTestsResult:
-        raise NotImplementedError()
-
-
-def collected_test_names() -> set[str]:
-    return set(state().duration_by_test.keys())
-
-
-class ListAllTestsResult:
-    def __init__(self, *, ids: set[str]) -> None:
-        assert isinstance(ids, set)
-        self.ids = ids
-
-    def clear_out_obsolete_test_names(self) -> None:
-        count_before = sum(len(x) for x in state().tests_by_mangled_function_name)
-        state().tests_by_mangled_function_name = defaultdict(
-            set,
-            **{
-                k: {test_name for test_name in test_names if test_name in self.ids}
-                for k, test_names in state().tests_by_mangled_function_name.items()
-            },
-        )
-        count_after = sum(len(x) for x in state().tests_by_mangled_function_name)
-        if count_before != count_after:
-            print(f"Removed {count_before - count_after} obsolete test names")
-            save_stats()
-
-    def new_tests(self) -> set[str]:
-        return self.ids - collected_test_names()
-
-
-class PytestRunner(TestRunner):
-    def __init__(self) -> None:
-        self._pytest_add_cli_args: list[str] = config().pytest_add_cli_args
-        self._pytest_add_cli_args_test_selection: list[str] = config().pytest_add_cli_args_test_selection
-
-    # noinspection PyMethodMayBeStatic
-    def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
-        import pytest
-
-        params = ["--rootdir=.", "--tb=native"] + params + self._pytest_add_cli_args
-        if config().debug:
-            params = ["-vv"] + params
-            print("python -m pytest ", " ".join([f'"{param}"' for param in params]))
-        exit_code = int(pytest.main(params, **kwargs))
-        if config().debug:
-            print("    exit code", exit_code)
-        if exit_code == 4:
-            raise BadTestExecutionCommandsException(params)
-        return exit_code
-
-    def _pytest_args_regular_run(self, tests: Iterable[str]) -> list[str]:
-        pytest_args = ["-x", "-q", "-p", "no:randomly", "-p", "no:random-order"]
-        if tests:
-            pytest_args += list(tests)
-        else:
-            pytest_args += self._pytest_add_cli_args_test_selection
-        return pytest_args
-
-    def run_stats(self, *, tests: Iterable[str]) -> int:
-        class StatsCollector:
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_logstart(self, nodeid: str, location: object) -> None:
-                state().duration_by_test[nodeid] = 0
-
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
-                unused(nextitem)
-                for function in state()._stats:
-                    state().tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
-                state()._stats.clear()
-
-            # noinspection PyMethodMayBeStatic
-            def pytest_runtest_makereport(self, item: object, call: object) -> None:
-                state().duration_by_test[item.nodeid] += call.duration  # type: ignore[attr-defined]
-
-        stats_collector = StatsCollector()
-
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(self._pytest_args_regular_run(tests), plugins=[stats_collector]))
-
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
-        with change_cwd("mutants"):
-            return int(self.execute_pytest(self._pytest_args_regular_run(tests)))
-
-    def collect_main_test_coverage(self, cov: Coverage) -> int:
-        with change_cwd("mutants"), cov.collect():
-            self.prepare_main_test_run()
-            return int(self.execute_pytest(self._pytest_args_regular_run([])))
-
-    def run_forced_fail(self) -> int:
-        return self.run_tests(mutant_name=None, tests=[])
-
-    def list_all_tests(self) -> ListAllTestsResult:
-        class TestsCollector:
-            def __init__(self) -> None:
-                self.collected_nodeids: set[str] = set()
-                self.deselected_nodeids: set[str] = set()
-
-            def pytest_collection_modifyitems(self, items: Any) -> None:
-                self.collected_nodeids |= {item.nodeid for item in items}
-
-            def pytest_deselected(self, items: Any) -> None:
-                self.deselected_nodeids |= {item.nodeid for item in items}
-
-        collector = TestsCollector()
-
-        pytest_args = ["-x", "-q", "--collect-only"] + self._pytest_add_cli_args_test_selection
-
-        with change_cwd("mutants"):
-            exit_code = int(self.execute_pytest(pytest_args, plugins=[collector]))
-            if exit_code != 0:
-                raise CollectTestsFailedException()
-
-        selected_nodeids = collector.collected_nodeids - collector.deselected_nodeids
-        return ListAllTestsResult(ids=selected_nodeids)
-
-
-class HammettRunner(TestRunner):
-    def __init__(self) -> None:
-        self.hammett_kwargs: Any = None
-
-    def run_stats(self, *, tests: Iterable[str]) -> int:
-        import hammett
-
-        print("Running hammett stats...")
-
-        def post_test_callback(_name: str, **_: object) -> None:
-            for function in state()._stats:
-                state().tests_by_mangled_function_name[function].add(_name)
-            state()._stats.clear()
-
-        return int(
-            hammett.main(
-                quiet=True,
-                fail_fast=True,
-                disable_assert_analyze=True,
-                post_test_callback=post_test_callback,
-                use_cache=False,
-                insert_cwd=False,
-            )
-        )
-
-    def run_forced_fail(self) -> int:
-        import hammett
-
-        return int(
-            hammett.main(quiet=True, fail_fast=True, disable_assert_analyze=True, use_cache=False, insert_cwd=False)
-        )
-
-    def prepare_main_test_run(self) -> None:
-        import hammett
-
-        self.hammett_kwargs = hammett.main_setup(
-            quiet=True,
-            fail_fast=True,
-            disable_assert_analyze=True,
-            use_cache=False,
-            insert_cwd=False,
-        )
-
-    def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
-        import hammett
-
-        hammett.Config.workerinput = dict(workerinput=f"_{mutant_name}")
-        return int(hammett.main_run_tests(**self.hammett_kwargs, tests=tests))
-
-
-spinner = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-
-
-def status_printer() -> Callable[..., None]:
-    """Manage the printing and in-place updating of a line of characters
-
-    .. note::
-        If the string is longer than a line, then in-place updating may not
-        work (it will print a new line at each refresh).
-    """
-    last_len = [0]
-    last_update = [datetime(1900, 1, 1)]
-    update_threshold = timedelta(seconds=0.1)
-
-    def p(s: str, *, force_output: bool = False) -> None:
-        if not force_output and (datetime.now() - last_update[0]) < update_threshold:
-            return
-        s = next(spinner) + " " + s
-        len_s = len(s)
-        output = "\r" + s + (" " * max(last_len[0] - len_s, 0))
-        assert sys.__stdout__ is not None
-        sys.__stdout__.write(output)
-        sys.__stdout__.flush()
-        last_len[0] = len_s
-
-    return p
-
-
-print_status = status_printer()
-
-
-@dataclass
-class Stat:
-    not_checked: int
-    killed: int
-    survived: int
-    total: int
-    no_tests: int
-    skipped: int
-    suspicious: int
-    timeout: int
-    check_was_interrupted_by_user: int
-    segfault: int
-    caught_by_type_check: int
-
-
-def collect_stat(m: SourceFileMutationData) -> Stat:
-    r = {k.replace(" ", "_"): 0 for k in status_by_exit_code.values()}
-    for k, v in m.exit_code_by_key.items():
-        # noinspection PyTypeChecker
-        r[status_by_exit_code[v].replace(" ", "_")] += 1
-    return Stat(
-        **r,
-        total=sum(r.values()),
-    )
-
-
-def calculate_summary_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> Stat:
-    stats = [collect_stat(x) for x in source_file_mutation_data_by_path.values()]
-    return Stat(
-        not_checked=sum(x.not_checked for x in stats),
-        killed=sum(x.killed for x in stats),
-        survived=sum(x.survived for x in stats),
-        total=sum(x.total for x in stats),
-        no_tests=sum(x.no_tests for x in stats),
-        skipped=sum(x.skipped for x in stats),
-        suspicious=sum(x.suspicious for x in stats),
-        timeout=sum(x.timeout for x in stats),
-        check_was_interrupted_by_user=sum(x.check_was_interrupted_by_user for x in stats),
-        segfault=sum(x.segfault for x in stats),
-        caught_by_type_check=sum(x.caught_by_type_check for x in stats),
-    )
-
-
-def print_stats(
-    source_file_mutation_data_by_path: dict[str, SourceFileMutationData], force_output: bool = False
-) -> None:
-    s = calculate_summary_stats(source_file_mutation_data_by_path)
-    print_status(
-        f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}  🧙 {s.caught_by_type_check}",
-        force_output=force_output,
-    )
-
-
 def run_forced_fail_test(runner: TestRunner) -> None:
     os.environ["MUTANT_UNDER_TEST"] = "fail"
     with CatchOutput(spinner_title="Running forced fail test") as catcher:
@@ -700,7 +310,7 @@ def cli() -> None:
 
 def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None) -> None:
     if tests is None:
-        tests = []  # Meaning all...
+        tests = set()  # Meaning all...
 
     os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
@@ -775,43 +385,6 @@ def collect_or_load_stats(runner: TestRunner, invalidate_stale_callers: bool = T
             run_stats_collection(runner, tests=new_tests)
 
 
-def load_stats() -> bool:
-    did_load = False
-    try:
-        with open("mutants/mutmut-stats.json") as f:
-            data: dict[str, object] = json.load(f)
-            for k, v in data.pop("tests_by_mangled_function_name").items():  # type: ignore[attr-defined]
-                state().tests_by_mangled_function_name[k] |= set(v)
-            state().duration_by_test = data.pop("duration_by_test")  # type: ignore[assignment]
-            state().stats_time = data.pop("stats_time")  # type: ignore[assignment]
-            # Load function hashes and dependencies (backwards compatible)
-            state().old_function_hashes = data.pop("function_hashes", {})  # type: ignore[assignment]
-            for k, v in data.pop("function_dependencies", {}).items():  # type: ignore[attr-defined]
-                state().function_dependencies[k] = set(v)
-            assert not data, data
-            did_load = True
-    except (FileNotFoundError, JSONDecodeError):
-        pass
-    return did_load
-
-
-def save_stats() -> None:
-    with open("mutants/mutmut-stats.json", "w") as f:
-        json.dump(
-            {
-                "tests_by_mangled_function_name": {
-                    k: list(v) for k, v in state().tests_by_mangled_function_name.items()
-                },
-                "duration_by_test": state().duration_by_test,
-                "stats_time": state().stats_time,
-                "function_hashes": state().current_function_hashes,
-                "function_dependencies": {k: list(v) for k, v in state().function_dependencies.items()},
-            },
-            f,
-            indent=4,
-        )
-
-
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
     s = calculate_summary_stats(source_file_mutation_data_by_path)
     with open("mutants/mutmut-cicd-stats.json", "w") as f:
@@ -826,6 +399,7 @@ def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutat
                 timeout=s.timeout,
                 check_was_interrupted_by_user=s.check_was_interrupted_by_user,
                 segfault=s.segfault,
+                caught_by_type_check=s.caught_by_type_check,
             ),
             f,
             indent=4,
@@ -1336,218 +910,13 @@ def apply_mutant(mutant_name: str) -> None:
 @cli.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display mutants killed by tests and type checker.")
 def browse(show_killed: bool) -> None:
-    from rich.syntax import Syntax
-    from textual.app import App
-    from textual.containers import Container
-    from textual.widget import Widget
-    from textual.widgets import DataTable
-    from textual.widgets import Footer
-    from textual.widgets import Static
+    from mutmut.ui.browse import run_result_browser
 
-    class ResultBrowser(App[None]):
-        loading_id = None
-        CSS_PATH = "result_browser_layout.tcss"
-        BINDINGS = [
-            ("q", "quit()", "Quit"),
-            ("r", "retest_mutant()", "Retest mutant"),
-            ("f", "retest_function()", "Retest function"),
-            ("m", "retest_module()", "Retest module"),
-            ("a", "apply_mutant()", "Apply mutant to disk"),
-            ("t", "view_tests()", "View tests for mutant"),
-        ]
-
-        columns = [
-            ("path", "Path"),
-        ] + [(status, Text(emoji, justify="right")) for status, emoji in emoji_by_status.items()]
-
-        cursor_type = "row"
-        source_file_mutation_data_and_stat_by_path: dict[str, tuple[SourceFileMutationData, Stat]] = {}
-        path_by_name: dict[str, Path] = {}
-
-        def compose(self) -> Iterable[Any]:
-            with Container(classes="container"):
-                yield DataTable(id="files")
-                yield DataTable(id="mutants")
-            with Widget(id="diff_view_widget"):
-                yield Static(id="description")
-                yield Static(id="diff_view")
-            yield Footer()
-
-        def on_mount(self) -> None:
-            # noinspection PyTypeChecker
-            files_table: DataTable[Any] = self.query_one("#files")  # type: ignore[assignment]
-            files_table.cursor_type = "row"
-            for key, label in self.columns:
-                files_table.add_column(key=key, label=label)
-
-            # noinspection PyTypeChecker
-            mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-            mutants_table.cursor_type = "row"
-            mutants_table.add_columns("name", "status")
-
-            self.read_data()
-            self.populate_files_table()
-
-        def read_data(self) -> None:
-            self.source_file_mutation_data_and_stat_by_path = {}
-            self.path_by_name: dict[str, Path] = {}
-
-            for p in walk_mutatable_files():
-                source_file_mutation_data = SourceFileMutationData(path=p)
-                source_file_mutation_data.load()
-                stat = collect_stat(source_file_mutation_data)
-
-                self.source_file_mutation_data_and_stat_by_path[str(p)] = source_file_mutation_data, stat
-                for name in source_file_mutation_data.exit_code_by_key:
-                    self.path_by_name[name] = p
-
-        def populate_files_table(self) -> None:
-            # noinspection PyTypeChecker
-            files_table: DataTable[Any] = self.query_one("#files")  # type: ignore[assignment]
-            # TODO: restore selection
-            selected_row = files_table.cursor_row
-            files_table.clear()
-
-            for p, (source_file_mutation_data, stat) in sorted(self.source_file_mutation_data_and_stat_by_path.items()):
-                row = [p] + [
-                    Text(str(getattr(stat, k.replace(" ", "_"))), justify="right") for k, _ in self.columns[1:]
-                ]
-                files_table.add_row(*row, key=str(p))
-
-            files_table.move_cursor(row=selected_row)
-
-        def on_data_table_row_highlighted(self, event: Any) -> None:
-            if not event.row_key or not event.row_key.value:
-                return
-            if event.data_table.id == "files":
-                # noinspection PyTypeChecker
-                mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-                mutants_table.clear()
-                source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
-                for k, v in source_file_mutation_data.exit_code_by_key.items():
-                    status = status_by_exit_code[v]
-                    if status not in ("killed", "caught by type check") or show_killed:
-                        mutants_table.add_row(k, emoji_by_status[status], key=k)
-            else:
-                assert event.data_table.id == "mutants"
-                # noinspection PyTypeChecker
-                description_view: Static = self.query_one("#description")  # type: ignore[assignment]
-                mutant_name = event.row_key.value
-                self.loading_id = mutant_name
-                path = self.path_by_name.get(mutant_name)
-                source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[str(path)]
-
-                exit_code = source_file_mutation_data.exit_code_by_key[mutant_name]
-                status = status_by_exit_code[exit_code]
-                estimated_duration = source_file_mutation_data.estimated_time_of_tests_by_mutant.get(mutant_name, "?")
-                duration = source_file_mutation_data.durations_by_key.get(mutant_name, "?")
-                type_check_error = source_file_mutation_data.type_check_error_by_key.get(mutant_name, "?")
-
-                view_tests_description = "(press t to view tests executed for this mutant)"
-
-                match status:
-                    case "killed":
-                        description = f"Killed ({exit_code=}): Mutant caused a test to fail 🎉"
-                    case "survived":
-                        description = f"Survived ({exit_code=}): No test detected this mutant. {view_tests_description}"
-                    case "skipped":
-                        description = f"Skipped ({exit_code=})"
-                    case "check was interrupted by user":
-                        description = f"User interrupted ({exit_code=})"
-                    case "caught by type check":
-                        description = f"Caught by type checker ({exit_code=}): {type_check_error}"
-                    case "timeout":
-                        description = (
-                            f"Timeout ({exit_code=}): Timed out because tests did not finish within {duration:.3f} seconds. "
-                            f"Tests without mutation took {estimated_duration:.3f} seconds. {view_tests_description}"
-                        )
-                    case "no tests":
-                        description = (
-                            f"Untested ({exit_code=}): Skipped because selected tests do not execute this code."
-                        )
-                    case "segfault":
-                        description = f"Segfault ({exit_code=}): Running pytest with this mutant segfaulted."
-                    case "suspicious":
-                        description = (
-                            f"Unknown ({exit_code=}): Running pytest with this mutant resulted in an unknown exit code."
-                        )
-                    case "not checked":
-                        description = "Not checked in the last mutmut run."
-                    case _:
-                        description = f"Unknown status ({exit_code=}, {status=})"
-                description_view.update(f"\n {description}\n")
-
-                diff_view: Static = self.query_one("#diff_view")  # type: ignore[assignment]
-                diff_view.update("<loading code diff...>")
-
-                def load_thread() -> None:
-                    try:
-                        d = get_diff_for_mutant(event.row_key.value, path=path)
-                        if event.row_key.value == self.loading_id:
-                            diff_view.update(Syntax(d, "diff"))
-                    except Exception as e:
-                        diff_view.update(f"<{type(e)} {e}>")
-
-                t = Thread(target=load_thread)
-                t.start()
-
-        def retest(self, pattern: str | None) -> None:
-            if pattern is None:
-                return
-            self._run_subprocess_command("run", [pattern])
-
-        def view_tests(self, mutant_name: str | None) -> None:
-            if mutant_name is None:
-                return
-            self._run_subprocess_command("tests-for-mutant", [mutant_name])
-
-        def _run_subprocess_command(self, command: str, args: list[str]) -> None:
-            with self.suspend():
-                browse_index = sys.argv.index("browse")
-                initial_args = sys.argv[:browse_index]
-                subprocess_args = [sys.executable, *initial_args, command, *args]
-                print(">", *subprocess_args)
-                subprocess.run(subprocess_args)
-                input("press enter to return to browser")
-
-            self.read_data()
-            self.populate_files_table()
-
-        def get_mutant_name_from_selection(self) -> str | None:
-            # noinspection PyTypeChecker
-            mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-            if mutants_table.cursor_row is None or not mutants_table.is_valid_row_index(mutants_table.cursor_row):
-                return None
-
-            result: str = mutants_table.get_row_at(mutants_table.cursor_row)[0]
-            return result
-
-        def action_retest_mutant(self) -> None:
-            self.retest(self.get_mutant_name_from_selection())
-
-        def action_retest_function(self) -> None:
-            name = self.get_mutant_name_from_selection()
-            if name is not None:
-                self.retest(name.rpartition("__mutmut_")[0] + "__mutmut_*")
-
-        def action_retest_module(self) -> None:
-            name = self.get_mutant_name_from_selection()
-            if name is not None:
-                self.retest(name.rpartition(".")[0] + ".*")
-
-        def action_apply_mutant(self) -> None:
-            # noinspection PyTypeChecker
-            mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-            if mutants_table.cursor_row is None or not mutants_table.is_valid_row_index(mutants_table.cursor_row):
-                return
-            apply_mutant(mutants_table.get_row_at(mutants_table.cursor_row)[0])
-
-        def action_view_tests(self) -> None:
-            name = self.get_mutant_name_from_selection()
-            if name is not None:
-                self.view_tests(name)
-
-    ResultBrowser().run()
+    run_result_browser(
+        show_killed=show_killed,
+        get_diff_for_mutant=get_diff_for_mutant,
+        apply_mutant=apply_mutant,
+    )
 
 
 if __name__ == "__main__":

@@ -5,15 +5,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from mutmut.__main__ import SourceFileMutationData
 from mutmut.__main__ import _run
-from mutmut.__main__ import walk_source_files
 from mutmut.configuration import config
+from mutmut.models.source_file_mutation_data import SourceFileMutationData
+from mutmut.utils.file_utils import walk_source_files
 from tests.conftest import reset_singletons
 
 
 @contextmanager
-def change_cwd(path):
+def change_cwd(path: Path):
     old_cwd = Path(Path.cwd()).resolve()
     os.chdir(path)
     try:
