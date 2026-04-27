@@ -1,0 +1,8 @@
+# Modules to preload for the 'import' warmup strategy
+# These are imported in the orchestrator and inherited by forked workers
+pytest
+
+#normally you would avoid importing the module itself in real projects
+#as it could result in unwanted side effects, now it's a convenient way
+#to simulate import delays through /sr/benchmark/__init__.py
+benchmark

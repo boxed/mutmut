@@ -10,6 +10,8 @@ venv
 table.css.map
 .idea
 .vscode
+.claude
+.cursor
 .cache
 .DS_Store
 .pytest_cache
@@ -55,6 +57,9 @@ output/*/index.html
 # Sphinx
 docs/_build
 docs/tri*.rst
+
+# Core dumps from segfaults
+core
 
 # tests
 results/

@@ -10,10 +10,36 @@ from configparser import ConfigParser
 from configparser import NoOptionError
 from configparser import NoSectionError
 from dataclasses import dataclass
+from enum import Enum
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 from typing import Any
+
+
+class ProcessIsolation(str, Enum):
+    """Valid values for process_isolation config.
+
+    Using str, Enum allows direct string comparison while providing
+    validation and IDE support.
+    """
+
+    FORK = "fork"  # Default: current behavior
+    HOT_FORK = "hot-fork"  # Fork-safe for gevent/grpc
+
+
+class HotForkWarmup(str, Enum):
+    """Warmup strategies for hot-fork orchestrator.
+
+    Controls what the orchestrator does before forking grandchildren:
+    - COLLECT: Run pytest --collect-only to pre-load test infrastructure (DEFAULT)
+    - IMPORT: Import modules from a file (useful when test collection has side effects)
+    - NONE: Just import pytest, no test collection
+    """
+
+    COLLECT = "collect"
+    IMPORT = "import"
+    NONE = "none"
 
 
 def _config_reader() -> Callable[[str, Any], Any]:
@@ -118,6 +144,21 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
+    isolation_str = s("process_isolation", "fork")
+    try:
+        process_isolation = ProcessIsolation(isolation_str)
+    except ValueError:
+        valid = [e.value for e in ProcessIsolation]
+        raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
+
+    # Validate hot_fork_warmup (default: collect)
+    warmup_str = s("hot_fork_warmup", "collect")
+    try:
+        hot_fork_warmup = HotForkWarmup(warmup_str)
+    except ValueError:
+        valid = [e.value for e in HotForkWarmup]
+        raise ValueError(f"Invalid hot_fork_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
+
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
@@ -131,6 +172,8 @@ def _load_config() -> Config:
         + list(Path(".").glob("test*.py")),
         max_stack_depth=s("max_stack_depth", -1),
         debug=s("debug", False),
+        log_to_file=s("log_to_file", False),
+        log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
         pytest_add_cli_args=s("pytest_add_cli_args", []),
@@ -141,10 +184,13 @@ def _load_config() -> Config:
         use_setproctitle=s(
             "use_setproctitle", not platform.system() == "Darwin"
         ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
+        track_dependencies=s("track_dependencies", True),
+        dependency_tracking_depth=s("dependency_tracking_depth", None),
+        process_isolation=process_isolation,
+        max_orchestrator_restarts=s("max_orchestrator_restarts", 3),
+        hot_fork_warmup=hot_fork_warmup,
+        preload_modules_file=s("preload_modules_file", None),
     )
-
-
-_config: Config | None = None
 
 
 @dataclass
@@ -155,6 +201,8 @@ class Config:
     max_stack_depth: int
     debug: bool
     source_paths: list[Path]
+    log_to_file: bool
+    log_file_path: str
     pytest_add_cli_args: list[str]
     pytest_add_cli_args_test_selection: list[str]
     mutate_only_covered_lines: bool
@@ -162,6 +210,12 @@ class Config:
     timeout_constant: float
     type_check_command: list[str]
     use_setproctitle: bool
+    track_dependencies: bool
+    dependency_tracking_depth: int | None
+    process_isolation: ProcessIsolation
+    max_orchestrator_restarts: int
+    hot_fork_warmup: HotForkWarmup
+    preload_modules_file: str | None
 
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)
@@ -177,6 +231,14 @@ class Config:
                 return True
         return False
 
+    def get_effective_dependency_depth(self) -> int:
+        """Get the effective dependency tracking depth, clamped to max_stack_depth."""
+        if self.dependency_tracking_depth is None:
+            return self.max_stack_depth
+        if self.max_stack_depth == -1:
+            return self.dependency_tracking_depth
+        return min(self.dependency_tracking_depth, self.max_stack_depth)
+
     def _should_ignore_for_mutation(self, path: Path | str) -> bool:
         path_str = str(path)
         if not path_str.endswith(".py"):
@@ -187,19 +249,27 @@ class Config:
         return False
 
     @staticmethod
-    def ensure_loaded() -> None:
-        global _config
-        if _config is None:
-            _config = _load_config()
-
-    @staticmethod
-    def get() -> Config:
-        global _config
-        Config.ensure_loaded()
-        assert _config is not None
-        return _config
-
-    @staticmethod
     def reset() -> None:
         global _config
         _config = None
+
+
+_config: Config | None = None
+
+
+class MutmutProgrammaticFailException(Exception):
+    pass
+
+
+def config() -> Config:
+    """Get the global configuration singleton, creating it if needed."""
+    global _config
+    if _config is None:
+        _config = _load_config()
+    return _config
+
+
+def reset_config() -> None:
+    """Reset the global configuration. Primarily used for testing."""
+    global _config
+    _config = None

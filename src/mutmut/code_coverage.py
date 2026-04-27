@@ -5,20 +5,19 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
 
-import coverage
+from coverage import Coverage
 from coverage import CoverageData
 
-if TYPE_CHECKING:
-    from mutmut.__main__ import TestRunner
+from mutmut.runners.harness import TestRunner
 
 
-# Returns a set of lines that are covered in this file gvein the covered_lines dict
-#  returned by gather_coverage
-# None means it's not enabled, set() means no lines are covered
-def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]] | None) -> set[int] | None:
-    if covered_lines is None or filename is None:
+def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]) -> set[int] | None:
+    """Return covered lines for a file, or None if coverage filtering is not active.
+
+    An empty dict means coverage is not enabled (mutate everything).
+    A populated dict means only mutate covered lines."""
+    if not covered_lines or filename is None:
         return None
 
     abs_filename = str((Path("mutants") / filename).absolute())
@@ -41,7 +40,7 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> dict[st
     mutants_path = Path("mutants")
 
     # Run the tests and gather coverage
-    cov = coverage.Coverage(data_file=None)
+    cov = Coverage(data_file=None)
     runner.collect_main_test_coverage(cov)
 
     # Build mapping of filenames to covered lines
