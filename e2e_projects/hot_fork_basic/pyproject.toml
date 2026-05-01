@@ -1,0 +1,9 @@
+[tool.mutmut]
+process_isolation = "hot-fork"
+paths_to_mutate = ["src/"]
+tests_dir = ["tests/"]
+
+[project]
+name = "hot_fork_basic"
+version = "0.1.0"
+description = "E2E test project for hot-fork mode without fork-unsafe libraries"

@@ -3,6 +3,14 @@ from my_lib import *
 from my_lib import _PrivateClass
 import pytest
 import asyncio
+import inspect
+
+import pytest
+from my_lib import hello, badly_tested, make_greeter, Point
+from my_lib import fibonacci, cached_fibonacci, escape_sequences, simple_consumer, async_consumer
+from my_lib import create_a_segfault_when_mutated, some_func, some_func_clone, func_with_star, func_with_star_clone
+from my_lib import func_with_arbitrary_args, func_with_arbitrary_args_clone
+from my_lib import Color, skip_this_function, also_skip_this_function, SkipThisClass, AlsoSkipThisClass
 
 """These tests are flawed on purpose, some mutants survive and some are killed."""
 

@@ -375,7 +375,7 @@ wheels = [
 
 [[package]]
 name = "mutmut"
-version = "3.5.0"
+version = "3.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -403,7 +403,7 @@ requires-dist = [
     { name = "coverage", specifier = ">=7.3.0" },
     { name = "libcst", specifier = ">=1.8.5" },
     { name = "pytest", specifier = ">=6.2.5" },
-    { name = "setproctitle", specifier = ">=1.1.0" },
+    { name = "setproctitle", specifier = ">=1.2.2" },
     { name = "textual", specifier = ">=1.0.0" },
     { name = "toml", marker = "python_full_version < '3.11'", specifier = ">=0.10.2" },
 ]

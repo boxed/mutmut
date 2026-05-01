@@ -10,9 +10,9 @@ This module provides a safe_setproctitle() function that:
 Related: https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055
 """
 
-from mutmut.configuration import Config
+from mutmut.configuration import config
 
-if Config.get().use_setproctitle:
+if config().use_setproctitle:
     from setproctitle import setproctitle as _setproctitle
 
     def safe_setproctitle(title: str) -> None:

@@ -1,0 +1,72 @@
+"""Runtime state for dependency tracking in mutmut.
+
+This module provides a singleton-pattern state object for tracking function hashes
+and dependencies across mutmut runs. The state is persisted to mutmut-stats.json
+and restored on subsequent runs.
+"""
+
+from collections import defaultdict
+from dataclasses import dataclass
+from dataclasses import field
+
+
+@dataclass
+class MutmutState:
+    """Runtime state for dependency tracking.
+
+    Attributes:
+        old_function_hashes: Function hashes from the previous run (loaded from JSON).
+            Used to detect which functions changed between runs.
+        current_function_hashes: Function hashes from the current run (populated during
+            mutant generation). Saved to JSON at end of run.
+        function_dependencies: Maps callee function names to the set of caller function
+            names. Used to propagate test coverage through call chains.
+        stats_time: CPU time taken for stats collection.
+        duration_by_test: Maps test node IDs to their execution duration.
+        tests_by_mangled_function_name: Maps mangled function names to tests that cover them.
+        _stats: Set of stats identifiers (internal use).
+        _covered_lines: Maps filenames to covered line numbers.
+        mutant_generation_time: Time taken for mutant generation phase (s).
+        clean_tests_time: Time taken for clean tests phase (s).
+        forced_fail_time: Time taken for forced fail test phase (s).
+        mutation_testing_time: Time taken for mutation testing phase (s).
+    """
+
+    # Hashes from previous run (loaded from JSON)
+    old_function_hashes: dict[str, str] = field(default_factory=dict)
+
+    # Hashes from current run (populated during mutant generation)
+    current_function_hashes: dict[str, str] = field(default_factory=dict)
+
+    # callee -> set of callers
+    function_dependencies: defaultdict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+    # Migrated from __init__.py (formerly module-level globals)
+    stats_time: float = 0.0
+    duration_by_test: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    tests_by_mangled_function_name: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+    _stats: set[str] = field(default_factory=set)
+    _covered_lines: dict[str, set[int]] = field(default_factory=dict)
+
+    # Phase timing data (in seconds)
+    mutant_generation_time: float = 0.0
+    clean_tests_time: float = 0.0
+    forced_fail_time: float = 0.0
+    mutation_testing_time: float = 0.0
+
+
+_state: MutmutState | None = None
+
+
+def state() -> MutmutState:
+    """Get the global MutmutState singleton, creating it if needed."""
+    global _state
+    if _state is None:
+        _state = MutmutState()
+    return _state
+
+
+def reset_state() -> None:
+    """Reset the global state. Primarily used for testing."""
+    global _state
+    _state = None
