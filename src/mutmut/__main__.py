@@ -117,14 +117,26 @@ exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status i
 def record_trampoline_hit(name: str) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
     if Config.get().max_stack_depth != -1:
+        # Only frames of user code under mutation count toward max_stack_depth.
+        # CWD is the ``./mutants`` directory while tests run, so user files live
+        # under ``mutants_dir``. Skip frames from mutmut's own machinery
+        # (``record_trampoline_hit``, ``_mutmut_trampoline``) and frames from
+        # third-party / stdlib code so the configured number reflects only
+        # user-code call depth. ``realpath`` is used on both sides so symlinks
+        # (e.g. ``/var`` -> ``/private/var`` on macOS) compare equal.
+        mutants_dir = os.path.realpath(os.getcwd())
         f = inspect.currentframe()
         c = Config.get().max_stack_depth
         while c and f:
             filename = f.f_code.co_filename
             if "pytest" in filename or "hammett" in filename or "unittest" in filename:
                 break
+            real_filename = os.path.realpath(filename)
+            in_mutants = real_filename == mutants_dir or real_filename.startswith(mutants_dir + os.sep)
+            is_mutmut_machinery = f.f_code.co_name == "_mutmut_trampoline"
+            if in_mutants and not is_mutmut_machinery:
+                c -= 1
             f = f.f_back
-            c -= 1
 
         if not c:
             return
