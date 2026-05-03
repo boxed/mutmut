@@ -159,14 +159,7 @@ class Color(Enum):
         return self.value
 
     @staticmethod
-    async def async_get_all() -> AsyncGenerator[Color, None]:
-        """return type hint here is "wrong" (it's technically AsyncGenerator[int, None])
-        but using Color in this context allows us to have a forward reference to the Color class
-        that doesn't require quoting the class name (eg. "Color") in the type hint
-        that we otherwise would not be able to have in py3.10, and allows us to test that
-        trampoline templates are resilient to forward references when using the external trampoline
-        pattern.
-        """
+    async def async_get_all() -> AsyncGenerator["Color", None]:
         for i in (Color.RED, Color.GREEN, Color.BLUE):
             await asyncio.sleep(0.001)
             yield i
