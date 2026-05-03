@@ -28,7 +28,7 @@ source_paths = [ "config_pkg/" ]
 only_mutate = [ "config_pkg/logic/*" ]
 do_not_mutate = [ "*ignore*" ]
 also_copy = [ "data" ]
-max_stack_depth=8 # Includes frames by mutmut, see https://github.com/boxed/mutmut/issues/378
+max_stack_depth=3
 # verify that we can override options with pytest_add_cli_args
 pytest_add_cli_args = ["-o", "xfail_strict=False"]
 # verify test exclusion (-m 'not fail') and test inclusion (-k=test_include)

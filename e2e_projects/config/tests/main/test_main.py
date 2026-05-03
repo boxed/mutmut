@@ -2,7 +2,7 @@ import json
 import pytest
 from pathlib import Path
 from config_pkg.logic import hello
-from config_pkg.logic.math import add, call_depth_two
+from config_pkg.logic.math import add, call_depth_one
 from config_pkg.logic.ignore_me import this_function_shall_NOT_be_mutated
 from config_pkg.utils.utils import util_that_should_NOT_be_mutated
 
@@ -20,8 +20,7 @@ def test_include_non_mutated_util():
 
 def test_include_max_stack_depth():
     # This test should only cover functions up to some depth
-    # For more context, see https://github.com/boxed/mutmut/issues/378
-    assert call_depth_two() == 2
+    assert call_depth_one() == 1
 
 def test_include_data_exists():
     path = (Path("data") / "data.json").resolve()
