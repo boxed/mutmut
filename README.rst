@@ -128,8 +128,8 @@ introduced bug in those base functions will lead to many tests that fail which
 are hard to understand how they relate to the function with the change.
 
 You can configure mutmut to only count a test as being relevant for a function
-if the stack depth from the test to the function is below some limit. In your
-`setup.cfg` add:
+if the stack depth is below some limit. Only stack frames from code inside `source_paths`
+is counted towards the limit, 3rd party libraries are ignored. In your `setup.cfg` add:
 
 .. code-block:: ini
 

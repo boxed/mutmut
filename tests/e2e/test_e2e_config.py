@@ -13,6 +13,8 @@ def test_config_result_snapshot():
             },
             "mutants/config_pkg/logic/math.py.meta": {
                 "config_pkg.logic.math.x_add__mutmut_1": 0,
+                "config_pkg.logic.math.x_call_depth_one__mutmut_1": 1,
+                "config_pkg.logic.math.x_call_depth_one__mutmut_2": 1,
                 "config_pkg.logic.math.x_call_depth_two__mutmut_1": 1,
                 "config_pkg.logic.math.x_call_depth_two__mutmut_2": 1,
                 "config_pkg.logic.math.x_call_depth_three__mutmut_1": 1,

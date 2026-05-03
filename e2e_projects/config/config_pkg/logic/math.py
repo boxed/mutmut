@@ -1,6 +1,9 @@
 def add(a, b):
     return a + b
 
+def call_depth_one():
+    return call_depth_two() - 1
+
 def call_depth_two():
     return call_depth_three() - 1
 
