@@ -64,6 +64,8 @@ def test_module_mutation():
     """Regression test, for a complete module with functions, type annotations and a class"""
 
     source = """from __future__ import division
+from typing import Self
+from enum import Enum
 import lib
 
 lib.foo()
@@ -81,12 +83,34 @@ class Adder:
     def add(self, value):
         return self.amount + value
 
+    @staticmethod
+    def negated(adder: "Adder") -> Self:
+        return Adder(-adder.amount)
+
+class Color(Enum):
+    RED = 'red'
+    BLUE = 'blue'
+
+    def darken(self) -> int:
+        return self.value - 1
+
+    @staticmethod
+    def from_name(name: str) -> "Color":
+        return Color[name.upper()]
+
+    @classmethod
+    def default(cls) -> "Color":
+        return cls.RED
+
+
 print(Adder(1).add(2))"""
 
     src, _ = mutate_file_contents("file.py", source)
 
     assert src == snapshot('''\
 from __future__ import division
+from typing import Self
+from enum import Enum
 import lib
 
 lib.foo()
@@ -175,6 +199,10 @@ x_bar__mutmut_mutants : MutantDict = { # type: ignore # mutmut generated
 } # type: ignore # mutmut generated
 
 x_bar__mutmut_orig.__name__ = 'x_bar' # type: ignore # mutmut generated
+def xǁAdderǁnegated__mutmut_trampoline(*args, **kwargs): # type: ignore # mutmut generated
+    return _mutmut_trampoline(xǁAdderǁnegated__mutmut_orig, xǁAdderǁnegated__mutmut_mutants, args, kwargs) # type: ignore # mutmut generated
+
+xǁAdderǁnegated__mutmut_trampoline.__name__ = 'negated' # type: ignore # mutmut generated
 
 class Adder:
     def __init__(self, amount):
@@ -208,6 +236,68 @@ class Adder:
     } # type: ignore # mutmut generated
     \n\
     xǁAdderǁadd__mutmut_orig.__name__ = 'xǁAdderǁadd' # type: ignore # mutmut generated
+    negated = staticmethod(xǁAdderǁnegated__mutmut_trampoline)
+_TxǁAdderǁ = TypeVar('_TxǁAdderǁ', bound='Adder')
+
+def xǁAdderǁnegated__mutmut_orig(adder: "Adder") -> _TxǁAdderǁ:
+    return Adder(-adder.amount)
+
+def xǁAdderǁnegated__mutmut_1(adder: "Adder") -> _TxǁAdderǁ:
+    return Adder(None)
+
+def xǁAdderǁnegated__mutmut_2(adder: "Adder") -> _TxǁAdderǁ:
+    return Adder(+adder.amount)
+xǁAdderǁnegated__mutmut_orig.__name__ = 'xǁAdderǁnegated' # type: ignore # mutmut generated
+
+xǁAdderǁnegated__mutmut_mutants: MutantDict = { # type: ignore # mutmut generated
+    'xǁAdderǁnegated__mutmut_1': xǁAdderǁnegated__mutmut_1, # type: ignore # mutmut generated
+    'xǁAdderǁnegated__mutmut_2': xǁAdderǁnegated__mutmut_2 # type: ignore # mutmut generated
+} # type: ignore # mutmut generated
+def xǁColorǁdarken__mutmut_trampoline(self, *args, **kwargs): # type: ignore # mutmut generated
+    return _mutmut_trampoline(xǁColorǁdarken__mutmut_orig, xǁColorǁdarken__mutmut_mutants, args, kwargs, self) # type: ignore # mutmut generated
+
+xǁColorǁdarken__mutmut_trampoline.__name__ = 'darken' # type: ignore # mutmut generated
+def xǁColorǁfrom_name__mutmut_trampoline(*args, **kwargs): # type: ignore # mutmut generated
+    return _mutmut_trampoline(xǁColorǁfrom_name__mutmut_orig, xǁColorǁfrom_name__mutmut_mutants, args, kwargs) # type: ignore # mutmut generated
+
+xǁColorǁfrom_name__mutmut_trampoline.__name__ = 'from_name' # type: ignore # mutmut generated
+
+class Color(Enum):
+    RED = 'red'
+    BLUE = 'blue'
+    darken = xǁColorǁdarken__mutmut_trampoline
+    from_name = staticmethod(xǁColorǁfrom_name__mutmut_trampoline)
+
+    @classmethod
+    def default(cls) -> "Color":
+        return cls.RED
+
+def xǁColorǁdarken__mutmut_orig(self) -> int:
+    return self.value - 1
+
+def xǁColorǁdarken__mutmut_1(self) -> int:
+    return self.value + 1
+
+def xǁColorǁdarken__mutmut_2(self) -> int:
+    return self.value - 2
+xǁColorǁdarken__mutmut_orig.__name__ = 'xǁColorǁdarken' # type: ignore # mutmut generated
+
+xǁColorǁdarken__mutmut_mutants: MutantDict = { # type: ignore # mutmut generated
+    'xǁColorǁdarken__mutmut_1': xǁColorǁdarken__mutmut_1, # type: ignore # mutmut generated
+    'xǁColorǁdarken__mutmut_2': xǁColorǁdarken__mutmut_2 # type: ignore # mutmut generated
+} # type: ignore # mutmut generated
+
+def xǁColorǁfrom_name__mutmut_orig(name: str) -> "Color":
+    return Color[name.upper()]
+
+def xǁColorǁfrom_name__mutmut_1(name: str) -> "Color":
+    return Color[name.lower()]
+xǁColorǁfrom_name__mutmut_orig.__name__ = 'xǁColorǁfrom_name' # type: ignore # mutmut generated
+
+xǁColorǁfrom_name__mutmut_mutants: MutantDict = { # type: ignore # mutmut generated
+    'xǁColorǁfrom_name__mutmut_1': xǁColorǁfrom_name__mutmut_1 # type: ignore # mutmut generated
+} # type: ignore # mutmut generated
+
 
 print(Adder(1).add(2))\
 ''')
