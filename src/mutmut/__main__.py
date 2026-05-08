@@ -881,6 +881,54 @@ def collect_source_file_mutation_data(
     return mutants, source_file_mutation_data_by_path
 
 
+def _check_test_to_mutant_associations(
+    source_file_mutation_data_by_path: dict[str, SourceFileMutationData],
+) -> None:
+    """Detect when stats recorded trampoline hits but no recorded key matches any mutant key.
+
+    The trampoline records ``orig.__module__ + '.' + orig.__name__`` while the
+    per-mutant lookup uses the path-derived dotted name from ``get_mutant_name``.
+    In a healthy project these are equal because the test suite imports the
+    source via fully-qualified package paths and the source dir matches one of
+    the conventions handled by ``setup_source_paths``. When they diverge (e.g.
+    ``[tool.pytest.ini_options] pythonpath = ["pkg"]`` makes tests do
+    ``import foo`` instead of ``from pkg.foo import ...``) every mutant is
+    silently marked "No Tests" and the run reports 0.00 mutations/second.
+
+    This check exits with an actionable message instead of producing the silent
+    all-No-Tests outcome.
+    """
+    recorded = set(mutmut.tests_by_mangled_function_name.keys())
+    if not recorded:
+        # No hits at all - the existing zero-check in run_stats_collection
+        # already covers this path; nothing to add here.
+        return
+
+    expected = {
+        mangled_name_from_mutant_name(mutant_name)
+        for m in source_file_mutation_data_by_path.values()
+        for mutant_name in m.exit_code_by_key
+    }
+    if not expected or recorded & expected:
+        return
+
+    print(
+        "Stopping early, because tests recorded trampoline hits but none match any mutant key. "
+        "It looks like tests import the source under a different module path than mutmut sees from the file path."
+    )
+    print(f"Recorded keys (e.g.): {sorted(recorded)[:3]}")
+    print(f"Expected keys (e.g.): {sorted(expected)[:3]}")
+    print(
+        "Common causes: a pythonpath setting in pytest config, conftest sys.path injection, "
+        "or a source dir other than ./, src/, or source/."
+    )
+    print(
+        "Fix: use fully-qualified package imports (e.g. from pkg.foo import ...) "
+        "and rely on mutmut's default sys.path setup."
+    )
+    exit(1)
+
+
 def estimated_worst_case_time(mutant_name: str) -> float:
     tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
     return sum(mutmut.duration_by_test[t] for t in tests)
@@ -898,6 +946,8 @@ def print_time_estimates(mutant_names: tuple[str, ...]) -> None:
     collect_or_load_stats(runner)
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
+
+    _check_test_to_mutant_associations(source_file_mutation_data_by_path)
 
     times_and_keys = [(estimated_worst_case_time(mutant_name), mutant_name) for m, mutant_name, result in mutants]
 
@@ -986,6 +1036,8 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     collect_or_load_stats(runner)
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
+
+    _check_test_to_mutant_associations(source_file_mutation_data_by_path)
 
     os.environ["MUTANT_UNDER_TEST"] = ""
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
