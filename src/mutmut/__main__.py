@@ -146,7 +146,9 @@ def walk_all_files() -> Iterator[tuple[str, str]]:
                 continue
         for root, dirs, files in walk(path):
             for filename in files:
-                yield root, filename
+                # only yield actual files, no sockets/pipes/etc.
+                if isfile(Path(root) / filename):
+                    yield root, filename
 
 
 def walk_source_files() -> Iterator[Path]:
