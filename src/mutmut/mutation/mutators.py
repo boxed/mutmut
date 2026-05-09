@@ -4,7 +4,6 @@ import re
 from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Sequence
-from enum import Enum
 from typing import Any
 from typing import cast
 
@@ -20,41 +19,6 @@ OPERATORS_TYPE = Sequence[
 
 # pattern to match (nearly) all chars in a string that are not part of an escape sequence
 NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
-
-
-class MethodType(Enum):
-    """Type of method based on its decorator."""
-
-    STATICMETHOD = "staticmethod"
-    CLASSMETHOD = "classmethod"
-    INSTANCE = "instance"
-
-
-def get_method_type(method: cst.FunctionDef) -> MethodType | None:
-    """Determine the method type based on decorators.
-
-    Returns:
-        MethodType.STATICMETHOD - for @staticmethod
-        MethodType.CLASSMETHOD - for @classmethod
-        MethodType.INSTANCE - for no decorators (regular instance method)
-        None - for other/multiple decorators (should be skipped)
-    """
-    if not method.decorators:
-        return MethodType.INSTANCE
-
-    if len(method.decorators) != 1:
-        # Multiple decorators - skip
-        return None
-
-    decorator = method.decorators[0].decorator
-    if isinstance(decorator, cst.Name):
-        if decorator.value == "staticmethod":
-            return MethodType.STATICMETHOD
-        elif decorator.value == "classmethod":
-            return MethodType.CLASSMETHOD
-
-    # Other decorator - skip
-    return None
 
 
 def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
