@@ -1,12 +1,30 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Add `# pragma: no mutate block` and `# pragma: no mutate start/end` comments
+* Add `do_not_mutate_patterns` to disable mutations with a regex
+* Add `only_mutate` config to select which files get mutated
+* Also mutate methods decorated with (only) `@staticmethod` or `@classmethod`
+* Add `use_setproctitle` option to disable process renaming (automatically disabled on MacOS)
+* Add (unstable) `timeout_multiplier` and `timeout_constant` options
+* Rename `paths_to_mutate` to `source_paths`
+* Change `max_stack_depth` to only consider functions inside `source_paths`
+* Fix mutation for enum class methods
+* Fix mutate_only_covered_lines when project uses custom coverage.py config
+* Fix execution when running mutmut via `python -m mutmut run`
+* Fix mutation of `class _SomePrivateClass` class methods
+* Fix mutation of default args
+* Warn when mutmut cannot match mutants with the collected stats
+
 3.5.0
 ~~~~~
 
 * Filter mutants based on type annotations. This feature needs to be turned on with the `type_check_command` config.
 
-* Support running on Windows
+* Show error message when running on Windows
 
 * Save mutation stats for use with CI/CD pipeline (#460)
 
