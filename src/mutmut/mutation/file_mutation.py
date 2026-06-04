@@ -485,6 +485,9 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
             wrapper.visit(visitor)
             mutated_methods = visitor.found_mutants
 
+            if not mutated_methods:
+                continue
+
             for error in errors_of_file:
                 assert error.file_path == visitor.file
                 mutant = next(
