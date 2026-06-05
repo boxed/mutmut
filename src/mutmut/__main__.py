@@ -8,7 +8,9 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING
 from typing import Any
 
+from mutmut.state import state
 from mutmut.utils.file_utils import change_cwd
+from mutmut.utils.format_utils import get_module_from_key
 from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import strip_prefix
 
@@ -114,7 +116,7 @@ emoji_by_status = {
 exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status in status_by_exit_code.items()}
 
 
-def record_trampoline_hit(name: str) -> None:
+def record_trampoline_hit(name: str, caller: str | None = None) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
 
     source_paths = [p.resolve(strict=True) for p in Config.get().source_paths]
@@ -136,6 +138,8 @@ def record_trampoline_hit(name: str) -> None:
             return
 
     mutmut._stats.add(name)
+    if caller is not None and Config.get().track_dependencies:
+        state().function_dependencies[name].add(caller)
 
 
 def walk_all_files() -> Iterator[tuple[str, str]]:
@@ -209,6 +213,8 @@ class FileMutationResult:
     error: Exception | None = None
     unmodified: bool = False
     ignored: bool = False
+    changed_functions: set[str] | None = None
+    current_hashes: dict[str, str] | None = None
 
 
 @dataclass
@@ -232,6 +238,8 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
                 stats.ignored += 1
             else:
                 stats.mutated += 1
+            if result.current_hashes:
+                state().current_function_hashes.update(result.current_hashes)
     return stats
 
 
@@ -337,7 +345,17 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
     data.hash_by_function_name = hash_by_function_name
     data.save()
 
-    return FileMutationResult(warnings=warnings)
+    module_name = strip_prefix(str(filename)[: -len(filename.suffix)].replace(os.sep, "."), prefix="src.")
+    current_hashes_qualified = {
+        f"{module_name}.{func}".replace(".__init__.", "."): h for func, h in hash_by_function_name.items()
+    }
+    changed_functions_qualified = {f"{module_name}.{func}".replace(".__init__.", ".") for func in changed}
+
+    return FileMutationResult(
+        warnings=warnings,
+        changed_functions=changed_functions_qualified,
+        current_hashes=current_hashes_qualified,
+    )
 
 
 def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> tuple[Sequence[str], dict[str, str]]:
@@ -723,6 +741,8 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
 
     os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
+    depth = Config.get().dependency_tracking_depth
+    os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth) if depth is not None else "-1"
     start_cpu_time = process_time()
 
     with CatchOutput(spinner_title="Running stats") as output_catcher:
@@ -758,13 +778,59 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
     save_stats()
 
 
-def collect_or_load_stats(runner: TestRunner) -> None:
+def _cleanup_stale_stats() -> None:
+    valid_modules = {get_module_from_key(key) for key in state().current_function_hashes}
+
+    def _is_valid_key(key: str) -> bool:
+        return get_module_from_key(key) in valid_modules
+
+    stale_keys = [k for k in mutmut.tests_by_mangled_function_name if not _is_valid_key(k)]
+    for k in stale_keys:
+        del mutmut.tests_by_mangled_function_name[k]
+
+    stale_dep_keys = [k for k in state().function_dependencies if not _is_valid_key(k)]
+    for k in stale_dep_keys:
+        del state().function_dependencies[k]
+
+    for _, callers in state().function_dependencies.items():
+        callers -= {c for c in callers if not _is_valid_key(c)}
+
+
+def _invalidate_stale_dependency_edges() -> set[str]:
+    old_hashes = state().old_function_hashes
+    new_hashes = state().current_function_hashes
+
+    if not old_hashes:
+        return set()
+
+    all_functions = old_hashes.keys() | new_hashes.keys()
+    changed_functions = {f for f in all_functions if old_hashes.get(f) != new_hashes.get(f)}
+
+    if not changed_functions:
+        return set()
+
+    for callers in state().function_dependencies.values():
+        callers -= changed_functions
+
+    deleted_functions = old_hashes.keys() - new_hashes.keys()
+    for f in deleted_functions:
+        state().function_dependencies.pop(f, None)
+
+    return changed_functions
+
+
+def collect_or_load_stats(runner: TestRunner, invalidate_stale_callers: bool = True) -> None:
     did_load = load_stats()
 
     if not did_load:
         # Run full stats
         run_stats_collection(runner)
     else:
+        _cleanup_stale_stats()
+        if Config.get().track_dependencies and invalidate_stale_callers:
+            _invalidate_stale_dependency_edges()
+        save_stats()
+
         # Run incremental stats
         with CatchOutput(spinner_title="Listing all tests") as output_catcher:
             os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
@@ -793,6 +859,9 @@ def load_stats() -> bool:
                 mutmut.tests_by_mangled_function_name[k] |= set(v)
             mutmut.duration_by_test = data.pop("duration_by_test")
             mutmut.stats_time = data.pop("stats_time")
+            state().old_function_hashes = data.pop("function_hashes", {})
+            for k, v in data.pop("function_dependencies", {}).items():
+                state().function_dependencies[k] = set(v)
             assert not data, data
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
@@ -807,6 +876,8 @@ def save_stats() -> None:
                 tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
                 duration_by_test=mutmut.duration_by_test,
                 stats_time=mutmut.stats_time,
+                function_hashes=state().current_function_hashes,
+                function_dependencies={k: list(v) for k, v in state().function_dependencies.items()},
             ),
             f,
             indent=4,

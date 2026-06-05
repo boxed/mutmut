@@ -1,24 +1,32 @@
 import os
 import pathlib
 import tempfile
+from collections import defaultdict
 from unittest.mock import Mock
 from unittest.mock import patch
 
 import libcst as cst
 import pytest
 
+import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
+from mutmut.__main__ import _cleanup_stale_stats
+from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import orig_function_and_class_names_from_key
+from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
+from mutmut.configuration import Config
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.mutation.trampoline_templates import mangle_function_name
+from mutmut.state import reset_state
+from mutmut.state import state
 from mutmut.utils.format_utils import get_mutant_name
 
 
@@ -1193,3 +1201,95 @@ class Foo:
             "method changed — all mutants should be reset, but some were preserved: "
             + str({k: v for k, v in merged.items() if v is not None})
         )
+
+
+# --- dependency tracking tests ---
+
+
+def test_record_trampoline_hit_records_caller(monkeypatch):
+    """record_trampoline_hit(name, caller=...) stores the edge in function_dependencies."""
+
+    reset_state()
+    mutmut._stats.clear()
+
+    cfg = Mock(spec=Config)
+    cfg.max_stack_depth = -1
+    cfg.source_paths = []
+    cfg.track_dependencies = True
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
+
+    assert "my_module.x_bar" in state().function_dependencies["my_module.x_foo"]
+    reset_state()
+
+
+def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
+    """record_trampoline_hit does not record dependencies when track_dependencies=False."""
+
+    reset_state()
+    mutmut._stats.clear()
+
+    cfg = Mock(spec=Config)
+    cfg.max_stack_depth = -1
+    cfg.source_paths = []
+    cfg.track_dependencies = False
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
+
+    assert "my_module.x_foo" not in state().function_dependencies
+    reset_state()
+
+
+def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
+    """_cleanup_stale_stats removes test associations for modules not in current_function_hashes."""
+
+    reset_state()
+    old_stats = mutmut.tests_by_mangled_function_name
+    mutmut.tests_by_mangled_function_name = defaultdict(set)
+
+    state().current_function_hashes["live_mod.x_foo"] = "aabbcc"
+    mutmut.tests_by_mangled_function_name["live_mod.x_foo__mutmut_orig"] = {"test_alive"}
+    mutmut.tests_by_mangled_function_name["dead_mod.x_bar__mutmut_orig"] = {"test_dead"}
+    state().function_dependencies["live_mod.x_baz"] = {"dead_mod.x_bar"}
+
+    _cleanup_stale_stats()
+
+    assert "live_mod.x_foo__mutmut_orig" in mutmut.tests_by_mangled_function_name
+    assert "dead_mod.x_bar__mutmut_orig" not in mutmut.tests_by_mangled_function_name
+    assert "dead_mod.x_bar" not in state().function_dependencies["live_mod.x_baz"]
+
+    mutmut.tests_by_mangled_function_name = old_stats
+    reset_state()
+
+
+def test_invalidate_stale_dependency_edges_clears_changed_callers():
+    """When B's hash changes, B is removed from all caller sets in function_dependencies."""
+
+    reset_state()
+
+    state().function_dependencies["mod.x_c"] = {"mod.x_b", "mod.x_a"}
+    state().old_function_hashes["mod.x_b"] = "old"
+    state().current_function_hashes["mod.x_b"] = "new"
+    state().old_function_hashes["mod.x_a"] = "same"
+    state().current_function_hashes["mod.x_a"] = "same"
+
+    changed = _invalidate_stale_dependency_edges()
+
+    assert "mod.x_b" in changed
+    assert "mod.x_b" not in state().function_dependencies["mod.x_c"]
+    assert "mod.x_a" in state().function_dependencies["mod.x_c"]
+    reset_state()
+
+
+def test_invalidate_stale_dependency_edges_no_old_hashes_returns_empty():
+    """With no prior hashes (first run), nothing is invalidated."""
+
+    reset_state()
+    state().current_function_hashes["mod.x_foo"] = "abc"
+
+    changed = _invalidate_stale_dependency_edges()
+
+    assert changed == set()
+    reset_state()
