@@ -1,6 +1,22 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Per-function source hashing for incremental cache invalidation — only re-test mutants in functions that changed
+
+* Cross-call dependency tracking — invalidate mutants in callers when a called function changes
+
+* Use git to detect non-Python dependency file changes; falls back to a curated file list when git is unavailable
+
+* Add `cache_invalidation_exclude` config to suppress noisy files from change detection
+
+* Add `use_git_change_detection` config (default true) to opt out of git-based detection
+
+* Invalidate cached results automatically when result-affecting config fields change
+
+
 3.6.0
 ~~~~~
 
