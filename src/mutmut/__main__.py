@@ -295,13 +295,6 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
         # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
         # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
         if source_mtime < mutant_mtime:
-            # reset the mutation stats
-            source_file_mutation_data = SourceFileMutationData(path=filename)
-            source_file_mutation_data.load()
-            for key in source_file_mutation_data.exit_code_by_key:
-                source_file_mutation_data.exit_code_by_key[key] = None
-            source_file_mutation_data.save()
-
             return FileMutationResult(unmodified=True)
     except OSError:
         pass
@@ -311,12 +304,12 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
     with open(output_path, "w") as out:
         try:
-            mutant_names = write_all_mutants_to_file(out=out, source=source, filename=filename)
+            mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
         except cst.ParserSyntaxError as e:
             # if libcst cannot parse it, then copy the source without any mutations
             warnings.append(SyntaxWarning(f"Unsupported syntax in {filename} ({str(e)}), skipping"))
             out.write(source)
-            mutant_names = []
+            mutant_names, hash_by_function_name = [], {}
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -327,22 +320,33 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             invalid_syntax_error.__cause__ = e
             return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
-    source_file_mutation_data = SourceFileMutationData(path=filename)
-    source_file_mutation_data.exit_code_by_key = {
-        get_mutant_name(filename, mutant_name): None for mutant_name in mutant_names
-    }
-    source_file_mutation_data.save()
+    data = SourceFileMutationData(path=filename)
+    data.load()
+    old_hashes = data.hash_by_function_name
+    changed = {f for f, h in hash_by_function_name.items() if old_hashes.get(f) != h}
+
+    merged: dict[str, int | None] = {}
+    for name in mutant_names:
+        key = get_mutant_name(filename, name)
+        func = mangled_name_from_mutant_name(key).rpartition(".")[2]
+        if func not in hash_by_function_name or func in changed:
+            merged[key] = None
+        else:
+            merged[key] = data.exit_code_by_key.get(key)
+    data.exit_code_by_key = merged
+    data.hash_by_function_name = hash_by_function_name
+    data.save()
 
     return FileMutationResult(warnings=warnings)
 
 
-def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> Sequence[str]:
-    result, mutant_names = mutate_file_contents(
+def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> tuple[Sequence[str], dict[str, str]]:
+    result, mutant_names, hash_by_function_name = mutate_file_contents(
         str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
     )
     out.write(result)
 
-    return mutant_names
+    return mutant_names, hash_by_function_name
 
 
 def unused(*_: object) -> None:

@@ -1,4 +1,6 @@
 import os
+import pathlib
+import tempfile
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -8,12 +10,16 @@ import pytest
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import get_diff_for_mutant
+from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import run_forced_fail_test
+from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.mutation.trampoline_templates import mangle_function_name
+from mutmut.utils.format_utils import get_mutant_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -24,7 +30,7 @@ def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> li
 
 
 def mutated_module(source: str) -> str:
-    mutated_code, _ = mutate_file_contents("", source)
+    mutated_code, _, _ = mutate_file_contents("", source)
     return mutated_code
 
 
@@ -794,7 +800,7 @@ class Foo:
 
     """.strip()
 
-    mutants_source, mutant_names = mutate_file_contents("filename", source)
+    mutants_source, mutant_names, _ = mutate_file_contents("filename", source)
     assert len(mutant_names) == 2
 
     diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path="test.py").strip()
@@ -1004,3 +1010,186 @@ def x_foo__mutmut_1():
 
     mutants = mutants_for_source(source)
     assert mutants == [expected]
+
+
+# --- function hashing tests ---
+
+
+def test_compute_function_hashes_module_level():
+    source = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    hashes = compute_function_hashes(source)
+    assert "x_foo" in hashes
+    assert "x_bar" in hashes
+    assert len(hashes["x_foo"]) == 12
+    assert hashes["x_foo"] != hashes["x_bar"]
+
+
+def test_compute_function_hashes_stable():
+    source = "def foo():\n    return 1\n"
+    assert compute_function_hashes(source) == compute_function_hashes(source)
+
+
+def test_compute_function_hashes_changes_on_body_change():
+    source1 = "def foo():\n    return 1\n"
+    source2 = "def foo():\n    return 2\n"
+    assert compute_function_hashes(source1)["x_foo"] != compute_function_hashes(source2)["x_foo"]
+
+
+def test_compute_function_hashes_insensitive_to_comments():
+    source1 = "def foo():\n    return 1\n"
+    source2 = "def foo():\n    # a comment\n    return 1\n"
+    # ast.dump ignores comments, so hashes must be equal
+    assert compute_function_hashes(source1)["x_foo"] == compute_function_hashes(source2)["x_foo"]
+
+
+def test_compute_function_hashes_includes_methods():
+    source = """
+class Foo:
+    def bar(self):
+        return 1
+""".strip()
+    hashes = compute_function_hashes(source)
+    from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+
+    method_key = f"x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar"
+    assert method_key in hashes
+
+
+def test_mutate_file_contents_returns_hashes_for_mutated_functions():
+    source = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    _, mutant_names, hashes = mutate_file_contents("test.py", source)
+    assert mutant_names
+    # every mutated function appears in the hashes
+
+    for name in mutant_names:
+        func = mangled_name_from_mutant_name(name).rpartition(".")[2]
+        assert func in hashes, f"{func!r} not in hashes {set(hashes)}"
+
+
+def test_hashing_preserves_unchanged_function_results():
+    """Unchanged function's mutants keep prior results; changed function's reset."""
+    source_v1 = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    source_v2 = """
+def foo():
+    return 99
+
+def bar():
+    return 2
+""".strip()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "mutants"), exist_ok=True)
+
+        src_path = pathlib.Path(tmp) / "mymod.py"
+        src_path.write_text(source_v1)
+
+        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+
+        data = SourceFileMutationData(path=src_path)
+        data.exit_code_by_key = {}
+        for name in mutant_names_v1:
+            key = get_mutant_name(src_path, name)
+            data.exit_code_by_key[key] = 1  # fake "killed"
+        data.hash_by_function_name = hashes_v1
+        data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
+        data.meta_path.parent.mkdir(parents=True, exist_ok=True)
+        data.save()
+
+        # simulate second run with foo changed
+        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+
+        prior = SourceFileMutationData(path=src_path)
+        prior.meta_path = data.meta_path
+        prior.load()
+        old_hashes = prior.hash_by_function_name
+        changed = {f for f, h in hashes_v2.items() if old_hashes.get(f) != h}
+
+        merged: dict = {}
+        for name in mutant_names_v2:
+            key = get_mutant_name(src_path, name)
+            func = mangled_name_from_mutant_name(key).rpartition(".")[2]
+            if func not in hashes_v2 or func in changed:
+                merged[key] = None
+            else:
+                merged[key] = prior.exit_code_by_key.get(key)
+
+        foo_keys = [k for k in merged if "x_foo" in mangled_name_from_mutant_name(k)]
+        bar_keys = [k for k in merged if "x_bar" in mangled_name_from_mutant_name(k)]
+
+        assert foo_keys, "expected foo mutants"
+        assert bar_keys, "expected bar mutants"
+        assert all(merged[k] is None for k in foo_keys), "foo changed — should reset"
+        assert all(merged[k] == 1 for k in bar_keys), "bar unchanged — should preserve"
+
+
+def test_hashing_resets_changed_method(monkeypatch):
+    """A changed class method's mutants must be reset, not silently preserved."""
+    source_v1 = """
+class Foo:
+    def method(self):
+        return 1
+""".strip()
+    source_v2 = """
+class Foo:
+    def method(self):
+        return 99
+""".strip()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "mutants"), exist_ok=True)
+
+        src_path = pathlib.Path(tmp) / "mymod.py"
+
+        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+        assert mutant_names_v1, "expected at least one method mutant"
+
+        data = SourceFileMutationData(path=src_path)
+        data.exit_code_by_key = {}
+        for name in mutant_names_v1:
+            key = get_mutant_name(src_path, name)
+            data.exit_code_by_key[key] = 1
+        data.hash_by_function_name = hashes_v1
+        data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
+        data.meta_path.parent.mkdir(parents=True, exist_ok=True)
+        data.save()
+
+        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+
+        prior = SourceFileMutationData(path=src_path)
+        prior.meta_path = data.meta_path
+        prior.load()
+        old_hashes = prior.hash_by_function_name
+        changed = {f for f, h in hashes_v2.items() if old_hashes.get(f) != h}
+
+        merged: dict = {}
+        for name in mutant_names_v2:
+            key = get_mutant_name(src_path, name)
+            func = mangled_name_from_mutant_name(key).rpartition(".")[2]
+            if func not in hashes_v2 or func in changed:
+                merged[key] = None
+            else:
+                merged[key] = prior.exit_code_by_key.get(key)
+
+        assert merged, "expected merged mutants"
+        assert all(v is None for v in merged.values()), (
+            "method changed — all mutants should be reset, but some were preserved: "
+            + str({k: v for k, v in merged.items() if v is not None})
+        )

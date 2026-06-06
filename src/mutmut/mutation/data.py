@@ -12,6 +12,7 @@ class SourceFileMutationData:
         self.meta_path = Path("mutants") / (str(path) + ".meta")
         self.key_by_pid: dict[int, str] = {}
         self.exit_code_by_key: dict[str, int | None] = {}
+        self.hash_by_function_name: dict[str, str] = {}
         self.durations_by_key: dict[str, float] = {}
         self.start_time_by_pid: dict[int, datetime] = {}
         self.type_check_error_by_key: dict[str, str | None] = {}
@@ -24,6 +25,7 @@ class SourceFileMutationData:
             return
 
         self.exit_code_by_key = meta.pop("exit_code_by_key")
+        self.hash_by_function_name = meta.pop("hash_by_function_name", {})
         self.type_check_error_by_key = meta.pop("type_check_error_by_key", {})
         self.durations_by_key = meta.pop("durations_by_key")
         self.estimated_time_of_tests_by_mutant = meta.pop("estimated_durations_by_key")
@@ -52,6 +54,7 @@ class SourceFileMutationData:
             json.dump(
                 {
                     "exit_code_by_key": self.exit_code_by_key,
+                    "hash_by_function_name": self.hash_by_function_name,
                     "type_check_error_by_key": self.type_check_error_by_key,
                     "durations_by_key": self.durations_by_key,
                     "estimated_durations_by_key": self.estimated_time_of_tests_by_mutant,
