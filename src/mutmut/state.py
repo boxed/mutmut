@@ -12,7 +12,13 @@ class MutmutState:
     # changes the per-function source hashes cannot see. Empty when absent (pre-upgrade
     # cache or first run), in which case no invalidation is triggered.
     old_config_fingerprint: dict[str, str] = field(default_factory=dict)
+    # Change-detection baselines describe the state at the *last full run*. The ``old_``
+    # values are what we compare against; the others are what gets persisted (only
+    # refreshed on a full run, so a ``warn`` keeps firing until the cache is rebuilt).
     old_watched_file_hashes: dict[str, str] = field(default_factory=dict)
+    watched_file_hashes: dict[str, str] = field(default_factory=dict)
+    old_git_commit: str | None = None
+    git_commit: str | None = None
 
 
 _state: MutmutState | None = None

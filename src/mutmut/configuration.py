@@ -146,7 +146,9 @@ def _load_config() -> Config:
         track_dependencies=s("track_dependencies", True),
         dependency_tracking_depth=s("dependency_tracking_depth", None),
         cache_invalidation_files=s("cache_invalidation_files", []),
+        cache_invalidation_exclude=s("cache_invalidation_exclude", []),
         on_dependency_change=s("on_dependency_change", "warn"),
+        use_git_change_detection=s("use_git_change_detection", True),
     )
 
 
@@ -172,7 +174,9 @@ class Config:
     track_dependencies: bool
     dependency_tracking_depth: int | None
     cache_invalidation_files: list[str]
+    cache_invalidation_exclude: list[str]
     on_dependency_change: str
+    use_git_change_detection: bool
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the

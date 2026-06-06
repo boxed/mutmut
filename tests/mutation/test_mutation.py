@@ -1,5 +1,7 @@
 import os
 import pathlib
+import shutil
+import subprocess
 import tempfile
 from collections import defaultdict
 from unittest.mock import Mock
@@ -12,12 +14,17 @@ import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import _apply_config_change_invalidation
+from mutmut.__main__ import _changed_dependency_files
 from mutmut.__main__ import _cleanup_stale_stats
 from mutmut.__main__ import _invalidate_stale_dependency_edges
+from mutmut.__main__ import _refresh_change_detection_baseline
 from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
 from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import get_diff_for_mutant
+from mutmut.__main__ import git_changed_non_py_files
+from mutmut.__main__ import git_head
+from mutmut.__main__ import git_tracked_non_py_files
 from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
@@ -1321,7 +1328,9 @@ def _config_for_invalidation(**overrides):
         track_dependencies=True,
         dependency_tracking_depth=None,
         cache_invalidation_files=[],
+        cache_invalidation_exclude=[],
         on_dependency_change="warn",
+        use_git_change_detection=True,
     )
     base.update(overrides)
     return Config(**base)
@@ -1495,3 +1504,199 @@ def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
 
     assert "pyproject.toml" in hashes
     assert "query.sql" in hashes
+
+
+# --- git-based change detection (soft dependency) ---
+
+_GIT = shutil.which("git")
+requires_git = pytest.mark.skipif(_GIT is None, reason="git not installed")
+
+
+def _git(args, cwd):
+    subprocess.run([_GIT, *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+
+def _init_repo(path):
+    _git(["init"], path)
+    _git(["config", "user.email", "t@example.com"], path)
+    _git(["config", "user.name", "Test"], path)
+    _git(["config", "commit.gpgsign", "false"], path)
+
+
+def _commit_all(path, message="commit"):
+    _git(["add", "-A"], path)
+    _git(["commit", "-m", message], path)
+
+
+@requires_git
+def test_git_head_returns_commit(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("1")
+    _commit_all(tmp_path)
+
+    head = git_head()
+
+    assert head and len(head) == 40
+
+
+def test_git_head_none_outside_repo(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert git_head() is None
+
+
+@requires_git
+def test_git_changed_non_py_files_detects_and_excludes_python(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "conf.yml").write_text("a: 1")
+    (tmp_path / "mod.py").write_text("x = 1")
+    _commit_all(tmp_path)
+    base = git_head()
+
+    (tmp_path / "conf.yml").write_text("a: 2")  # tracked non-.py modified
+    (tmp_path / "mod.py").write_text("x = 2")  # tracked .py modified (excluded)
+    (tmp_path / "data.sql").write_text("select 1")  # new untracked non-.py
+
+    assert git_changed_non_py_files(base) == {"conf.yml", "data.sql"}
+
+
+@requires_git
+def test_git_changed_non_py_files_bad_ref_returns_none(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("1")
+    _commit_all(tmp_path)
+
+    assert git_changed_non_py_files("deadbeef" * 5) is None
+
+
+@requires_git
+def test_changed_dependency_files_prefers_git_over_curated_list(tmp_path, monkeypatch):
+    """Git catches a non-.py file that is not in the curated watched list."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    assert "config.yaml" in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_use_git_change_detection_false_falls_back_to_curated(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    # config.yaml is not in the curated list and git is disabled -> not reported
+    assert "config.yaml" not in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_default_exclude_drops_noisy_files(tmp_path, monkeypatch):
+    """Docs / markdown changes are dropped by the default exclude list."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "README.md").write_text("hi")
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    (tmp_path / "README.md").write_text("changed")
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    changed = _changed_dependency_files()
+    assert "config.yaml" in changed
+    assert "README.md" not in changed
+    reset_state()
+
+
+@requires_git
+def test_user_exclude_pattern_drops_file(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "noisy.json").write_text("1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
+
+    (tmp_path / "noisy.json").write_text("2")
+
+    assert "noisy.json" not in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_registered_file_is_immune_to_exclusion(tmp_path, monkeypatch):
+    """A file explicitly registered in cache_invalidation_files is never excluded."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "notes.md").write_text("a")  # *.md is excluded by default
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
+
+    (tmp_path / "notes.md").write_text("b")
+
+    assert "notes.md" in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_git_tracked_non_py_files_lists_tracked_and_excludes_python(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    (tmp_path / "mod.py").write_text("x = 1")
+    _commit_all(tmp_path)
+    (tmp_path / "data.sql").write_text("select 1")  # untracked but not ignored
+
+    tracked = git_tracked_non_py_files()
+
+    assert "config.yaml" in tracked
+    assert "data.sql" in tracked
+    assert "mod.py" not in tracked
+
+
+@requires_git
+def test_baseline_records_git_files_for_gitless_fallback(tmp_path, monkeypatch):
+    """A full run with git records all tracked non-.py files, so a later run without
+    git can still detect changes to them by re-hashing."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    (tmp_path / "README.md").write_text("hi")  # excluded by default
+    _commit_all(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    _refresh_change_detection_baseline()
+    baseline = state().watched_file_hashes
+    assert "config.yaml" in baseline  # recorded for the gitless fallback
+    assert "README.md" not in baseline  # noise stays out of the baseline
+
+    # simulate a later run in an environment without git
+    state().old_watched_file_hashes = baseline
+    state().old_git_commit = None
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    assert "config.yaml" in _changed_dependency_files()
+    reset_state()

@@ -74,7 +74,9 @@ class TestShouldMutateFile:
             track_dependencies=True,
             dependency_tracking_depth=None,
             cache_invalidation_files=[],
+            cache_invalidation_exclude=[],
             on_dependency_change="warn",
+            use_git_change_detection=True,
         )
 
     def test_ignores_non_python_files(self):

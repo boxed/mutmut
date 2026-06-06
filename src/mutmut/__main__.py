@@ -835,16 +835,164 @@ _DEFAULT_WATCHED_FILES = (
     "Pipfile.lock",
 )
 
+# Files that practically never affect test behavior. Git change detection otherwise
+# surfaces every non-.py file in the repo, so these are dropped to cut the noise.
+# Users extend this via the ``cache_invalidation_exclude`` config; anything they
+# explicitly register in ``cache_invalidation_files`` is never excluded. Patterns are
+# matched with fnmatch (``*`` spans path separators).
+_DEFAULT_INVALIDATION_EXCLUDE = (
+    "*.md",
+    "*.rst",
+    "LICENSE*",
+    "COPYING*",
+    "NOTICE*",
+    "AUTHORS*",
+    "CHANGELOG*",
+    "CHANGES*",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+    ".pre-commit-config.yaml",
+    "docs/*",
+    "doc/*",
+)
+
+
+def _hash_files(paths: Iterable[str]) -> dict[str, str]:
+    """Content hash each existing path; missing files are simply omitted."""
+    hashes: dict[str, str] = {}
+    for p in paths:
+        path = Path(p)
+        if path.is_file():
+            hashes[p] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    return hashes
+
 
 def compute_watched_file_hashes() -> dict[str, str]:
     """Map watched-file path -> content hash for the default set plus user globs."""
     patterns = list(_DEFAULT_WATCHED_FILES) + list(Config.get().cache_invalidation_files)
-    hashes: dict[str, str] = {}
-    for pattern in patterns:
-        for path in sorted(Path(".").glob(pattern)):
-            if path.is_file():
-                hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    paths = [str(path) for pattern in patterns for path in sorted(Path(".").glob(pattern))]
+    return _hash_files(paths)
+
+
+def _run_git(args: list[str]) -> str | None:
+    """Run a git command at the project root. Returns stdout, or None on any failure
+    (git not installed, not a repo, unknown ref, ...). Git is a soft dependency: this
+    never raises so callers can silently fall back to content hashing.
+    """
+    try:
+        result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def git_head() -> str | None:
+    """The current HEAD commit, or None when git / a repo / a commit is unavailable."""
+    out = _run_git(["rev-parse", "HEAD"])
+    return out.strip() if out else None
+
+
+def git_changed_non_py_files(since_ref: str) -> set[str] | None:
+    """Non-.py files changed since ``since_ref`` (tracked diffs against the working tree,
+    including uncommitted edits, plus new untracked files). ``.py`` files are excluded
+    because the per-function hashes already track them. Returns None if git cannot answer.
+    """
+    diff = _run_git(["diff", "--name-only", since_ref, "--"])
+    if diff is None:
+        return None
+    untracked = _run_git(["ls-files", "--others", "--exclude-standard"]) or ""
+    files = {line for line in (diff + "\n" + untracked).splitlines() if line}
+    return {f for f in files if not f.endswith(".py")}
+
+
+def git_tracked_non_py_files() -> set[str] | None:
+    """Every non-.py file git knows about (tracked + untracked-not-ignored), or None if
+    git cannot answer. Recorded on a full run so a later git-less run can still detect
+    changes to these files by re-hashing them.
+    """
+    out = _run_git(["ls-files", "--cached", "--others", "--exclude-standard"])
+    if out is None:
+        return None
+    return {line for line in out.splitlines() if line and not line.endswith(".py")}
+
+
+def _changed_hashed_files(restrict_to: list[str] | None = None) -> set[str]:
+    """Baseline files whose content changed, by re-hashing them now.
+
+    Re-hashes every path in the stored baseline (which, after a full run with git, is
+    the comprehensive set of non-.py files) plus any newly-appearing curated/user-glob
+    files. This is how a git-less run still detects changes to files git discovered.
+    ``restrict_to`` limits the result to paths matching those glob patterns.
+    """
+    old = state().old_watched_file_hashes
+    if not old:
+        return set()
+    new = _hash_files(old.keys())
+    new.update(compute_watched_file_hashes())  # pick up newly-added curated/user files
+    changed = {p for p in old.keys() | new.keys() if old.get(p) != new.get(p)}
+    if restrict_to is not None:
+        changed = {p for p in changed if any(fnmatch.fnmatch(p, pat) for pat in restrict_to)}
+    return changed
+
+
+def _is_excluded(path: str, config: Config) -> bool:
+    """Whether ``path`` should be dropped from change reporting as noise.
+
+    Files explicitly registered in ``cache_invalidation_files`` are never excluded.
+    """
+    if any(fnmatch.fnmatch(path, pat) for pat in config.cache_invalidation_files):
+        return False
+    patterns = list(_DEFAULT_INVALIDATION_EXCLUDE) + list(config.cache_invalidation_exclude)
+    return any(fnmatch.fnmatch(path, pat) for pat in patterns)
+
+
+def _changed_dependency_files() -> set[str]:
+    """Files changed since the last full run that the per-function hashes cannot track.
+
+    Prefers git (catches every non-.py file in the repo and respects .gitignore) and
+    falls back to hashing a curated set of build/dependency files when git is
+    unavailable. Silent on the first run (no baseline to compare against). Noisy files
+    (see ``_DEFAULT_INVALIDATION_EXCLUDE`` and ``cache_invalidation_exclude``) are dropped.
+    """
+    config = Config.get()
+    old_commit = state().old_git_commit
+    if config.use_git_change_detection and old_commit is not None:
+        git_changed = git_changed_non_py_files(old_commit)
+        if git_changed is not None:
+            # also catch explicitly-registered files that git ignores
+            changed = git_changed | _changed_hashed_files(restrict_to=config.cache_invalidation_files)
+        else:
+            changed = _changed_hashed_files()
+    else:
+        changed = _changed_hashed_files()
+    return {p for p in changed if not _is_excluded(p, config)}
+
+
+def _compute_baseline_file_hashes() -> dict[str, str]:
+    """The set of non-.py files to track, hashed. Always includes the curated/user-glob
+    files; when git is available it also records every tracked non-.py file (minus noise)
+    so a later git-less run can still detect changes to them.
+    """
+    config = Config.get()
+    hashes = compute_watched_file_hashes()
+    if config.use_git_change_detection:
+        tracked = git_tracked_non_py_files()
+        if tracked is not None:
+            hashes.update(_hash_files(sorted(p for p in tracked if not _is_excluded(p, config))))
     return hashes
+
+
+def _refresh_change_detection_baseline() -> None:
+    """Snapshot the current git commit and tracked-file hashes as the new baseline.
+
+    Only called on a full run; cached runs keep the previous baseline so a ``warn``
+    keeps firing until the cache is actually rebuilt.
+    """
+    state().git_commit = git_head()
+    state().watched_file_hashes = _compute_baseline_file_hashes()
 
 
 def _reset_mutant_results(should_reset: Callable[[str, int], bool]) -> int:
@@ -871,27 +1019,24 @@ def _reset_mutant_results(should_reset: Callable[[str, int], bool]) -> int:
 
 
 def _report_watched_file_changes() -> bool:
-    """Surface changes to watched config/dependency files.
+    """Surface non-Python files that changed since the last full run.
 
     Returns True only when the configured policy is ``rerun`` and something changed,
-    asking the caller to reset all results. Silent when no prior hashes exist.
+    asking the caller to reset all results. Silent when there is no baseline yet.
     """
-    old = state().old_watched_file_hashes
-    if not old:
-        return False
-    new = compute_watched_file_hashes()
-    changed = sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
+    changed = _changed_dependency_files()
     if not changed:
         return False
 
     policy = Config.get().on_dependency_change
     if policy == "ignore":
         return False
+    listed = sorted(changed)
     if policy == "rerun":
-        print(f"    {len(changed)} watched file(s) changed; rerunning all mutants: {', '.join(changed)}")
+        print(f"    {len(listed)} non-Python file(s) changed; rerunning all mutants: {', '.join(listed)}")
         return True
     # default: warn but keep the cache
-    print(f"    Warning: {len(changed)} watched file(s) changed since the last run: {', '.join(changed)}")
+    print(f"    Warning: {len(listed)} non-Python file(s) changed since the last full run: {', '.join(listed)}")
     print("    These cannot be tracked for behavioral changes, so cached results were kept.")
     print('    If the changes affect your tests, delete the mutants/ directory or set on_dependency_change = "rerun".')
     return False
@@ -945,6 +1090,8 @@ def collect_or_load_stats(
         force_full = _apply_config_change_invalidation(mutants_caught_by_type_checker or {})
 
     if not did_load or force_full:
+        # A full run rebuilds the cache, so reset the change-detection baseline to "now".
+        _refresh_change_detection_baseline()
         # Run full stats
         run_stats_collection(runner)
     else:
@@ -986,6 +1133,10 @@ def load_stats() -> bool:
                 state().function_dependencies[k] = set(v)
             state().old_config_fingerprint = data.pop("config_fingerprint", {})
             state().old_watched_file_hashes = data.pop("watched_file_hashes", {})
+            state().old_git_commit = data.pop("git_commit", None)
+            # Preserve the loaded baseline; only a full run refreshes it.
+            state().watched_file_hashes = state().old_watched_file_hashes
+            state().git_commit = state().old_git_commit
             assert not data, data
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
@@ -1003,7 +1154,8 @@ def save_stats() -> None:
                 function_hashes=state().current_function_hashes,
                 function_dependencies={k: list(v) for k, v in state().function_dependencies.items()},
                 config_fingerprint=Config.get().config_fingerprint(),
-                watched_file_hashes=compute_watched_file_hashes(),
+                watched_file_hashes=state().watched_file_hashes,
+                git_commit=state().git_commit,
             ),
             f,
             indent=4,
