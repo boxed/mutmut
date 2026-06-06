@@ -1,22 +1,45 @@
 Changelog
 ---------
 
-Unreleased
-~~~~~~~~~~
+3.6.0
+~~~~~
 
 * Add `# pragma: no mutate block` and `# pragma: no mutate start/end` comments
+
 * Add `do_not_mutate_patterns` to disable mutations with a regex
+
 * Add `only_mutate` config to select which files get mutated
+
 * Also mutate methods decorated with (only) `@staticmethod` or `@classmethod`
+
 * Add `use_setproctitle` option to disable process renaming (automatically disabled on MacOS)
+
 * Add (unstable) `timeout_multiplier` and `timeout_constant` options
+
 * Rename `paths_to_mutate` to `source_paths`
+
+* Deprecate `tests_dir` in favor of `pytest_add_cli_args_test_selection`
+
 * Change `max_stack_depth` to only consider functions inside `source_paths`
+
+* Disable mutation of enums and `@staticmethod`/`@classmethod` methods when `type_check_command` is set, as these mutations break type checking
+
 * Fix mutation for enum class methods
+
 * Fix mutate_only_covered_lines when project uses custom coverage.py config
+
 * Fix execution when running mutmut via `python -m mutmut run`
+
 * Fix mutation of `class _SomePrivateClass` class methods
+
 * Fix mutation of default args
+
+* Fix `mutmut browse` crash when no file is selected yet
+
+* Fix timeout checker looking up the wrong mutant's expected test time, which could cause mutants to hang
+
+* Compare stats paths after resolving symlinks
+
 * Warn when mutmut cannot match mutants with the collected stats
 
 3.5.0
