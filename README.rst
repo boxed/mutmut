@@ -401,6 +401,49 @@ You can add and override pytest arguments:
     also_copy = ["mutmut_pytest.ini"]
 
 
+Detecting dependency and config changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Between runs, mutmut only re-tests mutants in functions whose source changed.
+Changes outside your Python source — a dependency upgrade, a data file, a
+config file — cannot be tied to a function, so they would otherwise be missed
+and you would get cached results that no longer reflect reality.
+
+To catch this, mutmut hashes a set of build and dependency files and warns you
+when any of them change since the last run. By default it watches:
+
+- `pyproject.toml`
+- `setup.cfg`
+- `setup.py`
+- `requirements*.txt`
+- `poetry.lock`
+- `uv.lock`
+- `Pipfile`
+- `Pipfile.lock`
+
+You can watch additional files (for example data files your tests depend on)
+with the `cache_invalidation_files` config, which accepts glob patterns
+resolved against the project root:
+
+.. code-block:: toml
+
+    cache_invalidation_files = [ "queries/*.sql", "config/*.yaml" ]
+
+When a watched file changes, `on_dependency_change` controls what happens:
+
+- `warn` (default): list the changed files and keep the cache.
+- `rerun`: re-test all mutants.
+- `ignore`: do nothing.
+
+.. code-block:: toml
+
+    on_dependency_change = "warn"
+
+Changes to mutmut's own result-affecting config (such as `pytest_add_cli_args`,
+`type_check_command`, or the timeout settings) are always detected and
+invalidate the affected cached results automatically.
+
+
 Unstable configs
 ~~~~~~~~~~~~~~~~
 

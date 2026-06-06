@@ -73,6 +73,8 @@ class TestShouldMutateFile:
             use_setproctitle=False,
             track_dependencies=True,
             dependency_tracking_depth=None,
+            cache_invalidation_files=[],
+            on_dependency_change="warn",
         )
 
     def test_ignores_non_python_files(self):

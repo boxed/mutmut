@@ -11,8 +11,12 @@ import pytest
 import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
+from mutmut.__main__ import _apply_config_change_invalidation
 from mutmut.__main__ import _cleanup_stale_stats
 from mutmut.__main__ import _invalidate_stale_dependency_edges
+from mutmut.__main__ import _report_watched_file_changes
+from mutmut.__main__ import _reset_mutant_results
+from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import orig_function_and_class_names_from_key
@@ -1293,3 +1297,201 @@ def test_invalidate_stale_dependency_edges_no_old_hashes_returns_empty():
 
     assert changed == set()
     reset_state()
+
+
+# --- config / dependency change invalidation tests (Tier 1 & 2) ---
+
+
+def _config_for_invalidation(**overrides):
+    base = dict(
+        also_copy=[],
+        only_mutate=[],
+        do_not_mutate=[],
+        do_not_mutate_patterns=[],
+        max_stack_depth=-1,
+        debug=False,
+        source_paths=[pathlib.Path("src")],
+        pytest_add_cli_args=[],
+        pytest_add_cli_args_test_selection=[],
+        mutate_only_covered_lines=False,
+        timeout_multiplier=15.0,
+        timeout_constant=1.0,
+        type_check_command=[],
+        use_setproctitle=False,
+        track_dependencies=True,
+        dependency_tracking_depth=None,
+        cache_invalidation_files=[],
+        on_dependency_change="warn",
+    )
+    base.update(overrides)
+    return Config(**base)
+
+
+def _write_meta(exit_code_by_key, src_rel="src/mymod.py"):
+    """Create a source file under a mutatable source dir plus its .meta, return the path."""
+    src = pathlib.Path(src_rel)
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("def foo():\n    return 1\n")
+    m = SourceFileMutationData(path=src)
+    m.exit_code_by_key = dict(exit_code_by_key)
+    m.meta_path.parent.mkdir(parents=True, exist_ok=True)
+    m.save()
+    return src
+
+
+def _load_results(src_rel="src/mymod.py"):
+    m = SourceFileMutationData(path=pathlib.Path(src_rel))
+    m.load()
+    return m.exit_code_by_key
+
+
+def test_reset_mutant_results_resets_only_matching(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    _write_meta({"a": 36, "b": 0, "c": None})  # timeout, survived, uncached
+
+    reset = _reset_mutant_results(lambda key, exit_code: exit_code == 36)
+
+    assert reset == 1
+    results = _load_results()
+    assert results == {"a": None, "b": 0, "c": None}
+
+
+def test_timeout_config_change_resets_only_timeouts(tmp_path, monkeypatch):
+    """Changing timeout config invalidates timeout verdicts but keeps killed/survived."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    old_cfg = _config_for_invalidation()
+    state().old_config_fingerprint = old_cfg.config_fingerprint()
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(timeout_multiplier=30.0))
+    _write_meta({"timed_out": 36, "killed": 1, "survived": 0})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"timed_out": None, "killed": 1, "survived": 0}
+    reset_state()
+
+
+def test_type_check_config_change_resets_symmetric_difference(tmp_path, monkeypatch):
+    """A type-check command change re-tests verdicts whose type-check status flips."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    old_cfg = _config_for_invalidation(type_check_command=["old"])
+    state().old_config_fingerprint = old_cfg.config_fingerprint()
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(type_check_command=["new"]))
+    # was_caught: cached 37 but no longer caught -> reset; now_caught: survived but newly caught -> reset;
+    # still_caught: 37 and still caught -> keep; untouched: survived and not caught -> keep
+    _write_meta({"was_caught": 37, "now_caught": 0, "still_caught": 37, "untouched": 0})
+
+    force_full = _apply_config_change_invalidation({"now_caught": object(), "still_caught": object()})
+
+    assert force_full is False
+    assert _load_results() == {
+        "was_caught": None,
+        "now_caught": None,
+        "still_caught": 37,
+        "untouched": 0,
+    }
+    reset_state()
+
+
+def test_global_pytest_change_forces_full_rerun(tmp_path, monkeypatch):
+    """A pytest-arg change resets all results and requests full stats recollection."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    state().old_config_fingerprint = _config_for_invalidation().config_fingerprint()
+    mutmut.duration_by_test["test_x"] = 1.0
+    mutmut.tests_by_mangled_function_name["mod.x_foo"] = {"test_x"}
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    _write_meta({"a": 1, "b": 0, "c": 36})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is True
+    assert all(v is None for v in _load_results().values())
+    assert not mutmut.duration_by_test
+    assert not mutmut.tests_by_mangled_function_name
+    reset_state()
+
+
+def test_no_config_change_keeps_all_results(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    cfg = _config_for_invalidation()
+    state().old_config_fingerprint = cfg.config_fingerprint()
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+    _write_meta({"a": 1, "b": 0, "c": 36})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"a": 1, "b": 0, "c": 36}
+    reset_state()
+
+
+def test_absent_fingerprint_is_silent(tmp_path, monkeypatch):
+    """A pre-upgrade cache (no stored fingerprint) triggers no invalidation."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    # old_config_fingerprint left empty
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    _write_meta({"a": 1, "b": 0})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"a": 1, "b": 0}
+    reset_state()
+
+
+def test_watched_file_change_warn_keeps_cache(tmp_path, monkeypatch, capsys):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
+    state().old_watched_file_hashes = {"pyproject.toml": "deadbeef0000"}
+
+    rerun = _report_watched_file_changes()
+
+    assert rerun is False
+    assert "pyproject.toml" in capsys.readouterr().out
+    reset_state()
+
+
+def test_watched_file_change_rerun_policy(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(on_dependency_change="rerun"))
+    pathlib.Path("uv.lock").write_text("changed")
+    state().old_watched_file_hashes = {"uv.lock": "deadbeef0000"}
+
+    assert _report_watched_file_changes() is True
+    reset_state()
+
+
+def test_watched_file_absent_old_hashes_is_silent(tmp_path, monkeypatch, capsys):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
+    # old_watched_file_hashes left empty
+
+    assert _report_watched_file_changes() is False
+    assert capsys.readouterr().out == ""
+    reset_state()
+
+
+def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["*.sql"]))
+    pathlib.Path("pyproject.toml").write_text("x")
+    pathlib.Path("query.sql").write_text("select 1")
+
+    hashes = compute_watched_file_hashes()
+
+    assert "pyproject.toml" in hashes
+    assert "query.sql" in hashes

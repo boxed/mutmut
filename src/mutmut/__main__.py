@@ -22,6 +22,7 @@ if platform.system() == "Windows":
 import ast
 import fnmatch
 import gc
+import hashlib
 import inspect
 import itertools
 import json
@@ -62,6 +63,7 @@ from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import Config
 from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.file_mutation import FailedTypeCheckMutant
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
@@ -819,10 +821,130 @@ def _invalidate_stale_dependency_edges() -> set[str]:
     return changed_functions
 
 
-def collect_or_load_stats(runner: TestRunner, invalidate_stale_callers: bool = True) -> None:
+# Dependency / build files whose changes the per-function source hashes cannot see.
+# Globs are resolved against the project root; missing files are skipped. Users can
+# extend this via the ``cache_invalidation_files`` config.
+_DEFAULT_WATCHED_FILES = (
+    "pyproject.toml",
+    "setup.cfg",
+    "setup.py",
+    "requirements*.txt",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile",
+    "Pipfile.lock",
+)
+
+
+def compute_watched_file_hashes() -> dict[str, str]:
+    """Map watched-file path -> content hash for the default set plus user globs."""
+    patterns = list(_DEFAULT_WATCHED_FILES) + list(Config.get().cache_invalidation_files)
+    hashes: dict[str, str] = {}
+    for pattern in patterns:
+        for path in sorted(Path(".").glob(pattern)):
+            if path.is_file():
+                hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    return hashes
+
+
+def _reset_mutant_results(should_reset: Callable[[str, int], bool]) -> int:
+    """Reset cached verdicts to ``None`` (forcing a re-test) where ``should_reset`` holds.
+
+    ``should_reset`` only sees already-decided mutants (``exit_code`` is not ``None``).
+    """
+    count = 0
+    for path in walk_mutatable_files():
+        meta_path = Path("mutants") / (str(path) + ".meta")
+        if not meta_path.exists():
+            continue
+        m = SourceFileMutationData(path=path)
+        m.load()
+        dirty = False
+        for key, exit_code in list(m.exit_code_by_key.items()):
+            if exit_code is not None and should_reset(key, exit_code):
+                m.exit_code_by_key[key] = None
+                dirty = True
+                count += 1
+        if dirty:
+            m.save()
+    return count
+
+
+def _report_watched_file_changes() -> bool:
+    """Surface changes to watched config/dependency files.
+
+    Returns True only when the configured policy is ``rerun`` and something changed,
+    asking the caller to reset all results. Silent when no prior hashes exist.
+    """
+    old = state().old_watched_file_hashes
+    if not old:
+        return False
+    new = compute_watched_file_hashes()
+    changed = sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
+    if not changed:
+        return False
+
+    policy = Config.get().on_dependency_change
+    if policy == "ignore":
+        return False
+    if policy == "rerun":
+        print(f"    {len(changed)} watched file(s) changed; rerunning all mutants: {', '.join(changed)}")
+        return True
+    # default: warn but keep the cache
+    print(f"    Warning: {len(changed)} watched file(s) changed since the last run: {', '.join(changed)}")
+    print("    These cannot be tracked for behavioral changes, so cached results were kept.")
+    print('    If the changes affect your tests, delete the mutants/ directory or set on_dependency_change = "rerun".')
+    return False
+
+
+def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, object]) -> bool:
+    """Reset only the cached verdicts a config / dependency change could have invalidated.
+
+    Returns True if a full stats recollection is required (a global pytest config change
+    or an opt-in dependency rerun), in which case all results have already been reset.
+    """
+    old_fp = state().old_config_fingerprint
+    new_fp = Config.get().config_fingerprint()
+    changed_groups = {g for g in new_fp if old_fp.get(g) != new_fp[g]} if old_fp else set()
+
+    dependency_rerun = _report_watched_file_changes()
+
+    # Global groups change how *every* test runs / which tests map to a function, so no
+    # subset of results is safe to keep -> full reset and full stats recollection.
+    if changed_groups & {"test_execution", "test_selection"} or dependency_rerun:
+        _reset_mutant_results(lambda key, exit_code: True)
+        mutmut.duration_by_test.clear()
+        mutmut.tests_by_mangled_function_name.clear()
+        state().function_dependencies.clear()
+        return True
+
+    # Timeout config only reclassifies timeouts; keep every other verdict.
+    if "timeout" in changed_groups:
+        _reset_mutant_results(lambda key, exit_code: status_by_exit_code[exit_code] == "timeout")
+
+    # The type-check pre-filter runs fresh every run; only verdicts whose type-check
+    # status flips are stale -> reset the symmetric difference of old (==37) and new.
+    if "type_check" in changed_groups:
+        caught = set(mutants_caught_by_type_checker)
+        _reset_mutant_results(lambda key, exit_code: (exit_code == 37) != (key in caught))
+
+    return False
+
+
+def collect_or_load_stats(
+    runner: TestRunner,
+    *,
+    mutants_caught_by_type_checker: dict[str, Any] | None = None,
+    apply_config_invalidation: bool = False,
+    invalidate_stale_callers: bool = True,
+) -> None:
     did_load = load_stats()
 
-    if not did_load:
+    force_full = False
+    if did_load and apply_config_invalidation:
+        force_full = _apply_config_change_invalidation(mutants_caught_by_type_checker or {})
+
+    if not did_load or force_full:
         # Run full stats
         run_stats_collection(runner)
     else:
@@ -862,6 +984,8 @@ def load_stats() -> bool:
             state().old_function_hashes = data.pop("function_hashes", {})
             for k, v in data.pop("function_dependencies", {}).items():
                 state().function_dependencies[k] = set(v)
+            state().old_config_fingerprint = data.pop("config_fingerprint", {})
+            state().old_watched_file_hashes = data.pop("watched_file_hashes", {})
             assert not data, data
             did_load = True
     except (FileNotFoundError, JSONDecodeError):
@@ -878,6 +1002,8 @@ def save_stats() -> None:
                 stats_time=mutmut.stats_time,
                 function_hashes=state().current_function_hashes,
                 function_dependencies={k: list(v) for k, v in state().function_dependencies.items()},
+                config_fingerprint=Config.get().config_fingerprint(),
+                watched_file_hashes=compute_watched_file_hashes(),
             ),
             f,
             indent=4,
@@ -1101,11 +1227,10 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         f"    done in {round(time.total_seconds() * 1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
     )
 
+    mutants_caught_by_type_checker: dict[str, FailedTypeCheckMutant] = {}
     if Config.get().type_check_command:
         with CatchOutput(spinner_title="Filtering mutations with type checker"):
             mutants_caught_by_type_checker = filter_mutants_with_type_checker()
-    else:
-        mutants_caught_by_type_checker = {}
 
     # TODO: config/option for runner
     # runner = HammettRunner()
@@ -1114,7 +1239,11 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     # TODO: run these steps only if we have mutants to test
 
-    collect_or_load_stats(runner)
+    collect_or_load_stats(
+        runner,
+        mutants_caught_by_type_checker=mutants_caught_by_type_checker,
+        apply_config_invalidation=True,
+    )
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
