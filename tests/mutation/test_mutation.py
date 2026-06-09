@@ -1326,7 +1326,7 @@ def _config_for_invalidation(**overrides):
         type_check_command=[],
         use_setproctitle=False,
         track_dependencies=True,
-        dependency_tracking_depth=None,
+        dependency_tracking_depth=-1,
         cache_invalidation_files=[],
         cache_invalidation_exclude=[],
         on_dependency_change="warn",

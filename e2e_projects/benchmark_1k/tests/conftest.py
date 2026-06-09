@@ -28,4 +28,4 @@ def benchmark_test_delay():
         jittered = random.gauss(_test_delay, _test_delay * 0.1)
         # Clamp to 0.01s
         time.sleep(max(0.01, jittered))
-        yield
+    yield

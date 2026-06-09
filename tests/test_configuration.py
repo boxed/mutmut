@@ -72,7 +72,7 @@ class TestShouldMutateFile:
             type_check_command=[],
             use_setproctitle=False,
             track_dependencies=True,
-            dependency_tracking_depth=None,
+            dependency_tracking_depth=-1,
             cache_invalidation_files=[],
             cache_invalidation_exclude=[],
             on_dependency_change="warn",
@@ -349,7 +349,7 @@ timeout_constant = 0.5
         assert config.timeout_constant == 1.0
         assert config.type_check_command == []
         assert config.track_dependencies is True
-        assert config.dependency_tracking_depth is None
+        assert config.dependency_tracking_depth == -1
 
     def test_also_copy_includes_defaults(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()

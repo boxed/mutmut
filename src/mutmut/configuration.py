@@ -144,7 +144,7 @@ def _load_config() -> Config:
             "use_setproctitle", not platform.system() == "Darwin"
         ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
         track_dependencies=s("track_dependencies", True),
-        dependency_tracking_depth=s("dependency_tracking_depth", None),
+        dependency_tracking_depth=s("dependency_tracking_depth", -1),
         cache_invalidation_files=s("cache_invalidation_files", []),
         cache_invalidation_exclude=s("cache_invalidation_exclude", []),
         on_dependency_change=s("on_dependency_change", "warn"),
@@ -172,7 +172,7 @@ class Config:
     type_check_command: list[str]
     use_setproctitle: bool
     track_dependencies: bool
-    dependency_tracking_depth: int | None
+    dependency_tracking_depth: int
     cache_invalidation_files: list[str]
     cache_invalidation_exclude: list[str]
     on_dependency_change: str

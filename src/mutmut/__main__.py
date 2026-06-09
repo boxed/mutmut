@@ -305,7 +305,12 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
         # source_mtime == mutant_mtime: only copied, otherwise the mutant file is untouched
         # source_mtime < mutant_mtime: the mutations have been saved after copying; source file untouched
         if source_mtime < mutant_mtime:
-            return FileMutationResult(unmodified=True)
+            data = SourceFileMutationData(path=filename)
+            data.load()
+            return FileMutationResult(
+                unmodified=True,
+                current_hashes={get_mutant_name(filename, func): h for func, h in data.hash_by_function_name.items()},
+            )
     except OSError:
         pass
 
@@ -347,11 +352,8 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
     data.hash_by_function_name = hash_by_function_name
     data.save()
 
-    module_name = strip_prefix(str(filename)[: -len(filename.suffix)].replace(os.sep, "."), prefix="src.")
-    current_hashes_qualified = {
-        f"{module_name}.{func}".replace(".__init__.", "."): h for func, h in hash_by_function_name.items()
-    }
-    changed_functions_qualified = {f"{module_name}.{func}".replace(".__init__.", ".") for func in changed}
+    current_hashes_qualified = {get_mutant_name(filename, func): h for func, h in hash_by_function_name.items()}
+    changed_functions_qualified = {get_mutant_name(filename, func) for func in changed}
 
     return FileMutationResult(
         warnings=warnings,
@@ -744,7 +746,7 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
     os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     depth = Config.get().dependency_tracking_depth
-    os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth) if depth is not None else "-1"
+    os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth)
     start_cpu_time = process_time()
 
     with CatchOutput(spinner_title="Running stats") as output_catcher:
