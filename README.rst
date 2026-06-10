@@ -47,7 +47,7 @@ You can get started with a simple:
     pip install mutmut
     mutmut run
 
-This will by run pytest on tests in the "tests" or "test" folder and
+This will run pytest on tests in the "tests" or "test" folder and
 it will try to figure out where the code to mutate is.
 
 
@@ -511,7 +511,7 @@ This section describes how to work with mutmut to enhance your test suite.
 4. Press `r` to rerun the mutant and see if you successfully managed to kill it.
 
 Mutmut keeps the data of what it has done and the mutants in the `mutants/`
-directory.If  you want to make sure you run a full mutmut run you can delete
+directory. If you want to make sure you run a full mutmut run you can delete
 this directory to start from scratch.
 
 Contributing to Mutmut
