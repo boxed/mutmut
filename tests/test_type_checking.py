@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import pytest
 from inline_snapshot import snapshot
 
+from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.type_checking import TypeCheckingError
 from mutmut.type_checking import parse_mypy_report
 from mutmut.type_checking import parse_pyrefly_report
@@ -104,6 +106,49 @@ def test_pyrefly_parsing():
             ),
         ]
     )
+
+
+def test_filter_mutants_ignores_type_errors_in_files_without_mutants(tmp_path, monkeypatch):
+    project = tmp_path
+    copied_file = project / "mutants" / "src" / "consumer.py"
+    copied_file.parent.mkdir(parents=True)
+    copied_file.write_text("def use_kwargs(kwargs):\n    return kwargs\n")
+    error = TypeCheckingError(
+        file_path=copied_file,
+        line_number=2,
+        error_description="Unpacked keyword argument object is not assignable",
+    )
+
+    monkeypatch.chdir(project)
+    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command: [error])
+
+    assert filter_mutants_with_type_checker() == {}
+
+
+def test_filter_mutants_still_raises_for_unowned_errors_in_mutated_files(tmp_path, monkeypatch):
+    project = tmp_path
+    mutated_file = project / "mutants" / "src" / "module.py"
+    mutated_file.parent.mkdir(parents=True)
+    mutated_file.write_text(
+        "from mutmut.mutation import _mutmut_mutated\n"
+        "\n"
+        "def helper(value):\n"
+        "    return value\n"
+        "\n"
+        "def x_mutate_me__mutmut_1():\n"
+        "    return 2\n"
+    )
+    error = TypeCheckingError(
+        file_path=mutated_file,
+        line_number=3,
+        error_description="helper type changed unexpectedly",
+    )
+
+    monkeypatch.chdir(project)
+    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command: [error])
+
+    with pytest.raises(Exception, match="Could not find mutant for type error"):
+        filter_mutants_with_type_checker()
 
 
 def _make_pahts_relative(errors: list[TypeCheckingError]):
