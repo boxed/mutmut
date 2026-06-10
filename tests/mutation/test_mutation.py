@@ -1226,6 +1226,7 @@ def test_record_trampoline_hit_records_caller(monkeypatch):
     cfg = Mock(spec=Config)
     cfg.max_stack_depth = -1
     cfg.source_paths = []
+    cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = True
     monkeypatch.setattr(Config, "get", lambda: cfg)
 
@@ -1244,6 +1245,7 @@ def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
     cfg = Mock(spec=Config)
     cfg.max_stack_depth = -1
     cfg.source_paths = []
+    cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = False
     monkeypatch.setattr(Config, "get", lambda: cfg)
 
@@ -1318,6 +1320,7 @@ def _config_for_invalidation(**overrides):
         max_stack_depth=-1,
         debug=False,
         source_paths=[pathlib.Path("src")],
+        resolved_mutated_source_paths=[(pathlib.Path("mutants") / "src").absolute()],
         pytest_add_cli_args=[],
         pytest_add_cli_args_test_selection=[],
         mutate_only_covered_lines=False,

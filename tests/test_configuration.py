@@ -64,6 +64,7 @@ class TestShouldMutateFile:
             max_stack_depth=-1,
             debug=False,
             source_paths=[],
+            resolved_mutated_source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
             mutate_only_covered_lines=False,

@@ -234,3 +234,7 @@ def divide(a: int, b: int):
             ),
         )
         raise Exception(f'Cannot divide if {b=} cannot be 0!!!')
+
+def write_into_file(path: str):
+    with open(path, 'w') as file:
+        file.write("Hello")
