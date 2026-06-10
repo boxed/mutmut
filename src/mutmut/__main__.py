@@ -121,7 +121,7 @@ exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status i
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
 
-    source_paths = [p.resolve(strict=True) for p in Config.get().source_paths]
+    mutated_source_paths = Config.get().resolved_mutated_source_paths
 
     if Config.get().max_stack_depth != -1:
         f = inspect.currentframe()
@@ -132,7 +132,7 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
             if "pytest" in filename or "hammett" in filename or "unittest" in filename:
                 break
             file_path = Path(filename).resolve(strict=True)
-            if any(path in file_path.parents for path in source_paths):
+            if any(path in file_path.parents for path in mutated_source_paths):
                 # only include stack frames of user-code; exclude mutmut and 3rd library stack frames
                 c -= 1
 

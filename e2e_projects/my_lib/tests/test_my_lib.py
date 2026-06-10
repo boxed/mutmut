@@ -172,3 +172,13 @@ def test_private_class_classmethod():
 def test_divide():
     with pytest.raises(Exception, match='.*cannot be 0!!!'):
         divide(1, 0)
+
+def test_tmp_dir_switch(tmpdir):
+    """Verify that mutmut works with the tmpdir fixture"""
+    # change to tmp directory
+    with tmpdir.as_cwd():
+        write_into_file("foo.txt")
+
+        with open("foo.txt", "r", encoding='utf-8') as file:
+            data = file.read()
+            assert "Hello" in data

@@ -103,6 +103,9 @@ def _load_config() -> Config:
     source_paths = [Path(path) for path in s("source_paths", [])]
     source_paths = source_paths or paths_to_mutate or [Path(path) for path in _guess_source_paths()]
 
+    # We resolve at startup, s.t. we are still in the current working directory (and no tests modified the directory)
+    resolved_mutated_source_paths = [Path.cwd().resolve(strict=True) / "mutants" / p for p in source_paths]
+
     tests_dir = s("tests_dir", [])
     if tests_dir:
         warnings.warn(
@@ -135,6 +138,7 @@ def _load_config() -> Config:
         debug=s("debug", False),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
+        resolved_mutated_source_paths=resolved_mutated_source_paths,
         pytest_add_cli_args=s("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=pytest_add_cli_args_test_selection,
         timeout_multiplier=s("timeout_multiplier", 15.0),
@@ -164,6 +168,7 @@ class Config:
     max_stack_depth: int
     debug: bool
     source_paths: list[Path]
+    resolved_mutated_source_paths: list[Path]
     pytest_add_cli_args: list[str]
     pytest_add_cli_args_test_selection: list[str]
     mutate_only_covered_lines: bool

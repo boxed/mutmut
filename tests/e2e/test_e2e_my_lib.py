@@ -109,6 +109,16 @@ def test_my_lib_result_snapshot():
                 "my_lib.xǁ_PrivateClassǁget_question__mutmut_3": 0,
                 "my_lib.xǁ_PrivateClassǁget_answer__mutmut_1": 0,
                 "my_lib.x_divide__mutmut_1": 1,
+                "my_lib.x_write_into_file__mutmut_1": 1,
+                "my_lib.x_write_into_file__mutmut_2": 1,
+                "my_lib.x_write_into_file__mutmut_3": 1,
+                "my_lib.x_write_into_file__mutmut_4": 1,
+                "my_lib.x_write_into_file__mutmut_5": 1,
+                "my_lib.x_write_into_file__mutmut_6": 1,
+                "my_lib.x_write_into_file__mutmut_7": 1,
+                "my_lib.x_write_into_file__mutmut_8": 0,
+                "my_lib.x_write_into_file__mutmut_9": 1,
+                "my_lib.x_write_into_file__mutmut_10": 1,
             }
         }
     )
