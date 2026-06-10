@@ -20,7 +20,7 @@ class Color(Enum):
         return self.name.lower()
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names, _ = mutate_file_contents("test.py", source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
@@ -65,7 +65,7 @@ class Color(Enum):
         return vals[name]
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names, _ = mutate_file_contents("test.py", source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
@@ -88,7 +88,7 @@ class Calculator:
         return a + b
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names, _ = mutate_file_contents("test.py", source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
@@ -117,7 +117,7 @@ class SubClass(Base):
         self.value = value
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names, _ = mutate_file_contents("test.py", source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
@@ -140,7 +140,7 @@ def foo(a: int, b: int = 2):
     return a + b
 """.strip()
 
-    mutated_code, mutant_names = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names, _ = mutate_file_contents("test.py", source)
     assert len(mutant_names) > 0, "Should have at least one mutant"
 
     monkeypatch.setenv("MUTANT_UNDER_TEST", "none")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import os
 import platform
 import sys
@@ -142,6 +143,12 @@ def _load_config() -> Config:
         use_setproctitle=s(
             "use_setproctitle", not platform.system() == "Darwin"
         ),  # False on Mac, true otherwise as default (https://github.com/boxed/mutmut/pull/450#issuecomment-4002571055)
+        track_dependencies=s("track_dependencies", True),
+        dependency_tracking_depth=s("dependency_tracking_depth", -1),
+        cache_invalidation_files=s("cache_invalidation_files", []),
+        cache_invalidation_exclude=s("cache_invalidation_exclude", []),
+        on_dependency_change=s("on_dependency_change", "warn"),
+        use_git_change_detection=s("use_git_change_detection", True),
     )
 
 
@@ -164,6 +171,35 @@ class Config:
     timeout_constant: float
     type_check_command: list[str]
     use_setproctitle: bool
+    track_dependencies: bool
+    dependency_tracking_depth: int
+    cache_invalidation_files: list[str]
+    cache_invalidation_exclude: list[str]
+    on_dependency_change: str
+    use_git_change_detection: bool
+
+    def config_fingerprint(self) -> dict[str, str]:
+        """Hash the config fields that can change cached mutant *results*, grouped so the
+        caller can invalidate only the verdict classes each group can affect.
+
+        Fields that only change *which* mutants exist (source_paths, only_mutate, etc.)
+        are deliberately excluded: new mutants are born uncached and dropped ones simply
+        stop being walked, so they need no result invalidation.
+        """
+
+        def _hash(value: object) -> str:
+            return hashlib.sha256(repr(value).encode()).hexdigest()[:12]
+
+        return {
+            # global pytest behaviour: a change can flip any verdict
+            "test_execution": _hash(tuple(self.pytest_add_cli_args)),
+            # which tests cover which function: a change reshapes the stats mapping
+            "test_selection": _hash(tuple(self.pytest_add_cli_args_test_selection)),
+            # only reclassifies timeouts
+            "timeout": _hash((self.timeout_multiplier, self.timeout_constant)),
+            # only changes the type-check pre-filter
+            "type_check": _hash(tuple(self.type_check_command)),
+        }
 
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)

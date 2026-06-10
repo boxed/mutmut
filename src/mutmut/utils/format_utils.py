@@ -45,6 +45,19 @@ def strip_prefix(s: str, *, prefix: str, strict: bool = False) -> str:
     return s
 
 
+def get_module_from_key(key: str) -> str:
+    """Extract module name from a mangled function key like 'app.foo.x_bar'.
+
+    The function name starts with 'x_' or 'xǁ', so we find that part
+    and return everything before it as the module path.
+    """
+    parts = key.split(".")
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i].startswith("x_") or parts[i].startswith("xǁ"):
+            return ".".join(parts[:i])
+    return key.rsplit(".", 1)[0] if "." in key else key
+
+
 def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
     module_name = str(relative_source_path)[: -len(relative_source_path.suffix)].replace(os.sep, ".")
     module_name = strip_prefix(module_name, prefix="src.")

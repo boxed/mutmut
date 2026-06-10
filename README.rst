@@ -401,6 +401,77 @@ You can add and override pytest arguments:
     also_copy = ["mutmut_pytest.ini"]
 
 
+Detecting dependency and config changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Between runs, mutmut only re-tests mutants in functions whose source changed.
+Changes outside your Python source — a dependency upgrade, a data file, a
+config file — cannot be tied to a function, so they would otherwise be missed
+and you would get cached results that no longer reflect reality.
+
+To catch this, mutmut detects non-Python files that changed since the last full
+run and warns you about them. If your project is a git repository and git is
+installed, mutmut uses git (a soft dependency no extra package is required) to
+find every changed non-Python file, respecting your `.gitignore`. Python files
+are excluded because their changes are already tracked per function.
+
+On a full run with git available, mutmut also records the content hashes of the
+tracked non-Python files. This means a later run in an environment without git
+(for example a different CI stage) can still detect changes to that known set of
+files, even though it cannot discover brand-new ones.
+
+When git is unavailable, mutmut falls back to hashing a curated set of build and
+dependency files:
+
+- `pyproject.toml`
+- `setup.cfg`
+- `setup.py`
+- `requirements*.txt`
+- `poetry.lock`
+- `uv.lock`
+- `Pipfile`
+- `Pipfile.lock`
+
+You can watch additional files (for example data files your tests depend on)
+with the `cache_invalidation_files` config, which accepts glob patterns
+resolved against the project root. These are checked even when git ignores them,
+and are never dropped by the exclusions below:
+
+.. code-block:: toml
+
+    cache_invalidation_files = [ "queries/*.sql", "config/*.yaml" ]
+
+Git detection reports every changed non-Python file, so mutmut drops files that
+practically never affect tests (markdown, `LICENSE`, `CHANGELOG`, `docs/`, git
+and editor metadata, ...). Exclude additional noisy files with
+`cache_invalidation_exclude` (glob patterns, `*` spans directories):
+
+.. code-block:: toml
+
+    cache_invalidation_exclude = [ "*.json", "fixtures/snapshots/*" ]
+
+When a watched file changes, `on_dependency_change` controls what happens:
+
+- `warn` (default): list the changed files and keep the cache.
+- `rerun`: re-test all mutants.
+- `ignore`: do nothing.
+
+.. code-block:: toml
+
+    on_dependency_change = "warn"
+
+Git detection is on by default; disable it (forcing the curated-list fallback)
+with:
+
+.. code-block:: toml
+
+    use_git_change_detection = false
+
+Changes to mutmut's own result-affecting config (such as `pytest_add_cli_args`,
+`type_check_command`, or the timeout settings) are always detected and
+invalidate the affected cached results automatically.
+
+
 Unstable configs
 ~~~~~~~~~~~~~~~~
 

@@ -10,6 +10,7 @@ from typing import TypeVar
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import record_trampoline_hit
+from mutmut.core import MutmutCallStack
 
 TReturn = TypeVar("TReturn")
 MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"]
@@ -57,8 +58,18 @@ def wrap_in_trampoline(
                 )
 
             if mutant_under_test == "stats":
-                record_trampoline_hit(f"{orig_func.__module__}.{mangled_name_from_mutant_name(orig_func.__name__)}")
-                return orig_func(*call_args, **kwargs)
+                orig_qual_name = f"{orig_func.__module__}.{mangled_name_from_mutant_name(orig_func.__name__)}"
+                caller_name, depth = MutmutCallStack.get()
+                max_depth = int(os.environ.get("MUTMUT_DEPENDENCY_DEPTH", "-1"))
+                if max_depth == -1 or depth < max_depth:
+                    record_trampoline_hit(orig_qual_name, caller=caller_name)
+                    token = MutmutCallStack.set((orig_qual_name, depth + 1))
+                    try:
+                        return orig_func(*call_args, **kwargs)
+                    finally:
+                        MutmutCallStack.reset(token)
+                else:
+                    return orig_func(*call_args, **kwargs)
 
             # mutant under test is {module}.{mutant_name}
             module, _, mutant_name = mutant_under_test.rpartition(".")

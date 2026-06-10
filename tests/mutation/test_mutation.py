@@ -1,19 +1,44 @@
 import os
+import pathlib
+import shutil
+import subprocess
+import tempfile
+from collections import defaultdict
 from unittest.mock import Mock
 from unittest.mock import patch
 
 import libcst as cst
 import pytest
 
+import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
+from mutmut.__main__ import _apply_config_change_invalidation
+from mutmut.__main__ import _changed_dependency_files
+from mutmut.__main__ import _cleanup_stale_stats
+from mutmut.__main__ import _invalidate_stale_dependency_edges
+from mutmut.__main__ import _refresh_change_detection_baseline
+from mutmut.__main__ import _report_watched_file_changes
+from mutmut.__main__ import _reset_mutant_results
+from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import get_diff_for_mutant
+from mutmut.__main__ import git_changed_non_py_files
+from mutmut.__main__ import git_head
+from mutmut.__main__ import git_tracked_non_py_files
+from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import orig_function_and_class_names_from_key
+from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
+from mutmut.configuration import Config
+from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.mutation.trampoline_templates import mangle_function_name
+from mutmut.state import reset_state
+from mutmut.state import state
+from mutmut.utils.format_utils import get_mutant_name
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -24,7 +49,7 @@ def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> li
 
 
 def mutated_module(source: str) -> str:
-    mutated_code, _ = mutate_file_contents("", source)
+    mutated_code, _, _ = mutate_file_contents("", source)
     return mutated_code
 
 
@@ -794,7 +819,7 @@ class Foo:
 
     """.strip()
 
-    mutants_source, mutant_names = mutate_file_contents("filename", source)
+    mutants_source, mutant_names, _ = mutate_file_contents("filename", source)
     assert len(mutant_names) == 2
 
     diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path="test.py").strip()
@@ -1004,3 +1029,674 @@ def x_foo__mutmut_1():
 
     mutants = mutants_for_source(source)
     assert mutants == [expected]
+
+
+# --- function hashing tests ---
+
+
+def test_compute_function_hashes_module_level():
+    source = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    hashes = compute_function_hashes(source)
+    assert "x_foo" in hashes
+    assert "x_bar" in hashes
+    assert len(hashes["x_foo"]) == 12
+    assert hashes["x_foo"] != hashes["x_bar"]
+
+
+def test_compute_function_hashes_stable():
+    source = "def foo():\n    return 1\n"
+    assert compute_function_hashes(source) == compute_function_hashes(source)
+
+
+def test_compute_function_hashes_changes_on_body_change():
+    source1 = "def foo():\n    return 1\n"
+    source2 = "def foo():\n    return 2\n"
+    assert compute_function_hashes(source1)["x_foo"] != compute_function_hashes(source2)["x_foo"]
+
+
+def test_compute_function_hashes_insensitive_to_comments():
+    source1 = "def foo():\n    return 1\n"
+    source2 = "def foo():\n    # a comment\n    return 1\n"
+    # ast.dump ignores comments, so hashes must be equal
+    assert compute_function_hashes(source1)["x_foo"] == compute_function_hashes(source2)["x_foo"]
+
+
+def test_compute_function_hashes_includes_methods():
+    source = """
+class Foo:
+    def bar(self):
+        return 1
+""".strip()
+    hashes = compute_function_hashes(source)
+    from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+
+    method_key = f"x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar"
+    assert method_key in hashes
+
+
+def test_mutate_file_contents_returns_hashes_for_mutated_functions():
+    source = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    _, mutant_names, hashes = mutate_file_contents("test.py", source)
+    assert mutant_names
+    # every mutated function appears in the hashes
+
+    for name in mutant_names:
+        func = mangled_name_from_mutant_name(name).rpartition(".")[2]
+        assert func in hashes, f"{func!r} not in hashes {set(hashes)}"
+
+
+def test_hashing_preserves_unchanged_function_results():
+    """Unchanged function's mutants keep prior results; changed function's reset."""
+    source_v1 = """
+def foo():
+    return 1
+
+def bar():
+    return 2
+""".strip()
+    source_v2 = """
+def foo():
+    return 99
+
+def bar():
+    return 2
+""".strip()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "mutants"), exist_ok=True)
+
+        src_path = pathlib.Path(tmp) / "mymod.py"
+        src_path.write_text(source_v1)
+
+        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+
+        data = SourceFileMutationData(path=src_path)
+        data.exit_code_by_key = {}
+        for name in mutant_names_v1:
+            key = get_mutant_name(src_path, name)
+            data.exit_code_by_key[key] = 1  # fake "killed"
+        data.hash_by_function_name = hashes_v1
+        data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
+        data.meta_path.parent.mkdir(parents=True, exist_ok=True)
+        data.save()
+
+        # simulate second run with foo changed
+        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+
+        prior = SourceFileMutationData(path=src_path)
+        prior.meta_path = data.meta_path
+        prior.load()
+        old_hashes = prior.hash_by_function_name
+        changed = {f for f, h in hashes_v2.items() if old_hashes.get(f) != h}
+
+        merged: dict = {}
+        for name in mutant_names_v2:
+            key = get_mutant_name(src_path, name)
+            func = mangled_name_from_mutant_name(key).rpartition(".")[2]
+            if func not in hashes_v2 or func in changed:
+                merged[key] = None
+            else:
+                merged[key] = prior.exit_code_by_key.get(key)
+
+        foo_keys = [k for k in merged if "x_foo" in mangled_name_from_mutant_name(k)]
+        bar_keys = [k for k in merged if "x_bar" in mangled_name_from_mutant_name(k)]
+
+        assert foo_keys, "expected foo mutants"
+        assert bar_keys, "expected bar mutants"
+        assert all(merged[k] is None for k in foo_keys), "foo changed — should reset"
+        assert all(merged[k] == 1 for k in bar_keys), "bar unchanged — should preserve"
+
+
+def test_hashing_resets_changed_method(monkeypatch):
+    """A changed class method's mutants must be reset, not silently preserved."""
+    source_v1 = """
+class Foo:
+    def method(self):
+        return 1
+""".strip()
+    source_v2 = """
+class Foo:
+    def method(self):
+        return 99
+""".strip()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "mutants"), exist_ok=True)
+
+        src_path = pathlib.Path(tmp) / "mymod.py"
+
+        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+        assert mutant_names_v1, "expected at least one method mutant"
+
+        data = SourceFileMutationData(path=src_path)
+        data.exit_code_by_key = {}
+        for name in mutant_names_v1:
+            key = get_mutant_name(src_path, name)
+            data.exit_code_by_key[key] = 1
+        data.hash_by_function_name = hashes_v1
+        data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
+        data.meta_path.parent.mkdir(parents=True, exist_ok=True)
+        data.save()
+
+        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+
+        prior = SourceFileMutationData(path=src_path)
+        prior.meta_path = data.meta_path
+        prior.load()
+        old_hashes = prior.hash_by_function_name
+        changed = {f for f, h in hashes_v2.items() if old_hashes.get(f) != h}
+
+        merged: dict = {}
+        for name in mutant_names_v2:
+            key = get_mutant_name(src_path, name)
+            func = mangled_name_from_mutant_name(key).rpartition(".")[2]
+            if func not in hashes_v2 or func in changed:
+                merged[key] = None
+            else:
+                merged[key] = prior.exit_code_by_key.get(key)
+
+        assert merged, "expected merged mutants"
+        assert all(v is None for v in merged.values()), (
+            "method changed — all mutants should be reset, but some were preserved: "
+            + str({k: v for k, v in merged.items() if v is not None})
+        )
+
+
+# --- dependency tracking tests ---
+
+
+def test_record_trampoline_hit_records_caller(monkeypatch):
+    """record_trampoline_hit(name, caller=...) stores the edge in function_dependencies."""
+
+    reset_state()
+    mutmut._stats.clear()
+
+    cfg = Mock(spec=Config)
+    cfg.max_stack_depth = -1
+    cfg.source_paths = []
+    cfg.track_dependencies = True
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
+
+    assert "my_module.x_bar" in state().function_dependencies["my_module.x_foo"]
+    reset_state()
+
+
+def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
+    """record_trampoline_hit does not record dependencies when track_dependencies=False."""
+
+    reset_state()
+    mutmut._stats.clear()
+
+    cfg = Mock(spec=Config)
+    cfg.max_stack_depth = -1
+    cfg.source_paths = []
+    cfg.track_dependencies = False
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
+
+    assert "my_module.x_foo" not in state().function_dependencies
+    reset_state()
+
+
+def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
+    """_cleanup_stale_stats removes test associations for modules not in current_function_hashes."""
+
+    reset_state()
+    old_stats = mutmut.tests_by_mangled_function_name
+    mutmut.tests_by_mangled_function_name = defaultdict(set)
+
+    state().current_function_hashes["live_mod.x_foo"] = "aabbcc"
+    mutmut.tests_by_mangled_function_name["live_mod.x_foo__mutmut_orig"] = {"test_alive"}
+    mutmut.tests_by_mangled_function_name["dead_mod.x_bar__mutmut_orig"] = {"test_dead"}
+    state().function_dependencies["live_mod.x_baz"] = {"dead_mod.x_bar"}
+
+    _cleanup_stale_stats()
+
+    assert "live_mod.x_foo__mutmut_orig" in mutmut.tests_by_mangled_function_name
+    assert "dead_mod.x_bar__mutmut_orig" not in mutmut.tests_by_mangled_function_name
+    assert "dead_mod.x_bar" not in state().function_dependencies["live_mod.x_baz"]
+
+    mutmut.tests_by_mangled_function_name = old_stats
+    reset_state()
+
+
+def test_invalidate_stale_dependency_edges_clears_changed_callers():
+    """When B's hash changes, B is removed from all caller sets in function_dependencies."""
+
+    reset_state()
+
+    state().function_dependencies["mod.x_c"] = {"mod.x_b", "mod.x_a"}
+    state().old_function_hashes["mod.x_b"] = "old"
+    state().current_function_hashes["mod.x_b"] = "new"
+    state().old_function_hashes["mod.x_a"] = "same"
+    state().current_function_hashes["mod.x_a"] = "same"
+
+    changed = _invalidate_stale_dependency_edges()
+
+    assert "mod.x_b" in changed
+    assert "mod.x_b" not in state().function_dependencies["mod.x_c"]
+    assert "mod.x_a" in state().function_dependencies["mod.x_c"]
+    reset_state()
+
+
+def test_invalidate_stale_dependency_edges_no_old_hashes_returns_empty():
+    """With no prior hashes (first run), nothing is invalidated."""
+
+    reset_state()
+    state().current_function_hashes["mod.x_foo"] = "abc"
+
+    changed = _invalidate_stale_dependency_edges()
+
+    assert changed == set()
+    reset_state()
+
+
+# --- config / dependency change invalidation tests (Tier 1 & 2) ---
+
+
+def _config_for_invalidation(**overrides):
+    base = dict(
+        also_copy=[],
+        only_mutate=[],
+        do_not_mutate=[],
+        do_not_mutate_patterns=[],
+        max_stack_depth=-1,
+        debug=False,
+        source_paths=[pathlib.Path("src")],
+        pytest_add_cli_args=[],
+        pytest_add_cli_args_test_selection=[],
+        mutate_only_covered_lines=False,
+        timeout_multiplier=15.0,
+        timeout_constant=1.0,
+        type_check_command=[],
+        use_setproctitle=False,
+        track_dependencies=True,
+        dependency_tracking_depth=-1,
+        cache_invalidation_files=[],
+        cache_invalidation_exclude=[],
+        on_dependency_change="warn",
+        use_git_change_detection=True,
+    )
+    base.update(overrides)
+    return Config(**base)
+
+
+def _write_meta(exit_code_by_key, src_rel="src/mymod.py"):
+    """Create a source file under a mutatable source dir plus its .meta, return the path."""
+    src = pathlib.Path(src_rel)
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("def foo():\n    return 1\n")
+    m = SourceFileMutationData(path=src)
+    m.exit_code_by_key = dict(exit_code_by_key)
+    m.meta_path.parent.mkdir(parents=True, exist_ok=True)
+    m.save()
+    return src
+
+
+def _load_results(src_rel="src/mymod.py"):
+    m = SourceFileMutationData(path=pathlib.Path(src_rel))
+    m.load()
+    return m.exit_code_by_key
+
+
+def test_reset_mutant_results_resets_only_matching(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    _write_meta({"a": 36, "b": 0, "c": None})  # timeout, survived, uncached
+
+    reset = _reset_mutant_results(lambda key, exit_code: exit_code == 36)
+
+    assert reset == 1
+    results = _load_results()
+    assert results == {"a": None, "b": 0, "c": None}
+
+
+def test_timeout_config_change_resets_only_timeouts(tmp_path, monkeypatch):
+    """Changing timeout config invalidates timeout verdicts but keeps killed/survived."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    old_cfg = _config_for_invalidation()
+    state().old_config_fingerprint = old_cfg.config_fingerprint()
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(timeout_multiplier=30.0))
+    _write_meta({"timed_out": 36, "killed": 1, "survived": 0})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"timed_out": None, "killed": 1, "survived": 0}
+    reset_state()
+
+
+def test_type_check_config_change_resets_symmetric_difference(tmp_path, monkeypatch):
+    """A type-check command change re-tests verdicts whose type-check status flips."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    old_cfg = _config_for_invalidation(type_check_command=["old"])
+    state().old_config_fingerprint = old_cfg.config_fingerprint()
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(type_check_command=["new"]))
+    # was_caught: cached 37 but no longer caught -> reset; now_caught: survived but newly caught -> reset;
+    # still_caught: 37 and still caught -> keep; untouched: survived and not caught -> keep
+    _write_meta({"was_caught": 37, "now_caught": 0, "still_caught": 37, "untouched": 0})
+
+    force_full = _apply_config_change_invalidation({"now_caught": object(), "still_caught": object()})
+
+    assert force_full is False
+    assert _load_results() == {
+        "was_caught": None,
+        "now_caught": None,
+        "still_caught": 37,
+        "untouched": 0,
+    }
+    reset_state()
+
+
+def test_global_pytest_change_forces_full_rerun(tmp_path, monkeypatch):
+    """A pytest-arg change resets all results and requests full stats recollection."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    state().old_config_fingerprint = _config_for_invalidation().config_fingerprint()
+    mutmut.duration_by_test["test_x"] = 1.0
+    mutmut.tests_by_mangled_function_name["mod.x_foo"] = {"test_x"}
+
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    _write_meta({"a": 1, "b": 0, "c": 36})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is True
+    assert all(v is None for v in _load_results().values())
+    assert not mutmut.duration_by_test
+    assert not mutmut.tests_by_mangled_function_name
+    reset_state()
+
+
+def test_no_config_change_keeps_all_results(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    cfg = _config_for_invalidation()
+    state().old_config_fingerprint = cfg.config_fingerprint()
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+    _write_meta({"a": 1, "b": 0, "c": 36})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"a": 1, "b": 0, "c": 36}
+    reset_state()
+
+
+def test_absent_fingerprint_is_silent(tmp_path, monkeypatch):
+    """A pre-upgrade cache (no stored fingerprint) triggers no invalidation."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    # old_config_fingerprint left empty
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    _write_meta({"a": 1, "b": 0})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"a": 1, "b": 0}
+    reset_state()
+
+
+def test_watched_file_change_warn_keeps_cache(tmp_path, monkeypatch, capsys):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
+    state().old_watched_file_hashes = {"pyproject.toml": "deadbeef0000"}
+
+    rerun = _report_watched_file_changes()
+
+    assert rerun is False
+    assert "pyproject.toml" in capsys.readouterr().out
+    reset_state()
+
+
+def test_watched_file_change_rerun_policy(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(on_dependency_change="rerun"))
+    pathlib.Path("uv.lock").write_text("changed")
+    state().old_watched_file_hashes = {"uv.lock": "deadbeef0000"}
+
+    assert _report_watched_file_changes() is True
+    reset_state()
+
+
+def test_watched_file_absent_old_hashes_is_silent(tmp_path, monkeypatch, capsys):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
+    # old_watched_file_hashes left empty
+
+    assert _report_watched_file_changes() is False
+    assert capsys.readouterr().out == ""
+    reset_state()
+
+
+def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["*.sql"]))
+    pathlib.Path("pyproject.toml").write_text("x")
+    pathlib.Path("query.sql").write_text("select 1")
+
+    hashes = compute_watched_file_hashes()
+
+    assert "pyproject.toml" in hashes
+    assert "query.sql" in hashes
+
+
+# --- git-based change detection (soft dependency) ---
+
+_GIT = shutil.which("git")
+requires_git = pytest.mark.skipif(_GIT is None, reason="git not installed")
+
+
+def _git(args, cwd):
+    subprocess.run([_GIT, *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+
+def _init_repo(path):
+    _git(["init"], path)
+    _git(["config", "user.email", "t@example.com"], path)
+    _git(["config", "user.name", "Test"], path)
+    _git(["config", "commit.gpgsign", "false"], path)
+
+
+def _commit_all(path, message="commit"):
+    _git(["add", "-A"], path)
+    _git(["commit", "-m", message], path)
+
+
+@requires_git
+def test_git_head_returns_commit(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("1")
+    _commit_all(tmp_path)
+
+    head = git_head()
+
+    assert head and len(head) == 40
+
+
+def test_git_head_none_outside_repo(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert git_head() is None
+
+
+@requires_git
+def test_git_changed_non_py_files_detects_and_excludes_python(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "conf.yml").write_text("a: 1")
+    (tmp_path / "mod.py").write_text("x = 1")
+    _commit_all(tmp_path)
+    base = git_head()
+
+    (tmp_path / "conf.yml").write_text("a: 2")  # tracked non-.py modified
+    (tmp_path / "mod.py").write_text("x = 2")  # tracked .py modified (excluded)
+    (tmp_path / "data.sql").write_text("select 1")  # new untracked non-.py
+
+    assert git_changed_non_py_files(base) == {"conf.yml", "data.sql"}
+
+
+@requires_git
+def test_git_changed_non_py_files_bad_ref_returns_none(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("1")
+    _commit_all(tmp_path)
+
+    assert git_changed_non_py_files("deadbeef" * 5) is None
+
+
+@requires_git
+def test_changed_dependency_files_prefers_git_over_curated_list(tmp_path, monkeypatch):
+    """Git catches a non-.py file that is not in the curated watched list."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    assert "config.yaml" in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_use_git_change_detection_false_falls_back_to_curated(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    # config.yaml is not in the curated list and git is disabled -> not reported
+    assert "config.yaml" not in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_default_exclude_drops_noisy_files(tmp_path, monkeypatch):
+    """Docs / markdown changes are dropped by the default exclude list."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "README.md").write_text("hi")
+    (tmp_path / "config.yaml").write_text("a: 1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    (tmp_path / "README.md").write_text("changed")
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    changed = _changed_dependency_files()
+    assert "config.yaml" in changed
+    assert "README.md" not in changed
+    reset_state()
+
+
+@requires_git
+def test_user_exclude_pattern_drops_file(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "noisy.json").write_text("1")
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
+
+    (tmp_path / "noisy.json").write_text("2")
+
+    assert "noisy.json" not in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_registered_file_is_immune_to_exclusion(tmp_path, monkeypatch):
+    """A file explicitly registered in cache_invalidation_files is never excluded."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "notes.md").write_text("a")  # *.md is excluded by default
+    _commit_all(tmp_path)
+    state().old_git_commit = git_head()
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
+
+    (tmp_path / "notes.md").write_text("b")
+
+    assert "notes.md" in _changed_dependency_files()
+    reset_state()
+
+
+@requires_git
+def test_git_tracked_non_py_files_lists_tracked_and_excludes_python(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    (tmp_path / "mod.py").write_text("x = 1")
+    _commit_all(tmp_path)
+    (tmp_path / "data.sql").write_text("select 1")  # untracked but not ignored
+
+    tracked = git_tracked_non_py_files()
+
+    assert "config.yaml" in tracked
+    assert "data.sql" in tracked
+    assert "mod.py" not in tracked
+
+
+@requires_git
+def test_baseline_records_git_files_for_gitless_fallback(tmp_path, monkeypatch):
+    """A full run with git records all tracked non-.py files, so a later run without
+    git can still detect changes to them by re-hashing."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _init_repo(tmp_path)
+    (tmp_path / "config.yaml").write_text("a: 1")
+    (tmp_path / "README.md").write_text("hi")  # excluded by default
+    _commit_all(tmp_path)
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+
+    _refresh_change_detection_baseline()
+    baseline = state().watched_file_hashes
+    assert "config.yaml" in baseline  # recorded for the gitless fallback
+    assert "README.md" not in baseline  # noise stays out of the baseline
+
+    # simulate a later run in an environment without git
+    state().old_watched_file_hashes = baseline
+    state().old_git_commit = None
+    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+    (tmp_path / "config.yaml").write_text("a: 2")
+
+    assert "config.yaml" in _changed_dependency_files()
+    reset_state()

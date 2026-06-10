@@ -1,6 +1,9 @@
 """This module contains code for managing mutant creation for whole files."""
 
+import ast
+import hashlib
 from collections import defaultdict
+from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -32,6 +35,49 @@ NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
 
 
+def compute_function_hashes(source_code: str, accept: Callable[[str], bool] | None = None) -> dict[str, str]:
+    """class-qualified mangled key (x_foo / xǁClassǁmethod) -> 12-char sha256 of the func AST."""
+    try:
+        tree = ast.parse(source_code)
+    except SyntaxError:
+        return {}
+    hashes: dict[str, str] = {}
+
+    def _visit(stmts: list[ast.stmt], class_name: str = "") -> None:
+        for node in stmts:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                key = mangle_function_name(name=node.name, class_name=class_name or None)
+                if accept is None or accept(key):
+                    hashes[key] = hashlib.sha256(ast.dump(node, annotate_fields=False).encode()).hexdigest()[:12]
+            elif isinstance(node, ast.ClassDef):
+                _visit(node.body, node.name if not class_name else f"{class_name}.{node.name}")
+
+    _visit(tree.body)
+    return hashes
+
+
+def _compute_mutated_function_hashes(
+    source_code: str, module: cst.Module, mutations: Sequence["Mutation"]
+) -> dict[str, str]:
+    key_by_node: dict[cst.FunctionDef, str] = {}
+
+    def _index(body: Sequence[cst.CSTNode], class_name: str = "") -> None:
+        for stmt in body:
+            if isinstance(stmt, cst.FunctionDef):
+                key_by_node[stmt] = mangle_function_name(name=stmt.name.value, class_name=class_name or None)
+            elif isinstance(stmt, cst.ClassDef) and isinstance(stmt.body, cst.IndentedBlock):
+                _index(stmt.body.body, stmt.name.value if not class_name else f"{class_name}.{stmt.name.value}")
+
+    _index(module.body)
+    mutated = {
+        key_by_node[m.contained_by_top_level_function]
+        for m in mutations
+        if isinstance(m.contained_by_top_level_function, cst.FunctionDef)
+        and m.contained_by_top_level_function in key_by_node
+    }
+    return compute_function_hashes(source_code, accept=lambda key: key in mutated)
+
+
 @dataclass
 class Mutation:
     original_node: cst.CSTNode
@@ -39,17 +85,19 @@ class Mutation:
     contained_by_top_level_function: cst.FunctionDef | None
 
 
-def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> tuple[str, Sequence[str]]:
+def mutate_file_contents(
+    filename: str, code: str, covered_lines: set[int] | None = None
+) -> tuple[str, Sequence[str], dict[str, str]]:
     """Create mutations for `code` and merge them to a single mutated file with trampolines.
 
-    :return: A tuple of (mutated code, list of mutant function names)."""
+    :return: A tuple of (mutated code, list of mutant function names, hash by function name)."""
     module, mutations, ignored_classes, ignored_functions = create_mutations(filename, code, covered_lines)
 
     mutated_code, mutant_names = combine_mutations_to_source(module, mutations, ignored_classes, ignored_functions)
 
-    # TODO: implement function hashing to skip testing unchanged functions
+    hash_by_function_name = _compute_mutated_function_hashes(code, module, mutations)
 
-    return mutated_code, mutant_names
+    return mutated_code, mutant_names, hash_by_function_name
 
 
 def create_mutations(
