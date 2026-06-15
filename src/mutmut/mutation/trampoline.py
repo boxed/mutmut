@@ -103,8 +103,33 @@ def wrap_in_trampoline(
 
             @wraps(decorated_func)
             async def _trampoline_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore
-                async for result in trampoline(*args, **kwargs):  # type: ignore
-                    yield result
+                # Forward the full async-generator protocol (asend/athrow/aclose) to the inner
+                # generator. A bare ``async for`` only forwards iteration, so aclose()/athrow()
+                # would hit this wrapper instead of the wrapped generator -- breaking deterministic
+                # cleanup (``finally:`` / ``except GeneratorExit:`` running synchronously on close)
+                # and exception injection. This mirrors the PEP 380 ``yield from`` expansion,
+                # adapted for the async-generator protocol. See
+                # https://github.com/boxed/mutmut/issues/525.
+                gen = trampoline(*args, **kwargs)  # type: ignore
+                try:
+                    yielded = await gen.asend(None)  # type: ignore
+                    while True:
+                        try:
+                            sent = yield yielded
+                        except GeneratorExit:
+                            # caller closed us -> close the inner generator and propagate
+                            await gen.aclose()  # type: ignore
+                            raise
+                        except BaseException as exc:
+                            # caller threw into us -> forward the exception into the inner generator
+                            yielded = await gen.athrow(exc)  # type: ignore
+                        else:
+                            # normal resume (__anext__ / asend) -> forward the sent value
+                            yielded = await gen.asend(sent)  # type: ignore
+                except StopAsyncIteration:
+                    return
+                finally:
+                    await gen.aclose()  # type: ignore
         else:
 
             @wraps(decorated_func)

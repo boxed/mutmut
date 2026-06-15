@@ -15,6 +15,9 @@ mutants_simple_func = {}
 mutants_generator_func = {}
 mutants_async_func = {}
 mutants_async_generator_func = {}
+mutants_cleanup_async_gen = {}
+mutants_recovering_async_gen = {}
+mutants_echo_async_gen = {}
 mutants_somenumber__init__ = {}
 mutants_somenumber_add = {}
 mutants_somenumber_negate = {}
@@ -85,6 +88,57 @@ async def async_generator_func_1(numbers: list[int]):
         yield n * 3
 
 
+# Async generators exercising the full protocol (close/throw/send) forwarded through the trampoline.
+# These need only an _mutmut_orig entry; the trampoline always runs the original here.
+
+
+@wrap_in_trampoline(mutants_cleanup_async_gen)
+async def cleanup_async_gen(log: list):
+    try:
+        for n in [1, 2, 3]:
+            yield n
+    finally:
+        log.append("cleaned-up")
+
+
+async def cleanup_async_gen_orig(log: list):
+    try:
+        for n in [1, 2, 3]:
+            yield n
+    finally:
+        log.append("cleaned-up")
+
+
+@wrap_in_trampoline(mutants_recovering_async_gen)
+async def recovering_async_gen():
+    try:
+        yield 1
+        yield 2
+    except ValueError:
+        yield "recovered"
+
+
+async def recovering_async_gen_orig():
+    try:
+        yield 1
+        yield 2
+    except ValueError:
+        yield "recovered"
+
+
+@wrap_in_trampoline(mutants_echo_async_gen)
+async def echo_async_gen(received: list):
+    while True:
+        value = yield
+        received.append(value)
+
+
+async def echo_async_gen_orig(received: list):
+    while True:
+        value = yield
+        received.append(value)
+
+
 class SomeNumber:
     @wrap_in_trampoline(mutants_somenumber__init__)
     def __init__(self, number: int):
@@ -149,6 +203,9 @@ mutants_async_func["_mutmut_orig"] = async_func_orig
 mutants_async_func["async_func__mutmut_1"] = async_func_1
 mutants_async_generator_func["_mutmut_orig"] = async_generator_func_orig
 mutants_async_generator_func["async_generator_func__mutmut_1"] = async_generator_func_1
+mutants_cleanup_async_gen["_mutmut_orig"] = cleanup_async_gen_orig
+mutants_recovering_async_gen["_mutmut_orig"] = recovering_async_gen_orig
+mutants_echo_async_gen["_mutmut_orig"] = echo_async_gen_orig
 mutants_somenumber__init__["_mutmut_orig"] = SomeNumber.SomeNumberǁ__init__orig
 mutants_somenumber__init__["SomeNumberǁ__init___mutmut_1"] = SomeNumber.SomeNumberǁ__init__1
 mutants_somenumber_add["_mutmut_orig"] = SomeNumber.SomeNumberǁadd_orig
@@ -226,6 +283,59 @@ class TestAsyncAndGeneratorFunc:
     def test_async_generator_is_asyncgen(self):
         """The decorated functions should still be async generators"""
         assert inspect.isasyncgenfunction(async_generator_func)
+
+
+class TestAsyncGeneratorProtocolForwarding:
+    """The async-generator wrapper must transparently forward aclose/athrow/asend.
+
+    Regression tests for https://github.com/boxed/mutmut/issues/525: a bare ``async for`` in the
+    wrapper only forwards iteration, so close/throw/send hit the wrapper instead of the wrapped
+    generator -- breaking deterministic cleanup and exception injection.
+    """
+
+    @pytest.mark.asyncio
+    async def test_aclose_runs_cleanup_synchronously(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "")
+        log: list = []
+        agen = cleanup_async_gen(log)
+        assert await agen.__anext__() == 1
+
+        await agen.aclose()
+
+        # The finally: block must run synchronously as part of aclose(), not deferred to GC.
+        assert log == ["cleaned-up"]
+
+    @pytest.mark.asyncio
+    async def test_athrow_is_forwarded_into_generator(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "")
+        agen = recovering_async_gen()
+        assert await agen.__anext__() == 1
+
+        # The exception must land at the generator's yield point, where its except handles it.
+        assert await agen.athrow(ValueError("boom")) == "recovered"
+
+        await agen.aclose()
+
+    @pytest.mark.asyncio
+    async def test_unhandled_athrow_propagates(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "")
+        agen = recovering_async_gen()
+        assert await agen.__anext__() == 1
+
+        with pytest.raises(KeyError):
+            await agen.athrow(KeyError("nope"))
+
+    @pytest.mark.asyncio
+    async def test_asend_is_forwarded_into_generator(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "")
+        received: list = []
+        agen = echo_async_gen(received)
+        await agen.asend(None)  # prime
+        await agen.asend("first")
+        await agen.asend("second")
+        await agen.aclose()
+
+        assert received == ["first", "second"]
 
 
 class TestSimpleClassMethods:
