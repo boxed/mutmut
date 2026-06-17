@@ -11,6 +11,7 @@ import libcst as cst
 import pytest
 
 import mutmut
+from mutmut.__main__ import BadTestExecutionCommandsException
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import _apply_config_change_invalidation
@@ -902,6 +903,20 @@ def test_run_forced_fail_test_with_failing_test(_start, _stop, _dump_output, cap
 @patch.object(CatchOutput, "start")
 def test_run_forced_fail_test_with_mutmut_programmatic_fail_exception(_start, _stop, _dump_output, capfd):
     runner = _mocked_runner_run_forced_failed(side_effect=MutmutProgrammaticFailException())
+
+    run_forced_fail_test(runner)
+
+    out, _ = capfd.readouterr()
+    assert "done" in out
+    assert not os.environ["MUTANT_UNDER_TEST"]
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, "dump_output")
+@patch.object(CatchOutput, "stop")
+@patch.object(CatchOutput, "start")
+def test_run_forced_fail_test_with_pytest_import_error(_start, _stop, _dump_output, capfd):
+    runner = _mocked_runner_run_forced_failed(side_effect=BadTestExecutionCommandsException(["tests/"]))
 
     run_forced_fail_test(runner)
 

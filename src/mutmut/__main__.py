@@ -669,7 +669,7 @@ def run_forced_fail_test(runner: TestRunner) -> None:
                 catcher.dump_output()
                 print("FAILED: Unable to force test failures")
                 raise SystemExit(1)
-        except MutmutProgrammaticFailException:
+        except (MutmutProgrammaticFailException, BadTestExecutionCommandsException):
             pass
     os.environ["MUTANT_UNDER_TEST"] = ""
     print("    done")
