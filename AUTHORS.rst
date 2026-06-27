@@ -27,3 +27,4 @@ Credits
 * Dominic Amato <dominic.a.amato@gmail.com>
 * A_A
 * Luzin Boris <borisluzin2004@gmail.com>
+* Nick Lafleur <nick.lafleur@hotmail.com>
