@@ -132,6 +132,10 @@ def _load_config() -> Config:
             Path("test/"),
             Path("setup.cfg"),
             Path("pyproject.toml"),
+            Path("uv.lock"),
+            Path("poetry.lock"),
+            Path("Pipfile.lock"),
+            Path("pdm.lock"),
         ]
         + list(Path(".").glob("test*.py")),
         max_stack_depth=s("max_stack_depth", -1),

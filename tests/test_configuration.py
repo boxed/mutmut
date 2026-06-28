@@ -361,3 +361,7 @@ timeout_constant = 0.5
         assert Path("test/") in config.also_copy
         assert Path("setup.cfg") in config.also_copy
         assert Path("pyproject.toml") in config.also_copy
+        assert Path("uv.lock") in config.also_copy
+        assert Path("poetry.lock") in config.also_copy
+        assert Path("Pipfile.lock") in config.also_copy
+        assert Path("pdm.lock") in config.also_copy
