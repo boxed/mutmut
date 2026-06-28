@@ -14,6 +14,8 @@ Unreleased
 
 * Add `use_git_change_detection` config (default true) to opt out of git-based detection
 
+* Add `uv.lock`, `poetry.lock`, `Pipfile.lock`, and `pdm.lock` to the list of files copied by default
+
 * Invalidate cached results automatically when result-affecting config fields change
 
 
