@@ -954,6 +954,24 @@ class A(Enum):
     assert not mutants
 
 
+@pytest.mark.parametrize("decorator", ["@dataclass", "@dataclass(frozen=True)"])
+def test_mutate_methods_of_decorated_classes(decorator):
+    # The decorator of a class is not copied into the trampoline, so
+    # decorating a class must not stop its methods from being mutated
+    source = f"""
+{decorator}
+class Foo:
+    x: int
+    y: int
+
+    def sum(self):
+        return self.x + self.y
+""".strip()
+
+    mutants = mutants_for_source(source)
+    assert mutants == [source.replace("self.x + self.y", "self.x - self.y")]
+
+
 def test_do_not_mutate_pattern_single_line(patch_config):
     source = 'logger.info("hello")'
     patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])

@@ -281,7 +281,12 @@ class MutationVisitor(cst.CSTVisitor):
                 if isinstance(decorator, cst.Name) and decorator.value in ("staticmethod", "classmethod"):
                     return False
             return True
-        if isinstance(node, cst.ClassDef) and len(node.decorators):
+
+        # decorators are executed at definition time, so mutating them can raise
+        # exceptions on import. A decorated class is still recursed into, because
+        # its decorator is kept on the original class and only its methods get
+        # trampolines, so reasons 1) and 3) above do not apply to it.
+        if isinstance(node, cst.Decorator):
             return True
 
         return False
