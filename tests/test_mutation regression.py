@@ -48,7 +48,7 @@ class Color(Enum):
 
 print(Adder(1).add(2))"""
 
-    src, _, _ = mutate_file_contents("file.py", source)
+    src = mutate_file_contents("file.py", source).code
 
     assert src == snapshot("""\
 from __future__ import division

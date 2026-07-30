@@ -18,6 +18,7 @@ Unreleased
 
 * Invalidate cached results automatically when result-affecting config fields change
 
+* Make `mutmut browse`, `show` and `apply` much faster and use far less memory, by storing where each mutant is in the mutated file instead of parsing the whole file to find it
 
 3.6.0
 ~~~~~

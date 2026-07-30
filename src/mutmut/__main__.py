@@ -33,7 +33,6 @@ import warnings
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable
-from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
@@ -50,7 +49,7 @@ from os import walk
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
-from threading import Thread
+from threading import Lock
 from time import process_time
 from types import TracebackType
 
@@ -62,8 +61,10 @@ import mutmut
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import Config
+from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import FailedTypeCheckMutant
+from mutmut.mutation.file_mutation import MutatedFile
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
@@ -319,12 +320,14 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
     with open(output_path, "w") as out:
         try:
-            mutant_names, hash_by_function_name = write_all_mutants_to_file(out=out, source=source, filename=filename)
+            mutated_file = write_all_mutants_to_file(out=out, source=source, filename=filename)
         except cst.ParserSyntaxError as e:
             # if libcst cannot parse it, then copy the source without any mutations
             warnings.append(SyntaxWarning(f"Unsupported syntax in {filename} ({str(e)}), skipping"))
             out.write(source)
-            mutant_names, hash_by_function_name = [], {}
+            mutated_file = MutatedFile(
+                code=source, mutant_names=[], line_span_by_function_name={}, hash_by_function_name={}
+            )
 
     # validate no syntax errors of mutants
     with open(output_path) as f:
@@ -335,13 +338,15 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             invalid_syntax_error.__cause__ = e
             return FileMutationResult(warnings=warnings, error=invalid_syntax_error)
 
+    hash_by_function_name = mutated_file.hash_by_function_name
+
     data = SourceFileMutationData(path=filename)
     data.load()
     old_hashes = data.hash_by_function_name
     changed = {f for f, h in hash_by_function_name.items() if old_hashes.get(f) != h}
 
     merged: dict[str, int | None] = {}
-    for name in mutant_names:
+    for name in mutated_file.mutant_names:
         key = get_mutant_name(filename, name)
         func = mangled_name_from_mutant_name(key).rpartition(".")[2]
         if func not in hash_by_function_name or func in changed:
@@ -349,8 +354,10 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
         else:
             merged[key] = data.exit_code_by_key.get(key)
     data.exit_code_by_key = merged
-    data.hash_by_function_name = hash_by_function_name
+    data.hash_by_function_name = dict(hash_by_function_name)
     data.save()
+
+    MutantLineSpans(path=filename, span_by_function_name=mutated_file.line_span_by_function_name).save()
 
     current_hashes_qualified = {get_mutant_name(filename, func): h for func, h in hash_by_function_name.items()}
     changed_functions_qualified = {get_mutant_name(filename, func) for func in changed}
@@ -362,13 +369,13 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
     )
 
 
-def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> tuple[Sequence[str], dict[str, str]]:
-    result, mutant_names, hash_by_function_name = mutate_file_contents(
+def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> MutatedFile:
+    mutated_file = mutate_file_contents(
         str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
     )
-    out.write(result)
+    out.write(mutated_file.code)
 
-    return mutant_names, hash_by_function_name
+    return mutated_file
 
 
 def unused(*_: object) -> None:
@@ -1610,26 +1617,91 @@ def find_mutant(mutant_name: str) -> SourceFileMutationData:
     raise FileNotFoundError(f"Could not find mutant {mutant_name}")
 
 
+def generated_function_names(mutant_name: str) -> tuple[str, str]:
+    """Get the names of the generated original and mutated function for a mutant.
+
+    :return: A tuple of (name of the unmutated copy, name of the mutant)."""
+    generated_mutant_name = mutant_name.rpartition(".")[-1]
+    return mangled_name_from_mutant_name(generated_mutant_name) + "__mutmut_orig", generated_mutant_name
+
+
+def read_functions_from_index(mutant_name: str, path: Path | str) -> tuple[cst.FunctionDef, cst.FunctionDef] | None:
+    """Read the unmutated copy and the mutant of a function from a mutated file, using the line span index.
+
+    Only the lines of those two functions are parsed, instead of the whole mutated file. Mutated
+    files are often orders of magnitude larger than the file they were generated from, so this is
+    the difference between parsing a few lines and parsing tens of megabytes.
+
+    Both functions are named after the function they were generated from, so that a diff of the
+    two shows only the mutation.
+
+    :return: A tuple of (unmutated function, mutated function), or None if there is no usable index."""
+    line_spans = MutantLineSpans.load(path)
+    if line_spans is None:
+        return None
+
+    orig_name, generated_mutant_name = generated_function_names(mutant_name)
+    try:
+        sources = line_spans.read_function_sources([orig_name, generated_mutant_name])
+    except (KeyError, ValueError):
+        # the index is incomplete or malformed, so fall back to parsing the file
+        return None
+
+    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
+    orig_source, mutant_source = sources
+    orig_function = parse_generated_function(orig_source, name=orig_name, is_method=class_name is not None)
+    mutant_function = parse_generated_function(
+        mutant_source, name=generated_mutant_name, is_method=class_name is not None
+    )
+    if orig_function is None or mutant_function is None:
+        # the index does not match the mutated file, so fall back to parsing the file
+        return None
+
+    return (
+        orig_function.with_changes(name=cst.Name(orig_function_name)),
+        mutant_function.with_changes(name=cst.Name(orig_function_name)),
+    )
+
+
+def parse_generated_function(source: str, *, name: str, is_method: bool) -> cst.FunctionDef | None:
+    """Parse a function that was read out of a mutated file by itself.
+
+    :param source: The source of the function, still indented as it was in the file.
+    :param is_method: Whether the function is a method, and therefore indented.
+    :return: The function, or None if `source` does not contain a function called `name`."""
+    if is_method:
+        # the source is indented as a class body, so it needs a class to live in to parse
+        source = "class _:\n" + source
+
+    try:
+        module = cst.parse_module(source)
+    except cst.ParserSyntaxError:
+        # the index points at lines that are not a function, so it must be out of date
+        return None
+
+    function = find_top_level_function_or_method(module, name)
+    if function is None:
+        return None
+
+    # comments and blank lines above the function became the module header when parsing it on its
+    # own, but they belong to the function
+    return function.with_changes(leading_lines=[*module.header, *function.leading_lines])
+
+
 def get_diff_for_mutant(
     mutant_name: str,
     source: str | None = None,
     path: Path | str | None = None,
 ) -> str:
     if path is None:
-        m = find_mutant(mutant_name)
-        path = m.path
-        status = status_by_exit_code[m.exit_code_by_key[mutant_name]]
-    else:
-        status = "not checked"
+        path = find_mutant(mutant_name).path
 
-    print(f"# {mutant_name}: {status}")
+    functions = None if source is not None else read_functions_from_index(mutant_name, path)
+    if functions is None:
+        module = read_mutants_module(path) if source is None else cst.parse_module(source)
+        functions = (read_original_function(module, mutant_name), read_mutant_function(module, mutant_name))
 
-    if source is None:
-        module = read_mutants_module(path)
-    else:
-        module = cst.parse_module(source)
-    orig_code = cst.Module([read_original_function(module, mutant_name)]).code.strip()
-    mutant_code = cst.Module([read_mutant_function(module, mutant_name)]).code.strip()
+    orig_code, mutant_code = (cst.Module([function]).code.strip() for function in functions)
 
     path_str = str(path)
     return "\n".join(
@@ -1646,7 +1718,9 @@ def get_diff_for_mutant(
 @click.argument("mutant_name")
 def show(mutant_name: str) -> None:
     Config.ensure_loaded()
-    print(get_diff_for_mutant(mutant_name))
+    m = find_mutant(mutant_name)
+    print(f"# {mutant_name}: {status_by_exit_code[m.exit_code_by_key[mutant_name]]}")
+    print(get_diff_for_mutant(mutant_name, path=m.path))
     return
 
 
@@ -1667,14 +1741,17 @@ def apply_mutant(mutant_name: str) -> None:
     orig_function_name = orig_function_name.rpartition(".")[-1]
 
     orig_module = read_orig_module(path)
-    mutants_module = read_mutants_module(path)
-
-    mutant_function = read_mutant_function(mutants_module, mutant_name)
-    mutant_function = mutant_function.with_changes(name=cst.Name(orig_function_name))
 
     original_function = find_top_level_function_or_method(orig_module, orig_function_name)
     if not original_function:
         raise FileNotFoundError(f"Could not apply mutant {mutant_name}")
+
+    functions_from_index = read_functions_from_index(mutant_name, path)
+    if functions_from_index is not None:
+        _, mutant_function = functions_from_index
+    else:
+        mutant_function = read_mutant_function(read_mutants_module(path), mutant_name)
+    mutant_function = mutant_function.with_changes(name=cst.Name(orig_function_name))
 
     new_module: cst.Module = orig_module.deep_replace(original_function, mutant_function)  # type: ignore[arg-type]
 
@@ -1687,16 +1764,18 @@ def apply_mutant(mutant_name: str) -> None:
 def browse(show_killed: bool) -> None:
     Config.ensure_loaded()
 
+    from rich.console import RenderableType
     from rich.syntax import Syntax
+    from textual import work
     from textual.app import App
     from textual.containers import Container
     from textual.widget import Widget
     from textual.widgets import DataTable
     from textual.widgets import Footer
     from textual.widgets import Static
+    from textual.worker import get_current_worker
 
     class ResultBrowser(App[None]):
-        loading_id = None
         CSS_PATH = "result_browser_layout.tcss"
         BINDINGS = [
             ("q", "quit()", "Quit"),
@@ -1714,6 +1793,7 @@ def browse(show_killed: bool) -> None:
         cursor_type = "row"
         source_file_mutation_data_and_stat_by_path: dict[str, tuple[SourceFileMutationData, Stat]] = {}
         path_by_name: dict[str, Path] = {}
+        diff_load_lock = Lock()
 
         def compose(self) -> Iterable[Any]:
             with Container(classes="container"):
@@ -1785,7 +1865,6 @@ def browse(show_killed: bool) -> None:
                 # noinspection PyTypeChecker
                 description_view: Static = self.query_one("#description")  # type: ignore[assignment]
                 mutant_name = event.row_key.value
-                self.loading_id = mutant_name
                 path = self.path_by_name.get(mutant_name)
                 source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[str(path)]
 
@@ -1832,17 +1911,31 @@ def browse(show_killed: bool) -> None:
                 diff_view: Static = self.query_one("#diff_view")  # type: ignore[assignment]
                 diff_view.update("<loading code diff...>")
 
-                def load_thread() -> None:
-                    Config.ensure_loaded()
-                    try:
-                        d = get_diff_for_mutant(event.row_key.value, path=path)
-                        if event.row_key.value == self.loading_id:
-                            diff_view.update(Syntax(d, "diff"))
-                    except Exception as e:
-                        diff_view.update(f"<{type(e)} {e}>")
+                self.load_diff(mutant_name, path, diff_view)
 
-                t = Thread(target=load_thread)
-                t.start()
+        @work(exclusive=True, thread=True, group="load_diff")
+        def load_diff(self, mutant_name: str, path: Path | None, diff_view: Static) -> None:
+            """Load the diff for a mutant and display it.
+
+            Only one diff is loaded at a time, and moving on to another mutant cancels the loads
+            that have not started yet. Otherwise moving through a long list of mutants piles up
+            loads for diffs that are never going to be displayed."""
+            worker = get_current_worker()
+
+            with self.diff_load_lock:
+                if worker.is_cancelled:
+                    return
+
+                Config.ensure_loaded()
+                try:
+                    update: RenderableType = Syntax(get_diff_for_mutant(mutant_name, path=path), "diff")
+                except Exception as e:
+                    update = f"<{type(e)} {e}>"
+
+            if worker.is_cancelled:
+                return
+
+            self.call_from_thread(diff_view.update, update)
 
         def retest(self, pattern: str | None) -> None:
             if pattern is None:

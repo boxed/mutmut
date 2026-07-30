@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import tempfile
 from collections import defaultdict
+from collections.abc import Sequence
+from pathlib import Path
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -20,6 +22,7 @@ from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import _refresh_change_detection_baseline
 from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
+from mutmut.__main__ import apply_mutant
 from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import git_changed_non_py_files
@@ -30,6 +33,7 @@ from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
+from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
@@ -49,8 +53,7 @@ def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> li
 
 
 def mutated_module(source: str) -> str:
-    mutated_code, _, _ = mutate_file_contents("", source)
-    return mutated_code
+    return mutate_file_contents("", source).code
 
 
 @pytest.mark.parametrize(
@@ -819,7 +822,8 @@ class Foo:
 
     """.strip()
 
-    mutants_source, mutant_names, _ = mutate_file_contents("filename", source)
+    mutated_file = mutate_file_contents("filename", source)
+    mutants_source, mutant_names = mutated_file.code, mutated_file.mutant_names
     assert len(mutant_names) == 2
 
     diff1 = get_diff_for_mutant(mutant_name=mutant_names[0], source=mutants_source, path="test.py").strip()
@@ -848,6 +852,97 @@ class Foo:
 +    return 4
 """.strip()
     )
+
+
+DIFF_SOURCE = '''\
+import functools
+
+
+# a comment above the function
+async def foo(
+    a=1,
+):
+    return a + 1
+
+
+class Foo:
+    """Docstring."""
+
+    def member(self):
+        return 3
+
+    def with_unindented_string(self):
+        text = """
+def member(
+"""
+        return text + str(4)
+'''
+
+
+def write_mutants_dir(directory: Path, source: str, *, write_line_spans: bool) -> Sequence[str]:
+    """Set up a project with a mutants directory the way `mutmut run` does, in the current directory.
+
+    :return: The names of the mutants that were generated."""
+    (directory / "pyproject.toml").write_text('[tool.mutmut]\nsource_paths = ["test.py"]\n')
+    (directory / "test.py").write_text(source)
+
+    mutated_file = mutate_file_contents("test.py", source)
+    (directory / "mutants").mkdir()
+    (directory / "mutants" / "test.py").write_text(mutated_file.code)
+    if write_line_spans:
+        MutantLineSpans(path="test.py", span_by_function_name=mutated_file.line_span_by_function_name).save()
+
+    # `apply_mutant` and `show` look mutants up in the meta file
+    source_file_mutation_data = SourceFileMutationData(path="test.py")
+    mutant_names = [get_mutant_name(Path("test.py"), name) for name in mutated_file.mutant_names]
+    source_file_mutation_data.exit_code_by_key = dict.fromkeys(mutant_names)
+    source_file_mutation_data.save()
+
+    return mutant_names
+
+
+def test_diff_from_line_span_index_matches_diff_from_parsing_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The line span index is a shortcut, so it has to produce exactly the same diff."""
+    with_index = tmp_path / "with_index"
+    without_index = tmp_path / "without_index"
+    with_index.mkdir()
+    without_index.mkdir()
+
+    monkeypatch.chdir(with_index)
+    mutant_names = write_mutants_dir(with_index, DIFF_SOURCE, write_line_spans=True)
+    assert MutantLineSpans.load("test.py") is not None
+    fast_diffs = [get_diff_for_mutant(name, path="test.py") for name in mutant_names]
+
+    # without the index, mutmut falls back to parsing the whole mutated file
+    monkeypatch.chdir(without_index)
+    assert write_mutants_dir(without_index, DIFF_SOURCE, write_line_spans=False) == mutant_names
+    assert MutantLineSpans.load("test.py") is None
+    slow_diffs = [get_diff_for_mutant(name, path="test.py") for name in mutant_names]
+
+    # mutants of a top level function, of a method, and of a method containing an unindented string
+    assert len(fast_diffs) == 8
+    assert fast_diffs == slow_diffs
+    for diff in fast_diffs:
+        assert diff.strip(), "expected every mutant to differ from the original"
+
+
+@pytest.mark.parametrize("mutant_index", [0, -1], ids=["top level function", "method"])
+def test_apply_mutant_from_line_span_index(mutant_index: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Applying a mutant must not depend on whether the line span index is there."""
+    applied = {}
+    for write_line_spans in (True, False):
+        directory = tmp_path / f"line_spans_{write_line_spans}"
+        directory.mkdir()
+        monkeypatch.chdir(directory)
+        mutant_names = write_mutants_dir(directory, DIFF_SOURCE, write_line_spans=write_line_spans)
+
+        apply_mutant(mutant_names[mutant_index])
+        applied[write_line_spans] = (directory / "test.py").read_text()
+
+    assert applied[True] == applied[False]
+    assert applied[True] != DIFF_SOURCE
+    # the mutated function keeps its name, and the comment above it is left alone
+    assert "# a comment above the function\nasync def foo(\n" in applied[True]
 
 
 def test_from_future_still_first():
@@ -1088,7 +1183,8 @@ def foo():
 def bar():
     return 2
 """.strip()
-    _, mutant_names, hashes = mutate_file_contents("test.py", source)
+    mutated_file = mutate_file_contents("test.py", source)
+    mutant_names, hashes = mutated_file.mutant_names, mutated_file.hash_by_function_name
     assert mutant_names
     # every mutated function appears in the hashes
 
@@ -1120,20 +1216,22 @@ def bar():
         src_path = pathlib.Path(tmp) / "mymod.py"
         src_path.write_text(source_v1)
 
-        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+        mutated_v1 = mutate_file_contents("mymod.py", source_v1)
+        mutant_names_v1, hashes_v1 = mutated_v1.mutant_names, mutated_v1.hash_by_function_name
 
         data = SourceFileMutationData(path=src_path)
         data.exit_code_by_key = {}
         for name in mutant_names_v1:
             key = get_mutant_name(src_path, name)
             data.exit_code_by_key[key] = 1  # fake "killed"
-        data.hash_by_function_name = hashes_v1
+        data.hash_by_function_name = dict(hashes_v1)
         data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
         data.meta_path.parent.mkdir(parents=True, exist_ok=True)
         data.save()
 
         # simulate second run with foo changed
-        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+        mutated_v2 = mutate_file_contents("mymod.py", source_v2)
+        mutant_names_v2, hashes_v2 = mutated_v2.mutant_names, mutated_v2.hash_by_function_name
 
         prior = SourceFileMutationData(path=src_path)
         prior.meta_path = data.meta_path
@@ -1177,7 +1275,8 @@ class Foo:
 
         src_path = pathlib.Path(tmp) / "mymod.py"
 
-        _, mutant_names_v1, hashes_v1 = mutate_file_contents("mymod.py", source_v1)
+        mutated_v1 = mutate_file_contents("mymod.py", source_v1)
+        mutant_names_v1, hashes_v1 = mutated_v1.mutant_names, mutated_v1.hash_by_function_name
         assert mutant_names_v1, "expected at least one method mutant"
 
         data = SourceFileMutationData(path=src_path)
@@ -1185,12 +1284,13 @@ class Foo:
         for name in mutant_names_v1:
             key = get_mutant_name(src_path, name)
             data.exit_code_by_key[key] = 1
-        data.hash_by_function_name = hashes_v1
+        data.hash_by_function_name = dict(hashes_v1)
         data.meta_path = pathlib.Path(tmp) / "mutants" / (str(src_path) + ".meta")
         data.meta_path.parent.mkdir(parents=True, exist_ok=True)
         data.save()
 
-        _, mutant_names_v2, hashes_v2 = mutate_file_contents("mymod.py", source_v2)
+        mutated_v2 = mutate_file_contents("mymod.py", source_v2)
+        mutant_names_v2, hashes_v2 = mutated_v2.mutant_names, mutated_v2.hash_by_function_name
 
         prior = SourceFileMutationData(path=src_path)
         prior.meta_path = data.meta_path
