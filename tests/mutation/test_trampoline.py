@@ -13,6 +13,7 @@ from mutmut.mutation.trampoline import wrap_in_trampoline
 
 mutants_simple_func = {}
 mutants_generator_func = {}
+mutants_returning_generator_func = {}
 mutants_async_func = {}
 mutants_async_generator_func = {}
 mutants_cleanup_async_gen = {}
@@ -51,6 +52,25 @@ def generator_func_orig(numbers: list[int]):
 def generator_func_1(numbers: list[int]):
     for n in numbers:
         yield n * 3
+
+
+@wrap_in_trampoline(mutants_returning_generator_func)
+def returning_generator_func(numbers: list[int]):
+    for n in numbers:
+        yield n * 2
+    return "done"
+
+
+def returning_generator_func_orig(numbers: list[int]):
+    for n in numbers:
+        yield n * 2
+    return "done"
+
+
+def returning_generator_func_1(numbers: list[int]):
+    for n in numbers:
+        yield n * 3
+    return "done"
 
 
 @wrap_in_trampoline(mutants_async_func)
@@ -199,6 +219,8 @@ mutants_simple_func["_mutmut_orig"] = simple_func_orig
 mutants_simple_func["simple_func__mutmut_1"] = simple_func_1
 mutants_generator_func["_mutmut_orig"] = generator_func_orig
 mutants_generator_func["generator_func__mutmut_1"] = generator_func_1
+mutants_returning_generator_func["_mutmut_orig"] = returning_generator_func_orig
+mutants_returning_generator_func["returning_generator_func__mutmut_1"] = returning_generator_func_1
 mutants_async_func["_mutmut_orig"] = async_func_orig
 mutants_async_func["async_func__mutmut_1"] = async_func_1
 mutants_async_generator_func["_mutmut_orig"] = async_generator_func_orig
@@ -239,6 +261,24 @@ class TestAsyncAndGeneratorFunc:
     def test_generator_func_mutated(self, monkeypatch):
         monkeypatch.setenv("MUTANT_UNDER_TEST", "test_trampoline.generator_func__mutmut_1")
         assert list(generator_func([1, 2, 3])) == [3, 6, 9], "Should call mutated func"
+
+    def test_generator_func_return_value_original(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "")
+
+        def consume():
+            result = yield from returning_generator_func([1, 2, 3])
+            yield result
+
+        assert list(consume()) == [2, 4, 6, "done"], "Should forward the return value"
+
+    def test_generator_func_return_value_mutated(self, monkeypatch):
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "test_trampoline.returning_generator_func__mutmut_1")
+
+        def consume():
+            result = yield from returning_generator_func([1, 2, 3])
+            yield result
+
+        assert list(consume()) == [3, 6, 9, "done"], "Should forward the return value"
 
     @pytest.mark.asyncio
     async def test_async_func_original(self, monkeypatch):

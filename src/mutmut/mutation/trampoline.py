@@ -93,7 +93,10 @@ def wrap_in_trampoline(
 
             @wraps(decorated_func)
             def _trampoline_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore
-                yield from trampoline(*args, **kwargs)  # type: ignore
+                # ``return`` the delegation result so a generator's StopIteration value
+                # (``return`` inside the generator) is forwarded to the caller's
+                # ``yield from``, matching the PEP 380 expansion.
+                return (yield from trampoline(*args, **kwargs))  # type: ignore
         elif inspect.iscoroutinefunction(decorated_func):
 
             @wraps(decorated_func)

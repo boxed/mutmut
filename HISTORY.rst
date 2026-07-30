@@ -4,6 +4,8 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Fix the trampoline dropping a generator's return value, so ``yield from`` on a mutated generator no longer yields ``None`` instead of its result
+
 * Per-function source hashing for incremental cache invalidation — only re-test mutants in functions that changed
 
 * Cross-call dependency tracking — invalidate mutants in callers when a called function changes
