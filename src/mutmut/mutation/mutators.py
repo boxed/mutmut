@@ -248,6 +248,27 @@ def operator_match(node: cst.Match) -> Iterable[cst.CSTNode]:
             yield node.with_changes(cases=[*node.cases[:i], *node.cases[i + 1 :]])
 
 
+def operator_if_exp(node: cst.IfExp) -> Iterable[cst.IfExp]:
+    """Force a ternary down each branch by neutralising its condition.
+
+    A ternary's two arms are a branch that nothing else here mutates, and
+    branch coverage does not see an uncovered arm either, so an untested arm
+    reads as a pass twice over.
+
+    The condition is parenthesised before `and False` / `or True` is appended.
+    Without the parentheses `and` binds tighter than a top-level `or`, so
+    `b or c` would become `b or (c and False)` -- which still takes the true
+    branch whenever `b` is truthy, i.e. an almost-always-surviving mutant that
+    tests cannot kill. `or True` happens not to need them, but wrapping both
+    keeps one rule instead of two.
+    """
+    parenthesised = node.test.with_changes(lpar=[cst.LeftParen()], rpar=[cst.RightParen()])
+    for operator, literal in ((cst.And(), "False"), (cst.Or(), "True")):
+        yield node.with_changes(
+            test=cst.BooleanOperation(left=parenthesised, operator=operator, right=cst.Name(literal))
+        )
+
+
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
     (cst.BaseNumber, operator_number),
@@ -265,6 +286,7 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.CSTNode, operator_keywords),
     (cst.CSTNode, operator_swap_op),
     (cst.Match, operator_match),
+    (cst.IfExp, operator_if_exp),
 ]
 
 

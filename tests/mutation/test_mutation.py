@@ -429,9 +429,13 @@ def test_function_with_annotation():
     print(mutated_code)
 
     expected_defs = [
-        "def x_capitalize__mutmut_1(s : str):\n    return s[0].title() - s[1:] if s else s",
-        "def x_capitalize__mutmut_2(s : str):\n    return s[1].title() + s[1:] if s else s",
-        "def x_capitalize__mutmut_3(s : str):\n    return s[0].title() + s[2:] if s else s",
+        # The ternary's condition is mutated first; `operator_if_exp` yields
+        # these two and shifts the arithmetic/index mutants down by two.
+        "def x_capitalize__mutmut_1(s : str):\n    return s[0].title() + s[1:] if (s) and False else s",
+        "def x_capitalize__mutmut_2(s : str):\n    return s[0].title() + s[1:] if (s) or True else s",
+        "def x_capitalize__mutmut_3(s : str):\n    return s[0].title() - s[1:] if s else s",
+        "def x_capitalize__mutmut_4(s : str):\n    return s[1].title() + s[1:] if s else s",
+        "def x_capitalize__mutmut_5(s : str):\n    return s[0].title() + s[2:] if s else s",
     ]
 
     for expected in expected_defs:
