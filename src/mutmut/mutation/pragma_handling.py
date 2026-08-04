@@ -21,17 +21,61 @@ class IgnoredCode:
     ignore_pattern_lines: set[int]
 
 
-def get_ignored_lines(filename: str, source: str, metadata_wrapper: cst.MetadataWrapper) -> IgnoredCode:
+def get_ignored_lines(
+    filename: str,
+    source: str,
+    metadata_wrapper: cst.MetadataWrapper,
+    coverage_excluded_lines: set[int] | None = None,
+) -> IgnoredCode:
     pragma_visitor = PragmaVisitor(filename)
     metadata_wrapper.visit(pragma_visitor)
 
     lines_ignored_by_pattern = get_lines_ignored_by_pattern(source)
 
+    # Code excluded from coverage measurement can never be killed by the tests, so it is
+    # ignored exactly like a `# pragma: no mutate block` region.
+    ignore_node_lines = pragma_visitor.ignore_node_lines
+    if coverage_excluded_lines:
+        ignore_node_lines = ignore_node_lines | expand_to_full_statements(metadata_wrapper, coverage_excluded_lines)
+
     return IgnoredCode(
         no_mutate_lines=pragma_visitor.no_mutate_lines,
-        ignore_node_lines=pragma_visitor.ignore_node_lines,
+        ignore_node_lines=ignore_node_lines,
         ignore_pattern_lines=lines_ignored_by_pattern,
     )
+
+
+def expand_to_full_statements(metadata_wrapper: cst.MetadataWrapper, lines: set[int]) -> set[int]:
+    """Grow each line in *lines* to cover every line of the statement starting there.
+
+    coverage.py reports only the line a statement starts on, but a mutation can be
+    anchored on any line of a multi-line statement, so we need the whole span."""
+    expander = StatementExpander(lines)
+    metadata_wrapper.visit(expander)
+
+    return expander.expanded_lines
+
+
+class StatementExpander(cst.CSTVisitor):
+    """Collect the full line span of every statement that starts on one of `lines`.
+
+    Only statements are expanded. A container such as the module or an indented block
+    starts on the same line as its first child, so expanding those would swallow the
+    code following the excluded part."""
+
+    METADATA_DEPENDENCIES = (PositionProvider,)
+
+    def __init__(self, lines: set[int]) -> None:
+        self._lines = lines
+        self.expanded_lines: set[int] = set()
+
+    def on_visit(self, node: cst.CSTNode) -> bool:
+        if isinstance(node, (cst.BaseStatement, cst.BaseSmallStatement)):
+            position = self.get_metadata(PositionProvider, node, None)
+            if position and position.start.line in self._lines:
+                self.expanded_lines.update(range(position.start.line, position.end.line + 1))
+
+        return True
 
 
 def get_lines_ignored_by_pattern(source: str) -> set[int]:

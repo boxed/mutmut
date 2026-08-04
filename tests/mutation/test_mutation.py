@@ -45,8 +45,12 @@ from mutmut.state import state
 from mutmut.utils.format_utils import get_mutant_name
 
 
-def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
-    module, mutated_nodes, _, _ = create_mutations("test.py", source, covered_lines)
+def mutants_for_source(
+    source: str,
+    covered_lines: set[int] | None = None,
+    coverage_excluded_lines: set[int] | None = None,
+) -> list[str]:
+    module, mutated_nodes, _, _ = create_mutations("test.py", source, covered_lines, coverage_excluded_lines)
     mutants: list[str] = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutated_nodes]  # type: ignore
 
     return mutants
@@ -690,6 +694,62 @@ def test_mutate_only_covered_lines_all():
     mutants = mutants_for_source(source, covered_lines=set([1, 2]))
     assert mutants
     assert mutants == mutants_expected
+
+
+def test_coverage_excluded_lines_are_not_mutated():
+    source = """def foo():\n    return 1+1\n""".strip()
+    assert mutants_for_source(source, coverage_excluded_lines=set([2])) == []
+
+
+def test_coverage_excluded_lines_do_not_affect_other_lines():
+    source = "def foo():\n    return 1 + 1\ndef bar():\n    return 2 + 2"
+
+    module, mutations, _, ignored_functions = create_mutations("test.py", source, None, set([1, 2]))
+
+    mutants = [module.deep_replace(m.original_node, m.mutated_node).code for m in mutations]  # type: ignore
+    assert ignored_functions == {"foo"}
+    assert all("2 + 2" not in mutant for mutant in mutants)
+    assert all("1 + 1" in mutant for mutant in mutants)
+
+
+def test_coverage_excluded_lines_cover_whole_multiline_statement():
+    # coverage.py reports only the *first* line of an excluded statement, so line 2 alone
+    # stands for the whole assignment and has to be expanded to reach the operands on the
+    # continuation lines.
+    source = "def foo(a, b):\n    result = (\n        a\n        + b\n    )\n    return result"
+
+    assert any("a - b" in mutant for mutant in mutants_for_source(source))
+    assert mutants_for_source(source, coverage_excluded_lines=set([2])) == []
+
+
+def test_coverage_excluded_lines_do_not_swallow_the_following_statement():
+    # The `if` body and the statement after it start on adjacent lines, and the enclosing
+    # indented block starts on the same line as the `if`. Expanding the exclusion must
+    # follow the excluded statement only, not its container.
+    source = "def foo(flag):\n    if flag:\n        return 1 + 1\n    return 2 + 2"
+
+    mutants = mutants_for_source(source, coverage_excluded_lines=set([2, 3]))
+
+    assert mutants
+    assert all("1 + 1" in mutant for mutant in mutants)
+    assert any("2 - 2" in mutant for mutant in mutants)
+
+
+def test_coverage_excluded_class_is_not_mutated():
+    source = "class C:\n    def m(self):\n        return 1 + 1"
+
+    _, mutations, ignored_classes, _ = create_mutations("test.py", source, None, set([1, 2, 3]))
+
+    assert ignored_classes == {"C"}
+    assert mutations == []
+
+
+def test_coverage_excluded_first_line_does_not_skip_whole_module():
+    # The module node starts on line 1 just like a statement excluded there does, and it
+    # spans the whole file, so it must not be expanded along with the statement.
+    source = "import os\ndef foo():\n    return 1 + 1"
+
+    assert mutants_for_source(source, coverage_excluded_lines=set([1]))
 
 
 def test_mutate_dict():

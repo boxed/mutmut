@@ -43,6 +43,13 @@ def test_mutate_only_covered_lines_result_snapshot():
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_31": 1,
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_32": 1,
             },
+            "mutants/src/mutate_only_covered_lines/exclude_me.py.meta": {
+                "mutate_only_covered_lines.exclude_me.x_excluded_branch__mutmut_1": 1,
+                "mutate_only_covered_lines.exclude_me.x_excluded_branch__mutmut_2": 1,
+                "mutate_only_covered_lines.exclude_me.x_excluded_branch__mutmut_3": 1,
+                "mutate_only_covered_lines.exclude_me.x_excluded_by_coverage_config__mutmut_1": 1,
+                "mutate_only_covered_lines.exclude_me.x_excluded_by_coverage_config__mutmut_2": 1,
+            },
             "mutants/src/mutate_only_covered_lines/omit_me.py.meta": {},
         }
     )

@@ -60,6 +60,7 @@ from rich.text import Text
 import mutmut
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
+from mutmut.code_coverage import get_excluded_lines_for_file
 from mutmut.configuration import Config
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
@@ -278,7 +279,9 @@ def setup_source_paths() -> None:
 
 def store_lines_covered_by_tests() -> None:
     if Config.get().mutate_only_covered_lines:
-        mutmut._covered_lines = gather_coverage(PytestRunner(), list(walk_source_files()))
+        coverage_info = gather_coverage(PytestRunner(), list(walk_source_files()))
+        mutmut._covered_lines = coverage_info.covered_lines
+        mutmut._excluded_lines = coverage_info.excluded_lines
 
 
 def copy_also_copy_files() -> None:
@@ -371,7 +374,10 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
 def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> MutatedFile:
     mutated_file = mutate_file_contents(
-        str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
+        str(filename),
+        source,
+        get_covered_lines_for_file(str(filename), mutmut._covered_lines),
+        get_excluded_lines_for_file(str(filename), mutmut._excluded_lines),
     )
     out.write(mutated_file.code)
 

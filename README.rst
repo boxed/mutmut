@@ -169,6 +169,11 @@ If you only want to mutate lines that are called (according to coverage.py), you
 
     mutate_only_covered_lines=true
 
+This also honours the lines coverage.py is told to leave out of its measurement, so code
+marked with `# pragma: no cover`, or matched by your `exclude_lines`/`exclude_also`
+settings, is not mutated either. Such code is not held to your test suite, so mutants
+there could only ever show up as survivors.
+
 
 Filter generated mutants with type checker
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

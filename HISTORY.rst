@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Fix `mutate_only_covered_lines` mutating code that coverage.py excludes from measurement (`# pragma: no cover`, `exclude_lines`, `exclude_also`). Such lines are reported as covered when they run, so they used to produce mutants that could only ever survive
+
 3.7.0
 ~~~~~
 

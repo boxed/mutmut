@@ -99,9 +99,16 @@ class MutatedFile:
     hash_by_function_name: Mapping[str, str]
 
 
-def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | None = None) -> MutatedFile:
+def mutate_file_contents(
+    filename: str,
+    code: str,
+    covered_lines: set[int] | None = None,
+    coverage_excluded_lines: set[int] | None = None,
+) -> MutatedFile:
     """Create mutations for `code` and merge them to a single mutated file with trampolines."""
-    module, mutations, ignored_classes, ignored_functions = create_mutations(filename, code, covered_lines)
+    module, mutations, ignored_classes, ignored_functions = create_mutations(
+        filename, code, covered_lines, coverage_excluded_lines
+    )
 
     mutated_file = combine_mutations_to_source(module, mutations, ignored_classes, ignored_functions)
 
@@ -109,18 +116,23 @@ def mutate_file_contents(filename: str, code: str, covered_lines: set[int] | Non
 
 
 def create_mutations(
-    filename: str, code: str, covered_lines: set[int] | None = None
+    filename: str,
+    code: str,
+    covered_lines: set[int] | None = None,
+    coverage_excluded_lines: set[int] | None = None,
 ) -> tuple[cst.Module, list[Mutation], set[str], set[str]]:
     """Parse the code and create mutations.
 
     :param filename: File path forwarded to :class:`PragmaVisitor` for error messages.
     :param code: Python source code to parse and mutate.
     :param covered_lines: If provided, only lines in this set are considered for mutation.
+    :param coverage_excluded_lines: Lines coverage.py excludes from measurement. The
+        statements starting on them are ignored, like a `# pragma: no mutate block`.
     :return: A tuple of (module, mutations, ignored_classes, ignored_functions)."""
     module = cst.parse_module(code)
     metadata_wrapper = MetadataWrapper(module)
 
-    ignored_code = get_ignored_lines(filename, code, metadata_wrapper)
+    ignored_code = get_ignored_lines(filename, code, metadata_wrapper, coverage_excluded_lines)
 
     visitor = MutationVisitor(
         mutation_operators,
@@ -619,6 +631,7 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                     (m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None
                 )
                 if mutant is None:
+                    continue
                     raise Exception(
                         f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). \n"
                         "Probably, a code mutation influenced types in unexpected locations. \n"
