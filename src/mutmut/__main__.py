@@ -1243,13 +1243,8 @@ def badge(input_path: Path, output: Path, label: str) -> None:
     except JSONDecodeError as e:
         raise click.ClickException(f"{input_path} does not contain valid JSON") from e
 
-    total = int(stats.get("total", 0))
-    skipped = int(stats.get("skipped", 0))
-    tested = total - skipped
-    if tested <= 0:
-        score = 0.0
-    else:
-        score = ((int(stats.get("killed", 0)) + int(stats.get("timeout", 0))) / tested) * 100
+    tested = int(stats.get("total", 0)) - int(stats.get("skipped", 0))
+    score = 0.0 if tested <= 0 else ((int(stats.get("killed", 0)) + int(stats.get("timeout", 0))) / tested) * 100
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w") as f:
         json.dump(
