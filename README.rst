@@ -518,41 +518,18 @@ this directory to start from scratch.
 Mutation score badges
 ---------------------
 
-If you want a mutation score badge in GitHub, mutmut can turn its CI stats
-into `Shields endpoint JSON <https://shields.io/badges/endpoint-badge>`_.
-
-Generate the badge JSON with:
+`mutmut badge` turns `mutmut export-cicd-stats` output into `Shields endpoint JSON <https://shields.io/badges/endpoint-badge>`_.
 
 .. code-block:: console
 
+    mutmut export-cicd-stats
     mutmut badge --output mutation-score.json
 
-using the `mutants/mutmut-cicd-stats.json` file from `mutmut export-cicd-stats`.
-This writes:
-
-.. code-block:: json
-
-    {
-        "schemaVersion": 1,
-        "label": "mutation",
-        "message": "63.4%",
-        "color": "#bbff00"
-    }
-
-One simple GitHub Actions pattern is:
-
-.. code-block:: yaml
-
-    - run: mutmut run
-    - run: mutmut export-cicd-stats
-    - run: mutmut badge --output mutation-score.json
-
-Publish `mutation-score.json` from a branch such as `gh-pages` or `badges`,
-then use:
+Publish `mutation-score.json` somewhere public, then use:
 
 .. code-block:: md
 
-    ![mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/OWNER/REPO/gh-pages/mutation-score.json)
+    ![mutation](https://img.shields.io/endpoint?url=https://example.com/mutation-score.json)
 
 Contributing to Mutmut
 ----------------------
