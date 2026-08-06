@@ -33,6 +33,7 @@ import warnings
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable
+from colorsys import hls_to_rgb
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
@@ -1191,6 +1192,13 @@ def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutat
         )
 
 
+def mutation_score_to_hex_color(score: float) -> str:
+    clamped_score = max(0.0, min(100.0, score))
+    hue = (clamped_score / 100.0) * (120.0 / 360.0)
+    red, green, blue = hls_to_rgb(hue, 0.5, 1.0)
+    return f"#{round(red * 255):02x}{round(green * 255):02x}{round(blue * 255):02x}"
+
+
 # exports CI/CD stats to block pull requests from merging if mutation score is too low, or used in other ways in CI/CD pipelines
 @cli.command()
 def export_cicd_stats() -> None:
@@ -1216,6 +1224,46 @@ def export_cicd_stats() -> None:
 
     save_cicd_stats(source_file_mutation_data_by_path)
     print("Saved CI/CD stats to mutants/mutmut-cicd-stats.json")
+
+
+@cli.command()
+@click.option(
+    "--input",
+    "input_path",
+    default="mutants/mutmut-cicd-stats.json",
+    show_default=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option("--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--label", default="mutation", show_default=True)
+def badge(input_path: Path, output: Path, label: str) -> None:
+    try:
+        with input_path.open() as f:
+            stats = json.load(f)
+    except JSONDecodeError as e:
+        raise click.ClickException(f"{input_path} does not contain valid JSON") from e
+
+    total = int(stats.get("total", 0))
+    skipped = int(stats.get("skipped", 0))
+    tested = total - skipped
+    if tested <= 0:
+        score = 0.0
+    else:
+        score = ((int(stats.get("killed", 0)) + int(stats.get("timeout", 0))) / tested) * 100
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w") as f:
+        json.dump(
+            {
+                "schemaVersion": 1,
+                "label": label,
+                "message": f"{score:.1f}%",
+                "color": mutation_score_to_hex_color(score),
+            },
+            f,
+            indent=4,
+        )
+        f.write("\n")
+    print(f"Saved mutation badge to {output}")
 
 
 def collect_source_file_mutation_data(
