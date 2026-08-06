@@ -514,6 +514,21 @@ Mutmut keeps the data of what it has done and the mutants in the `mutants/`
 directory. If you want to make sure you run a full mutmut run you can delete
 this directory to start from scratch.
 
+
+Mutation score badges
+---------------------
+
+`mutmut badge` turns `mutmut export-cicd-stats` output into `Shields endpoint JSON <https://shields.io/badges/endpoint-badge>`_:
+
+.. code-block:: console
+
+    mutmut export-cicd-stats
+    mutmut badge --output mutation-score.json
+
+.. code-block:: md
+
+    ![mutation](https://img.shields.io/endpoint?url=https://example.com/mutation-score.json)
+
 Contributing to Mutmut
 ----------------------
 
