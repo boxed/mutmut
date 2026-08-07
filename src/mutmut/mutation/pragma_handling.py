@@ -49,11 +49,13 @@ def expand_to_full_statements(metadata_wrapper: cst.MetadataWrapper, lines: set[
     """Grow each line in *lines* to cover every line of the statement starting there.
 
     coverage.py reports only the line a statement starts on, but a mutation can be
-    anchored on any line of a multi-line statement, so we need the whole span."""
+    anchored on any line of a multi-line statement, so we need the whole span. The
+    original lines are always kept: not every one of them starts a statement, for
+    instance `case ...:`, `else:` and `except ...:` are clauses of one."""
     expander = StatementExpander(lines)
     metadata_wrapper.visit(expander)
 
-    return expander.expanded_lines
+    return lines | expander.expanded_lines
 
 
 class StatementExpander(cst.CSTVisitor):

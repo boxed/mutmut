@@ -15,6 +15,12 @@ def _parse_ignored_code(filename: str, source: str) -> IgnoredCode:
     return get_ignored_lines(filename, source, wrapper)
 
 
+def _parse_ignored_code_with_exclusions(filename: str, source: str, excluded_lines: set[int]) -> IgnoredCode:
+    module = cst.parse_module(source)
+    wrapper = MetadataWrapper(module)
+    return get_ignored_lines(filename, source, wrapper, excluded_lines)
+
+
 class TestParsePragmaLines:
     """Tests for PragmaVisitor basic pragma detection."""
 
@@ -388,3 +394,39 @@ def foo():
         patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])
         ignored_code = _parse_ignored_code("test.py", source)
         assert ignored_code.ignore_pattern_lines == {3}
+
+
+class TestCoverageExcludedLines:
+    """Tests for folding coverage.py's excluded lines into the ignored ones."""
+
+    def test_multiline_statement_is_expanded(self):
+        source = """
+def foo(a, b):
+    result = (
+        a
+        + b
+    )
+"""
+        ignored_code = _parse_ignored_code_with_exclusions("test.py", source, {3})
+        assert ignored_code.ignore_node_lines == {3, 4, 5, 6}
+
+    def test_line_that_does_not_start_a_statement_is_kept(self):
+        # `case ...:` is a clause of the match statement, not a statement of its own, so
+        # there is nothing to expand and the line has to survive on its own.
+        source = """
+def foo(tok):
+    match tok:
+        case 1:
+            return 10
+        case _:
+            raise Exception("nope")
+"""
+        ignored_code = _parse_ignored_code_with_exclusions("test.py", source, {6, 7})
+        assert ignored_code.ignore_node_lines == {6, 7}
+
+    def test_module_is_not_expanded(self):
+        source = "import os\ndef foo():\n    return 1 + 1"
+
+        ignored_code = _parse_ignored_code_with_exclusions("test.py", source, {1})
+
+        assert ignored_code.ignore_node_lines == {1}

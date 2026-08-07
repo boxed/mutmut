@@ -744,6 +744,39 @@ def test_coverage_excluded_class_is_not_mutated():
     assert mutations == []
 
 
+def test_coverage_excluded_case_is_not_dropped_from_match():
+    # Dropping a case is a mutation of the enclosing `match`, so the excluded lines of
+    # the case itself are never looked at unless the removal is checked separately.
+    source = 'def foo(tok):\n    match tok:\n        case 1:\n            return 10\n        case _:\n            raise Exception("nope")'
+
+    mutants = mutants_for_source(source, coverage_excluded_lines=set([5, 6]))
+
+    match_drops = [mutant for mutant in mutants if "match tok:" in mutant]
+    assert match_drops
+    assert all("case _:" in mutant for mutant in match_drops)
+
+
+def test_coverage_excluded_argument_is_not_removed_from_call():
+    source = "def foo(a, b):\n    return g(\n        a,\n        b,\n    )"
+
+    mutants = mutants_for_source(source, coverage_excluded_lines=set([3]))
+
+    assert mutants
+    assert all("a," in mutant for mutant in mutants)
+
+
+def test_coverage_excluded_case_keeps_the_other_cases_droppable():
+    source = 'def foo(tok):\n    match tok:\n        case 1:\n            return 10\n        case 2:\n            return 20\n        case _:\n            raise Exception("nope")'
+
+    def match_drops(coverage_excluded_lines):
+        _, mutations, _, _ = create_mutations("test.py", source, None, coverage_excluded_lines)
+        return [m for m in mutations if isinstance(m.original_node, cst.Match)]
+
+    # one drop per case, minus the excluded one: the match is still worth mutating
+    assert len(match_drops(None)) == 3
+    assert len(match_drops(set([7, 8]))) == 2
+
+
 def test_coverage_excluded_first_line_does_not_skip_whole_module():
     # The module node starts on line 1 just like a statement excluded there does, and it
     # spans the whole file, so it must not be expanded along with the statement.

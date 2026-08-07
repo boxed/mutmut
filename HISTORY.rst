@@ -6,6 +6,8 @@ Unreleased
 
 * Fix `mutate_only_covered_lines` mutating code that coverage.py excludes from measurement (`# pragma: no cover`, `exclude_lines`, `exclude_also`). Such lines are reported as covered when they run, so they used to produce mutants that could only ever survive
 
+* Fix mutations that delete ignored code. Dropping a `case` from a `match`, or an argument from a call, is a mutation of the enclosing node, so it used to be made even when the removed lines were themselves ignored
+
 3.7.0
 ~~~~~
 

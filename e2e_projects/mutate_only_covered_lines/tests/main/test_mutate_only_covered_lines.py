@@ -1,6 +1,6 @@
 from mutate_only_covered_lines.ignore_me import this_function_shall_NOT_be_mutated
 from mutate_only_covered_lines import hello_mutate_only_covered_lines, mutate_only_covered_lines_multiline, function_with_pragma, do_not_mutate_external_ommited_function
-from mutate_only_covered_lines.exclude_me import excluded_function, excluded_branch, excluded_by_coverage_config
+from mutate_only_covered_lines.exclude_me import excluded_function, excluded_branch, excluded_by_coverage_config, excluded_case
 
 """This tests the mutate_only_covered_lines feature."""
 
@@ -29,3 +29,7 @@ def test_excluded_branch():
 
 def test_excluded_by_coverage_config():
     assert excluded_by_coverage_config(2, 3) == 7
+
+def test_excluded_case():
+    assert excluded_case("a") == 1
+    assert excluded_case("b") == 2

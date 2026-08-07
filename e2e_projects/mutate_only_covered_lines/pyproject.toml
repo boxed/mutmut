@@ -24,6 +24,7 @@ omit = [
 [tool.coverage.report]
 exclude_also = [
     "if debug_only:",
+    "case _NEVER:",
 ]
 
 [tool.mutmut]

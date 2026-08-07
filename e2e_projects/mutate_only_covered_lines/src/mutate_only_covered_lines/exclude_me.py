@@ -29,3 +29,14 @@ def excluded_by_coverage_config(a: int, b: int) -> int:
             + 1
         )
     return total
+
+
+def excluded_case(kind: str) -> int:
+    # dropping a case is a mutation of the `match`, not of the excluded lines themselves
+    match kind:
+        case "a":
+            return 1
+        case "b":
+            return 2
+        case _NEVER:
+            raise Exception("Can't happen")
