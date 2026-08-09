@@ -672,7 +672,6 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                     (m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None
                 )
                 if mutant is None:
-                    continue
                     raise Exception(
                         f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). \n"
                         "Probably, a code mutation influenced types in unexpected locations. \n"
