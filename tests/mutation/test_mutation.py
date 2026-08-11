@@ -24,6 +24,7 @@ from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
 from mutmut.__main__ import apply_mutant
 from mutmut.__main__ import compute_watched_file_hashes
+from mutmut.__main__ import create_mutants_for_file
 from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import git_changed_non_py_files
 from mutmut.__main__ import git_head
@@ -1501,6 +1502,39 @@ def test_get_mutant_name_preserves_real_src_package_prefix():
 
 def test_get_mutant_name_strips_src_layout_prefix_by_default():
     assert get_mutant_name(Path("src/calculator.py"), "x_add_one__mutmut_1") == "calculator.x_add_one__mutmut_1"
+
+
+def test_src_package_regenerates_cache_with_unqualified_names(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cfg = _config_for_invalidation(src_package_exists=True)
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    source_path = Path("src/calculator.py")
+    source_path.parent.mkdir()
+    source = "def add_one(value):\n    return value + 1\n"
+    source_path.write_text(source)
+
+    output_path = Path("mutants/src/calculator.py")
+    output_path.parent.mkdir(parents=True)
+    output_path.write_text(source)
+
+    mutated_file = mutate_file_contents(str(source_path), source)
+    data = SourceFileMutationData(path=source_path)
+    data.exit_code_by_key = {get_mutant_name(source_path, name): 1 for name in mutated_file.mutant_names}
+    data.hash_by_function_name = dict(mutated_file.hash_by_function_name)
+    data.save()
+
+    source_mtime = source_path.stat().st_mtime_ns
+    os.utime(output_path, ns=(source_mtime + 1_000_000, source_mtime + 1_000_000))
+
+    result = create_mutants_for_file(source_path, output_path)
+
+    migrated = SourceFileMutationData(path=source_path)
+    migrated.load()
+    assert result.unmodified is False
+    assert migrated.exit_code_by_key
+    assert all(key.startswith("src.calculator.") for key in migrated.exit_code_by_key)
+    assert set(migrated.exit_code_by_key.values()) == {None}
 
 
 def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
