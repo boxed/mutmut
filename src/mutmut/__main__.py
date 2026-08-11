@@ -122,13 +122,16 @@ exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status i
 
 
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
-    assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
+    config = Config.get()
+    assert not name.startswith("src.") or config.src_package_exists, (
+        "Failed trampoline hit. Module name starts with `src.`, which is invalid unless src/__init__.py exists"
+    )
 
-    mutated_source_paths = Config.get().resolved_mutated_source_paths
+    mutated_source_paths = config.resolved_mutated_source_paths
 
-    if Config.get().max_stack_depth != -1:
+    if config.max_stack_depth != -1:
         f = inspect.currentframe()
-        c = Config.get().max_stack_depth
+        c = config.max_stack_depth
         while c and f:
             filename = f.f_code.co_filename
             f = f.f_back
@@ -143,7 +146,7 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
             return
 
     mutmut._stats.add(name)
-    if caller is not None and Config.get().track_dependencies:
+    if caller is not None and config.track_dependencies:
         state().function_dependencies[name].add(caller)
 
 
@@ -301,6 +304,7 @@ def copy_also_copy_files() -> None:
 
 def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationResult:
     warnings: list[Warning] = []
+    preserve_src_prefix = Config.get().src_package_exists
 
     try:
         source_mtime = os.path.getmtime(filename)
@@ -312,10 +316,23 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
         if source_mtime < mutant_mtime:
             data = SourceFileMutationData(path=filename)
             data.load()
-            return FileMutationResult(
-                unmodified=True,
-                current_hashes={get_mutant_name(filename, func): h for func, h in data.hash_by_function_name.items()},
+            cached_names_are_current = not (
+                preserve_src_prefix
+                and filename.parts[0] == "src"
+                and any(not key.startswith("src.") for key in data.exit_code_by_key)
             )
+            if cached_names_are_current:
+                return FileMutationResult(
+                    unmodified=True,
+                    current_hashes={
+                        get_mutant_name(
+                            filename,
+                            func,
+                            preserve_src_prefix=preserve_src_prefix,
+                        ): h
+                        for func, h in data.hash_by_function_name.items()
+                    },
+                )
     except OSError:
         pass
 
@@ -351,7 +368,7 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
     merged: dict[str, int | None] = {}
     for name in mutated_file.mutant_names:
-        key = get_mutant_name(filename, name)
+        key = get_mutant_name(filename, name, preserve_src_prefix=preserve_src_prefix)
         func = mangled_name_from_mutant_name(key).rpartition(".")[2]
         if func not in hash_by_function_name or func in changed:
             merged[key] = None
@@ -363,8 +380,13 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
     MutantLineSpans(path=filename, span_by_function_name=mutated_file.line_span_by_function_name).save()
 
-    current_hashes_qualified = {get_mutant_name(filename, func): h for func, h in hash_by_function_name.items()}
-    changed_functions_qualified = {get_mutant_name(filename, func) for func in changed}
+    current_hashes_qualified = {
+        get_mutant_name(filename, func, preserve_src_prefix=preserve_src_prefix): h
+        for func, h in hash_by_function_name.items()
+    }
+    changed_functions_qualified = {
+        get_mutant_name(filename, func, preserve_src_prefix=preserve_src_prefix) for func in changed
+    }
 
     return FileMutationResult(
         warnings=warnings,
@@ -479,7 +501,7 @@ class PytestRunner(TestRunner):
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item: Any, call: Any) -> None:
-                if call.when != 'call':
+                if call.when != "call":
                     return
                 mutmut.duration_by_test[item.nodeid] += call.duration
 

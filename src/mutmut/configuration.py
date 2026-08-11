@@ -142,6 +142,7 @@ def _load_config() -> Config:
         debug=s("debug", False),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
+        src_package_exists=(Path("src") / "__init__.py").is_file(),
         resolved_mutated_source_paths=resolved_mutated_source_paths,
         pytest_add_cli_args=s("pytest_add_cli_args", []),
         pytest_add_cli_args_test_selection=pytest_add_cli_args_test_selection,
@@ -186,6 +187,7 @@ class Config:
     cache_invalidation_exclude: list[str]
     on_dependency_change: str
     use_git_change_detection: bool
+    src_package_exists: bool = False
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the

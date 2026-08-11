@@ -1,0 +1,6 @@
+[tool.mutmut]
+source_paths = ["src/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

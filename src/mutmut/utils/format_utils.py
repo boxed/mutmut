@@ -58,9 +58,15 @@ def get_module_from_key(key: str) -> str:
     return key.rsplit(".", 1)[0] if "." in key else key
 
 
-def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
+def get_mutant_name(
+    relative_source_path: Path,
+    mutant_method_name: str,
+    *,
+    preserve_src_prefix: bool = False,
+) -> str:
     module_name = str(relative_source_path)[: -len(relative_source_path.suffix)].replace(os.sep, ".")
-    module_name = strip_prefix(module_name, prefix="src.")
+    if not preserve_src_prefix:
+        module_name = strip_prefix(module_name, prefix="src.")
 
     # FYI, we currently use "mutant_name" inconsistently, for both the whole identifier including the path and only the mangled method name
     mutant_name = f"{module_name}.{mutant_method_name}"

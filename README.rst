@@ -99,6 +99,11 @@ If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutm
     source_paths = [ "src/" ]
     pytest_add_cli_args_test_selection= [ "tests/" ]
 
+For a standard ``src`` layout, import the package inside ``src`` rather than
+importing ``src`` itself. If ``src/__init__.py`` exists because ``src`` is the
+actual top-level package, mutmut recognizes that package and preserves its
+``src.`` module prefix in mutant names.
+
 See below for more options for configuring mutmut.
 
 

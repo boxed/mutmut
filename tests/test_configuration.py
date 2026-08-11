@@ -64,6 +64,7 @@ class TestShouldMutateFile:
             max_stack_depth=-1,
             debug=False,
             source_paths=[],
+            src_package_exists=False,
             resolved_mutated_source_paths=[],
             pytest_add_cli_args=[],
             pytest_add_cli_args_test_selection=[],
@@ -343,6 +344,7 @@ timeout_constant = 0.5
         assert config.debug is False
         assert config.max_stack_depth == -1
         assert config.source_paths == [Path("src")]
+        assert config.src_package_exists is False
         assert config.only_mutate == []
         assert config.do_not_mutate == []
         assert config.mutate_only_covered_lines is False
@@ -351,6 +353,15 @@ timeout_constant = 0.5
         assert config.type_check_command == []
         assert config.track_dependencies is True
         assert config.dependency_tracking_depth == -1
+
+    def test_detects_top_level_src_package(self, in_tmp_dir: Path):
+        src = in_tmp_dir / "src"
+        src.mkdir()
+        (src / "__init__.py").touch()
+
+        config = _load_config()
+
+        assert config.src_package_exists is True
 
     def test_also_copy_includes_defaults(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()

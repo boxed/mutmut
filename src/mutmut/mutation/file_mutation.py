@@ -655,7 +655,8 @@ def group_by_path(errors: list[TypeCheckingError]) -> dict[Path, list[TypeChecki
 
 def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
     with change_cwd(Path("mutants")):
-        errors = run_type_checker(Config.get().type_check_command)
+        config = Config.get()
+        errors = run_type_checker(config.type_check_command)
         errors_by_path = group_by_path(errors)
 
         mutants_to_skip: dict[str, FailedTypeCheckMutant] = {}
@@ -683,7 +684,11 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                         "If your project normally has no type errors and uses mypy/pyrefly, please file an issue with steps to reproduce on github.\n"
                     )
 
-                mutant_name = get_mutant_name(path.relative_to(Path(".").absolute()), mutant.function_name)
+                mutant_name = get_mutant_name(
+                    path.relative_to(Path(".").absolute()),
+                    mutant.function_name,
+                    preserve_src_prefix=config.src_package_exists,
+                )
 
                 mutants_to_skip[mutant_name] = FailedTypeCheckMutant(
                     method_location=mutant,

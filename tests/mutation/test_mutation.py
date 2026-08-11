@@ -1470,6 +1470,39 @@ def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
     reset_state()
 
 
+def test_record_trampoline_hit_rejects_src_layout_import(monkeypatch):
+    cfg = _config_for_invalidation(src_package_exists=False)
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    with pytest.raises(AssertionError, match="invalid unless src/__init__.py exists"):
+        record_trampoline_hit("src.calculator.x_add_one")
+
+
+def test_record_trampoline_hit_accepts_src_package(monkeypatch):
+    mutmut._stats.clear()
+    cfg = _config_for_invalidation(src_package_exists=True)
+    monkeypatch.setattr(Config, "get", lambda: cfg)
+
+    record_trampoline_hit("src.calculator.x_add_one")
+
+    assert "src.calculator.x_add_one" in mutmut._stats
+
+
+def test_get_mutant_name_preserves_real_src_package_prefix():
+    assert (
+        get_mutant_name(
+            Path("src/calculator.py"),
+            "x_add_one__mutmut_1",
+            preserve_src_prefix=True,
+        )
+        == "src.calculator.x_add_one__mutmut_1"
+    )
+
+
+def test_get_mutant_name_strips_src_layout_prefix_by_default():
+    assert get_mutant_name(Path("src/calculator.py"), "x_add_one__mutmut_1") == "calculator.x_add_one__mutmut_1"
+
+
 def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
     """_cleanup_stale_stats removes test associations for modules not in current_function_hashes."""
 
@@ -1535,6 +1568,7 @@ def _config_for_invalidation(**overrides):
         max_stack_depth=-1,
         debug=False,
         source_paths=[pathlib.Path("src")],
+        src_package_exists=False,
         resolved_mutated_source_paths=[(pathlib.Path("mutants") / "src").absolute()],
         pytest_add_cli_args=[],
         pytest_add_cli_args_test_selection=[],
