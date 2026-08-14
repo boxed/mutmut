@@ -14,21 +14,22 @@ import pytest
 
 import mutmut
 from mutmut.__main__ import CatchOutput
-from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import _apply_config_change_invalidation
 from mutmut.__main__ import _changed_dependency_files
 from mutmut.__main__ import _cleanup_stale_stats
 from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import _refresh_change_detection_baseline
+from mutmut.__main__ import _register_mutant_result
 from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
 from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import git_changed_non_py_files
 from mutmut.__main__ import git_head
 from mutmut.__main__ import git_tracked_non_py_files
-from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
+from mutmut.configuration import ProcessIsolation
+from mutmut.core import MutmutProgrammaticFailException
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.diff_apply import apply_mutant
@@ -40,9 +41,11 @@ from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.state import reset_state
 from mutmut.state import state
+from mutmut.stats import record_trampoline_hit
 from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.utils.format_utils import orig_function_and_class_names_from_key
+from mutmut.workers.isolation import MutantResult
 
 
 def mutants_for_source(
@@ -1516,7 +1519,7 @@ def test_record_trampoline_hit_records_caller(monkeypatch):
     cfg.source_paths = []
     cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = True
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: cfg)
+    monkeypatch.setattr(mutmut.stats, "config", lambda: cfg)
 
     record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
 
@@ -1535,7 +1538,7 @@ def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
     cfg.source_paths = []
     cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = False
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: cfg)
+    monkeypatch.setattr(mutmut.stats, "config", lambda: cfg)
 
     record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
 
@@ -1622,6 +1625,7 @@ def _config_for_invalidation(**overrides):
         cache_invalidation_exclude=[],
         on_dependency_change="warn",
         use_git_change_detection=True,
+        process_isolation=ProcessIsolation.FORK,
     )
     base.update(overrides)
     return Config(**base)
@@ -1995,3 +1999,53 @@ def test_baseline_records_git_files_for_gitless_fallback(tmp_path, monkeypatch):
 
     assert "config.yaml" in _changed_dependency_files()
     reset_state()
+
+
+class TestRegisterMutantResult:
+    """_register_mutant_result writes a finished worker's verdict onto its meta file."""
+
+    @staticmethod
+    def _mutation_data(tmp_path, mutant_name):
+        data = SourceFileMutationData(path="mymod.py")
+        data.meta_path = tmp_path / "mymod.py.meta"
+        data.exit_code_by_key = {mutant_name: None}
+        return data
+
+    def test_records_exit_code_and_duration(self, tmp_path):
+        mutant_name = "mymod.x_foo__mutmut_1"
+        data = self._mutation_data(tmp_path, mutant_name)
+
+        _register_mutant_result(
+            MutantResult(mutant_name=mutant_name, exit_code=1, duration=1.5),
+            {mutant_name: data},
+        )
+
+        assert data.exit_code_by_key[mutant_name] == 1
+        assert data.durations_by_key[mutant_name] == 1.5
+
+    def test_persists_the_result(self, tmp_path):
+        mutant_name = "mymod.x_foo__mutmut_1"
+        data = self._mutation_data(tmp_path, mutant_name)
+
+        _register_mutant_result(
+            MutantResult(mutant_name=mutant_name, exit_code=33, duration=0.0),
+            {mutant_name: data},
+        )
+
+        reloaded = SourceFileMutationData(path="mymod.py")
+        reloaded.meta_path = data.meta_path
+        reloaded.load()
+        assert reloaded.exit_code_by_key[mutant_name] == 33
+
+    def test_rejects_a_mutant_the_meta_file_does_not_know(self, tmp_path):
+        """A name mismatch must fail loudly instead of inventing a phantom mutant."""
+        data = self._mutation_data(tmp_path, "mymod.x_foo__mutmut_1")
+        unknown = "mymod.x_foo__mutmut_99"
+
+        with pytest.raises(AssertionError, match=unknown):
+            _register_mutant_result(
+                MutantResult(mutant_name=unknown, exit_code=1, duration=0.1),
+                {unknown: data},
+            )
+
+        assert unknown not in data.exit_code_by_key
