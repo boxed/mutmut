@@ -266,6 +266,19 @@ class Config:
             "type_check": _hash(tuple(self.type_check_command)),
         }
 
+    def get_effective_dependency_depth(self) -> int:
+        """The dependency-tracking depth clamped to ``max_stack_depth``.
+
+        ``-1`` means "unlimited/unset" for both fields. When the tracking depth
+        is unset it falls back to the stack depth; otherwise it is the smaller
+        of the two (a stack depth of ``-1`` imposes no clamp).
+        """
+        if self.dependency_tracking_depth == -1:
+            return self.max_stack_depth
+        if self.max_stack_depth == -1:
+            return self.dependency_tracking_depth
+        return min(self.dependency_tracking_depth, self.max_stack_depth)
+
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)
 

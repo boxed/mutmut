@@ -58,6 +58,32 @@ def get_module_from_key(key: str) -> str:
     return key.rsplit(".", 1)[0] if "." in key else key
 
 
+def mangled_name_from_mutant_name(mutant_name: str) -> str:
+    """Strip the ``__mutmut_<n>`` suffix off a mutant key.
+
+    ``module.x_foo__mutmut_1`` -> ``module.x_foo``.
+    """
+    assert "__mutmut_" in mutant_name, mutant_name
+    return mutant_name.partition("__mutmut_")[0]
+
+
+def raw_func_name_from_mangled(mangled: str) -> str:
+    """Convert a mangled name to its raw (canonical) form.
+
+    ``module.x_funcname`` -> ``module.funcname`` and, for methods,
+    ``module.xǁClassǁmethod`` -> ``module.Class.method``. Used to key the
+    dependency graph by human-readable names.
+    """
+    module_part, _, func_part = mangled.rpartition(".")
+    if CLASS_NAME_SEPARATOR in func_part:
+        class_name = func_part[func_part.index(CLASS_NAME_SEPARATOR) + 1 : func_part.rindex(CLASS_NAME_SEPARATOR)]
+        method_name = func_part[func_part.rindex(CLASS_NAME_SEPARATOR) + 1 :]
+        func_part = f"{class_name}.{method_name}"
+    elif func_part.startswith("x_"):
+        func_part = func_part[2:]
+    return f"{module_part}.{func_part}" if module_part else func_part
+
+
 def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
     module_name = str(relative_source_path)[: -len(relative_source_path.suffix)].replace(os.sep, ".")
     module_name = strip_prefix(module_name, prefix="src.")
