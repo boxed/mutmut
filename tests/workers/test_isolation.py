@@ -1,13 +1,21 @@
 """Tests for fork isolation utilities."""
 
 import os
+import threading
 
 import pytest
 
+from mutmut.configuration import ProcessIsolation
+from mutmut.configuration import config
+from mutmut.configuration import reset_config
 from mutmut.workers.isolation import ForkRunner
+from mutmut.workers.isolation import HotForkRunner
 from mutmut.workers.isolation import OrchestratorCrashError
+from mutmut.workers.isolation import get_mutant_runner
+from mutmut.workers.isolation import recv_message
 from mutmut.workers.isolation import run_in_fork
 from mutmut.workers.isolation import run_in_fork_with_result
+from mutmut.workers.isolation import send_message
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
@@ -236,4 +244,112 @@ class TestForkRunnerNoTestMutants:
         drained = [runner.wait_for_result().mutant_name for _ in range(runner.pending_count())]
 
         assert drained == ["mod.x_foo__mutmut_1", "mod.x_foo__mutmut_2", "mod.x_foo__mutmut_3"]
+        assert runner.pending_count() == 0
+
+
+class TestGetMutantRunner:
+    """Tests for the get_mutant_runner factory."""
+
+    @pytest.fixture
+    def in_project_dir(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "src").mkdir()
+        reset_config()
+        return tmp_path
+
+    def test_selects_fork_by_default(self, in_project_dir):
+        runner = get_mutant_runner(2)
+        assert isinstance(runner, ForkRunner)
+        assert runner.max_workers == 2
+
+    def test_selects_hot_fork(self, in_project_dir, monkeypatch):
+        monkeypatch.setattr(config(), "process_isolation", ProcessIsolation.HOT_FORK)
+        runner = get_mutant_runner(4)
+        assert isinstance(runner, HotForkRunner)
+        assert runner.max_workers == 4
+        assert runner.max_restarts == config().max_orchestrator_restarts
+
+    def test_rejects_zero_workers(self, in_project_dir):
+        with pytest.raises(ValueError, match="at least 1"):
+            get_mutant_runner(0)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX pipes required")
+class TestPipeMessaging:
+    """Framed pipe messages must stay in step with select() on the raw fd.
+
+    A buffered reader can pull several frames into userspace at once, after which
+    select() reports "not readable" and the already-received frames are never
+    processed - the receiver loops forever waiting for results it already has."""
+
+    def test_roundtrips_a_message(self):
+        r, w = os.pipe()
+        try:
+            send_message(w, ("mod.x_foo__mutmut_1", 0))
+            assert recv_message(r) == ("mod.x_foo__mutmut_1", 0)
+        finally:
+            os.close(r)
+            os.close(w)
+
+    def test_reading_one_message_leaves_the_rest_selectable(self):
+        import select
+
+        r, w = os.pipe()
+        try:
+            for i in range(5):
+                send_message(w, (f"mod.x_foo__mutmut_{i}", 0))
+
+            assert recv_message(r) == ("mod.x_foo__mutmut_0", 0)
+            # The remaining four must still be visible to select(), or the
+            # receive loop would block on them forever.
+            assert select.select([r], [], [], 0)[0], "remaining messages are not selectable"
+            assert [recv_message(r)[0] for _ in range(4)] == [f"mod.x_foo__mutmut_{i}" for i in range(1, 5)]
+        finally:
+            os.close(r)
+            os.close(w)
+
+    def test_survives_a_payload_larger_than_the_pipe_buffer(self):
+        # 128k of test ids exceeds both PIPE_BUF and the 64k pipe capacity, so
+        # the write must be looped and the read must reassemble it.
+        payload = ("mod.x_foo__mutmut_1", [f"tests/test_{i}.py::test_case" for i in range(5000)], 10)
+        r, w = os.pipe()
+        reader = threading.Thread(target=lambda: received.append(recv_message(r)))
+        received: list = []
+        try:
+            reader.start()
+            send_message(w, payload)
+            reader.join(timeout=10)
+            assert not reader.is_alive(), "receiver blocked on a large message"
+            assert received == [payload]
+        finally:
+            os.close(r)
+            os.close(w)
+
+    def test_reports_eof_when_the_writer_closes(self):
+        r, w = os.pipe()
+        os.close(w)
+        try:
+            with pytest.raises(EOFError):
+                recv_message(r)
+        finally:
+            os.close(r)
+
+
+class TestHotForkRunnerNoTestMutants:
+    """HotForkRunner resolves a mutant with no tests the same way ForkRunner does."""
+
+    @staticmethod
+    def _runner():
+        return HotForkRunner(max_workers=4, test_runner_class=object, test_runner_args={})
+
+    def test_no_test_mutant_is_resolved_without_an_orchestrator(self):
+        runner = self._runner()  # never started, so there is no work pipe
+        runner.submit("mod.x_foo__mutmut_1", [], cpu_time_limit=1, estimated_time=0.0)
+        assert runner.pending_count() == 1
+
+    def test_no_test_mutant_reports_exit_code_33(self):
+        runner = self._runner()
+        runner.submit("mod.x_foo__mutmut_1", [], cpu_time_limit=1, estimated_time=0.0)
+        result = runner.wait_for_result()
+        assert (result.mutant_name, result.exit_code) == ("mod.x_foo__mutmut_1", 33)
         assert runner.pending_count() == 0

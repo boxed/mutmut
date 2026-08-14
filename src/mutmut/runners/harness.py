@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 from typing import Any
 
+from mutmut.configuration import HotForkWarmup
 from mutmut.configuration import config
 from mutmut.state import state
 from mutmut.stats import save_stats
@@ -49,6 +50,16 @@ class TestRunner(ABC):
     def list_all_tests(self) -> ListAllTestsResult:
         raise NotImplementedError()
 
+    def warm_up(self) -> None:
+        """Pre-import expensive modules so forked children inherit them.
+
+        Called by HotForkRunner inside the orchestrator after the test runner is
+        created. Importing pytest (and optionally running collection) here means
+        the grandchildren fork with everything already in memory. The default is
+        a no-op for runners that do not benefit from it.
+        """
+        return
+
 
 def collected_test_names() -> set[str]:
     return set(state().duration_by_test.keys())
@@ -81,6 +92,34 @@ class PytestRunner(TestRunner):
     def __init__(self) -> None:
         self._pytest_add_cli_args: list[str] = config().pytest_add_cli_args
         self._pytest_add_cli_args_test_selection: list[str] = config().pytest_add_cli_args_test_selection
+
+    def warm_up(self) -> None:
+        """Pre-load test infrastructure per the ``hot_fork_warmup`` config.
+
+        - COLLECT (default): run ``pytest --collect-only`` to import conftest,
+          plugins, and test modules (biggest speedup for most projects).
+        - IMPORT: import the modules listed in ``preload_modules_file``.
+        - NONE: import nothing beyond what running a test already needs.
+        """
+        warmup = config().hot_fork_warmup
+
+        if warmup == HotForkWarmup.COLLECT:
+            with change_cwd("mutants"):
+                self.execute_pytest(["--collect-only", "-qqq"] + self._pytest_add_cli_args_test_selection)
+        elif warmup == HotForkWarmup.IMPORT:
+            preload_file = config().preload_modules_file
+            if preload_file:
+                import importlib
+
+                with open(preload_file) as f:
+                    for line in f:
+                        module_name = line.strip()
+                        if module_name and not module_name.startswith("#"):
+                            try:
+                                importlib.import_module(module_name)
+                            except ImportError:
+                                pass  # Best effort.
+        # HotForkWarmup.NONE -> no-op.
 
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
