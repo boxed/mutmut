@@ -4,7 +4,13 @@ import os
 
 import pytest
 
+from mutmut.configuration import ProcessIsolation
+from mutmut.configuration import config
+from mutmut.configuration import reset_config
+from mutmut.workers.isolation import ForkRunner
+from mutmut.workers.isolation import HotForkRunner
 from mutmut.workers.isolation import OrchestratorCrashError
+from mutmut.workers.isolation import get_mutant_runner
 from mutmut.workers.isolation import run_in_fork
 from mutmut.workers.isolation import run_in_fork_with_result
 
@@ -177,3 +183,30 @@ class TestOrchestratorCrashError:
         assert exc_info.value.exit_code == 255
         assert exc_info.value.lost_mutants == ["test_mutant"]
         assert exc_info.value.crash_log == "/tmp/crash.log"
+
+
+class TestGetMutantRunner:
+    """Tests for the get_mutant_runner factory."""
+
+    @pytest.fixture
+    def in_project_dir(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "src").mkdir()
+        reset_config()
+        return tmp_path
+
+    def test_selects_fork_by_default(self, in_project_dir):
+        runner = get_mutant_runner(2)
+        assert isinstance(runner, ForkRunner)
+        assert runner.max_workers == 2
+
+    def test_selects_hot_fork(self, in_project_dir, monkeypatch):
+        monkeypatch.setattr(config(), "process_isolation", ProcessIsolation.HOT_FORK)
+        runner = get_mutant_runner(4)
+        assert isinstance(runner, HotForkRunner)
+        assert runner.max_workers == 4
+        assert runner.max_restarts == config().max_orchestrator_restarts
+
+    def test_rejects_zero_workers(self, in_project_dir):
+        with pytest.raises(ValueError, match="at least 1"):
+            get_mutant_runner(0)

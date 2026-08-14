@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from mutmut.configuration import Config
+from mutmut.configuration import HotForkWarmup
 from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
@@ -47,6 +48,34 @@ class TestConfigSingleton:
         assert config1 is not config2
 
 
+class TestProcessIsolationConfig:
+    def _write_pyproject(self, in_tmp_dir: Path, body: str) -> None:
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text(f"[tool.mutmut]\n{body}\n")
+
+    def test_defaults(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, "")
+        cfg = config()
+        assert cfg.process_isolation == ProcessIsolation.FORK
+        assert cfg.hot_fork_warmup == HotForkWarmup.COLLECT
+        assert cfg.max_orchestrator_restarts == 3
+        assert cfg.preload_modules_file is None
+
+    def test_hot_fork_selected(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'process_isolation = "hot-fork"')
+        assert config().process_isolation == ProcessIsolation.HOT_FORK
+
+    def test_invalid_process_isolation_raises(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'process_isolation = "bogus"')
+        with pytest.raises(ValueError, match="Invalid process_isolation value"):
+            _load_config()
+
+    def test_invalid_hot_fork_warmup_raises(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'hot_fork_warmup = "bogus"')
+        with pytest.raises(ValueError, match="Invalid hot_fork_warmup value"):
+            _load_config()
+
+
 class TestShouldMutateFile:
     @staticmethod
     def _get_config(only_mutate: list[str], do_not_mutate: list[str]) -> Config:
@@ -74,6 +103,11 @@ class TestShouldMutateFile:
             on_dependency_change="warn",
             use_git_change_detection=True,
             process_isolation=ProcessIsolation.FORK,
+            hot_fork_warmup=HotForkWarmup.COLLECT,
+            max_orchestrator_restarts=3,
+            preload_modules_file=None,
+            log_to_file=False,
+            log_file_path="mutants/mutmut-debug.log",
         )
 
     def test_ignores_non_python_files(self):

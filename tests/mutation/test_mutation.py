@@ -33,6 +33,7 @@ from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
+from mutmut.configuration import HotForkWarmup
 from mutmut.configuration import ProcessIsolation
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
@@ -1436,6 +1437,11 @@ def _config_for_invalidation(**overrides):
         on_dependency_change="warn",
         use_git_change_detection=True,
         process_isolation=ProcessIsolation.FORK,
+        hot_fork_warmup=HotForkWarmup.COLLECT,
+        max_orchestrator_restarts=3,
+        preload_modules_file=None,
+        log_to_file=False,
+        log_file_path="mutants/mutmut-debug.log",
     )
     base.update(overrides)
     return Config(**base)

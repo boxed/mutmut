@@ -29,6 +29,24 @@ class ProcessIsolation(str, Enum):
     HOT_FORK = "hot-fork"  # Fork-safe orchestrator for gevent/grpc/torch.
 
 
+class HotForkWarmup(str, Enum):
+    """Warmup strategy for the hot-fork orchestrator.
+
+    Controls what the orchestrator does after importing the test runner but
+    before forking any grandchildren:
+
+    - COLLECT: run ``pytest --collect-only`` to pre-load conftest, plugins, and
+      test modules (default; biggest speedup for most projects).
+    - IMPORT: import the modules listed in ``preload_modules_file`` (useful when
+      test collection has side effects you do not want shared).
+    - NONE: import nothing extra beyond what running a test needs.
+    """
+
+    COLLECT = "collect"
+    IMPORT = "import"
+    NONE = "none"
+
+
 def _config_reader() -> Callable[[str, Any], Any]:
     path = Path("pyproject.toml")
     if path.exists():
@@ -141,6 +159,13 @@ def _load_config() -> Config:
         valid = [e.value for e in ProcessIsolation]
         raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
 
+    warmup_str = s("hot_fork_warmup", "collect")
+    try:
+        hot_fork_warmup = HotForkWarmup(warmup_str)
+    except ValueError:
+        valid = [e.value for e in HotForkWarmup]
+        raise ValueError(f"Invalid hot_fork_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
+
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
@@ -177,6 +202,11 @@ def _load_config() -> Config:
         on_dependency_change=s("on_dependency_change", "warn"),
         use_git_change_detection=s("use_git_change_detection", True),
         process_isolation=process_isolation,
+        hot_fork_warmup=hot_fork_warmup,
+        max_orchestrator_restarts=s("max_orchestrator_restarts", 3),
+        preload_modules_file=s("preload_modules_file", None),
+        log_to_file=s("log_to_file", False),
+        log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
     )
 
 
@@ -207,6 +237,11 @@ class Config:
     on_dependency_change: str
     use_git_change_detection: bool
     process_isolation: ProcessIsolation
+    hot_fork_warmup: HotForkWarmup
+    max_orchestrator_restarts: int
+    preload_modules_file: str | None
+    log_to_file: bool
+    log_file_path: str
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the
