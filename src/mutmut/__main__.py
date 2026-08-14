@@ -935,10 +935,36 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
     _run(mutant_names, max_children)
 
 
-# separate function, so we can call it directly from the tests
-def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
-    # TODO: run no-ops once in a while to detect if we get false negatives
-    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
+@cli.command()
+@click.option(
+    "--no-invalidate-callers",
+    is_flag=True,
+    default=False,
+    help="Keep dependency caller edges instead of pruning ones whose callee changed.",
+)
+def generate(no_invalidate_callers: bool) -> None:
+    """Regenerate mutants and refresh hashes/stats without running the mutation tests."""
+    _generate_mutants_and_collect_stats([], None, invalidate_stale_callers=not no_invalidate_callers)
+    print("Mutants generated. Run 'mutmut run' to test them, or 'mutmut browse' to view results.")
+
+
+def _generate_mutants_and_collect_stats(
+    mutant_names: tuple[str, ...] | list[str],
+    max_children: int | None,
+    *,
+    invalidate_stale_callers: bool = True,
+) -> tuple[
+    MutantRunner,
+    dict[str, FailedTypeCheckMutant],
+    list[tuple[SourceFileMutationData, str, int | None]],
+    dict[str, SourceFileMutationData],
+]:
+    """Generate mutants, type-check-filter them, and (re)collect stats.
+
+    Shared prefix of ``run`` and ``generate``: everything up to but not including
+    the clean-test / forced-fail / mutation-testing loop. Returns the runner, the
+    type-check verdicts, and the collected mutant list + per-path mutation data.
+    """
     os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
 
     if max_children is None:
@@ -972,11 +998,26 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         runner,
         mutants_caught_by_type_checker=mutants_caught_by_type_checker,
         apply_config_invalidation=True,
+        invalidate_stale_callers=invalidate_stale_callers,
     )
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     _check_test_to_mutant_associations(source_file_mutation_data_by_path)
+
+    return runner, mutants_caught_by_type_checker, mutants, source_file_mutation_data_by_path
+
+
+# separate function, so we can call it directly from the tests
+def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
+    # TODO: run no-ops once in a while to detect if we get false negatives
+    # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
+    (
+        runner,
+        mutants_caught_by_type_checker,
+        mutants,
+        source_file_mutation_data_by_path,
+    ) = _generate_mutants_and_collect_stats(mutant_names, max_children)
 
     os.environ["MUTANT_UNDER_TEST"] = ""
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
