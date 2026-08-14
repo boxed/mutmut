@@ -3,7 +3,17 @@
 import os
 from pathlib import Path
 
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
+CLASS_NAME_SEPARATOR = "ǁ"
+
+
+def mangle_function_name(*, name: str, class_name: str | None) -> str:
+    assert CLASS_NAME_SEPARATOR not in name
+    if class_name:
+        assert CLASS_NAME_SEPARATOR not in class_name
+        prefix = f"x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
+    else:
+        prefix = "x_"
+    return f"{prefix}{name}"
 
 
 def make_mutant_key(func_name: str, class_name: str | None = None) -> str:
@@ -82,6 +92,19 @@ def raw_func_name_from_mangled(mangled: str) -> str:
     elif func_part.startswith("x_"):
         func_part = func_part[2:]
     return f"{module_part}.{func_part}" if module_part else func_part
+
+
+def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
+    r = mangled_name_from_mutant_name(mutant_name)
+    _, _, r = r.rpartition(".")
+    class_name = None
+    if CLASS_NAME_SEPARATOR in r:
+        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1 : r.rindex(CLASS_NAME_SEPARATOR)]
+        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1 :]
+    else:
+        assert r.startswith("x_"), r
+        r = r[2:]
+    return r, class_name
 
 
 def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:

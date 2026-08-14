@@ -8,9 +8,9 @@ from typing import ParamSpec
 from typing import TypeVar
 
 from mutmut.__main__ import MutmutProgrammaticFailException
-from mutmut.__main__ import mangled_name_from_mutant_name
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.core import MutmutCallStack
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
 
 TReturn = TypeVar("TReturn")
 MutantDict = Annotated[dict[str, Callable[..., TReturn]], "Mutant"]

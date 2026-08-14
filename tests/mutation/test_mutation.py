@@ -28,8 +28,6 @@ from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import git_changed_non_py_files
 from mutmut.__main__ import git_head
 from mutmut.__main__ import git_tracked_non_py_files
-from mutmut.__main__ import mangled_name_from_mutant_name
-from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
@@ -40,11 +38,13 @@ from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
-from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.state import reset_state
 from mutmut.state import state
+from mutmut.utils.format_utils import CLASS_NAME_SEPARATOR
 from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import mangle_function_name
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 
 def mutants_for_source(source: str, covered_lines: set[int] | None = None) -> list[str]:
@@ -1171,8 +1171,6 @@ class Foo:
         return 1
 """.strip()
     hashes = compute_function_hashes(source)
-    from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
-
     method_key = f"x{CLASS_NAME_SEPARATOR}Foo{CLASS_NAME_SEPARATOR}bar"
     assert method_key in hashes
 

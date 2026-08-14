@@ -10,6 +10,8 @@ from typing import Any
 from mutmut.state import state
 from mutmut.utils.format_utils import get_module_from_key
 from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 if platform.system() == "Windows":
     print(
@@ -52,7 +54,6 @@ from mutmut.mutation.file_mutation import FailedTypeCheckMutant
 from mutmut.mutation.file_mutation import MutatedFile
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
-from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 from mutmut.runners.harness import CollectTestsFailedException
 from mutmut.runners.harness import PytestRunner
 from mutmut.runners.harness import collected_test_names
@@ -259,24 +260,6 @@ def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -
     out.write(mutated_file.code)
 
     return mutated_file
-
-
-def mangled_name_from_mutant_name(mutant_name: str) -> str:
-    assert "__mutmut_" in mutant_name, mutant_name
-    return mutant_name.partition("__mutmut_")[0]
-
-
-def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
-    r = mangled_name_from_mutant_name(mutant_name)
-    _, _, r = r.rpartition(".")
-    class_name = None
-    if CLASS_NAME_SEPARATOR in r:
-        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1 : r.rindex(CLASS_NAME_SEPARATOR)]
-        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1 :]
-    else:
-        assert r.startswith("x_"), r
-        r = r[2:]
-    return r, class_name
 
 
 def run_forced_fail_test(runner: MutantRunner) -> None:

@@ -1,5 +1,3 @@
-CLASS_NAME_SEPARATOR = "ǁ"
-
 GENERATED_MARKER = "# type: ignore # mutmut generated"
 
 
@@ -12,16 +10,6 @@ def _mark_generated(code: str) -> str:
             line = f"{line} {GENERATED_MARKER}"
         lines.append(line)
     return "\n".join(lines)
-
-
-def mangle_function_name(*, name: str, class_name: str | None) -> str:
-    assert CLASS_NAME_SEPARATOR not in name
-    if class_name:
-        assert CLASS_NAME_SEPARATOR not in class_name
-        prefix = f"x{CLASS_NAME_SEPARATOR}{class_name}{CLASS_NAME_SEPARATOR}"
-    else:
-        prefix = "x_"
-    return f"{prefix}{name}"
 
 
 def build_mutants_dict_and_name(
