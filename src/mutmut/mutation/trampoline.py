@@ -26,13 +26,45 @@ R = TypeVar("R")
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+# Process-local copy of the active mutant. Tests that scrub os.environ
+# (``patch.dict(..., clear=True)``) must not be able to disable it. See #511.
+_mutant_under_test: str | None = None
+
+
+def set_mutant_under_test(name: str | None) -> None:
+    """Record the active mutant in process-local state.
+
+    ``None`` clears the override so the trampoline falls back to ``os.environ``.
+    A string value is also mirrored into ``MUTANT_UNDER_TEST`` for compatibility.
+    """
+    global _mutant_under_test
+    _mutant_under_test = name
+    if name is not None:
+        os.environ["MUTANT_UNDER_TEST"] = name
+
+
+def get_mutant_under_test() -> str:
+    """Return the active mutant name.
+
+    If ``MUTANT_UNDER_TEST`` is in the environment, that value wins so
+    existing tests and callers that only set the env var keep working.
+    If the key is missing (for example after ``patch.dict(..., clear=True)``),
+    fall back to the process-local copy set by ``set_mutant_under_test``.
+    """
+    if "MUTANT_UNDER_TEST" in os.environ:
+        return os.environ["MUTANT_UNDER_TEST"]
+    if _mutant_under_test is not None:
+        return _mutant_under_test
+    return ""
+
+
 def wrap_in_trampoline(
     mutants_dict: dict[str, F], is_classmethod: bool = False
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     def mutmut_mutated(decorated_func: Callable[P, R]) -> Callable[P, R]:
         """Wrap the ``decorated_func`` in a trampoline.
-        The trampoline forwards calls based on the MUTANT_UNDER_TEST environment variable,
-        either to a copy of the original method,
+        The trampoline forwards calls based on the active mutant
+        (see ``get_mutant_under_test``), either to a copy of the original method,
         or to the currently active mutated method.
         """
 
@@ -50,7 +82,7 @@ def wrap_in_trampoline(
                 call_args = list(args[1:])
                 orig_func = getattr(args[0], orig_func.__name__)
 
-            mutant_under_test = os.environ.get("MUTANT_UNDER_TEST", "")
+            mutant_under_test = get_mutant_under_test()
 
             if mutant_under_test == "fail":
                 raise MutmutProgrammaticFailException(

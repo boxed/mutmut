@@ -13,7 +13,7 @@ This phase creates a ``./mutants/`` directory, which will be used by all followi
 
 We start by copying ``source_paths`` to ``mutants/`` and then mutate the ``*.py`` files in there. Finally, we also copy ``also_copy`` paths to ``mutants/``, including the (guessed) test directories and some project files.
 
-The mutated files contains the original code and the mutants. With the ``MUTANT_UNDER_TEST`` environment variable, we can specify (among other things) which mutant should be enabled. If a mutant is not enabled, it will run the original code.
+The mutated files contains the original code and the mutants. The active mutant is stored in process-local state (and mirrored to the ``MUTANT_UNDER_TEST`` environment variable). If a mutant is not enabled, it will run the original code.
 
 
 Collecting tests and stats

@@ -5,10 +5,14 @@ The functions under test are similar to how file_mutation.py would output the mu
 
 import asyncio
 import inspect
+import os
+from unittest.mock import patch
 
 import pytest
 from typing_extensions import Self
 
+from mutmut.mutation.trampoline import get_mutant_under_test
+from mutmut.mutation.trampoline import set_mutant_under_test
 from mutmut.mutation.trampoline import wrap_in_trampoline
 
 mutants_simple_func = {}
@@ -251,6 +255,22 @@ class TestSimpleFunc:
         # if we have the same mutant name in a different module, we should not mutate
         monkeypatch.setenv("MUTANT_UNDER_TEST", "other_test_trampoline.simple_func__mutmut_1")
         assert simple_func(2, 3) == 5, "Should call mutated function"
+
+    def test_trampoline_survives_cleared_environ(self):
+        # Tests that scrub os.environ (patch.dict(..., clear=True)) used to
+        # make the trampoline fall back to the original function. See #511.
+        set_mutant_under_test("test_trampoline.simple_func__mutmut_1")
+        try:
+            with patch.dict(os.environ, {"IN_DOCKER": "1"}, clear=True):
+                assert "MUTANT_UNDER_TEST" not in os.environ
+                assert simple_func(2, 3) == -1, "Should still call mutated function"
+        finally:
+            set_mutant_under_test(None)
+
+    def test_get_mutant_under_test_falls_back_to_env(self, monkeypatch):
+        set_mutant_under_test(None)
+        monkeypatch.setenv("MUTANT_UNDER_TEST", "from-env")
+        assert get_mutant_under_test() == "from-env"
 
 
 class TestAsyncAndGeneratorFunc:

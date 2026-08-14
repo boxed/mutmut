@@ -479,7 +479,7 @@ class PytestRunner(TestRunner):
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item: Any, call: Any) -> None:
-                if call.when != 'call':
+                if call.when != "call":
                     return
                 mutmut.duration_by_test[item.nodeid] += call.duration
 
@@ -677,8 +677,20 @@ def print_stats(
     )
 
 
+def _set_mutant_under_test(name: str) -> None:
+    """Activate a mutant in process-local state and the environment.
+
+    Late-import the trampoline setter: that module imports from this file
+    at load time. The process-local copy is used when tests scrub
+    ``os.environ``. See #511.
+    """
+    from mutmut.mutation.trampoline import set_mutant_under_test
+
+    set_mutant_under_test(name)
+
+
 def run_forced_fail_test(runner: TestRunner) -> None:
-    os.environ["MUTANT_UNDER_TEST"] = "fail"
+    _set_mutant_under_test("fail")
     with CatchOutput(spinner_title="Running forced fail test") as catcher:
         try:
             if runner.run_forced_fail() == 0:
@@ -687,7 +699,7 @@ def run_forced_fail_test(runner: TestRunner) -> None:
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass
-    os.environ["MUTANT_UNDER_TEST"] = ""
+    _set_mutant_under_test("")
     print("    done")
 
 
@@ -759,7 +771,7 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
     if tests is None:
         tests = []  # Meaning all...
 
-    os.environ["MUTANT_UNDER_TEST"] = "stats"
+    _set_mutant_under_test("stats")
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     depth = Config.get().dependency_tracking_depth
     os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth)
@@ -1120,7 +1132,7 @@ def collect_or_load_stats(
 
         # Run incremental stats
         with CatchOutput(spinner_title="Listing all tests") as output_catcher:
-            os.environ["MUTANT_UNDER_TEST"] = "list_all_tests"
+            _set_mutant_under_test("list_all_tests")
             try:
                 all_tests_result = runner.list_all_tests()
             except CollectTestsFailedException:
@@ -1419,7 +1431,7 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
 def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
-    os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
+    _set_mutant_under_test("mutant_generation")
     Config.ensure_loaded()
 
     if max_children is None:
@@ -1461,7 +1473,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     _check_test_to_mutant_associations(source_file_mutation_data_by_path)
 
-    os.environ["MUTANT_UNDER_TEST"] = ""
+    _set_mutant_under_test("")
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
@@ -1523,7 +1535,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             pid = os.fork()
             if pid == 0:
                 # In the child
-                os.environ["MUTANT_UNDER_TEST"] = mutant_name
+                _set_mutant_under_test(mutant_name)
                 setproctitle(f"mutmut: {mutant_name}")
 
                 # Run fast tests first
