@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mutmut.threading import timeout
+from mutmut.workers import timeout
 
 
 @pytest.fixture(autouse=True)
