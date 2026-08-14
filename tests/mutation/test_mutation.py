@@ -33,6 +33,7 @@ from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
+from mutmut.configuration import ProcessIsolation
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import compute_function_hashes
@@ -1434,6 +1435,7 @@ def _config_for_invalidation(**overrides):
         cache_invalidation_exclude=[],
         on_dependency_change="warn",
         use_git_change_detection=True,
+        process_isolation=ProcessIsolation.FORK,
     )
     base.update(overrides)
     return Config(**base)
@@ -1737,7 +1739,9 @@ def test_user_exclude_pattern_drops_file(tmp_path, monkeypatch):
     (tmp_path / "noisy.json").write_text("1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
+    monkeypatch.setattr(
+        mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"])
+    )
 
     (tmp_path / "noisy.json").write_text("2")
 
@@ -1754,7 +1758,9 @@ def test_registered_file_is_immune_to_exclusion(tmp_path, monkeypatch):
     (tmp_path / "notes.md").write_text("a")  # *.md is excluded by default
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
+    monkeypatch.setattr(
+        mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"])
+    )
 
     (tmp_path / "notes.md").write_text("b")
 

@@ -11,10 +11,22 @@ from configparser import ConfigParser
 from configparser import NoOptionError
 from configparser import NoSectionError
 from dataclasses import dataclass
+from enum import Enum
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 from typing import Any
+
+
+class ProcessIsolation(str, Enum):
+    """Valid values for the ``process_isolation`` config.
+
+    Subclassing ``str`` allows direct string comparison while still giving us
+    validation and IDE support.
+    """
+
+    FORK = "fork"  # Default: fork the (test-polluted) parent per mutant.
+    HOT_FORK = "hot-fork"  # Fork-safe orchestrator for gevent/grpc/torch.
 
 
 def _config_reader() -> Callable[[str, Any], Any]:
@@ -122,6 +134,13 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
+    isolation_str = s("process_isolation", "fork")
+    try:
+        process_isolation = ProcessIsolation(isolation_str)
+    except ValueError:
+        valid = [e.value for e in ProcessIsolation]
+        raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
+
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
@@ -157,6 +176,7 @@ def _load_config() -> Config:
         cache_invalidation_exclude=s("cache_invalidation_exclude", []),
         on_dependency_change=s("on_dependency_change", "warn"),
         use_git_change_detection=s("use_git_change_detection", True),
+        process_isolation=process_isolation,
     )
 
 
@@ -186,6 +206,7 @@ class Config:
     cache_invalidation_exclude: list[str]
     on_dependency_change: str
     use_git_change_detection: bool
+    process_isolation: ProcessIsolation
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the

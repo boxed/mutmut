@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from mutmut.configuration import Config
+from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
 from mutmut.configuration import _load_config
@@ -72,6 +73,7 @@ class TestShouldMutateFile:
             cache_invalidation_exclude=[],
             on_dependency_change="warn",
             use_git_change_detection=True,
+            process_isolation=ProcessIsolation.FORK,
         )
 
     def test_ignores_non_python_files(self):
