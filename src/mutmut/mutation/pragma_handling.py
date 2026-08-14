@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import libcst as cst
 from libcst.metadata import PositionProvider
 
-from mutmut.configuration import Config
+from mutmut.configuration import config
 
 
 @dataclass
@@ -36,7 +36,7 @@ def get_ignored_lines(filename: str, source: str, metadata_wrapper: cst.Metadata
 
 def get_lines_ignored_by_pattern(source: str) -> set[int]:
     matching_lines = set()
-    for pattern in Config.get().do_not_mutate_patterns:
+    for pattern in config().do_not_mutate_patterns:
         compiled_pattern = re.compile(pattern)
         for i, line in enumerate(source.splitlines()):
             if compiled_pattern.search(line):

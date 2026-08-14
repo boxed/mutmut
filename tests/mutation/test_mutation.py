@@ -1321,14 +1321,14 @@ def test_record_trampoline_hit_records_caller(monkeypatch):
     """record_trampoline_hit(name, caller=...) stores the edge in function_dependencies."""
 
     reset_state()
-    mutmut._stats.clear()
+    state()._stats.clear()
 
     cfg = Mock(spec=Config)
     cfg.max_stack_depth = -1
     cfg.source_paths = []
     cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = True
-    monkeypatch.setattr(Config, "get", lambda: cfg)
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: cfg)
 
     record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
 
@@ -1340,14 +1340,14 @@ def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
     """record_trampoline_hit does not record dependencies when track_dependencies=False."""
 
     reset_state()
-    mutmut._stats.clear()
+    state()._stats.clear()
 
     cfg = Mock(spec=Config)
     cfg.max_stack_depth = -1
     cfg.source_paths = []
     cfg.resolved_mutated_source_paths = []
     cfg.track_dependencies = False
-    monkeypatch.setattr(Config, "get", lambda: cfg)
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: cfg)
 
     record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
 
@@ -1359,21 +1359,21 @@ def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
     """_cleanup_stale_stats removes test associations for modules not in current_function_hashes."""
 
     reset_state()
-    old_stats = mutmut.tests_by_mangled_function_name
-    mutmut.tests_by_mangled_function_name = defaultdict(set)
+    old_stats = state().tests_by_mangled_function_name
+    state().tests_by_mangled_function_name = defaultdict(set)
 
     state().current_function_hashes["live_mod.x_foo"] = "aabbcc"
-    mutmut.tests_by_mangled_function_name["live_mod.x_foo__mutmut_orig"] = {"test_alive"}
-    mutmut.tests_by_mangled_function_name["dead_mod.x_bar__mutmut_orig"] = {"test_dead"}
+    state().tests_by_mangled_function_name["live_mod.x_foo__mutmut_orig"] = {"test_alive"}
+    state().tests_by_mangled_function_name["dead_mod.x_bar__mutmut_orig"] = {"test_dead"}
     state().function_dependencies["live_mod.x_baz"] = {"dead_mod.x_bar"}
 
     _cleanup_stale_stats()
 
-    assert "live_mod.x_foo__mutmut_orig" in mutmut.tests_by_mangled_function_name
-    assert "dead_mod.x_bar__mutmut_orig" not in mutmut.tests_by_mangled_function_name
+    assert "live_mod.x_foo__mutmut_orig" in state().tests_by_mangled_function_name
+    assert "dead_mod.x_bar__mutmut_orig" not in state().tests_by_mangled_function_name
     assert "dead_mod.x_bar" not in state().function_dependencies["live_mod.x_baz"]
 
-    mutmut.tests_by_mangled_function_name = old_stats
+    state().tests_by_mangled_function_name = old_stats
     reset_state()
 
 
@@ -1459,7 +1459,7 @@ def _load_results(src_rel="src/mymod.py"):
 
 def test_reset_mutant_results_resets_only_matching(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
     _write_meta({"a": 36, "b": 0, "c": None})  # timeout, survived, uncached
 
     reset = _reset_mutant_results(lambda key, exit_code: exit_code == 36)
@@ -1476,7 +1476,7 @@ def test_timeout_config_change_resets_only_timeouts(tmp_path, monkeypatch):
     old_cfg = _config_for_invalidation()
     state().old_config_fingerprint = old_cfg.config_fingerprint()
 
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(timeout_multiplier=30.0))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(timeout_multiplier=30.0))
     _write_meta({"timed_out": 36, "killed": 1, "survived": 0})
 
     force_full = _apply_config_change_invalidation({})
@@ -1493,7 +1493,7 @@ def test_type_check_config_change_resets_symmetric_difference(tmp_path, monkeypa
     old_cfg = _config_for_invalidation(type_check_command=["old"])
     state().old_config_fingerprint = old_cfg.config_fingerprint()
 
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(type_check_command=["new"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(type_check_command=["new"]))
     # was_caught: cached 37 but no longer caught -> reset; now_caught: survived but newly caught -> reset;
     # still_caught: 37 and still caught -> keep; untouched: survived and not caught -> keep
     _write_meta({"was_caught": 37, "now_caught": 0, "still_caught": 37, "untouched": 0})
@@ -1515,18 +1515,18 @@ def test_global_pytest_change_forces_full_rerun(tmp_path, monkeypatch):
     reset_state()
     monkeypatch.chdir(tmp_path)
     state().old_config_fingerprint = _config_for_invalidation().config_fingerprint()
-    mutmut.duration_by_test["test_x"] = 1.0
-    mutmut.tests_by_mangled_function_name["mod.x_foo"] = {"test_x"}
+    state().duration_by_test["test_x"] = 1.0
+    state().tests_by_mangled_function_name["mod.x_foo"] = {"test_x"}
 
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
     _write_meta({"a": 1, "b": 0, "c": 36})
 
     force_full = _apply_config_change_invalidation({})
 
     assert force_full is True
     assert all(v is None for v in _load_results().values())
-    assert not mutmut.duration_by_test
-    assert not mutmut.tests_by_mangled_function_name
+    assert not state().duration_by_test
+    assert not state().tests_by_mangled_function_name
     reset_state()
 
 
@@ -1535,7 +1535,7 @@ def test_no_config_change_keeps_all_results(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     cfg = _config_for_invalidation()
     state().old_config_fingerprint = cfg.config_fingerprint()
-    monkeypatch.setattr(Config, "get", lambda: cfg)
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: cfg)
     _write_meta({"a": 1, "b": 0, "c": 36})
 
     force_full = _apply_config_change_invalidation({})
@@ -1550,7 +1550,7 @@ def test_absent_fingerprint_is_silent(tmp_path, monkeypatch):
     reset_state()
     monkeypatch.chdir(tmp_path)
     # old_config_fingerprint left empty
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(pytest_add_cli_args=["-x"]))
     _write_meta({"a": 1, "b": 0})
 
     force_full = _apply_config_change_invalidation({})
@@ -1563,7 +1563,7 @@ def test_absent_fingerprint_is_silent(tmp_path, monkeypatch):
 def test_watched_file_change_warn_keeps_cache(tmp_path, monkeypatch, capsys):
     reset_state()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
     pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
     state().old_watched_file_hashes = {"pyproject.toml": "deadbeef0000"}
 
@@ -1577,7 +1577,7 @@ def test_watched_file_change_warn_keeps_cache(tmp_path, monkeypatch, capsys):
 def test_watched_file_change_rerun_policy(tmp_path, monkeypatch):
     reset_state()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(on_dependency_change="rerun"))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(on_dependency_change="rerun"))
     pathlib.Path("uv.lock").write_text("changed")
     state().old_watched_file_hashes = {"uv.lock": "deadbeef0000"}
 
@@ -1588,7 +1588,7 @@ def test_watched_file_change_rerun_policy(tmp_path, monkeypatch):
 def test_watched_file_absent_old_hashes_is_silent(tmp_path, monkeypatch, capsys):
     reset_state()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
     pathlib.Path("pyproject.toml").write_text("[project]\nname='x'\n")
     # old_watched_file_hashes left empty
 
@@ -1599,7 +1599,7 @@ def test_watched_file_absent_old_hashes_is_silent(tmp_path, monkeypatch, capsys)
 
 def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["*.sql"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["*.sql"]))
     pathlib.Path("pyproject.toml").write_text("x")
     pathlib.Path("query.sql").write_text("select 1")
 
@@ -1683,7 +1683,7 @@ def test_changed_dependency_files_prefers_git_over_curated_list(tmp_path, monkey
     (tmp_path / "config.yaml").write_text("a: 1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
 
     (tmp_path / "config.yaml").write_text("a: 2")
 
@@ -1699,7 +1699,7 @@ def test_use_git_change_detection_false_falls_back_to_curated(tmp_path, monkeypa
     (tmp_path / "config.yaml").write_text("a: 1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(use_git_change_detection=False))
 
     (tmp_path / "config.yaml").write_text("a: 2")
 
@@ -1718,7 +1718,7 @@ def test_default_exclude_drops_noisy_files(tmp_path, monkeypatch):
     (tmp_path / "config.yaml").write_text("a: 1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
 
     (tmp_path / "README.md").write_text("changed")
     (tmp_path / "config.yaml").write_text("a: 2")
@@ -1737,7 +1737,7 @@ def test_user_exclude_pattern_drops_file(tmp_path, monkeypatch):
     (tmp_path / "noisy.json").write_text("1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
 
     (tmp_path / "noisy.json").write_text("2")
 
@@ -1754,7 +1754,7 @@ def test_registered_file_is_immune_to_exclusion(tmp_path, monkeypatch):
     (tmp_path / "notes.md").write_text("a")  # *.md is excluded by default
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
 
     (tmp_path / "notes.md").write_text("b")
 
@@ -1788,7 +1788,7 @@ def test_baseline_records_git_files_for_gitless_fallback(tmp_path, monkeypatch):
     (tmp_path / "config.yaml").write_text("a: 1")
     (tmp_path / "README.md").write_text("hi")  # excluded by default
     _commit_all(tmp_path)
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation())
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
 
     _refresh_change_detection_baseline()
     baseline = state().watched_file_hashes
@@ -1798,7 +1798,7 @@ def test_baseline_records_git_files_for_gitless_fallback(tmp_path, monkeypatch):
     # simulate a later run in an environment without git
     state().old_watched_file_hashes = baseline
     state().old_git_commit = None
-    monkeypatch.setattr(Config, "get", lambda: _config_for_invalidation(use_git_change_detection=False))
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(use_git_change_detection=False))
     (tmp_path / "config.yaml").write_text("a: 2")
 
     assert "config.yaml" in _changed_dependency_files()

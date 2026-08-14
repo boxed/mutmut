@@ -57,10 +57,10 @@ import click
 import libcst as cst
 from rich.text import Text
 
-import mutmut
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.configuration import Config
+from mutmut.configuration import config
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.file_mutation import FailedTypeCheckMutant
@@ -122,11 +122,11 @@ exit_code_to_emoji = {exit_code: emoji_by_status[status] for exit_code, status i
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
 
-    mutated_source_paths = Config.get().resolved_mutated_source_paths
+    mutated_source_paths = config().resolved_mutated_source_paths
 
-    if Config.get().max_stack_depth != -1:
+    if config().max_stack_depth != -1:
         f = inspect.currentframe()
-        c = Config.get().max_stack_depth
+        c = config().max_stack_depth
         while c and f:
             filename = f.f_code.co_filename
             f = f.f_back
@@ -140,13 +140,13 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
         if not c:
             return
 
-    mutmut._stats.add(name)
-    if caller is not None and Config.get().track_dependencies:
+    state()._stats.add(name)
+    if caller is not None and config().track_dependencies:
         state().function_dependencies[name].add(caller)
 
 
 def walk_all_files() -> Iterator[tuple[str, str]]:
-    for path in Config.get().source_paths:
+    for path in config().source_paths:
         if not isdir(path):
             if isfile(path):
                 yield "", str(path)
@@ -163,9 +163,9 @@ def walk_source_files() -> Iterator[Path]:
 
 
 def walk_mutatable_files() -> Iterator[Path]:
-    config = Config.get()
+    cfg = config()
     for path in walk_source_files():
-        if config.should_mutate(path):
+        if cfg.should_mutate(path):
             yield path
 
 
@@ -252,7 +252,7 @@ def create_file_mutants(path: Path) -> FileMutationResult:
         output_path = Path("mutants") / path
         makedirs(output_path.parent, exist_ok=True)
 
-        if Config.get().should_mutate(path):
+        if config().should_mutate(path):
             return create_mutants_for_file(path, output_path)
         else:
             shutil.copy(path, output_path)
@@ -277,13 +277,13 @@ def setup_source_paths() -> None:
 
 
 def store_lines_covered_by_tests() -> None:
-    if Config.get().mutate_only_covered_lines:
-        mutmut._covered_lines = gather_coverage(PytestRunner(), list(walk_source_files()))
+    if config().mutate_only_covered_lines:
+        state()._covered_lines = gather_coverage(PytestRunner(), list(walk_source_files()))
 
 
 def copy_also_copy_files() -> None:
-    assert isinstance(Config.get().also_copy, list)
-    for path in Config.get().also_copy:
+    assert isinstance(config().also_copy, list)
+    for path in config().also_copy:
         print("     also copying", path)
         path = Path(path)
         destination = Path("mutants") / path
@@ -371,7 +371,7 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
 
 def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -> MutatedFile:
     mutated_file = mutate_file_contents(
-        str(filename), source, get_covered_lines_for_file(str(filename), mutmut._covered_lines)
+        str(filename), source, get_covered_lines_for_file(str(filename), state()._covered_lines)
     )
     out.write(mutated_file.code)
 
@@ -403,7 +403,7 @@ class TestRunner(ABC):
 
 
 def collected_test_names() -> set[str]:
-    return set(mutmut.duration_by_test.keys())
+    return set(state().duration_by_test.keys())
 
 
 class ListAllTestsResult:
@@ -412,15 +412,15 @@ class ListAllTestsResult:
         self.ids = ids
 
     def clear_out_obsolete_test_names(self) -> None:
-        count_before = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
-        mutmut.tests_by_mangled_function_name = defaultdict(
+        count_before = sum(len(x) for x in state().tests_by_mangled_function_name)
+        state().tests_by_mangled_function_name = defaultdict(
             set,
             **{
                 k: {test_name for test_name in test_names if test_name in self.ids}
-                for k, test_names in mutmut.tests_by_mangled_function_name.items()
+                for k, test_names in state().tests_by_mangled_function_name.items()
             },
         )
-        count_after = sum(len(x) for x in mutmut.tests_by_mangled_function_name)
+        count_after = sum(len(x) for x in state().tests_by_mangled_function_name)
         if count_before != count_after:
             print(f"Removed {count_before - count_after} obsolete test names")
             save_stats()
@@ -431,19 +431,19 @@ class ListAllTestsResult:
 
 class PytestRunner(TestRunner):
     def __init__(self) -> None:
-        self._pytest_add_cli_args: list[str] = Config.get().pytest_add_cli_args
-        self._pytest_add_cli_args_test_selection: list[str] = Config.get().pytest_add_cli_args_test_selection
+        self._pytest_add_cli_args: list[str] = config().pytest_add_cli_args
+        self._pytest_add_cli_args_test_selection: list[str] = config().pytest_add_cli_args_test_selection
 
     # noinspection PyMethodMayBeStatic
     def execute_pytest(self, params: list[str], **kwargs: Any) -> int:
         import pytest
 
         params = ["--rootdir=.", "--tb=native"] + params + self._pytest_add_cli_args
-        if Config.get().debug:
+        if config().debug:
             params = ["-vv"] + params
             print("python -m pytest ", " ".join([f'"{param}"' for param in params]))
         exit_code = int(pytest.main(params, **kwargs))
-        if Config.get().debug:
+        if config().debug:
             print("    exit code", exit_code)
         if exit_code == 4:
             raise BadTestExecutionCommandsException(params)
@@ -461,18 +461,18 @@ class PytestRunner(TestRunner):
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_logstart(self, nodeid: str, location: Any) -> None:
-                mutmut.duration_by_test[nodeid] = 0
+                state().duration_by_test[nodeid] = 0
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
                 unused(nextitem)
-                for function in mutmut._stats:
-                    mutmut.tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
-                mutmut._stats.clear()
+                for function in state()._stats:
+                    state().tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
+                state()._stats.clear()
 
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_makereport(self, item: Any, call: Any) -> None:
-                mutmut.duration_by_test[item.nodeid] += call.duration
+                state().duration_by_test[item.nodeid] += call.duration
 
         stats_collector = StatsCollector()
 
@@ -526,9 +526,9 @@ class HammettRunner(TestRunner):
         print("Running hammett stats...")
 
         def post_test_callback(_name: str, **_: Any) -> None:
-            for function in mutmut._stats:
-                mutmut.tests_by_mangled_function_name[function].add(_name)
-            mutmut._stats.clear()
+            for function in state()._stats:
+                state().tests_by_mangled_function_name[function].add(_name)
+            state()._stats.clear()
 
         return int(
             hammett.main(
@@ -690,7 +690,7 @@ class CatchOutput:
     ) -> None:
         self.strings: list[str] = []
         self.spinner_title = spinner_title or ""
-        if Config.get().debug:
+        if config().debug:
             self.spinner_title += "\n"
 
         class StdOutRedirect(TextIOBase):
@@ -716,7 +716,7 @@ class CatchOutput:
             print_status(self.spinner_title)
         sys.stdout = self.redirect
         sys.stderr = self.redirect
-        if Config.get().debug:
+        if config().debug:
             self.stop()
 
     def dump_output(self) -> None:
@@ -752,7 +752,7 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
 
     os.environ["MUTANT_UNDER_TEST"] = "stats"
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
-    depth = Config.get().dependency_tracking_depth
+    depth = config().dependency_tracking_depth
     os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth)
     start_cpu_time = process_time()
 
@@ -762,13 +762,13 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
             output_catcher.dump_output()
             print(f"failed to collect stats. runner returned {collect_stats_exit_code}")
             exit(1)
-        num_associated_tests = sum(len(tests) for tests in mutmut.tests_by_mangled_function_name.values())
+        num_associated_tests = sum(len(tests) for tests in state().tests_by_mangled_function_name.values())
         if num_associated_tests == 0:
             output_catcher.dump_output()
             print(
                 "Stopping early, because we could not find any test case for any mutant. It seems that the selected tests do not cover any code that we mutated."
             )
-            if not Config.get().debug:
+            if not config().debug:
                 print("You can set debug=true to see the executed test names in the output above.")
             else:
                 print("In the last pytest run above, you can see which tests we executed.")
@@ -780,7 +780,7 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
 
     print("    done")
     if not tests:  # again, meaning all
-        mutmut.stats_time = process_time() - start_cpu_time
+        state().stats_time = process_time() - start_cpu_time
 
     if not collected_test_names():
         print("failed to collect stats, no active tests found")
@@ -795,9 +795,9 @@ def _cleanup_stale_stats() -> None:
     def _is_valid_key(key: str) -> bool:
         return get_module_from_key(key) in valid_modules
 
-    stale_keys = [k for k in mutmut.tests_by_mangled_function_name if not _is_valid_key(k)]
+    stale_keys = [k for k in state().tests_by_mangled_function_name if not _is_valid_key(k)]
     for k in stale_keys:
-        del mutmut.tests_by_mangled_function_name[k]
+        del state().tests_by_mangled_function_name[k]
 
     stale_dep_keys = [k for k in state().function_dependencies if not _is_valid_key(k)]
     for k in stale_dep_keys:
@@ -879,7 +879,7 @@ def _hash_files(paths: Iterable[str]) -> dict[str, str]:
 
 def compute_watched_file_hashes() -> dict[str, str]:
     """Map watched-file path -> content hash for the default set plus user globs."""
-    patterns = list(_DEFAULT_WATCHED_FILES) + list(Config.get().cache_invalidation_files)
+    patterns = list(_DEFAULT_WATCHED_FILES) + list(config().cache_invalidation_files)
     paths = [str(path) for pattern in patterns for path in sorted(Path(".").glob(pattern))]
     return _hash_files(paths)
 
@@ -966,18 +966,18 @@ def _changed_dependency_files() -> set[str]:
     unavailable. Silent on the first run (no baseline to compare against). Noisy files
     (see ``_DEFAULT_INVALIDATION_EXCLUDE`` and ``cache_invalidation_exclude``) are dropped.
     """
-    config = Config.get()
+    cfg = config()
     old_commit = state().old_git_commit
-    if config.use_git_change_detection and old_commit is not None:
+    if cfg.use_git_change_detection and old_commit is not None:
         git_changed = git_changed_non_py_files(old_commit)
         if git_changed is not None:
             # also catch explicitly-registered files that git ignores
-            changed = git_changed | _changed_hashed_files(restrict_to=config.cache_invalidation_files)
+            changed = git_changed | _changed_hashed_files(restrict_to=cfg.cache_invalidation_files)
         else:
             changed = _changed_hashed_files()
     else:
         changed = _changed_hashed_files()
-    return {p for p in changed if not _is_excluded(p, config)}
+    return {p for p in changed if not _is_excluded(p, cfg)}
 
 
 def _compute_baseline_file_hashes() -> dict[str, str]:
@@ -985,12 +985,12 @@ def _compute_baseline_file_hashes() -> dict[str, str]:
     files; when git is available it also records every tracked non-.py file (minus noise)
     so a later git-less run can still detect changes to them.
     """
-    config = Config.get()
+    cfg = config()
     hashes = compute_watched_file_hashes()
-    if config.use_git_change_detection:
+    if cfg.use_git_change_detection:
         tracked = git_tracked_non_py_files()
         if tracked is not None:
-            hashes.update(_hash_files(sorted(p for p in tracked if not _is_excluded(p, config))))
+            hashes.update(_hash_files(sorted(p for p in tracked if not _is_excluded(p, cfg))))
     return hashes
 
 
@@ -1037,7 +1037,7 @@ def _report_watched_file_changes() -> bool:
     if not changed:
         return False
 
-    policy = Config.get().on_dependency_change
+    policy = config().on_dependency_change
     if policy == "ignore":
         return False
     listed = sorted(changed)
@@ -1058,7 +1058,7 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
     or an opt-in dependency rerun), in which case all results have already been reset.
     """
     old_fp = state().old_config_fingerprint
-    new_fp = Config.get().config_fingerprint()
+    new_fp = config().config_fingerprint()
     changed_groups = {g for g in new_fp if old_fp.get(g) != new_fp[g]} if old_fp else set()
 
     dependency_rerun = _report_watched_file_changes()
@@ -1067,8 +1067,8 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
     # subset of results is safe to keep -> full reset and full stats recollection.
     if changed_groups & {"test_execution", "test_selection"} or dependency_rerun:
         _reset_mutant_results(lambda key, exit_code: True)
-        mutmut.duration_by_test.clear()
-        mutmut.tests_by_mangled_function_name.clear()
+        state().duration_by_test.clear()
+        state().tests_by_mangled_function_name.clear()
         state().function_dependencies.clear()
         return True
 
@@ -1105,7 +1105,7 @@ def collect_or_load_stats(
         run_stats_collection(runner)
     else:
         _cleanup_stale_stats()
-        if Config.get().track_dependencies and invalidate_stale_callers:
+        if config().track_dependencies and invalidate_stale_callers:
             _invalidate_stale_dependency_edges()
         save_stats()
 
@@ -1134,9 +1134,9 @@ def load_stats() -> bool:
         with open("mutants/mutmut-stats.json") as f:
             data = json.load(f)
             for k, v in data.pop("tests_by_mangled_function_name").items():
-                mutmut.tests_by_mangled_function_name[k] |= set(v)
-            mutmut.duration_by_test = data.pop("duration_by_test")
-            mutmut.stats_time = data.pop("stats_time")
+                state().tests_by_mangled_function_name[k] |= set(v)
+            state().duration_by_test = data.pop("duration_by_test")
+            state().stats_time = data.pop("stats_time")
             state().old_function_hashes = data.pop("function_hashes", {})
             for k, v in data.pop("function_dependencies", {}).items():
                 state().function_dependencies[k] = set(v)
@@ -1157,12 +1157,12 @@ def save_stats() -> None:
     with open("mutants/mutmut-stats.json", "w") as f:
         json.dump(
             dict(
-                tests_by_mangled_function_name={k: list(v) for k, v in mutmut.tests_by_mangled_function_name.items()},
-                duration_by_test=mutmut.duration_by_test,
-                stats_time=mutmut.stats_time,
+                tests_by_mangled_function_name={k: list(v) for k, v in state().tests_by_mangled_function_name.items()},
+                duration_by_test=state().duration_by_test,
+                stats_time=state().stats_time,
                 function_hashes=state().current_function_hashes,
                 function_dependencies={k: list(v) for k, v in state().function_dependencies.items()},
-                config_fingerprint=Config.get().config_fingerprint(),
+                config_fingerprint=config().config_fingerprint(),
                 watched_file_hashes=state().watched_file_hashes,
                 git_commit=state().git_commit,
             ),
@@ -1194,7 +1194,6 @@ def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutat
 # exports CI/CD stats to block pull requests from merging if mutation score is too low, or used in other ways in CI/CD pipelines
 @cli.command()
 def export_cicd_stats() -> None:
-    Config.ensure_loaded()
 
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
 
@@ -1266,7 +1265,7 @@ def _check_test_to_mutant_associations(
     This check exits with an actionable message instead of producing the silent
     all-No-Tests outcome.
     """
-    recorded = set(mutmut.tests_by_mangled_function_name.keys())
+    recorded = set(state().tests_by_mangled_function_name.keys())
     if not recorded:
         # No hits at all - the existing zero-check in run_stats_collection
         # already covers this path; nothing to add here.
@@ -1298,15 +1297,14 @@ def _check_test_to_mutant_associations(
 
 
 def estimated_worst_case_time(mutant_name: str) -> float:
-    tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
-    return sum(mutmut.duration_by_test[t] for t in tests)
+    tests = state().tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
+    return sum(state().duration_by_test[t] for t in tests)
 
 
 @cli.command()
 @click.argument("mutant_names", required=False, nargs=-1)
 def print_time_estimates(mutant_names: tuple[str, ...]) -> None:
     assert isinstance(mutant_names, (tuple, list)), mutant_names
-    Config.ensure_loaded()
 
     runner = PytestRunner()
     runner.prepare_main_test_run()
@@ -1369,7 +1367,6 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     os.environ["MUTANT_UNDER_TEST"] = "mutant_generation"
-    Config.ensure_loaded()
 
     if max_children is None:
         max_children = os.cpu_count() or 4
@@ -1389,7 +1386,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     )
 
     mutants_caught_by_type_checker: dict[str, FailedTypeCheckMutant] = {}
-    if Config.get().type_check_command:
+    if config().type_check_command:
         with CatchOutput(spinner_title="Filtering mutations with type checker"):
             mutants_caught_by_type_checker = filter_mutants_with_type_checker()
 
@@ -1429,7 +1426,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     def read_one_child_exit_status() -> None:
         pid, wait_status = os.wait()
         exit_code = os.waitstatus_to_exitcode(wait_status)
-        if Config.get().debug:
+        if config().debug:
             print("    worker exit code", exit_code)
         source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
 
@@ -1447,8 +1444,8 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         # Now do mutation
         for mutation_data, mutant_name, result in mutants:
             mutant_name = mutant_name.replace("__init__.", "")
-            tests = mutmut.tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
-            estimated_time_of_tests = sum(mutmut.duration_by_test[test_name] for test_name in tests)
+            tests = state().tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
+            estimated_time_of_tests = sum(state().duration_by_test[test_name] for test_name in tests)
             mutation_data.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
             print_stats(source_file_mutation_data_by_path)
 
@@ -1468,7 +1465,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 mutation_data.save()
                 continue
 
-            config = Config.get()
+            cfg = config()
             pid = os.fork()
             if pid == 0:
                 # In the child
@@ -1476,12 +1473,12 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 setproctitle(f"mutmut: {mutant_name}")
 
                 # Run fast tests first
-                sorted_tests = sorted(tests, key=lambda test_name: mutmut.duration_by_test[test_name])
+                sorted_tests = sorted(tests, key=lambda test_name: state().duration_by_test[test_name])
                 if not sorted_tests:
                     os._exit(33)
 
                 cpu_time_limit_s = ceil(
-                    (estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier * 2 + process_time()
+                    (estimated_time_of_tests + cfg.timeout_constant) * cfg.timeout_multiplier * 2 + process_time()
                 )
                 # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit_s, cpu_time_limit_s + 1))
@@ -1494,7 +1491,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 os._exit(result)
             else:
                 # in the parent
-                wall_time_limit_s = (estimated_time_of_tests + config.timeout_constant) * config.timeout_multiplier
+                wall_time_limit_s = (estimated_time_of_tests + cfg.timeout_constant) * cfg.timeout_multiplier
                 register_timeout(pid=pid, timeout_s=wall_time_limit_s)
                 source_file_mutation_data_by_pid[pid] = mutation_data
                 mutation_data.register_pid(pid=pid, key=mutant_name)
@@ -1543,18 +1540,17 @@ def tests_for_mutant_names(mutant_names: tuple[str, ...] | list[str]) -> set[str
     tests = set()
     for mutant_name in mutant_names:
         if "*" in mutant_name:
-            for name, tests_of_this_name in mutmut.tests_by_mangled_function_name.items():
+            for name, tests_of_this_name in state().tests_by_mangled_function_name.items():
                 if fnmatch.fnmatch(name, mutant_name):
                     tests |= set(tests_of_this_name)
         else:
-            tests |= set(mutmut.tests_by_mangled_function_name[mangled_name_from_mutant_name(mutant_name)])
+            tests |= set(state().tests_by_mangled_function_name[mangled_name_from_mutant_name(mutant_name)])
     return tests
 
 
 @cli.command()
 @click.option("--all", default=False)
 def results(all: bool) -> None:
-    Config.ensure_loaded()
     for path in walk_mutatable_files():
         m = SourceFileMutationData(path=path)
         m.load()
@@ -1717,7 +1713,6 @@ def get_diff_for_mutant(
 @cli.command()
 @click.argument("mutant_name")
 def show(mutant_name: str) -> None:
-    Config.ensure_loaded()
     m = find_mutant(mutant_name)
     print(f"# {mutant_name}: {status_by_exit_code[m.exit_code_by_key[mutant_name]]}")
     print(get_diff_for_mutant(mutant_name, path=m.path))
@@ -1728,7 +1723,6 @@ def show(mutant_name: str) -> None:
 @click.argument("mutant_name")
 def apply(mutant_name: str) -> None:
     # try:
-    Config.ensure_loaded()
     apply_mutant(mutant_name)
     # except FileNotFoundError as e:
     #     print(e)
@@ -1762,7 +1756,6 @@ def apply_mutant(mutant_name: str) -> None:
 @cli.command()
 @click.option("--show-killed", is_flag=True, default=False, help="Display mutants killed by tests and type checker.")
 def browse(show_killed: bool) -> None:
-    Config.ensure_loaded()
 
     from rich.console import RenderableType
     from rich.syntax import Syntax
@@ -1820,7 +1813,6 @@ def browse(show_killed: bool) -> None:
             self.populate_files_table()
 
         def read_data(self) -> None:
-            Config.ensure_loaded()
             self.source_file_mutation_data_and_stat_by_path = {}
             self.path_by_name: dict[str, Path] = {}
 
@@ -1926,7 +1918,6 @@ def browse(show_killed: bool) -> None:
                 if worker.is_cancelled:
                     return
 
-                Config.ensure_loaded()
                 try:
                     update: RenderableType = Syntax(get_diff_for_mutant(mutant_name, path=path), "diff")
                 except Exception as e:
@@ -1982,7 +1973,6 @@ def browse(show_killed: bool) -> None:
                 self.retest(name.rpartition(".")[0] + ".*")
 
         def action_apply_mutant(self) -> None:
-            Config.ensure_loaded()
             # noinspection PyTypeChecker
             mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
             if mutants_table.cursor_row is None or not mutants_table.is_valid_row_index(mutants_table.cursor_row):
