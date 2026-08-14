@@ -68,8 +68,8 @@ from mutmut.mutation.file_mutation import MutatedFile
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
-from mutmut.threading.timeout import register_timeout
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
+from mutmut.workers.timeout import register_timeout
 
 if TYPE_CHECKING:
     from coverage import Coverage
