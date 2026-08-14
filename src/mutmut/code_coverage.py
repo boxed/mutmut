@@ -11,7 +11,7 @@ import coverage
 from coverage import CoverageData
 
 if TYPE_CHECKING:
-    from mutmut.__main__ import TestRunner
+    from mutmut.runners.harness import TestRunner
 
 
 # Returns a set of lines that are covered in this file gvein the covered_lines dict
