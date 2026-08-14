@@ -6,7 +6,7 @@ import pytest
 import mutmut.__main__
 from mutmut.__main__ import InvalidGeneratedSyntaxException
 from mutmut.__main__ import create_mutants
-from mutmut.configuration import Config
+from mutmut.configuration import config
 
 source_dir = Path(__file__).parent / "data" / "test_generation"
 source_dir = source_dir.relative_to(Path.cwd())
@@ -25,7 +25,7 @@ def test_mutant_generation_raises_exception_on_invalid_syntax(monkeypatch):
         source_dir / "invalid_syntax.py",
     ]
     monkeypatch.setattr(mutmut.__main__, "walk_source_files", lambda: source_files)
-    monkeypatch.setattr(Config.get(), "should_mutate", lambda _path: True)
+    monkeypatch.setattr(config(), "should_mutate", lambda _path: True)
 
     # should raise an exception, because we copy the invalid_syntax.py file and then verify
     # if it is valid syntax
