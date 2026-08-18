@@ -180,12 +180,12 @@ class PragmaVisitor(cst.CSTVisitor):
 
     def _scan_body_stmts(
         self,
-        body: Sequence[cst.BaseStatement | cst.BaseCompoundStatement | cst.SimpleStatementLine],
+        body: Sequence[cst.BaseStatement | cst.BaseCompoundStatement | cst.SimpleStatementLine | cst.MatchCase],
     ) -> None:
         """Scan ``leading_lines`` of each statement for standalone pragmas.
 
-        Shared by ``visit_Module`` (module-level body) and
-        ``visit_IndentedBlock`` (block-level body)."""
+        Shared by ``visit_Module`` (module-level body), ``visit_IndentedBlock``
+        (block-level body) and ``visit_Match`` (the ``case`` clauses)."""
         block_from_idx: int | None = None
         for i, stmt in enumerate(body):
             found = self._scan_empty_lines(getattr(stmt, "leading_lines", []))
@@ -265,7 +265,26 @@ class PragmaVisitor(cst.CSTVisitor):
         self._visit_compound_header(node)
         return True
 
-    def visit_Match(self, node: cst.CSTNode) -> bool | None:
+    def visit_Match(self, node: cst.Match) -> bool | None:
+        # Unlike If/For/While/... a `Match` node has no `body` attribute: its
+        # `cases` are a plain sequence of `MatchCase`, not an IndentedBlock, so
+        # a trailing comment on the `match ...:` line lives directly on
+        # `whitespace_after_colon` instead.
+        tok = _parse_pragma_token(node.whitespace_after_colon.comment)
+        if tok is not None:
+            node_line = self.get_metadata(PositionProvider, node).start.line
+            if tok == "block":
+                node_pos = self.get_metadata(PositionProvider, node)
+                self.ignore_node_lines.add(node_line)
+                self.ignore_node_lines.update(range(node_pos.start.line, node_pos.end.line + 1))
+            else:
+                self.no_mutate_lines.add(node_line)
+
+        self._scan_body_stmts(node.cases)
+        self._scan_empty_lines(node.footer)
+        return True
+
+    def visit_MatchCase(self, node: cst.MatchCase) -> bool | None:
         self._visit_compound_header(node)
         return True
 

@@ -599,6 +599,79 @@ def buzz(val=1):
     assert "return val + 1" in mutated_code
 
 
+def test_pragma_no_mutate_on_match_case_guard():
+    """A pragma on a `case ... if guard:` line suppresses mutation of the
+    guard expression, e.g. `n > 0` becoming `n >= 0`."""
+    source = """
+def classify(x):
+    match x:
+        case 1:
+            return 10
+        case n if n > 0:  # pragma: no mutate
+            return 20
+        case _:
+            return 30
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_classify__mutmut_orig" in mutated_code
+    assert "n >= 0" not in mutated_code
+    assert "n > 1" not in mutated_code
+
+
+def test_pragma_no_mutate_on_match_case_single_line():
+    source = """
+def classify(x):
+    match x:
+        case 1: return 10  # pragma: no mutate
+        case _: return 30
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_classify__mutmut_orig" in mutated_code
+    assert "return 11" not in mutated_code
+    # the untouched case is still mutated
+    assert "return 31" in mutated_code
+
+
+def test_pragma_no_mutate_block_on_match_case():
+    """A block pragma on a `case` header suppresses mutation of that case's
+    whole body, leaving sibling cases mutable."""
+    source = """
+def classify(x):
+    match x:
+        case n if n > 0:  # pragma: no mutate block
+            return n + 1
+        case _:
+            return 0
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_classify__mutmut_orig" in mutated_code
+    assert "n >= 0" not in mutated_code
+    assert "n + 2" not in mutated_code
+    # the untouched case is still mutated
+    assert "return 1" in mutated_code
+
+
+def test_pragma_no_mutate_block_on_match_does_not_affect_other_functions():
+    source = """
+def skipped(x):
+    match x:  # pragma: no mutate block
+        case n if n > 0:
+            return n + 1
+        case _:
+            return 0
+
+def mutated(x):
+    match x:
+        case n if n > 0:
+            return n + 1
+        case _:
+            return 0
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "x_skipped__mutmut" not in mutated_code
+    assert "x_mutated__mutmut_orig" in mutated_code
+
+
 def test_pragma_no_mutate_block_inline_if_allows_elif():
     """Inline block pragma on an if-statement suppresses only that branch;
     the elif/else branches remain mutable because they exit the if scope."""
