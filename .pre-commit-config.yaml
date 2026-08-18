@@ -21,16 +21,16 @@ repos:
         args: [--fix, --exit-non-zero-on-fix, --show-fixes]
     -   id: ruff-format
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.3.1
     hooks:
     -   id: mypy
         args: [--config-file=mypy.ini]
         exclude: (tests/|docs/)
         additional_dependencies:
-        -    click>=8.0.0
+        -    click>=8.4.2
         -    coverage>=7.3.0
-        -    libcst>=1.8.5
+        -    libcst>=1.9.0
         -    pytest>=6.2.5
-        -    setproctitle>=1.1.0
+        -    setproctitle>=1.3.7
         -    textual>=1.0.0
         -    types-toml>=0.10.2
