@@ -4,6 +4,8 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
+
 * Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)
 
 * Fix `mutate_only_covered_lines` mutating code that coverage.py excludes from measurement (`# pragma: no cover`, `exclude_lines`, `exclude_also`). Such lines are reported as covered when they run, so they used to produce mutants that could only ever survive

@@ -257,6 +257,29 @@ class PragmaVisitor(cst.CSTVisitor):
         self._visit_compound_header(node)
         return True
 
+    def visit_TryStar(self, node: cst.TryStar) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    # ``else``, ``except``, ``except*`` and ``finally`` are separate nodes owning
+    # their own suite, so a pragma on their header line reaches none of the
+    # visitors above.
+    def visit_Else(self, node: cst.Else) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_ExceptHandler(self, node: cst.ExceptHandler) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_ExceptStarHandler(self, node: cst.ExceptStarHandler) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
+    def visit_Finally(self, node: cst.Finally) -> bool | None:
+        self._visit_compound_header(node)
+        return True
+
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
         self._visit_compound_header(node)
         return True

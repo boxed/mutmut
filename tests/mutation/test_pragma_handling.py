@@ -230,6 +230,64 @@ this line has zero indentation
         ignored_code = _parse_ignored_code("test.py", source)
         assert ignored_code.no_mutate_lines == {3, 4, 5, 6, 7}
 
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                "\nif condition:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                id="if-else",
+            ),
+            pytest.param(
+                "\nfor item in items:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                id="for-else",
+            ),
+            pytest.param(
+                "\nwhile condition:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                id="while-else",
+            ),
+            pytest.param(
+                "\ntry:\n    x = 1\nexcept ValueError:  # pragma: no mutate block\n    y = 2\n",
+                id="except",
+            ),
+            pytest.param(
+                "\ntry:\n    x = 1\nexcept* ValueError:  # pragma: no mutate block\n    y = 2\n",
+                id="except-star",
+            ),
+            pytest.param(
+                "\ntry:\n    x = 1\nfinally:  # pragma: no mutate block\n    y = 2\n",
+                id="finally",
+            ),
+        ],
+    )
+    def test_inline_on_compound_arm(self, source):
+        """``else``, ``except``, ``except*`` and ``finally`` own their own suite,
+        so they need their own visitors."""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == set()
+        assert ignored_code.ignore_node_lines == {4, 5}
+
+    def test_inline_on_try_with_except_star(self):
+        """``try``/``except*`` parses as ``TryStar``, not ``Try``."""
+        source = """
+try:  # pragma: no mutate block
+    x = 1
+except* ValueError:
+    y = 2
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.ignore_node_lines == {2, 3}
+
+    def test_inline_on_arm_does_not_ignore_siblings(self):
+        source = """
+if condition:
+    x = 1
+else:  # pragma: no mutate block
+    y = 2
+z = 3
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.ignore_node_lines == {4, 5}
+
 
 class TestSelectionPragma:
     """Tests for # pragma: no mutate start / end pairs."""
