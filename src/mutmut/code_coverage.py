@@ -14,7 +14,7 @@ from coverage import CoverageData
 from coverage.exceptions import CoverageException
 
 if TYPE_CHECKING:
-    from mutmut.__main__ import TestRunner
+    from mutmut.runners.harness import TestRunner
 
 
 @dataclass
