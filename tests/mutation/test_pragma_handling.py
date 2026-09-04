@@ -234,27 +234,57 @@ this line has zero indentation
         "source",
         [
             pytest.param(
-                "\nif condition:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                """
+if condition:
+    x = 1
+else:  # pragma: no mutate block
+    y = 2
+""",
                 id="if-else",
             ),
             pytest.param(
-                "\nfor item in items:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                """
+for item in items:
+    x = 1
+else:  # pragma: no mutate block
+    y = 2
+""",
                 id="for-else",
             ),
             pytest.param(
-                "\nwhile condition:\n    x = 1\nelse:  # pragma: no mutate block\n    y = 2\n",
+                """
+while condition:
+    x = 1
+else:  # pragma: no mutate block
+    y = 2
+""",
                 id="while-else",
             ),
             pytest.param(
-                "\ntry:\n    x = 1\nexcept ValueError:  # pragma: no mutate block\n    y = 2\n",
+                """
+try:
+    x = 1
+except ValueError:  # pragma: no mutate block
+    y = 2
+""",
                 id="except",
             ),
             pytest.param(
-                "\ntry:\n    x = 1\nexcept* ValueError:  # pragma: no mutate block\n    y = 2\n",
+                """
+try:
+    x = 1
+except* ValueError:  # pragma: no mutate block
+    y = 2
+""",
                 id="except-star",
             ),
             pytest.param(
-                "\ntry:\n    x = 1\nfinally:  # pragma: no mutate block\n    y = 2\n",
+                """
+try:
+    x = 1
+finally:  # pragma: no mutate block
+    y = 2
+""",
                 id="finally",
             ),
         ],
