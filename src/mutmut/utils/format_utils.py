@@ -66,3 +66,21 @@ def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
     mutant_name = f"{module_name}.{mutant_method_name}"
     mutant_name = mutant_name.replace(".__init__.", ".")
     return mutant_name
+
+
+def mangled_name_from_mutant_name(mutant_name: str) -> str:
+    assert "__mutmut_" in mutant_name, mutant_name
+    return mutant_name.partition("__mutmut_")[0]
+
+
+def orig_function_and_class_names_from_key(mutant_name: str) -> tuple[str, str | None]:
+    r = mangled_name_from_mutant_name(mutant_name)
+    _, _, r = r.rpartition(".")
+    class_name = None
+    if CLASS_NAME_SEPARATOR in r:
+        class_name = r[r.index(CLASS_NAME_SEPARATOR) + 1 : r.rindex(CLASS_NAME_SEPARATOR)]
+        r = r[r.rindex(CLASS_NAME_SEPARATOR) + 1 :]
+    else:
+        assert r.startswith("x_"), r
+        r = r[2:]
+    return r, class_name

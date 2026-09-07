@@ -22,19 +22,17 @@ from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import _refresh_change_detection_baseline
 from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
-from mutmut.__main__ import apply_mutant
 from mutmut.__main__ import compute_watched_file_hashes
-from mutmut.__main__ import get_diff_for_mutant
 from mutmut.__main__ import git_changed_non_py_files
 from mutmut.__main__ import git_head
 from mutmut.__main__ import git_tracked_non_py_files
-from mutmut.__main__ import mangled_name_from_mutant_name
-from mutmut.__main__ import orig_function_and_class_names_from_key
 from mutmut.__main__ import record_trampoline_hit
 from mutmut.__main__ import run_forced_fail_test
 from mutmut.configuration import Config
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.diff_apply import apply_mutant
+from mutmut.mutation.diff_apply import get_diff_for_mutant
 from mutmut.mutation.file_mutation import compute_function_hashes
 from mutmut.mutation.file_mutation import create_mutations
 from mutmut.mutation.file_mutation import mutate_file_contents
@@ -43,6 +41,8 @@ from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.state import reset_state
 from mutmut.state import state
 from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
+from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 
 def mutants_for_source(
@@ -1852,7 +1852,9 @@ def test_user_exclude_pattern_drops_file(tmp_path, monkeypatch):
     (tmp_path / "noisy.json").write_text("1")
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"]))
+    monkeypatch.setattr(
+        mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_exclude=["*.json"])
+    )
 
     (tmp_path / "noisy.json").write_text("2")
 
@@ -1869,7 +1871,9 @@ def test_registered_file_is_immune_to_exclusion(tmp_path, monkeypatch):
     (tmp_path / "notes.md").write_text("a")  # *.md is excluded by default
     _commit_all(tmp_path)
     state().old_git_commit = git_head()
-    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"]))
+    monkeypatch.setattr(
+        mutmut.__main__, "config", lambda: _config_for_invalidation(cache_invalidation_files=["notes.md"])
+    )
 
     (tmp_path / "notes.md").write_text("b")
 

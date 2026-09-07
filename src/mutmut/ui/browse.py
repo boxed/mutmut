@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from collections.abc import Callable
 from collections.abc import Iterable
 from pathlib import Path
 from threading import Lock
@@ -11,6 +10,8 @@ from typing import Any
 from rich.text import Text
 
 from mutmut.mutation.data import SourceFileMutationData
+from mutmut.mutation.diff_apply import apply_mutant
+from mutmut.mutation.diff_apply import get_diff_for_mutant
 from mutmut.stats import Stat
 from mutmut.stats import collect_stat
 from mutmut.stats import emoji_by_status
@@ -18,18 +19,10 @@ from mutmut.stats import status_by_exit_code
 from mutmut.utils.file_utils import walk_mutatable_files
 
 
-def run_result_browser(
-    *,
-    show_killed: bool,
-    get_diff_for_mutant: Callable[..., str],
-    apply_mutant: Callable[[str], None],
-) -> None:
+def run_result_browser(*, show_killed: bool) -> None:
     """Run the interactive result browser.
 
-    Creates and runs the ResultBrowser Textual app. The ``get_diff_for_mutant`` and
-    ``apply_mutant`` callables are injected to avoid a circular import back into
-    ``mutmut.__main__``.
-    """
+    Creates and runs the ResultBrowser Textual app."""
 
     from rich.console import RenderableType
     from rich.syntax import Syntax
