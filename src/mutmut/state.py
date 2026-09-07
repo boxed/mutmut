@@ -19,6 +19,13 @@ class MutmutState:
     watched_file_hashes: dict[str, str] = field(default_factory=dict)
     old_git_commit: str | None = None
     git_commit: str | None = None
+    # Migrated from module-level globals in mutmut/__init__.py.
+    stats_time: float | None = None
+    duration_by_test: defaultdict[str, float] = field(default_factory=lambda: defaultdict(float))
+    tests_by_mangled_function_name: defaultdict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+    _stats: set[str] = field(default_factory=set)
+    _covered_lines: dict[str, set[int]] | None = None
+    _excluded_lines: dict[str, set[int]] | None = None
 
 
 _state: MutmutState | None = None

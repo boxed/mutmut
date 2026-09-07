@@ -9,7 +9,8 @@ import mutmut
 from mutmut.__main__ import SourceFileMutationData
 from mutmut.__main__ import _run
 from mutmut.__main__ import walk_source_files
-from mutmut.configuration import Config
+from mutmut.configuration import config
+from mutmut.configuration import reset_config
 
 
 @contextmanager
@@ -25,12 +26,11 @@ def change_cwd(path):
 def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
     """Create a single dict from all mutant results in *.meta files"""
     with change_cwd(project_path):
-        Config.reset()
-        Config.ensure_loaded()
+        reset_config()
 
         stats = {}
         for p in walk_source_files():
-            if not Config.get().should_mutate(p):
+            if not config().should_mutate(p):
                 continue
             data = SourceFileMutationData(path=p)
             data.load()

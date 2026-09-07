@@ -134,7 +134,7 @@ def test_load_returns_none_without_a_usable_index(tmp_path: Path, monkeypatch: p
 
 def test_a_stale_index_is_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """An index that does not match the mutated file must not produce a bogus result."""
-    from mutmut.__main__ import read_functions_from_index
+    from mutmut.mutation.diff_apply import read_functions_from_index
 
     source = "def f():\n    return 1\n"
     mutated_file = mutate_file_contents("test.py", source)

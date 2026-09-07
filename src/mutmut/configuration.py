@@ -233,20 +233,14 @@ class Config:
                 return True
         return False
 
-    @staticmethod
-    def ensure_loaded() -> None:
-        global _config
-        if _config is None:
-            _config = _load_config()
 
-    @staticmethod
-    def get() -> Config:
-        global _config
-        Config.ensure_loaded()
-        assert _config is not None
-        return _config
+def config() -> Config:
+    global _config
+    if _config is None:
+        _config = _load_config()
+    return _config
 
-    @staticmethod
-    def reset() -> None:
-        global _config
-        _config = None
+
+def reset_config() -> None:
+    global _config
+    _config = None

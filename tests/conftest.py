@@ -7,21 +7,21 @@ import mutmut.configuration
 
 @pytest.fixture(autouse=True)
 def reset_config():
-    mutmut.configuration.Config.reset()
+    mutmut.configuration.reset_config()
 
 
 @pytest.fixture(name="patch_config")
 def monkeypatch_config_get(monkeypatch):
-    """Utility to overwrite values in the loaded Config"""
-    orig_get = mutmut.configuration.Config.get
+    """Utility to overwrite values in the loaded Config.
+
+    Mutates the singleton instance in place (rather than patching the ``config()``
+    accessor) so the change is visible to every module that already imported
+    ``config`` by reference (``from mutmut.configuration import config``).
+    """
 
     def patch_config(config_name: str, value: Any):
-        def patched_get():
-            config = orig_get()
-            assert hasattr(config, config_name)
-            setattr(config, config_name, value)
-            return config
-
-        monkeypatch.setattr(mutmut.configuration.Config, "get", patched_get)
+        cfg = mutmut.configuration.config()
+        assert hasattr(cfg, config_name)
+        monkeypatch.setattr(cfg, config_name, value)
 
     return patch_config
