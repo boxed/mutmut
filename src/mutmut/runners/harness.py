@@ -34,7 +34,8 @@ class TestRunner(ABC):
     def run_stats(self, *, tests: Iterable[str]) -> int:
         raise NotImplementedError()
 
-    def run_forced_fail(self) -> int:
+    def run_forced_fail(self, *, tests: Iterable[str] = ()) -> int:
+        """Run ``tests`` (all tests if empty) with every mutant forced to raise."""
         raise NotImplementedError()
 
     def prepare_main_test_run(self) -> None:
@@ -138,8 +139,8 @@ class PytestRunner(TestRunner):
             self.prepare_main_test_run()
             return int(self.execute_pytest(self._pytest_args_regular_run([])))
 
-    def run_forced_fail(self) -> int:
-        return self.run_tests(mutant_name=None, tests=[])
+    def run_forced_fail(self, *, tests: Iterable[str] = ()) -> int:
+        return self.run_tests(mutant_name=None, tests=list(tests))
 
     def list_all_tests(self) -> ListAllTestsResult:
         class TestsCollector:
@@ -191,7 +192,7 @@ class HammettRunner(TestRunner):
             )
         )
 
-    def run_forced_fail(self) -> int:
+    def run_forced_fail(self, *, tests: Iterable[str] = ()) -> int:
         import hammett
 
         return int(

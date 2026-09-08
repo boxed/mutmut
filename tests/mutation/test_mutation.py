@@ -7,6 +7,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import Mock
+from unittest.mock import call
 from unittest.mock import patch
 
 import libcst as cst
@@ -1121,6 +1122,33 @@ def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
     runner = Mock()
     runner.run_forced_fail = Mock(return_value=return_value, side_effect=side_effect)
     return runner
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, "dump_output")
+@patch.object(CatchOutput, "stop")
+@patch.object(CatchOutput, "start")
+def test_run_forced_fail_test_falls_back_to_the_whole_suite_when_the_probe_passes(_start, _stop, _dump_output, capfd):
+    runner = _mocked_runner_run_forced_failed(side_effect=[0, 1])
+
+    run_forced_fail_test(runner, tests=["tests/test_a.py::test_probe"])
+
+    assert runner.run_forced_fail.call_args_list == [call(tests=["tests/test_a.py::test_probe"]), call(tests=())]
+    out, _ = capfd.readouterr()
+    assert "done" in out
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, "dump_output")
+@patch.object(CatchOutput, "stop")
+@patch.object(CatchOutput, "start")
+def test_run_forced_fail_test_fails_when_the_probe_and_the_whole_suite_pass(_start, _stop, _dump_output, capfd):
+    runner = _mocked_runner_run_forced_failed(return_value=0)
+
+    with pytest.raises(SystemExit):
+        run_forced_fail_test(runner, tests=["tests/test_a.py::test_probe"])
+
+    assert runner.run_forced_fail.call_count == 2
 
 
 def test_do_not_mutate_top_level_decorators():
