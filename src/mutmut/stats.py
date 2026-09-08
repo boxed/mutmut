@@ -15,7 +15,6 @@ status_by_exit_code = defaultdict(
     {
         1: "killed",
         3: "killed",  # internal error in pytest means a kill
-        -24: "killed",
         0: "survived",
         5: "no tests",
         2: "check was interrupted by user",
