@@ -4,6 +4,10 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Performance: faster stats collection on big test suites. Recording which functions a test reaches no longer resolves file paths on every call to a mutated function
+
+* Fix ``max_stack_depth`` crashing stats collection on frames without a source file, such as a ``@dataclass`` generated ``__init__``
+
 * Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
 
 * Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)
