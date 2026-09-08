@@ -1625,6 +1625,33 @@ def test_type_check_config_change_resets_symmetric_difference(tmp_path, monkeypa
     reset_state()
 
 
+def test_type_check_verdicts_are_requested_only_when_the_type_check_config_changed(tmp_path, monkeypatch):
+    """The provider of type-check verdicts is expensive: it is called only when needed."""
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def provider():
+        calls.append(True)
+        return {"now_caught": object()}
+
+    unchanged = _config_for_invalidation(type_check_command=["same"])
+    state().old_config_fingerprint = unchanged.config_fingerprint()
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: unchanged)
+    _write_meta({"now_caught": 0})
+
+    assert _apply_config_change_invalidation(provider) is False
+    assert calls == []
+    assert _load_results() == {"now_caught": 0}
+
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(type_check_command=["new"]))
+
+    assert _apply_config_change_invalidation(provider) is False
+    assert calls == [True]
+    assert _load_results() == {"now_caught": None}
+    reset_state()
+
+
 def test_global_pytest_change_forces_full_rerun(tmp_path, monkeypatch):
     """A pytest-arg change resets all results and requests full stats recollection."""
     reset_state()

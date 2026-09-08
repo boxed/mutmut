@@ -1,5 +1,12 @@
+from unittest.mock import Mock
+
 from inline_snapshot import snapshot
 
+import mutmut
+import mutmut.__main__
+from mutmut.__main__ import _run
+from tests.e2e.e2e_utils import E2E_PROJECTS
+from tests.e2e.e2e_utils import change_cwd
 from tests.e2e.e2e_utils import run_mutmut_on_project
 
 
@@ -105,3 +112,21 @@ def test_type_checking_mypy_result_snapshot(patch_config):
             }
         }
     )
+
+
+def test_type_checker_report_is_not_waited_for_when_every_mutant_has_a_verdict(monkeypatch):
+    """The checker starts in the background right after generation; with nothing left to test
+    its report is never needed, so mutmut must not block on it (and must stop it)."""
+    first_run = run_mutmut_on_project("type_checking")
+    assert first_run
+
+    checker = Mock()
+    checker.result.side_effect = AssertionError("the report was waited for although no mutant needed a verdict")
+    monkeypatch.setattr(mutmut.__main__, "start_type_checker", lambda command, cwd=None: checker)
+
+    with change_cwd(E2E_PROJECTS / "type_checking"):
+        mutmut._reset_globals()
+        _run([], None)
+
+    checker.result.assert_not_called()
+    checker.terminate.assert_called_once()

@@ -4,7 +4,6 @@ import os
 import platform
 import sys
 from collections.abc import Iterable
-from typing import Any
 
 from mutmut.state import state
 from mutmut.utils.format_utils import get_module_from_key
@@ -27,6 +26,7 @@ import shutil
 import subprocess
 import warnings
 from collections.abc import Callable
+from collections.abc import Mapping
 from colorsys import hls_to_rgb
 from dataclasses import dataclass
 from dataclasses import field
@@ -69,6 +69,8 @@ from mutmut.stats import load_stats
 from mutmut.stats import print_stats
 from mutmut.stats import save_stats
 from mutmut.stats import status_by_exit_code
+from mutmut.type_checking import TypeCheckerProcess
+from mutmut.type_checking import start_type_checker
 from mutmut.ui.browse import run_result_browser
 from mutmut.ui.terminal import print_status
 from mutmut.utils.file_utils import copy_also_copy_files
@@ -664,11 +666,20 @@ def _report_watched_file_changes() -> bool:
     return False
 
 
-def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, object]) -> bool:
+MutantsCaughtByTypeChecker = Mapping[str, object]
+MutantsCaughtProvider = Callable[[], MutantsCaughtByTypeChecker]
+
+
+def _apply_config_change_invalidation(
+    mutants_caught_by_type_checker: MutantsCaughtByTypeChecker | MutantsCaughtProvider,
+) -> bool:
     """Reset only the cached verdicts a config / dependency change could have invalidated.
 
     Returns True if a full stats recollection is required (a global pytest config change
     or an opt-in dependency rerun), in which case all results have already been reset.
+
+    ``mutants_caught_by_type_checker`` may be a callable: the type checker is expensive and its
+    result is only needed when the type-check config changed, so it is requested lazily.
     """
     old_fp = state().old_config_fingerprint
     new_fp = config().config_fingerprint()
@@ -692,7 +703,8 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
     # The type-check pre-filter runs fresh every run; only verdicts whose type-check
     # status flips are stale -> reset the symmetric difference of old (==37) and new.
     if "type_check" in changed_groups:
-        caught = set(mutants_caught_by_type_checker)
+        provider = mutants_caught_by_type_checker
+        caught = set(provider() if callable(provider) else provider)
         _reset_mutant_results(lambda key, exit_code: (exit_code == 37) != (key in caught))
 
     return False
@@ -701,7 +713,7 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
 def collect_or_load_stats(
     runner: TestRunner,
     *,
-    mutants_caught_by_type_checker: dict[str, Any] | None = None,
+    mutants_caught_by_type_checker: MutantsCaughtByTypeChecker | MutantsCaughtProvider | None = None,
     apply_config_invalidation: bool = False,
     invalidate_stale_callers: bool = True,
 ) -> None:
@@ -966,6 +978,12 @@ elif "mutmut.__main__" not in sys.modules:
     )
 
 
+def run_type_check_phase(checker: TypeCheckerProcess) -> dict[str, FailedTypeCheckMutant]:
+    """Wait for the type checker started after generation and map its errors to mutants."""
+    with CatchOutput(spinner_title="Filtering mutations with type checker"):
+        return filter_mutants_with_type_checker(checker)
+
+
 @cli.command()
 @click.option("--max-children", type=int)
 @click.argument("mutant_names", required=False, nargs=-1)
@@ -997,11 +1015,33 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         f"    done in {round(time.total_seconds() * 1000)}ms ({stats.mutated} files mutated, {stats.ignored} ignored, {stats.unmodified} unmodified)",
     )
 
-    mutants_caught_by_type_checker: dict[str, FailedTypeCheckMutant] = {}
+    # The type checker only needs the generated files, so it starts now and runs in the
+    # background while the stats are collected. Its report is only waited for and attributed
+    # to mutants when there are mutants without a verdict (or when the type-check config
+    # changed and cached verdicts must be re-evaluated).
+    type_checker: TypeCheckerProcess | None = None
     if config().type_check_command:
-        with CatchOutput(spinner_title="Filtering mutations with type checker"):
-            mutants_caught_by_type_checker = filter_mutants_with_type_checker()
+        type_checker = start_type_checker(config().type_check_command, cwd=Path("mutants"))
+    mutants_caught_by_type_checker: dict[str, FailedTypeCheckMutant] | None = None
 
+    def get_mutants_caught_by_type_checker() -> dict[str, FailedTypeCheckMutant]:
+        nonlocal mutants_caught_by_type_checker
+        if mutants_caught_by_type_checker is None:
+            mutants_caught_by_type_checker = run_type_check_phase(type_checker) if type_checker else {}
+        return mutants_caught_by_type_checker
+
+    try:
+        _run_with_type_checker(mutant_names, max_children, get_mutants_caught_by_type_checker)
+    finally:
+        if type_checker is not None:
+            type_checker.terminate()
+
+
+def _run_with_type_checker(
+    mutant_names: tuple[str, ...] | list[str],
+    max_children: int,
+    get_mutants_caught_by_type_checker: Callable[[], dict[str, FailedTypeCheckMutant]],
+) -> None:
     # TODO: config/option for runner
     # runner = HammettRunner()
     runner = PytestRunner()
@@ -1011,13 +1051,16 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     collect_or_load_stats(
         runner,
-        mutants_caught_by_type_checker=mutants_caught_by_type_checker,
+        mutants_caught_by_type_checker=get_mutants_caught_by_type_checker,
         apply_config_invalidation=True,
     )
 
     mutants, source_file_mutation_data_by_path = collect_source_file_mutation_data(mutant_names=mutant_names)
 
     _check_test_to_mutant_associations(source_file_mutation_data_by_path)
+
+    if any(mutant_names or result is None for _, _, result in mutants):
+        get_mutants_caught_by_type_checker()
 
     _set_mutant_under_test("")
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
@@ -1070,7 +1113,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 mutation_data.save()
                 continue
 
-            failed_type_check_mutant = mutants_caught_by_type_checker.get(mutant_name)
+            failed_type_check_mutant = get_mutants_caught_by_type_checker().get(mutant_name)
             if failed_type_check_mutant:
                 mutation_data.exit_code_by_key[mutant_name] = 37
                 mutation_data.type_check_error_by_key[mutant_name] = failed_type_check_mutant.error.error_description
