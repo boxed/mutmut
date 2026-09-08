@@ -6,6 +6,8 @@ Unreleased
 
 * Fix obsolete test names never being removed from ``mutants/mutmut-stats.json``: the counters guarding the save iterated dict keys instead of the test sets, so the cleanup was applied in memory but never persisted (`#564`)
 
+* Also drop obsolete test names from ``duration_by_test`` in ``mutants/mutmut-stats.json``, not only from the test-to-function mapping
+
 * Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
 
 * Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)

@@ -19,10 +19,13 @@ def isolated_stats(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "mutants").mkdir()
     (tmp_path / "src").mkdir()
-    saved = state().tests_by_mangled_function_name
+    saved_tests = state().tests_by_mangled_function_name
+    saved_durations = state().duration_by_test
     state().tests_by_mangled_function_name = defaultdict(set)
+    state().duration_by_test = defaultdict(float)
     yield
-    state().tests_by_mangled_function_name = saved
+    state().tests_by_mangled_function_name = saved_tests
+    state().duration_by_test = saved_durations
 
 
 class TestClearOutObsoleteTestNames:
@@ -45,6 +48,18 @@ class TestClearOutObsoleteTestNames:
             "pkg.foo.x_add": ["tests/test_foo.py::test_add"],
             "pkg.foo.x_sub": [],
         }
+
+    def test_obsolete_test_durations_are_dropped_and_persisted(self, capsys):
+        state().tests_by_mangled_function_name["pkg.foo.x_add"].add("tests/test_foo.py::test_add")
+        state().duration_by_test["tests/test_foo.py::test_add"] = 0.1
+        state().duration_by_test["tests/test_gone.py::test_add"] = 0.2
+
+        ListAllTestsResult(ids={"tests/test_foo.py::test_add"}).clear_out_obsolete_test_names()
+
+        assert dict(state().duration_by_test) == {"tests/test_foo.py::test_add": 0.1}
+        assert "Removed 1 obsolete test names" in capsys.readouterr().out
+        on_disk = json.loads(STATS_FILE.read_text())
+        assert on_disk["duration_by_test"] == {"tests/test_foo.py::test_add": 0.1}
 
     def test_nothing_obsolete_leaves_stats_file_untouched(self, capsys):
         state().tests_by_mangled_function_name["pkg.foo.x_add"].add("tests/test_foo.py::test_add")

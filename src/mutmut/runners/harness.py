@@ -60,18 +60,18 @@ class ListAllTestsResult:
         self.ids = ids
 
     def clear_out_obsolete_test_names(self) -> None:
-        count_before = sum(len(x) for x in state().tests_by_mangled_function_name.values())
+        known = collected_test_names().union(*state().tests_by_mangled_function_name.values())
+        obsolete = known - self.ids
+        if not obsolete:
+            return
         state().tests_by_mangled_function_name = defaultdict(
             set,
-            **{
-                k: {test_name for test_name in test_names if test_name in self.ids}
-                for k, test_names in state().tests_by_mangled_function_name.items()
-            },
+            **{k: test_names - obsolete for k, test_names in state().tests_by_mangled_function_name.items()},
         )
-        count_after = sum(len(x) for x in state().tests_by_mangled_function_name.values())
-        if count_before != count_after:
-            print(f"Removed {count_before - count_after} obsolete test names")
-            save_stats()
+        for test_name in obsolete:
+            state().duration_by_test.pop(test_name, None)
+        print(f"Removed {len(obsolete)} obsolete test names")
+        save_stats()
 
     def new_tests(self) -> set[str]:
         return self.ids - collected_test_names()
