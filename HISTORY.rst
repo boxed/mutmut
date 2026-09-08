@@ -4,6 +4,8 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Performance: the clean test run is skipped right after a full stats collection or when nothing is left to test, and otherwise limited to the tests of the mutants about to be tested. The forced-fail check probes a few tests known to reach mutated functions instead of running the whole suite
+
 * Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
 
 * Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)

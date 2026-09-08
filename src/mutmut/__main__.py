@@ -26,6 +26,7 @@ import resource
 import shutil
 import subprocess
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 from colorsys import hls_to_rgb
 from dataclasses import dataclass
@@ -281,11 +282,21 @@ def _set_mutant_under_test(name: str) -> None:
     set_mutant_under_test(name)
 
 
-def run_forced_fail_test(runner: TestRunner) -> None:
+def run_forced_fail_test(runner: TestRunner, tests: Iterable[str] = ()) -> None:
+    """Verify that activating mutants makes tests fail.
+
+    ``tests`` narrows the run to tests known to reach a mutated function (see
+    ``probe_tests_for_forced_fail``), which avoids collecting the whole suite. If they
+    unexpectedly pass, the whole suite is tried before giving up.
+    """
+    tests = list(tests)
     _set_mutant_under_test("fail")
     with CatchOutput(spinner_title="Running forced fail test") as catcher:
         try:
-            if runner.run_forced_fail() == 0:
+            exit_code = runner.run_forced_fail(tests=tests)
+            if exit_code == 0 and tests:
+                exit_code = runner.run_forced_fail(tests=())
+            if exit_code == 0:
                 catcher.dump_output()
                 print("FAILED: Unable to force test failures")
                 raise SystemExit(1)
@@ -293,6 +304,40 @@ def run_forced_fail_test(runner: TestRunner) -> None:
             pass
     _set_mutant_under_test("")
     print("    done")
+
+
+def probe_tests_for_forced_fail(tests: Iterable[str], limit: int = 8) -> list[str]:
+    """Up to ``limit`` tests, from different files, most likely to fail when every mutant raises.
+
+    Ranked by how many mutated functions stats collection saw a test reach; a test with a
+    single association may only be linked through an import-time hit and pass. Empty when
+    nothing suitable is known, meaning run everything."""
+    durations = state().duration_by_test
+    functions_reached: dict[str, int] = defaultdict(int)
+    for tests_of_function in state().tests_by_mangled_function_name.values():
+        for test in tests_of_function:
+            functions_reached[test] += 1
+    candidates = sorted(
+        (test for test in tests if test in durations),
+        key=lambda test: (-functions_reached[test], durations[test], test),
+    )
+    probes: list[str] = []
+    seen_files: set[str] = set()
+    for test in candidates:
+        file = test.partition("::")[0]
+        if file in seen_files:
+            continue
+        seen_files.add(file)
+        probes.append(test)
+        if len(probes) == limit:
+            break
+    return probes
+
+
+def print_skipped_phase(title: str, reason: str) -> None:
+    print_status(title, force_output=True)
+    print()
+    print(f"    skipped: {reason}")
 
 
 class CatchOutput:
@@ -704,7 +749,12 @@ def collect_or_load_stats(
     mutants_caught_by_type_checker: dict[str, Any] | None = None,
     apply_config_invalidation: bool = False,
     invalidate_stale_callers: bool = True,
-) -> None:
+) -> bool:
+    """Load cached stats or collect them. Returns True if a full stats collection ran.
+
+    A full collection runs every test (unmutated) and fails the run if any test fails, so
+    when it returns True the caller knows the suite passes and can skip the clean run.
+    """
     did_load = load_stats()
 
     force_full = False
@@ -716,6 +766,7 @@ def collect_or_load_stats(
         _refresh_change_detection_baseline()
         # Run full stats
         run_stats_collection(runner)
+        return True
     else:
         _cleanup_stale_stats()
         if config().track_dependencies and invalidate_stale_callers:
@@ -739,6 +790,26 @@ def collect_or_load_stats(
         if new_tests:
             print(f"Found {len(new_tests)} new tests, rerunning stats collection")
             run_stats_collection(runner, tests=new_tests)
+    return False
+
+
+def tests_for_mutants(mutants: Iterable[tuple[SourceFileMutationData, str, int | None]]) -> set[str]:
+    """Every test that stats collection associated with the functions of ``mutants``."""
+    tests: set[str] = set()
+    for _, mutant_name, _ in mutants:
+        key = mangled_name_from_mutant_name(mutant_name.replace("__init__.", ""))
+        tests |= state().tests_by_mangled_function_name.get(key, set())
+    return tests
+
+
+def clean_run_test_selection(relevant_tests: set[str]) -> list[str]:
+    """Which tests to hand pytest for the clean run: the relevant ids, or the configured
+    selection once the ids are a majority of the suite (returned as an empty list)."""
+    known_tests = collected_test_names()
+    # rough crossover: resolving this many ids costs more than collecting the configured paths
+    if len(relevant_tests) >= len(known_tests) / 2:
+        return []
+    return sorted(relevant_tests)
 
 
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
@@ -1007,9 +1078,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     runner = PytestRunner()
     runner.prepare_main_test_run()
 
-    # TODO: run these steps only if we have mutants to test
-
-    collect_or_load_stats(
+    ran_full_stats = collect_or_load_stats(
         runner,
         mutants_caught_by_type_checker=mutants_caught_by_type_checker,
         apply_config_invalidation=True,
@@ -1019,19 +1088,31 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     _check_test_to_mutant_associations(source_file_mutation_data_by_path)
 
-    _set_mutant_under_test("")
-    with CatchOutput(spinner_title="Running clean tests") as output_catcher:
-        tests = tests_for_mutant_names(mutant_names)
+    # Only mutants without a verdict (or the explicitly requested ones) are tested below, so the
+    # clean and forced-fail runs are scoped to them and skipped when there is nothing to test.
+    pending_mutants = [(m, name, result) for m, name, result in mutants if mutant_names or result is None]
+    relevant_tests = tests_for_mutants(pending_mutants)
 
-        clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
-        if clean_test_exit_code != 0:
-            output_catcher.dump_output()
-            print("Failed to run clean test")
-            exit(1)
-    print("    done")
+    _set_mutant_under_test("")
+    if not pending_mutants or not relevant_tests:
+        print_skipped_phase("Running clean tests", "no mutants with tests to check")
+    elif ran_full_stats:
+        # stats collection ran every test unmutated and would have stopped on a failure
+        print_skipped_phase("Running clean tests", "all tests already passed during stats collection")
+    else:
+        with CatchOutput(spinner_title="Running clean tests") as output_catcher:
+            clean_test_exit_code = runner.run_tests(mutant_name=None, tests=clean_run_test_selection(relevant_tests))
+            if clean_test_exit_code != 0:
+                output_catcher.dump_output()
+                print("Failed to run clean test")
+                exit(1)
+        print("    done")
 
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
-    run_forced_fail_test(runner)
+    if not pending_mutants or not relevant_tests:
+        print_skipped_phase("Running forced fail test", "no mutants with tests to check")
+    else:
+        run_forced_fail_test(runner, tests=probe_tests_for_forced_fail(relevant_tests))
 
     runner.prepare_main_test_run()
 

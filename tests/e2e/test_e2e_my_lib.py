@@ -1,5 +1,10 @@
 from inline_snapshot import snapshot
 
+import mutmut
+from mutmut.__main__ import _run
+from mutmut.runners.harness import PytestRunner
+from tests.e2e.e2e_utils import E2E_PROJECTS
+from tests.e2e.e2e_utils import change_cwd
 from tests.e2e.e2e_utils import run_mutmut_on_project
 
 
@@ -122,3 +127,17 @@ def test_my_lib_result_snapshot():
             }
         }
     )
+
+
+def test_rerun_with_every_verdict_cached_runs_no_tests(monkeypatch):
+    """With nothing left to test, neither the clean run nor the forced-fail run is needed."""
+    assert run_mutmut_on_project("my_lib")
+
+    def no_tests_expected(self, *, mutant_name, tests):
+        raise AssertionError(f"unexpected test run for mutant {mutant_name!r} with tests {tests!r}")
+
+    monkeypatch.setattr(PytestRunner, "run_tests", no_tests_expected)
+
+    with change_cwd(E2E_PROJECTS / "my_lib"):
+        mutmut._reset_globals()
+        _run([], None)
