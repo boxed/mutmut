@@ -16,6 +16,7 @@ from typing import cast
 
 import libcst as cst
 import libcst.matchers as m
+from libcst._nodes.internal import CodegenState
 from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
 
@@ -33,6 +34,10 @@ from mutmut.type_checking import run_type_checker
 from mutmut.utils.file_utils import change_cwd
 from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import is_mutated_method_name
+
+# Whether mutant copies are produced by splicing text (see PrerenderedFunction) or by rebuilding
+# and rendering the function tree per mutant.
+SPLICE_MUTANT_TEXT = True
 
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
@@ -360,6 +365,74 @@ trampoline_impl_cst = list(cst.parse_module(trampoline_imports).body)
 trampoline_impl_cst[-1] = trampoline_impl_cst[-1].with_changes(leading_lines=[cst.EmptyLine(), cst.EmptyLine()])
 
 
+@dataclass(frozen=True)
+class PrerenderedFunction(cst.BaseCompoundStatement):
+    """A generated function already rendered to source text, emitted verbatim.
+
+    Rendering a function once and splicing each mutant's text (see ``_splice_mutant``) is much
+    cheaper than rebuilding and rendering the tree per mutant. ``code`` includes its own
+    indentation: statements emit theirs in libcst, and this node cannot know its place."""
+
+    name: str
+    code: str
+
+    def _visit_and_replace_children(self, visitor: cst.CSTVisitor | cst.CSTTransformer) -> "PrerenderedFunction":
+        return self
+
+    def _codegen_impl(self, state: CodegenState) -> None:
+        state.add_token(self.code)
+
+
+class RecordingCodegenState(CodegenState):
+    """Codegen state that records the output span of selected nodes.
+
+    ``spans`` maps ``id(node)`` to its character span and ``indent_tokens_at`` to the indentation
+    stack it was rendered with, needed to render a replacement identically. A node rendered more
+    than once is dropped: its position would be ambiguous."""
+
+    def __init__(self, *, default_indent: str, default_newline: str, target_ids: set[int], indent_tokens: list[str]):
+        super().__init__(default_indent=default_indent, default_newline=default_newline)
+        self.indent_tokens = list(indent_tokens)
+        self.length = 0
+        self.spans: dict[int, tuple[int, int]] = {}
+        self.indent_tokens_at: dict[int, list[str]] = {}
+        self._target_ids = target_ids
+        self._starts: dict[int, int] = {}
+        self._ambiguous: set[int] = set()
+
+    def add_token(self, value: str) -> None:
+        self.tokens.append(value)
+        self.length += len(value)
+
+    def add_indent_tokens(self) -> None:
+        self.tokens.extend(self.indent_tokens)
+        self.length += sum(len(token) for token in self.indent_tokens)
+
+    def before_codegen(self, node: cst.CSTNode) -> None:
+        key = id(node)
+        if key in self._target_ids:
+            if key in self._starts:
+                self._ambiguous.add(key)
+            self._starts[key] = self.length
+            self.indent_tokens_at[key] = list(self.indent_tokens)
+
+    def after_codegen(self, node: cst.CSTNode) -> None:
+        key = id(node)
+        if key in self._target_ids:
+            if key in self._ambiguous:
+                self.spans.pop(key, None)
+            else:
+                self.spans[key] = (self._starts[key], self.length)
+
+
+def render_with_indent(module: cst.Module, node: cst.CSTNode, indent_tokens: Sequence[str]) -> str:
+    """Render ``node`` as it would be rendered inside ``module`` at the given indentation."""
+    state = CodegenState(default_indent=module.default_indent, default_newline=module.default_newline)
+    state.indent_tokens = list(indent_tokens)
+    node._codegen(state)
+    return "".join(state.tokens)
+
+
 def combine_mutations_to_source(
     module: cst.Module,
     mutations: Sequence[Mutation],
@@ -400,7 +473,7 @@ def combine_mutations_to_source(
                 result.append(func)
                 continue
             empty_dict_nodes, nodes, mutant_dict_assignment_nodes, mutant_names = function_trampoline_arrangement(
-                func, func_mutants, class_name=None
+                func, func_mutants, class_name=None, module=module if SPLICE_MUTANT_TEXT else None
             )
             result.extend(empty_dict_nodes)
             result.extend(nodes)
@@ -415,6 +488,7 @@ def combine_mutations_to_source(
                 pre_class_nodes: list[MODULE_STATEMENT] = []
                 post_class_nodes: list[MODULE_STATEMENT] = []
                 mutated_body = []
+                class_indent = module.default_indent if cls.body.indent is None else cls.body.indent
                 for method in cls.body.body:
                     method_mutants = mutations_within_function.get(method)
                     if not isinstance(method, cst.FunctionDef) or not method_mutants:
@@ -422,7 +496,13 @@ def combine_mutations_to_source(
                         continue
 
                     empty_dict_nodes, nodes, mutant_dict_assignment_nodes, mutant_names = (
-                        function_trampoline_arrangement(method, method_mutants, class_name=cls.name.value)
+                        function_trampoline_arrangement(
+                            method,
+                            method_mutants,
+                            class_name=cls.name.value,
+                            module=module if SPLICE_MUTANT_TEXT else None,
+                            indent_tokens=[class_indent],
+                        )
                     )
                     pre_class_nodes.extend(empty_dict_nodes)
                     mutated_body.extend(nodes)
@@ -483,16 +563,18 @@ def collect_line_spans(
     """Record the line spans of the generated functions in `statement`, which begins on `start_line`.
 
     :param part: The rendered code of `statement`, as produced by `module.code_for_node`."""
+    name = _generated_function_name(statement)
+    if name is not None:
+        line_spans[name] = LineSpan(start_line, start_line + part.count("\n") - 1)
+        return
     if isinstance(statement, cst.FunctionDef):
-        if is_mutated_method_name(statement.name.value):
-            line_spans[statement.name.value] = LineSpan(start_line, start_line + part.count("\n") - 1)
         return
 
     if not isinstance(statement, cst.ClassDef) or not isinstance(statement.body, cst.IndentedBlock):
         return
 
     body = statement.body
-    if not any(isinstance(child, cst.FunctionDef) and is_mutated_method_name(child.name.value) for child in body.body):
+    if not any(_generated_function_name(child) is not None for child in body.body):
         # nothing was mutated in this class, so there is no need to render its methods
         return
 
@@ -502,19 +584,38 @@ def collect_line_spans(
 
     line = start_line + header_line_count
     for child, child_part in zip(body.body, child_parts, strict=True):
-        if isinstance(child, cst.FunctionDef) and is_mutated_method_name(child.name.value):
-            line_spans[child.name.value] = LineSpan(line, line + child_part.count("\n") - 1)
+        name = _generated_function_name(child)
+        if name is not None:
+            line_spans[name] = LineSpan(line, line + child_part.count("\n") - 1)
         line += child_part.count("\n")
 
 
+def _generated_function_name(statement: cst.CSTNode) -> str | None:
+    """The name of ``statement`` if it is a generated (mutant or original-copy) function."""
+    if isinstance(statement, PrerenderedFunction):
+        return statement.name
+    if isinstance(statement, cst.FunctionDef) and is_mutated_method_name(statement.name.value):
+        return statement.name.value
+    return None
+
+
 def function_trampoline_arrangement(
-    function: cst.FunctionDef, mutants: Iterable[Mutation], class_name: str | None
+    function: cst.FunctionDef,
+    mutants: Iterable[Mutation],
+    class_name: str | None,
+    module: cst.Module | None = None,
+    indent_tokens: Sequence[str] = (),
 ) -> tuple[Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], Sequence[str]]:
     """Create mutated functions and a trampoline that switches between original and mutated versions.
+
+    With ``module``, mutant copies are spliced text (see :class:`PrerenderedFunction`) and
+    ``indent_tokens`` is the indentation the function is defined at (one level for a method).
+    Without it, every mutant is built as a full tree.
 
     :return: A tuple of (mutant_dict_declaration_nodes, method_nodes, mutant_dict_assignment_nodes, mutant names)"""
     method_nodes: list[MODULE_STATEMENT] = []
     mutant_names: list[str] = []
+    mutants = list(mutants)
 
     name = function.name.value
     mangled_name = mangle_function_name(name=name, class_name=class_name) + "__mutmut"
@@ -540,9 +641,14 @@ def function_trampoline_arrangement(
     method_nodes.append(function.with_changes(name=cst.Name(mangled_name + "_orig")))
 
     # mutated versions of the function
+    recording = _record_function_rendering(function, mutants, module, indent_tokens) if module is not None else None
     for i, mutant in enumerate(mutants):
         mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
+        prerendered = _splice_mutant(recording, function, mutant, mutant_name) if recording else None
+        if prerendered is not None:
+            method_nodes.append(prerendered)
+            continue
         mutated_method = function.with_changes(name=cst.Name(mutant_name))
         mutated_method = cast(cst.FunctionDef, deep_replace(mutated_method, mutant.original_node, mutant.mutated_node))
         method_nodes.append(mutated_method)
@@ -555,6 +661,55 @@ def function_trampoline_arrangement(
     mutant_dict_assignment_nodes[0] = mutant_dict_assignment_nodes[0].with_changes(leading_lines=[cst.EmptyLine()])
 
     return mutant_dict_declaration_nodes, method_nodes, mutant_dict_assignment_nodes, mutant_names
+
+
+@dataclass(frozen=True)
+class FunctionRendering:
+    """A function rendered once, with the output spans of its name and mutation targets."""
+
+    module: cst.Module
+    code: str
+    state: RecordingCodegenState
+
+
+def _record_function_rendering(
+    function: cst.FunctionDef, mutants: Sequence[Mutation], module: cst.Module, indent_tokens: Sequence[str]
+) -> FunctionRendering:
+    target_ids = {id(function.name)} | {id(mutant.original_node) for mutant in mutants}
+    state = RecordingCodegenState(
+        default_indent=module.default_indent,
+        default_newline=module.default_newline,
+        target_ids=target_ids,
+        indent_tokens=list(indent_tokens),
+    )
+    function._codegen(state)
+    return FunctionRendering(module=module, code="".join(state.tokens), state=state)
+
+
+def _splice_mutant(
+    rendering: FunctionRendering, function: cst.FunctionDef, mutant: Mutation, mutant_name: str
+) -> PrerenderedFunction | None:
+    """The mutant's source: the function's text with its name and the mutated node replaced.
+
+    None when splicing cannot produce it (target not rendered exactly once, or before the
+    name); the caller then builds the tree."""
+    spans = rendering.state.spans
+    name_span = spans.get(id(function.name))
+    target_span = spans.get(id(mutant.original_node))
+    if name_span is None or target_span is None or not isinstance(mutant.mutated_node, cst.CSTNode):
+        return None
+    name_start, name_end = name_span
+    start, end = target_span
+    if start < name_end:
+        return None
+    mutated_code = render_with_indent(
+        rendering.module, mutant.mutated_node, rendering.state.indent_tokens_at[id(mutant.original_node)]
+    )
+    code = rendering.code
+    return PrerenderedFunction(
+        name=mutant_name,
+        code=code[:name_start] + mutant_name + code[name_end:start] + mutated_code + code[end:],
+    )
 
 
 def get_statements_until_func_or_class(statements: Sequence[MODULE_STATEMENT]) -> list[MODULE_STATEMENT]:
