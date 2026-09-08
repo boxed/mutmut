@@ -9,7 +9,9 @@ from typing import TypeVar
 
 from mutmut.__main__ import MutmutProgrammaticFailException
 from mutmut.__main__ import record_trampoline_hit
+from mutmut.configuration import config
 from mutmut.core import MutmutCallStack
+from mutmut.state import state
 from mutmut.utils.format_utils import mangled_name_from_mutant_name
 
 TReturn = TypeVar("TReturn")
@@ -51,11 +53,46 @@ def get_mutant_under_test() -> str:
     If the key is missing (for example after ``patch.dict(..., clear=True)``),
     fall back to the process-local copy set by ``set_mutant_under_test``.
     """
-    if "MUTANT_UNDER_TEST" in os.environ:
-        return os.environ["MUTANT_UNDER_TEST"]
+    from_environ = os.environ.get("MUTANT_UNDER_TEST")
+    if from_environ is not None:
+        return from_environ
     if _mutant_under_test is not None:
         return _mutant_under_test
     return ""
+
+
+# Maximum call depth for dependency tracking during stats collection. ``None`` means
+# "not set yet, read ``MUTMUT_DEPENDENCY_DEPTH``". Cached because the trampoline is on the
+# hot path of every call to every mutated function while stats are collected.
+_dependency_depth: int | None = None
+
+
+def set_dependency_depth(depth: int | None) -> None:
+    global _dependency_depth
+    _dependency_depth = depth
+
+
+def _get_dependency_depth() -> int:
+    global _dependency_depth
+    if _dependency_depth is None:
+        _dependency_depth = int(os.environ.get("MUTMUT_DEPENDENCY_DEPTH", "-1"))
+    return _dependency_depth
+
+
+def _needs_recording(name: str, caller: str | None) -> bool:
+    """Whether ``record_trampoline_hit`` could still learn something from this call.
+
+    The hit set is per test (cleared at teardown) and the dependency edges are per function,
+    so once both are known, the (expensive) stack inspection in ``record_trampoline_hit``
+    cannot change the outcome and is skipped.
+    """
+    current = state()
+    if name not in current._stats:
+        return True
+    if caller is None or not config().track_dependencies:
+        return False
+    callers = current.function_dependencies.get(name)
+    return callers is None or caller not in callers
 
 
 def wrap_in_trampoline(
@@ -68,7 +105,11 @@ def wrap_in_trampoline(
         or to the currently active mutated method.
         """
 
+        # qualified name of the original function, computed on the first stats hit
+        cached_qual_name: str | None = None
+
         def trampoline(*args: P.args, **kwargs: P.kwargs) -> R:
+            nonlocal cached_qual_name
             # orig_func is the non-mutated implementation.
             # we do not use `decorated_func` directly,
             # because using the func via SomeClass.foo makes it easier for classmethod wrapping
@@ -90,11 +131,14 @@ def wrap_in_trampoline(
                 )
 
             if mutant_under_test == "stats":
-                orig_qual_name = f"{orig_func.__module__}.{mangled_name_from_mutant_name(orig_func.__name__)}"
+                if cached_qual_name is None:
+                    cached_qual_name = f"{orig_func.__module__}.{mangled_name_from_mutant_name(orig_func.__name__)}"
+                orig_qual_name = cached_qual_name
                 caller_name, depth = MutmutCallStack.get()
-                max_depth = int(os.environ.get("MUTMUT_DEPENDENCY_DEPTH", "-1"))
+                max_depth = _get_dependency_depth()
                 if max_depth == -1 or depth < max_depth:
-                    record_trampoline_hit(orig_qual_name, caller=caller_name)
+                    if _needs_recording(orig_qual_name, caller_name):
+                        record_trampoline_hit(orig_qual_name, caller=caller_name)
                     token = MutmutCallStack.set((orig_qual_name, depth + 1))
                     try:
                         return orig_func(*call_args, **kwargs)

@@ -84,21 +84,60 @@ from mutmut.workers.timeout import register_timeout
 # TODO: pragma no mutate should end up in `skipped` category
 
 
+FRAME_OTHER = 0
+FRAME_MUTATED_SOURCE = 1
+FRAME_TEST_FRAMEWORK = 2
+
+# co_filename -> FRAME_* classification. Filenames come from code objects, so there are only
+# as many distinct keys as loaded modules; classifying one costs a path resolution.
+_frame_classification_cache: dict[str, int] = {}
+
+
+def classify_frame_filename(filename: str) -> int:
+    """Classify a stack frame by its code object's filename, for ``max_stack_depth``.
+
+    Relative filenames are not cached because their meaning depends on the working directory,
+    which tests may change.
+    """
+    cached = _frame_classification_cache.get(filename)
+    if cached is not None:
+        return cached
+
+    if "pytest" in filename or "hammett" in filename or "unittest" in filename:
+        result = FRAME_TEST_FRAMEWORK
+    elif filename.startswith("<"):
+        # <string>, <frozen ...>: not a file
+        result = FRAME_OTHER
+    else:
+        try:
+            file_path = Path(filename).resolve()
+        except (OSError, ValueError):
+            result = FRAME_OTHER
+        else:
+            parents = file_path.parents
+            result = (
+                FRAME_MUTATED_SOURCE
+                if any(path in parents for path in config().resolved_mutated_source_paths)
+                else FRAME_OTHER
+            )
+
+    if os.path.isabs(filename):
+        _frame_classification_cache[filename] = result
+    return result
+
+
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
-
-    mutated_source_paths = config().resolved_mutated_source_paths
 
     if config().max_stack_depth != -1:
         f = inspect.currentframe()
         c = config().max_stack_depth
         while c and f:
-            filename = f.f_code.co_filename
+            classification = classify_frame_filename(f.f_code.co_filename)
             f = f.f_back
-            if "pytest" in filename or "hammett" in filename or "unittest" in filename:
+            if classification == FRAME_TEST_FRAMEWORK:
                 break
-            file_path = Path(filename).resolve(strict=True)
-            if any(path in file_path.parents for path in mutated_source_paths):
+            if classification == FRAME_MUTATED_SOURCE:
                 # only include stack frames of user-code; exclude mutmut and 3rd library stack frames
                 c -= 1
 
@@ -269,6 +308,13 @@ def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -
     return mutated_file
 
 
+def _set_dependency_depth(depth: int) -> None:
+    """Refresh the trampoline's cached copy of ``MUTMUT_DEPENDENCY_DEPTH`` for this process."""
+    from mutmut.mutation.trampoline import set_dependency_depth  # avoids an import cycle
+
+    set_dependency_depth(depth)
+
+
 def _set_mutant_under_test(name: str) -> None:
     """Activate a mutant in process-local state and the environment.
 
@@ -367,6 +413,7 @@ def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None)
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     depth = config().dependency_tracking_depth
     os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth)
+    _set_dependency_depth(depth)
     start_cpu_time = process_time()
 
     with CatchOutput(spinner_title="Running stats") as output_catcher:
