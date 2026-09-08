@@ -1000,7 +1000,8 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     mutants_caught_by_type_checker: dict[str, FailedTypeCheckMutant] = {}
     if config().type_check_command:
         with CatchOutput(spinner_title="Filtering mutations with type checker"):
-            mutants_caught_by_type_checker = filter_mutants_with_type_checker()
+            # leave a core for the test process that may run alongside the type checker
+            mutants_caught_by_type_checker = filter_mutants_with_type_checker(workers=max(max_children - 1, 1))
 
     # TODO: config/option for runner
     # runner = HammettRunner()

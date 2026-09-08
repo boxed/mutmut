@@ -198,6 +198,9 @@ To enable this filtering, configure the `type_check_command` to output json resu
     # for mypy
     type_check_command = ['mypy', 'your_source_dir', '--output', 'json', '--disable-error-code', 'unused-ignore']
 
+mypy 2 is asked to check with one worker process fewer than ``--max-children``. An explicit
+``--num-workers`` in the command, or ``MYPY_NUM_WORKERS`` in the environment, takes precedence.
+
 Currently, only `pyrefly` and `mypy` are supported.
 With `pyright` and `ty`, mutating a class method `Foo.bar()` can break the types of all methods of `Foo`,
 and therefore mutmut cannot match the type error with the mutant that caused the type error.

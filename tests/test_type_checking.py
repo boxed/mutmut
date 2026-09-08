@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,8 @@ from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.type_checking import TypeCheckingError
 from mutmut.type_checking import parse_mypy_report
 from mutmut.type_checking import parse_pyrefly_report
+from mutmut.type_checking import run_type_checker
+from mutmut.type_checking import type_checker_environment
 
 
 def test_mypy_parsing():
@@ -120,7 +123,7 @@ def test_filter_mutants_ignores_type_errors_in_files_without_mutants(tmp_path, m
     )
 
     monkeypatch.chdir(project)
-    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command: [error])
+    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command, workers: [error])
 
     assert filter_mutants_with_type_checker() == {}
 
@@ -145,7 +148,7 @@ def test_filter_mutants_still_raises_for_unowned_errors_in_mutated_files(tmp_pat
     )
 
     monkeypatch.chdir(project)
-    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command: [error])
+    monkeypatch.setattr("mutmut.mutation.file_mutation.run_type_checker", lambda command, workers: [error])
 
     with pytest.raises(Exception, match="Could not find mutant for type error"):
         filter_mutants_with_type_checker()
@@ -158,3 +161,45 @@ def _make_pahts_relative(errors: list[TypeCheckingError]):
         assert cwd in error.file_path.parents
         # then convert it to relative path, so it's easy to use snapshot(...)
         error.file_path = error.file_path.relative_to(cwd)
+
+
+def test_run_type_checker_passes_the_workers_to_mypy(monkeypatch):
+    monkeypatch.delenv("MYPY_NUM_WORKERS", raising=False)
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    run_type_checker(["mypy", "src", "--output", "json"], workers=4)
+
+    assert seen["env"]["MYPY_NUM_WORKERS"] == "4"
+
+
+class TestTypeCheckerEnvironment:
+    def test_asks_mypy_for_the_given_workers(self, monkeypatch):
+        monkeypatch.delenv("MYPY_NUM_WORKERS", raising=False)
+        monkeypatch.setenv("KEEP", "me")
+
+        env = type_checker_environment(["mypy", "src", "--output", "json"], workers=8)
+
+        assert env is not None
+        assert env["MYPY_NUM_WORKERS"] == "8"
+        assert env["KEEP"] == "me"
+
+    def test_leaves_the_environment_alone_by_default_and_for_other_checkers(self, monkeypatch):
+        monkeypatch.delenv("MYPY_NUM_WORKERS", raising=False)
+
+        assert type_checker_environment(["mypy", "src"], workers=1) is None
+        assert type_checker_environment(["pyrefly", "check", "--output-format=json"], workers=8) is None
+
+    @pytest.mark.parametrize("command", [["mypy", "-n", "2", "src"], ["mypy", "--num-workers=2", "src"]])
+    def test_an_explicit_worker_count_in_the_command_wins(self, monkeypatch, command):
+        monkeypatch.delenv("MYPY_NUM_WORKERS", raising=False)
+        assert type_checker_environment(command, workers=8) is None
+
+    def test_an_existing_environment_variable_wins(self, monkeypatch):
+        monkeypatch.setenv("MYPY_NUM_WORKERS", "3")
+        assert type_checker_environment(["mypy", "src"], workers=8) is None
