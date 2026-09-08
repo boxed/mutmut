@@ -60,7 +60,7 @@ class ListAllTestsResult:
         self.ids = ids
 
     def clear_out_obsolete_test_names(self) -> None:
-        count_before = sum(len(x) for x in state().tests_by_mangled_function_name)
+        count_before = sum(len(x) for x in state().tests_by_mangled_function_name.values())
         state().tests_by_mangled_function_name = defaultdict(
             set,
             **{
@@ -68,7 +68,7 @@ class ListAllTestsResult:
                 for k, test_names in state().tests_by_mangled_function_name.items()
             },
         )
-        count_after = sum(len(x) for x in state().tests_by_mangled_function_name)
+        count_after = sum(len(x) for x in state().tests_by_mangled_function_name.values())
         if count_before != count_after:
             print(f"Removed {count_before - count_after} obsolete test names")
             save_stats()
