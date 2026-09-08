@@ -17,6 +17,7 @@ if platform.system() == "Windows":
     )
     sys.exit(1)
 import ast
+import compileall
 import fnmatch
 import gc
 import hashlib
@@ -39,6 +40,7 @@ from multiprocessing import get_start_method
 from multiprocessing import set_start_method
 from os import makedirs
 from pathlib import Path
+from time import monotonic
 from time import process_time
 from types import TracebackType
 
@@ -63,6 +65,7 @@ from mutmut.runners.harness import CollectTestsFailedException
 from mutmut.runners.harness import PytestRunner
 from mutmut.runners.harness import TestRunner
 from mutmut.runners.harness import collected_test_names
+from mutmut.stats import ProgressCounter
 from mutmut.stats import calculate_summary_stats
 from mutmut.stats import emoji_by_status
 from mutmut.stats import load_stats
@@ -159,6 +162,17 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
             if result.current_hashes:
                 state().current_function_hashes.update(result.current_hashes)
     return stats
+
+
+def precompile_mutants(max_children: int) -> None:
+    """Byte-compile the mutated tree with a worker pool, so the single-process stats run does
+    not compile it serially on first import. Up-to-date .pyc files are skipped."""
+    for path in config().source_paths:
+        mutated = Path("mutants") / path
+        if mutated.is_dir():
+            compileall.compile_dir(mutated, quiet=1, workers=max_children)
+        elif mutated.is_file():
+            compileall.compile_file(mutated, quiet=1)
 
 
 def create_file_mutants(path: Path) -> FileMutationResult:
@@ -991,6 +1005,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         setup_source_paths()
         store_lines_covered_by_tests()
         stats = create_mutants(max_children)
+        precompile_mutants(max_children)
 
     time = datetime.now() - start
     print(
@@ -1035,12 +1050,27 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     runner.prepare_main_test_run()
 
+    progress = ProgressCounter(source_file_mutation_data_by_path)
+    last_flush = monotonic()
+
+    def flush_results(*, force: bool, interval_s: float = 2.0) -> None:
+        """Write the meta files with unsaved results, at most every ``interval_s`` seconds unless forced."""
+        nonlocal last_flush
+        if force or monotonic() - last_flush >= interval_s:
+            for m in source_file_mutation_data_by_path.values():
+                m.save_if_dirty()
+            last_flush = monotonic()
+
     def read_one_child_exit_status() -> None:
         pid, wait_status = os.wait()
         exit_code = os.waitstatus_to_exitcode(wait_status)
         if config().debug:
             print("    worker exit code", exit_code)
-        source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
+        data = source_file_mutation_data_by_pid.pop(pid)
+        old_exit_code = data.exit_code_by_key[data.key_by_pid[pid]]
+        data.register_result(pid=pid, exit_code=exit_code)
+        progress.record(old_exit_code, exit_code)
+        flush_results(force=False)
 
     source_file_mutation_data_by_pid: dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
     running_children = 0
@@ -1059,22 +1089,22 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
             tests = state().tests_by_mangled_function_name.get(mangled_name_from_mutant_name(mutant_name), set())
             estimated_time_of_tests = sum(state().duration_by_test[test_name] for test_name in tests)
             mutation_data.estimated_time_of_tests_by_mutant[mutant_name] = estimated_time_of_tests
-            print_stats(source_file_mutation_data_by_path)
+            progress.print()
 
             # Rerun mutant if it's explicitly mentioned, but otherwise let the result stand
             if not mutant_names and result is not None:
                 continue
 
             if not tests:
-                mutation_data.exit_code_by_key[mutant_name] = 33
-                mutation_data.save()
+                mutation_data.set_result(mutant_name, 33)
+                progress.record(result, 33)
                 continue
 
             failed_type_check_mutant = mutants_caught_by_type_checker.get(mutant_name)
             if failed_type_check_mutant:
-                mutation_data.exit_code_by_key[mutant_name] = 37
+                mutation_data.set_result(mutant_name, 37)
                 mutation_data.type_check_error_by_key[mutant_name] = failed_type_check_mutant.error.error_description
-                mutation_data.save()
+                progress.record(result, 37)
                 continue
 
             cfg = config()
@@ -1126,6 +1156,7 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         stop_all_children(mutants)
     finally:
         gc.unfreeze()
+        flush_results(force=True)
 
     elapsed_time = datetime.now() - start
 

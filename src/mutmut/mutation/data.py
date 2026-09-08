@@ -108,6 +108,7 @@ class SourceFileMutationData:
         self.durations_by_key: dict[str, float] = {}
         self.start_time_by_pid: dict[int, datetime] = {}
         self.type_check_error_by_key: dict[str, str | None] = {}
+        self.dirty = False  # unsaved results; see save_if_dirty()
 
     def load(self) -> None:
         try:
@@ -127,21 +128,33 @@ class SourceFileMutationData:
         self.key_by_pid[pid] = key
         self.start_time_by_pid[pid] = datetime.now()
 
-    def register_result(self, *, pid: int, exit_code: int) -> None:
+    def register_result(self, *, pid: int, exit_code: int) -> str:
+        """Record the verdict of child ``pid`` and return the mutant's key.
+
+        The meta file is not written here (that would be once per mutant); the caller flushes
+        with ``save_if_dirty``."""
         assert self.key_by_pid[pid] in self.exit_code_by_key
         key = self.key_by_pid[pid]
-        self.exit_code_by_key[key] = exit_code
+        self.set_result(key, exit_code)
         self.durations_by_key[key] = (datetime.now() - self.start_time_by_pid[pid]).total_seconds()
-        # TODO: maybe rate limit this? Saving on each result can slow down mutation testing a lot if the test run is fast.
         del self.key_by_pid[pid]
         del self.start_time_by_pid[pid]
-        self.save()
+        return key
+
+    def set_result(self, key: str, exit_code: int) -> None:
+        self.exit_code_by_key[key] = exit_code
+        self.dirty = True
+
+    def save_if_dirty(self) -> None:
+        if self.dirty:
+            self.save()
 
     def stop_children(self) -> None:
         for pid in self.key_by_pid.keys():
             os.kill(pid, signal.SIGTERM)
 
     def save(self) -> None:
+        self.dirty = False
         with open(self.meta_path, "w") as f:
             json.dump(
                 {

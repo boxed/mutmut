@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
+from datetime import timedelta
 from json import JSONDecodeError
 
 from mutmut.configuration import config
@@ -93,14 +95,45 @@ def calculate_summary_stats(source_file_mutation_data_by_path: dict[str, SourceF
     )
 
 
+def format_stats(s: Stat) -> str:
+    return f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}  🧙 {s.caught_by_type_check}"
+
+
 def print_stats(
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData], force_output: bool = False
 ) -> None:
-    s = calculate_summary_stats(source_file_mutation_data_by_path)
-    print_status(
-        f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}  🧙 {s.caught_by_type_check}",
-        force_output=force_output,
-    )
+    print_status(format_stats(calculate_summary_stats(source_file_mutation_data_by_path)), force_output=force_output)
+
+
+def _stat_field(exit_code: int | None) -> str:
+    """The ``Stat`` field that counts mutants with this exit code."""
+    return status_by_exit_code[exit_code].replace(" ", "_")
+
+
+class ProgressCounter:
+    """Running totals for the status line during mutation testing: recounting every mutant
+    per update is quadratic over a run, so the totals are computed once and adjusted per verdict."""
+
+    def __init__(self, source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
+        self.stat = calculate_summary_stats(source_file_mutation_data_by_path)
+        self._last_print = datetime(1900, 1, 1)
+
+    def record(self, old_exit_code: int | None, new_exit_code: int | None) -> None:
+        """Move one mutant from the status of ``old_exit_code`` to that of ``new_exit_code``."""
+        old_field = _stat_field(old_exit_code)
+        new_field = _stat_field(new_exit_code)
+        if old_field == new_field:
+            return
+        setattr(self.stat, old_field, getattr(self.stat, old_field) - 1)
+        setattr(self.stat, new_field, getattr(self.stat, new_field) + 1)
+
+    def print(self, force_output: bool = False) -> None:
+        """Print the status line, at most every 100ms unless forced."""
+        now = datetime.now()
+        if not force_output and now - self._last_print < timedelta(seconds=0.1):
+            return
+        self._last_print = now
+        print_status(format_stats(self.stat), force_output=True)
 
 
 def load_stats() -> bool:
