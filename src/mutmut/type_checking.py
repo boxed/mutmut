@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,10 +15,24 @@ class TypeCheckingError:
     error_description: str
 
 
-def run_type_checker(type_check_command: list[str]) -> list[TypeCheckingError]:
+def type_checker_environment(type_check_command: list[str], workers: int) -> dict[str, str] | None:
+    """Return an environment with MYPY_NUM_WORKERS set, or None if the user already set a worker count."""
+    if workers <= 1 or "mypy" not in type_check_command or "MYPY_NUM_WORKERS" in os.environ:
+        return None
+    if any(arg == "-n" or arg.startswith(("--num-workers", "-n=")) for arg in type_check_command):
+        return None
+    return {**os.environ, "MYPY_NUM_WORKERS": str(workers)}
+
+
+def run_type_checker(type_check_command: list[str], workers: int = 1) -> list[TypeCheckingError]:
     errors = []
 
-    completed_process = subprocess.run(type_check_command, capture_output=True, encoding="utf-8")
+    completed_process = subprocess.run(
+        type_check_command,
+        capture_output=True,
+        encoding="utf-8",
+        env=type_checker_environment(type_check_command, workers),
+    )
 
     try:
         if "mypy" in type_check_command:

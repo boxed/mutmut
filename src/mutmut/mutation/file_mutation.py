@@ -653,9 +653,9 @@ def group_by_path(errors: list[TypeCheckingError]) -> dict[Path, list[TypeChecki
     return grouped
 
 
-def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
+def filter_mutants_with_type_checker(workers: int = 1) -> dict[str, FailedTypeCheckMutant]:
     with change_cwd(Path("mutants")):
-        errors = run_type_checker(config().type_check_command)
+        errors = run_type_checker(config().type_check_command, workers=workers)
         errors_by_path = group_by_path(errors)
 
         mutants_to_skip: dict[str, FailedTypeCheckMutant] = {}
