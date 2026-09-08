@@ -1,5 +1,6 @@
 import json
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,20 +15,53 @@ class TypeCheckingError:
     error_description: str
 
 
+class TypeCheckerProcess:
+    """A type checker running in the background.
+
+    Its output goes to temporary files rather than pipes, so it never blocks on a full pipe
+    while nobody is reading. ``result()`` waits for it and parses the report."""
+
+    def __init__(self, type_check_command: list[str], cwd: Path | str | None = None) -> None:
+        self.command = type_check_command
+        self._stdout = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        self._stderr = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        self.process = subprocess.Popen(type_check_command, cwd=cwd, stdout=self._stdout, stderr=self._stderr)
+
+    def result(self) -> list[TypeCheckingError]:
+        self.process.wait()
+        self._stdout.seek(0)
+        self._stderr.seek(0)
+        try:
+            return parse_type_checker_output(self.command, self._stdout.read(), self._stderr.read())
+        finally:
+            self._stdout.close()
+            self._stderr.close()
+
+    def terminate(self) -> None:
+        """Stop the checker if it is still running (its result is not needed)."""
+        if self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait()
+        self._stdout.close()
+        self._stderr.close()
+
+
+def start_type_checker(type_check_command: list[str], cwd: Path | str | None = None) -> TypeCheckerProcess:
+    return TypeCheckerProcess(type_check_command, cwd=cwd)
+
+
 def run_type_checker(type_check_command: list[str]) -> list[TypeCheckingError]:
-    errors = []
+    return start_type_checker(type_check_command).result()
 
-    completed_process = subprocess.run(type_check_command, capture_output=True, encoding="utf-8")
 
+def parse_type_checker_output(type_check_command: list[str], stdout: str, stderr: str) -> list[TypeCheckingError]:
     try:
         if "mypy" in type_check_command:
-            report = [json.loads(line) for line in completed_process.stdout.splitlines()]
+            report = [json.loads(line) for line in stdout.splitlines()]
         else:
-            report = json.loads(completed_process.stdout)
+            report = json.loads(stdout)
     except json.JSONDecodeError:
-        raise Exception(
-            f"type check command did not return JSON. Got: {completed_process.stdout} (stderr: {completed_process.stderr})"
-        )
+        raise Exception(f"type check command did not return JSON. Got: {stdout} (stderr: {stderr})")
 
     if "pyrefly" in type_check_command:
         errors = parse_pyrefly_report(cast(dict[str, Any], report))

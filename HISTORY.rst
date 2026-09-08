@@ -4,6 +4,8 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Performance: the type checker runs in the background during stats collection and is only waited for when some mutant still needs a verdict. Type errors are attributed via the line span index instead of re-parsing mutated files
+
 * Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
 
 * Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)
