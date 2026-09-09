@@ -113,6 +113,87 @@ def foo():
         assert ignored_code.ignore_node_lines == set()
 
 
+class TestMatchCasePragma:
+    """Tests for pragmas on `match` and `case` headers."""
+
+    def test_no_mutate_on_case(self):
+        source = """
+def foo(tok):
+    match tok:
+        case 1:  # pragma: no mutate
+            return 10
+        case _:
+            raise Exception("nope")
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+        assert ignored_code.ignore_node_lines == set()
+
+    def test_no_mutate_on_match(self):
+        source = """
+def foo(tok):
+    match tok:  # pragma: no mutate
+        case 1:
+            return 10
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {3}
+        assert ignored_code.ignore_node_lines == set()
+
+    def test_no_mutate_block_on_case(self):
+        source = """
+def foo(tok):
+    match tok:
+        case 1:  # pragma: no mutate block
+            return 10
+            return 11
+        case _:
+            raise Exception("nope")
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == set()
+        assert ignored_code.ignore_node_lines == {4, 5, 6}
+
+    def test_no_mutate_block_on_match(self):
+        source = """
+def foo(tok):
+    match tok:  # pragma: no mutate block
+        case 1:
+            return 10
+        case _:
+            raise Exception("nope")
+    return -1
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == set()
+        assert ignored_code.ignore_node_lines == {3, 4, 5, 6, 7}
+
+    def test_single_line_case_body(self):
+        """case body is a SimpleStatementSuite."""
+        source = """
+def foo(tok):
+    match tok:
+        case 1: return 10  # pragma: no mutate
+        case _: raise Exception("nope")
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+        assert ignored_code.ignore_node_lines == set()
+
+    def test_only_matching_case_is_ignored(self):
+        source = """
+def foo(tok):
+    match tok:
+        case 1:  # pragma: no mutate
+            return 10
+        case 2:
+            return 20
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+        assert ignored_code.ignore_node_lines == set()
+
+
 class TestBlockPragma:
     """Tests for # pragma: no mutate block."""
 
