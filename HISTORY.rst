@@ -4,15 +4,27 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
-* Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*``
+* Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*`` (`#559`)
 
-* Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`)
+* Fix ``# pragma: no mutate`` being silently ignored on ``match`` and ``case`` headers (`#554`)
 
-* Fix `mutate_only_covered_lines` mutating code that coverage.py excludes from measurement (`# pragma: no cover`, `exclude_lines`, `exclude_also`). Such lines are reported as covered when they run, so they used to produce mutants that could only ever survive
+* Fix mutants being reported as survived when a test uses ``patch.dict(os.environ, ..., clear=True)`` (`#511`, `#552`)
 
-* Fix mutations that delete ignored code. Dropping a `case` from a `match`, or an argument from a call, is a mutation of the enclosing node, so it used to be made even when the removed lines were themselves ignored
+* Fix `mutate_only_covered_lines` mutating code that coverage.py excludes from measurement (`# pragma: no cover`, `exclude_lines`, `exclude_also`) (`#547`)
 
-* Support python3.15
+* Fix mutations that delete ignored code. Dropping a `case` from a `match`, or an argument from a call, is a mutation of the enclosing node, so it used to be made even when the removed lines were themselves ignored (`#547`)
+
+* Fix methods of decorated classes (for example `@dataclass`) not being mutated (`#480`, `#539`)
+
+* Fix time measurement including test setup/teardown instead of only the main test run (`#544`)
+
+* Fix mutants stopped by the CPU-time limit being reported as killed instead of timed out (`#565`)
+
+* Mutate the condition of ternary expressions (`#196`, `#546`)
+
+* Add a `badge` command that writes a shields.io endpoint file, for publishing the mutation score (`#549`)
+
+* Support python3.15 (`#551`)
 
 3.7.0
 ~~~~~
@@ -599,7 +611,7 @@ Thanks goes out Marcelo Da Cruz Pinto, Savo Kovačević,
 
 * Dict literals looking like `dict(a=foo)` now have mutated keys. You can also declare synonyms in setup.cfg.
 
-* Fix "from x import *"
+* Fix ``from x import *``
 
 
 0.0.6 (2017-06-13)
