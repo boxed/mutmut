@@ -308,6 +308,7 @@ pytest_add_cli_args_test_selection = ["--no-header"]
 also_copy = ["fixtures"]
 mutate_only_covered_lines = true
 type_check_command = ["mypy", "--strict"]
+disable_mutation_types = ["string.lower", "string.upper"]
 timeout_multiplier = 5.0
 timeout_constant = 0.5
 """)
@@ -326,6 +327,7 @@ timeout_constant = 0.5
         assert Path("fixtures") in config.also_copy
         assert config.mutate_only_covered_lines is True
         assert config.type_check_command == ["mypy", "--strict"]
+        assert config.disable_mutation_types == ["string.lower", "string.upper"]
         assert config.timeout_multiplier == 5.0
         assert config.timeout_constant == 0.5
 
@@ -343,8 +345,20 @@ timeout_constant = 0.5
         assert config.timeout_multiplier == 15.0
         assert config.timeout_constant == 1.0
         assert config.type_check_command == []
+        assert config.disable_mutation_types == []
         assert config.track_dependencies is True
         assert config.dependency_tracking_depth == -1
+
+    def test_rejects_unknown_mutation_type(self, in_tmp_dir: Path):
+        (in_tmp_dir / "pyproject.toml").write_text("""
+[tool.mutmut]
+source_paths = ["src"]
+disable_mutation_types = ["string.typo"]
+""")
+        (in_tmp_dir / "src").mkdir()
+
+        with pytest.raises(ValueError, match=r"Unknown mutation type\(s\): string\.typo"):
+            _load_config()
 
     def test_also_copy_includes_defaults(self, in_tmp_dir: Path):
         (in_tmp_dir / "src").mkdir()

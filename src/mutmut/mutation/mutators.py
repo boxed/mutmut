@@ -13,6 +13,7 @@ import libcst.matchers as m
 OPERATORS_TYPE = Sequence[
     tuple[
         type,
+        str,
         Callable[[Any], Iterable[cst.CSTNode]],
     ]
 ]
@@ -30,7 +31,7 @@ def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
         print("Unexpected number type", node)
 
 
-def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
+def _operator_string(node: cst.BaseString, mutate: Callable[[str], str]) -> Iterable[cst.BaseString]:
     if isinstance(node, cst.SimpleString):
         value = node.value
         old_value = value
@@ -42,20 +43,27 @@ def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
             # that mutation is meaningless for
             return
 
-        supported_str_mutations: list[Callable[[str], str]] = [
-            lambda x: "XX" + x + "XX",
-            # do not modify escape sequences, as this could break python syntax
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
-        ]
-
-        for mut_func in supported_str_mutations:
-            new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"
-            if new_value == value:
-                continue
-            if new_value == old_value:
-                continue
+        new_value = f"{prefix}{value[0]}{mutate(value[1:-1])}{value[-1]}"
+        if new_value != value and new_value != old_value:
             yield node.with_changes(value=new_value)
+
+
+def operator_string_wrap(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    yield from _operator_string(node, lambda value: "XX" + value + "XX")
+
+
+def operator_string_lower(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    # Escape sequences must retain their spelling so the mutation cannot break Python syntax.
+    yield from _operator_string(
+        node, lambda value: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), value)
+    )
+
+
+def operator_string_upper(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    # Escape sequences must retain their spelling so the mutation cannot break Python syntax.
+    yield from _operator_string(
+        node, lambda value: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), value)
+    )
 
 
 def operator_lambda(node: cst.Lambda) -> Iterable[cst.Lambda]:
@@ -271,23 +279,27 @@ def operator_if_exp(node: cst.IfExp) -> Iterable[cst.IfExp]:
 
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
-    (cst.BaseNumber, operator_number),
-    (cst.BaseString, operator_string),
-    (cst.Name, operator_name),
-    (cst.Assign, operator_assignment),
-    (cst.AnnAssign, operator_assignment),
-    (cst.AugAssign, operator_augmented_assignment),
-    (cst.UnaryOperation, operator_remove_unary_ops),
-    (cst.Call, operator_dict_arguments),
-    (cst.Call, operator_arg_removal),
-    (cst.Call, operator_symmetric_string_methods_swap),
-    (cst.Call, operator_unsymmetrical_string_methods_swap),
-    (cst.Lambda, operator_lambda),
-    (cst.CSTNode, operator_keywords),
-    (cst.CSTNode, operator_swap_op),
-    (cst.Match, operator_match),
-    (cst.IfExp, operator_if_exp),
+    (cst.BaseNumber, "number", operator_number),
+    (cst.BaseString, "string.wrap", operator_string_wrap),
+    (cst.BaseString, "string.lower", operator_string_lower),
+    (cst.BaseString, "string.upper", operator_string_upper),
+    (cst.Name, "name", operator_name),
+    (cst.Assign, "assignment", operator_assignment),
+    (cst.AnnAssign, "assignment", operator_assignment),
+    (cst.AugAssign, "assignment.augmented", operator_augmented_assignment),
+    (cst.UnaryOperation, "operator.unary", operator_remove_unary_ops),
+    (cst.Call, "argument.keyword", operator_dict_arguments),
+    (cst.Call, "argument.removal", operator_arg_removal),
+    (cst.Call, "string.method.swap", operator_symmetric_string_methods_swap),
+    (cst.Call, "string.method.swap", operator_unsymmetrical_string_methods_swap),
+    (cst.Lambda, "lambda", operator_lambda),
+    (cst.CSTNode, "keyword", operator_keywords),
+    (cst.CSTNode, "operator", operator_swap_op),
+    (cst.Match, "match", operator_match),
+    (cst.IfExp, "if_expression", operator_if_exp),
 ]
+
+mutation_type_names = frozenset(mutation_type for _, mutation_type, _ in mutation_operators)
 
 
 def _simple_mutation_mapping(

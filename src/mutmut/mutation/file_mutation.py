@@ -229,7 +229,9 @@ class MutationVisitor(cst.CSTVisitor):
         return True
 
     def _create_mutations(self, node: cst.CSTNode) -> None:
-        for t, operator in self._operators:
+        for t, mutation_type, operator in self._operators:
+            if not config().should_mutate_type(mutation_type):
+                continue
             if isinstance(node, t):
                 for mutated_node in operator(node):
                     if self._removes_ignored_code(node, mutated_node):

@@ -685,6 +685,10 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
         state().function_dependencies.clear()
         return True
 
+    # Filtering can shift the numeric IDs of every later mutant in a function.
+    if "mutant_generation" in changed_groups:
+        _reset_mutant_results(lambda key, exit_code: True)
+
     # Timeout config only reclassifies timeouts; keep every other verdict.
     if "timeout" in changed_groups:
         _reset_mutant_results(lambda key, exit_code: status_by_exit_code[exit_code] == "timeout")
