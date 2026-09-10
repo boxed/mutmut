@@ -15,6 +15,7 @@ import libcst.matchers as m
 OPERATORS_TYPE = Sequence[
     tuple[
         type,
+        str,
         Callable[[Any], Iterable[cst.CSTNode]],
     ]
 ]
@@ -50,7 +51,7 @@ def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
         print("Unexpected number type", node)
 
 
-def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
+def _operator_string(node: cst.BaseString, mutate: Callable[[str, bool], str]) -> Iterable[cst.BaseString]:
     if isinstance(node, cst.SimpleString):
         value = node.value
         old_value = value
@@ -65,35 +66,32 @@ def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
         # For raw strings (r"..." or R"..."), escape sequences are literal, so case changes are NOT equivalent
         is_raw = "r" in prefix.lower()
 
-        supported_str_mutations: list[Callable[[str], str]] = [
-            lambda x: "XX" + x + "XX",
-        ]
-
-        if is_raw:
-            # Raw strings: use original regex (all non-backslash chars)
-            old_pattern = re.compile(r"((?<!\\)[^\\]+)")
-            supported_str_mutations.extend(
-                [
-                    lambda x: old_pattern.sub(lambda m: m.group(1).lower(), x),
-                    lambda x: old_pattern.sub(lambda m: m.group(1).upper(), x),
-                ]
-            )
-        else:
-            # Regular strings: preserve escape sequences with case-sensitive hex/names
-            supported_str_mutations.extend(
-                [
-                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda m: m.group(2).lower() if m.group(2) else m.group(0), x),
-                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda m: m.group(2).upper() if m.group(2) else m.group(0), x),
-                ]
-            )
-
-        for mut_func in supported_str_mutations:
-            new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"
-            if new_value == value:
-                continue
-            if new_value == old_value:
-                continue
+        new_value = f"{prefix}{value[0]}{mutate(value[1:-1], is_raw)}{value[-1]}"
+        if new_value != value and new_value != old_value:
             yield node.with_changes(value=new_value)
+
+
+# Raw strings have no escape sequences, so every run of non-backslash characters can change case
+RAW_STRING_NON_BACKSLASH = re.compile(r"((?<!\\)[^\\]+)")
+
+
+def _change_case(value: str, is_raw: bool, change: Callable[[str], str]) -> str:
+    if is_raw:
+        return RAW_STRING_NON_BACKSLASH.sub(lambda match: change(match.group(1)), value)
+    # Regular strings: preserve escape sequences with case-sensitive hex/names
+    return NON_ESCAPE_SEQUENCE.sub(lambda match: change(match.group(2)) if match.group(2) else match.group(0), value)
+
+
+def operator_string_wrap(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    yield from _operator_string(node, lambda value, is_raw: "XX" + value + "XX")
+
+
+def operator_string_lower(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    yield from _operator_string(node, lambda value, is_raw: _change_case(value, is_raw, str.lower))
+
+
+def operator_string_upper(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    yield from _operator_string(node, lambda value, is_raw: _change_case(value, is_raw, str.upper))
 
 
 def operator_lambda(node: cst.Lambda) -> Iterable[cst.Lambda]:
@@ -312,27 +310,31 @@ def operator_if_exp(node: cst.IfExp) -> Iterable[cst.IfExp]:
 
 # Operators that should be called on specific node types
 mutation_operators: OPERATORS_TYPE = [
-    (cst.BaseNumber, operator_number),
-    (cst.BaseString, operator_string),
-    (cst.Name, operator_name),
-    (cst.Assign, operator_assignment),
-    (cst.AnnAssign, operator_assignment),
-    (cst.AugAssign, operator_augmented_assignment),
-    (cst.UnaryOperation, operator_remove_unary_ops),
-    (cst.Call, operator_dict_arguments),
-    (cst.Call, operator_arg_removal),
-    (cst.Call, operator_symmetric_string_methods_swap),
-    (cst.Call, operator_unsymmetrical_string_methods_swap),
-    (cst.Lambda, operator_lambda),
-    (cst.CSTNode, operator_keywords),
-    (cst.CSTNode, operator_swap_op),
-    (cst.Match, operator_match),
-    (cst.IfExp, operator_if_exp),
+    (cst.BaseNumber, "number", operator_number),
+    (cst.BaseString, "string.wrap", operator_string_wrap),
+    (cst.BaseString, "string.lower", operator_string_lower),
+    (cst.BaseString, "string.upper", operator_string_upper),
+    (cst.Name, "name", operator_name),
+    (cst.Assign, "assignment", operator_assignment),
+    (cst.AnnAssign, "assignment", operator_assignment),
+    (cst.AugAssign, "assignment.augmented", operator_augmented_assignment),
+    (cst.UnaryOperation, "operator.unary", operator_remove_unary_ops),
+    (cst.Call, "argument.keyword", operator_dict_arguments),
+    (cst.Call, "argument.removal", operator_arg_removal),
+    (cst.Call, "string.method.swap", operator_symmetric_string_methods_swap),
+    (cst.Call, "string.method.swap", operator_unsymmetrical_string_methods_swap),
+    (cst.Lambda, "lambda", operator_lambda),
+    (cst.CSTNode, "keyword", operator_keywords),
+    (cst.CSTNode, "operator", operator_swap_op),
+    (cst.Match, "match", operator_match),
+    (cst.IfExp, "if_expression", operator_if_exp),
 ]
 
 # Operators that remove code, like `a = b` -> `a = None`. If such a mutant survives, it shadows
 # the other mutants inside the code it removes.
 code_removing_operators = {operator_assignment, operator_arg_removal, operator_lambda, operator_match}
+
+mutation_type_names = frozenset(mutation_type for _, mutation_type, _ in mutation_operators)
 
 
 def _simple_mutation_mapping(
