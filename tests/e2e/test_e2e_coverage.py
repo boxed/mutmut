@@ -42,6 +42,9 @@ def test_mutate_only_covered_lines_result_snapshot():
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_30": 1,
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_31": 1,
                 "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_32": 1,
+                "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_33": 1,
+                "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_34": 1,
+                "mutate_only_covered_lines.x_mutate_only_covered_lines_multiline__mutmut_35": 1,
             },
             "mutants/src/mutate_only_covered_lines/exclude_me.py.meta": {
                 "mutate_only_covered_lines.exclude_me.x_excluded_branch__mutmut_1": 1,

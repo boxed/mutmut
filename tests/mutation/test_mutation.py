@@ -260,6 +260,21 @@ def mutated_module(source: str) -> str:
         ('"FoO"', ['"XXFoOXX"', '"foo"', '"FOO"']),
         ("'FoO'", ["'XXFoOXX'", "'foo'", "'FOO'"]),
         ("u'FoO'", ["u'XXFoOXX'", "u'foo'", "u'FOO'"]),
+        (
+            'f"FoO {name} ignored"',
+            ['f"XXFoO XX{name} ignored"', 'f"foo {name} ignored"', 'f"FOO {name} ignored"'],
+        ),
+        ('f"{name} FoO"', ['f"{name}XX FoOXX"', 'f"{name} foo"', 'f"{name} FOO"']),
+        ('f"{name}"', []),
+        (
+            '"FoO " "ignored"',
+            ['"XXFoO XX" "ignored"', '"foo " "ignored"', '"FOO " "ignored"'],
+        ),
+        ('"" "FoO"', ['"" "XXFoOXX"', '"" "foo"', '"" "FOO"']),
+        (
+            'f"FoO {name}" "ignored"',
+            ['f"XXFoO XX{name}" "ignored"', 'f"foo {name}" "ignored"', 'f"FOO {name}" "ignored"'],
+        ),
         ("10", "11"),
         ("10.", "11.0"),
         ("0o10", "9"),
