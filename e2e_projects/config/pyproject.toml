@@ -27,6 +27,7 @@ debug = true
 source_paths = [ "config_pkg/" ]
 only_mutate = [ "config_pkg/logic/*" ]
 do_not_mutate = [ "*ignore*" ]
+disable_mutation_types = [ "string.lower", "string.upper" ]
 also_copy = [ "data" ]
 max_stack_depth=3
 # verify that we can override options with pytest_add_cli_args

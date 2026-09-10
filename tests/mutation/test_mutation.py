@@ -342,6 +342,25 @@ def test_basic_mutations(original, expected):
     assert sorted(mutants) == sorted(expected)
 
 
+def test_disable_specific_mutation_type(patch_config):
+    patch_config("disable_mutation_types", ["string.lower"])
+
+    assert sorted(mutants_for_source('"FoO"')) == ['"FOO"', '"XXFoOXX"']
+
+
+def test_disable_mutation_type_group(patch_config):
+    patch_config("disable_mutation_types", ["string"])
+
+    assert mutants_for_source('"FoO"') == []
+    assert mutants_for_source("value.lower()") == []
+
+
+def test_disable_unrelated_mutation_type(patch_config):
+    patch_config("disable_mutation_types", ["number"])
+
+    assert sorted(mutants_for_source('"FoO"')) == ['"FOO"', '"XXFoOXX"', '"foo"']
+
+
 def test_do_not_mutate_annotations():
     source = """
 def foo() -> int:
@@ -1671,6 +1690,26 @@ def test_timeout_config_change_resets_only_timeouts(tmp_path, monkeypatch):
 
     assert force_full is False
     assert _load_results() == {"timed_out": None, "killed": 1, "survived": 0}
+    reset_state()
+
+
+def test_mutation_type_config_change_resets_all_results(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    old_cfg = _config_for_invalidation()
+    state().old_config_fingerprint = old_cfg.config_fingerprint()
+
+    monkeypatch.setattr(
+        mutmut.__main__,
+        "config",
+        lambda: _config_for_invalidation(disable_mutation_types=["string.lower"]),
+    )
+    _write_meta({"first": 1, "second": 0, "uncached": None})
+
+    force_full = _apply_config_change_invalidation({})
+
+    assert force_full is False
+    assert _load_results() == {"first": None, "second": None, "uncached": None}
     reset_state()
 
 

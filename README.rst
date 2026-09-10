@@ -246,6 +246,41 @@ via the following options. Examples where this could be relevant:
 - Optimizing break instead of continue. The code runs fine when mutating break
   to continue, but it's slower.
 
+Skipping mutation types
+^^^^^^^^^^^^^^^^^^^^^^^
+
+You can disable mutation types that are not useful for your codebase. For example,
+SQL keywords and HTTP header names are often case-insensitive, so their lowercase
+and uppercase string mutants may be equivalent:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    disable_mutation_types = ["string.lower", "string.upper"]
+
+Mutation types use dotted groups. A group name disables every type below it, so
+``disable_mutation_types = ["string"]`` disables all string mutations.
+
+The available mutation types are:
+
+- ``argument.keyword``
+- ``argument.removal``
+- ``assignment``
+- ``assignment.augmented``
+- ``if_expression``
+- ``keyword``
+- ``lambda``
+- ``match``
+- ``name``
+- ``number``
+- ``operator``
+- ``operator.unary``
+- ``string.lower``
+- ``string.method.swap``
+- ``string.upper``
+- ``string.wrap``
+
 Skipping via regex
 ^^^^^^^^^^^^^^^^^^
 
