@@ -1,6 +1,6 @@
-"""File-based logging helpers, used mainly by the hot-fork orchestrator.
+"""File-based logging helpers, used mainly by the fork server.
 
-Child/orchestrator processes cannot easily log to the console without
+Forked processes cannot easily log to the console without
 corrupting the interactive terminal output, so mutmut logs to a rotating file
 instead. Logging is opt-in (``log_to_file``/``debug`` config) and off by default.
 """

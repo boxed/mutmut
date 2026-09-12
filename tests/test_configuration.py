@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from mutmut.configuration import Config
-from mutmut.configuration import HotForkWarmup
+from mutmut.configuration import ForkServerWarmup
 from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
@@ -57,22 +57,22 @@ class TestProcessIsolationConfig:
         self._write_pyproject(in_tmp_dir, "")
         cfg = config()
         assert cfg.process_isolation == ProcessIsolation.FORK
-        assert cfg.hot_fork_warmup == HotForkWarmup.COLLECT
-        assert cfg.max_orchestrator_restarts == 3
+        assert cfg.forkserver_warmup == ForkServerWarmup.COLLECT
+        assert cfg.max_forkserver_restarts == 3
         assert cfg.preload_modules_file is None
 
-    def test_hot_fork_selected(self, in_tmp_dir: Path):
-        self._write_pyproject(in_tmp_dir, 'process_isolation = "hot-fork"')
-        assert config().process_isolation == ProcessIsolation.HOT_FORK
+    def test_forkserver_selected(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'process_isolation = "forkserver"')
+        assert config().process_isolation == ProcessIsolation.FORKSERVER
 
     def test_invalid_process_isolation_raises(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, 'process_isolation = "bogus"')
         with pytest.raises(ValueError, match="Invalid process_isolation value"):
             _load_config()
 
-    def test_invalid_hot_fork_warmup_raises(self, in_tmp_dir: Path):
-        self._write_pyproject(in_tmp_dir, 'hot_fork_warmup = "bogus"')
-        with pytest.raises(ValueError, match="Invalid hot_fork_warmup value"):
+    def test_invalid_forkserver_warmup_raises(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'forkserver_warmup = "bogus"')
+        with pytest.raises(ValueError, match="Invalid forkserver_warmup value"):
             _load_config()
 
 
@@ -103,8 +103,8 @@ class TestShouldMutateFile:
             on_dependency_change="warn",
             use_git_change_detection=True,
             process_isolation=ProcessIsolation.FORK,
-            hot_fork_warmup=HotForkWarmup.COLLECT,
-            max_orchestrator_restarts=3,
+            forkserver_warmup=ForkServerWarmup.COLLECT,
+            max_forkserver_restarts=3,
             preload_modules_file=None,
             log_to_file=False,
             log_file_path="mutants/mutmut-debug.log",

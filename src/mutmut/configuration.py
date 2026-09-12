@@ -21,18 +21,29 @@ from typing import Any
 class ProcessIsolation(str, Enum):
     """Valid values for the ``process_isolation`` config.
 
+    Chooses *which process* each mutant worker is forked from. Named after the
+    ``multiprocessing`` start methods of the same name, which make the same
+    distinction:
+
+    - FORK: fork straight from mutmut's main process, which has already imported
+      pytest and run the suite to collect stats. Fastest, but every worker
+      inherits whatever the test setup left in that process.
+    - FORKSERVER: keep the main process free of pytest and fork a dedicated
+      server process that does nothing but import and fork workers. For test
+      setups that are not fork-safe (gevent, grpc, torch).
+
     Subclassing ``str`` allows direct string comparison while still giving us
     validation and IDE support.
     """
 
-    FORK = "fork"  # Default: fork the (test-polluted) parent per mutant.
-    HOT_FORK = "hot-fork"  # Fork-safe orchestrator for gevent/grpc/torch.
+    FORK = "fork"
+    FORKSERVER = "forkserver"
 
 
-class HotForkWarmup(str, Enum):
-    """Warmup strategy for the hot-fork orchestrator.
+class ForkServerWarmup(str, Enum):
+    """Warmup strategy for the fork server.
 
-    Controls what the orchestrator does after importing the test runner but
+    Controls what the fork server does after importing the test runner but
     before forking any grandchildren:
 
     - COLLECT: run ``pytest --collect-only`` to pre-load conftest, plugins, and
@@ -159,12 +170,12 @@ def _load_config() -> Config:
         valid = [e.value for e in ProcessIsolation]
         raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
 
-    warmup_str = s("hot_fork_warmup", "collect")
+    warmup_str = s("forkserver_warmup", "collect")
     try:
-        hot_fork_warmup = HotForkWarmup(warmup_str)
+        forkserver_warmup = ForkServerWarmup(warmup_str)
     except ValueError:
-        valid = [e.value for e in HotForkWarmup]
-        raise ValueError(f"Invalid hot_fork_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
+        valid = [e.value for e in ForkServerWarmup]
+        raise ValueError(f"Invalid forkserver_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
 
     return Config(
         only_mutate=only_mutate,
@@ -202,8 +213,8 @@ def _load_config() -> Config:
         on_dependency_change=s("on_dependency_change", "warn"),
         use_git_change_detection=s("use_git_change_detection", True),
         process_isolation=process_isolation,
-        hot_fork_warmup=hot_fork_warmup,
-        max_orchestrator_restarts=s("max_orchestrator_restarts", 3),
+        forkserver_warmup=forkserver_warmup,
+        max_forkserver_restarts=s("max_forkserver_restarts", 3),
         preload_modules_file=s("preload_modules_file", None),
         log_to_file=s("log_to_file", False),
         log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
@@ -237,8 +248,8 @@ class Config:
     on_dependency_change: str
     use_git_change_detection: bool
     process_isolation: ProcessIsolation
-    hot_fork_warmup: HotForkWarmup
-    max_orchestrator_restarts: int
+    forkserver_warmup: ForkServerWarmup
+    max_forkserver_restarts: int
     preload_modules_file: str | None
     log_to_file: bool
     log_file_path: str

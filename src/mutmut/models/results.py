@@ -1,4 +1,4 @@
-"""Result data models for worker/orchestrator communication."""
+"""Result data models for worker/fork server communication."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 class StatsResult:
     """Stats collected by a forked child, serialized back to the parent.
 
-    The hot-fork runner collects stats inside a forked child (so the parent
+    The forkserver runner collects stats inside a forked child (so the parent
     never imports pytest). The child cannot mutate the parent's ``state()``
     directly, so it packs the collected data into this picklable structure and
     the parent merges it back in.

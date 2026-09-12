@@ -69,10 +69,10 @@ def run_mutmut(
     show_output: bool = False,
 ) -> dict:
     """Run mutmut with specified strategy."""
-    config = get_pyproject_content(debug=verbose, process_isolation=strategy if strategy == "fork" else "hot-fork")
+    config = get_pyproject_content(debug=verbose, process_isolation=strategy if strategy == "fork" else "forkserver")
 
     if strategy != "fork":
-        config += f'hot_fork_warmup = "{strategy}"\n'
+        config += f'forkserver_warmup = "{strategy}"\n'
         if strategy == "import":
             config += 'preload_modules_file = "mutmut_preload.txt"\n'
 

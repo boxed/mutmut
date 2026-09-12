@@ -9,8 +9,8 @@ from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import config
 from mutmut.configuration import reset_config
 from mutmut.workers.isolation import ForkRunner
-from mutmut.workers.isolation import HotForkRunner
-from mutmut.workers.isolation import OrchestratorCrashError
+from mutmut.workers.isolation import ForkServerCrashError
+from mutmut.workers.isolation import ForkServerRunner
 from mutmut.workers.isolation import get_mutant_runner
 from mutmut.workers.isolation import recv_message
 from mutmut.workers.isolation import run_in_fork
@@ -119,17 +119,17 @@ class TestRunInFork:
         assert marker.read_text() == "created"
 
 
-class TestOrchestratorCrashError:
-    """Tests for OrchestratorCrashError exception."""
+class TestForkServerCrashError:
+    """Tests for ForkServerCrashError exception."""
 
     def test_error_message_includes_exit_code(self):
         """Exit code is included in message."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=[])
+        err = ForkServerCrashError(exit_code=1, lost_mutants=[])
         assert "exit code: 1" in str(err)
 
     def test_error_message_lists_lost_mutants(self):
         """Lost mutants are listed in message."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=["mutant_1", "mutant_2"])
+        err = ForkServerCrashError(exit_code=1, lost_mutants=["mutant_1", "mutant_2"])
         assert "mutant_1" in str(err)
         assert "mutant_2" in str(err)
         assert "2 in-flight mutant(s)" in str(err)
@@ -137,7 +137,7 @@ class TestOrchestratorCrashError:
     def test_truncates_long_mutant_list(self):
         """Only first 10 mutants shown, rest summarized."""
         mutants = [f"mutant_{i}" for i in range(15)]
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=mutants)
+        err = ForkServerCrashError(exit_code=1, lost_mutants=mutants)
 
         assert "mutant_0" in str(err)
         assert "mutant_9" in str(err)
@@ -146,42 +146,42 @@ class TestOrchestratorCrashError:
 
     def test_includes_resume_instructions(self):
         """Message includes how to resume."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=[])
+        err = ForkServerCrashError(exit_code=1, lost_mutants=[])
         assert "mutmut run" in str(err)
 
     def test_includes_crash_log_path(self):
         """Crash log path is shown if provided."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=[], crash_log="mutants/.orchestrator-crash.log")
-        assert ".orchestrator-crash.log" in str(err)
+        err = ForkServerCrashError(exit_code=1, lost_mutants=[], crash_log="mutants/.forkserver-crash.log")
+        assert ".forkserver-crash.log" in str(err)
 
     def test_attributes_accessible(self):
         """Exception attributes are accessible."""
-        err = OrchestratorCrashError(exit_code=42, lost_mutants=["a", "b"], crash_log="/path/to/log")
+        err = ForkServerCrashError(exit_code=42, lost_mutants=["a", "b"], crash_log="/path/to/log")
         assert err.exit_code == 42
         assert err.lost_mutants == ["a", "b"]
         assert err.crash_log == "/path/to/log"
 
     def test_empty_lost_mutants(self):
         """Works correctly with empty lost mutants list."""
-        err = OrchestratorCrashError(exit_code=0, lost_mutants=[])
+        err = ForkServerCrashError(exit_code=0, lost_mutants=[])
         assert "0 in-flight mutant(s)" in str(err)
 
     def test_no_crash_log(self):
         """Works correctly without crash log."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=["m1"])
+        err = ForkServerCrashError(exit_code=1, lost_mutants=["m1"])
         # Should not raise and should not include "Crash log:"
         msg = str(err)
         assert "Crash log:" not in msg
 
     def test_is_exception(self):
-        """OrchestratorCrashError is an Exception subclass."""
-        err = OrchestratorCrashError(exit_code=1, lost_mutants=[])
+        """ForkServerCrashError is an Exception subclass."""
+        err = ForkServerCrashError(exit_code=1, lost_mutants=[])
         assert isinstance(err, Exception)
 
     def test_can_be_raised_and_caught(self):
         """Exception can be raised and caught properly."""
-        with pytest.raises(OrchestratorCrashError) as exc_info:
-            raise OrchestratorCrashError(exit_code=255, lost_mutants=["test_mutant"], crash_log="/tmp/crash.log")
+        with pytest.raises(ForkServerCrashError) as exc_info:
+            raise ForkServerCrashError(exit_code=255, lost_mutants=["test_mutant"], crash_log="/tmp/crash.log")
 
         assert exc_info.value.exit_code == 255
         assert exc_info.value.lost_mutants == ["test_mutant"]
@@ -262,12 +262,12 @@ class TestGetMutantRunner:
         assert isinstance(runner, ForkRunner)
         assert runner.max_workers == 2
 
-    def test_selects_hot_fork(self, in_project_dir, monkeypatch):
-        monkeypatch.setattr(config(), "process_isolation", ProcessIsolation.HOT_FORK)
+    def test_selects_forkserver(self, in_project_dir, monkeypatch):
+        monkeypatch.setattr(config(), "process_isolation", ProcessIsolation.FORKSERVER)
         runner = get_mutant_runner(4)
-        assert isinstance(runner, HotForkRunner)
+        assert isinstance(runner, ForkServerRunner)
         assert runner.max_workers == 4
-        assert runner.max_restarts == config().max_orchestrator_restarts
+        assert runner.max_restarts == config().max_forkserver_restarts
 
     def test_rejects_zero_workers(self, in_project_dir):
         with pytest.raises(ValueError, match="at least 1"):
@@ -335,14 +335,14 @@ class TestPipeMessaging:
             os.close(r)
 
 
-class TestHotForkRunnerNoTestMutants:
-    """HotForkRunner resolves a mutant with no tests the same way ForkRunner does."""
+class TestForkServerRunnerNoTestMutants:
+    """ForkServerRunner resolves a mutant with no tests the same way ForkRunner does."""
 
     @staticmethod
     def _runner():
-        return HotForkRunner(max_workers=4, test_runner_class=object, test_runner_args={})
+        return ForkServerRunner(max_workers=4, test_runner_class=object, test_runner_args={})
 
-    def test_no_test_mutant_is_resolved_without_an_orchestrator(self):
+    def test_no_test_mutant_is_resolved_without_a_forkserver(self):
         runner = self._runner()  # never started, so there is no work pipe
         runner.submit("mod.x_foo__mutmut_1", [], cpu_time_limit=1, estimated_time=0.0)
         assert runner.pending_count() == 1

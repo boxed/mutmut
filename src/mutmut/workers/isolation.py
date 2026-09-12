@@ -8,8 +8,9 @@ makes the process fork-unsafe.
 The low-level ``run_in_fork*`` helpers run operations in forked children so the
 parent stays clean. On top of them, ``MutantRunner`` abstracts the process
 isolation strategy used to test each mutant. ``ForkRunner`` is the traditional
-os.fork()-per-mutant approach; ``HotForkRunner`` (single orchestrator) will be
-layered on later for fork-unsafe libraries.
+os.fork()-per-mutant approach; ``ForkServerRunner`` keeps the main process clean
+by routing every fork through a dedicated server process, for fork-unsafe
+libraries.
 """
 
 from __future__ import annotations
@@ -175,10 +176,10 @@ def recv_message(fd: int) -> Any:
     return pickle.loads(_read_exactly(fd, size))
 
 
-class OrchestratorCrashError(Exception):
-    """Raised when the hot-fork orchestrator crashes unexpectedly.
+class ForkServerCrashError(Exception):
+    """Raised when the fork server crashes unexpectedly.
 
-    The orchestrator manages all mutant test runs. If it crashes, any
+    The fork server manages all mutant test runs. If it crashes, any
     in-flight mutants are lost. The user can resume by running
     `mutmut run` again - completed results are preserved.
     """
@@ -190,7 +191,7 @@ class OrchestratorCrashError(Exception):
 
         # Build detailed message
         details = [
-            f"Hot-fork orchestrator crashed unexpectedly (exit code: {exit_code})",
+            f"Fork server crashed unexpectedly (exit code: {exit_code})",
             f"Lost {len(lost_mutants)} in-flight mutant(s):",
         ]
         for m in lost_mutants[:10]:
@@ -311,21 +312,21 @@ class MutantRunner(ABC):
         """List all tests in the test suite."""
 
 
-class HotForkRunner(MutantRunner):
-    """Fork-safe mutation runner using a single hot orchestrator.
+class ForkServerRunner(MutantRunner):
+    """Fork-safe mutation runner using a single fork server.
 
     Architecture::
 
-        Parent (clean) -> Orchestrator (imports pytest) -> N concurrent children
+        Parent (clean) -> Fork server (imports pytest) -> N concurrent children
 
     The parent never imports pytest/conftest, so it stays fork-safe. The
-    orchestrator imports pytest exactly once, then forks a grandchild per
+    fork server imports pytest exactly once, then forks a grandchild per
     mutant; each grandchild runs one mutant's tests and exits. This is both
     faster than forking a fresh pytest per mutant (one import instead of N) and
     compatible with fork-unsafe libraries like gevent, grpc, and torch.
 
-    If the orchestrator crashes, in-flight mutants are re-submitted to a fresh
-    orchestrator up to ``max_restarts`` times before an OrchestratorCrashError
+    If the fork server crashes, in-flight mutants are re-submitted to a fresh
+    fork server up to ``max_restarts`` times before a ForkServerCrashError
     is raised.
     """
 
@@ -336,7 +337,7 @@ class HotForkRunner(MutantRunner):
         start_time: float
         wall_timeout: float
 
-    # Default maximum number of orchestrator restarts before giving up.
+    # Default maximum number of fork server restarts before giving up.
     DEFAULT_MAX_RESTARTS = 3
 
     def __init__(
@@ -359,7 +360,7 @@ class HotForkRunner(MutantRunner):
         self.result_pipe_read: int | None = None
         self.result_pipe_write: int | None = None
 
-        self.orchestrator_pid: int | None = None
+        self.forkserver_pid: int | None = None
         self._pending: set[str] = set()  # mutant_names in flight
         # mutant_name -> (tests, cpu_time_limit, estimated_time, start_time)
         self._pending_work: dict[str, tuple[list[str], int, float, datetime]] = {}
@@ -370,24 +371,24 @@ class HotForkRunner(MutantRunner):
 
     def startup(self) -> None:
         gc.freeze()
-        self._start_orchestrator()
+        self._start_forkserver()
 
-    def _start_orchestrator(self) -> None:
-        """Fork a fresh orchestrator process with new pipes.
+    def _start_forkserver(self) -> None:
+        """Start a fresh fork server process with new pipes.
 
         Can be called more than once for crash recovery; each call creates fresh
-        pipes and a new orchestrator.
+        pipes and a new fork server.
         """
         self.work_pipe_read, self.work_pipe_write = os.pipe()
         self.result_pipe_read, self.result_pipe_write = os.pipe()
 
         pid = os.fork()
         if pid == 0:
-            # Child: become the orchestrator.
+            # Child: become the fork server.
             os.close(self.work_pipe_write)
             os.close(self.result_pipe_read)
             try:
-                self._orchestrator_main(self.work_pipe_read, self.result_pipe_write)
+                self._forkserver_main(self.work_pipe_read, self.result_pipe_write)
             except Exception as e:
                 self._write_crash_log(e)
                 os._exit(1)
@@ -396,27 +397,27 @@ class HotForkRunner(MutantRunner):
         # Parent: close the child's ends.
         os.close(self.work_pipe_read)
         os.close(self.result_pipe_write)
-        self.orchestrator_pid = pid
-        self._logger.info(f"HotForkRunner started orchestrator (pid={pid})")
+        self.forkserver_pid = pid
+        self._logger.info(f"Started fork server (pid={pid})")
 
-    def _restart_orchestrator_with_pending_work(self, exit_code: int = -1) -> None:
-        """Restart the orchestrator and re-submit all pending work.
+    def _restart_forkserver_with_pending_work(self, exit_code: int = -1) -> None:
+        """Restart the fork server and re-submit all pending work.
 
-        Raises OrchestratorCrashError once ``max_restarts`` is exceeded.
+        Raises ForkServerCrashError once ``max_restarts`` is exceeded.
         """
         self._restart_count += 1
         self._crash_exit_codes.append(exit_code)
 
-        crash_log_path = get_log_file_path().parent / ".orchestrator-crash.log"
+        crash_log_path = get_log_file_path().parent / ".forkserver-crash.log"
         pending_mutants = list(self._pending)
         self._logger.error(
-            f"Orchestrator crashed with exit code {exit_code}. "
+            f"Fork server crashed with exit code {exit_code}. "
             f"Check {crash_log_path} and {get_log_file_path()} for details."
         )
         self._logger.error(f"Pending mutants at time of crash ({len(pending_mutants)}): {pending_mutants}")
 
         if self._restart_count > self.max_restarts:
-            raise OrchestratorCrashError(
+            raise ForkServerCrashError(
                 exit_code=-1,
                 lost_mutants=list(self._pending),
                 crash_log=str(crash_log_path) if crash_log_path.exists() else None,
@@ -424,37 +425,37 @@ class HotForkRunner(MutantRunner):
 
         lost_count = len(self._pending)
         self._logger.warning(
-            f"Orchestrator crashed, restarting (attempt {self._restart_count}/{self.max_restarts}), "
+            f"Fork server crashed, restarting (attempt {self._restart_count}/{self.max_restarts}), "
             f"re-submitting {lost_count} pending mutant(s)"
         )
 
         pending_work_copy = dict(self._pending_work)
 
-        self._start_orchestrator()
+        self._start_forkserver()
 
         if self.work_pipe_write is None:
-            raise RuntimeError("Failed to restart orchestrator - work pipe not created")
+            raise RuntimeError("Failed to restart fork server - work pipe not created")
         for mutant_name, (tests, cpu_time_limit, estimated_time, _) in pending_work_copy.items():
             send_message(self.work_pipe_write, (mutant_name, list(tests), cpu_time_limit))
             self._pending_work[mutant_name] = (tests, cpu_time_limit, estimated_time, datetime.now())
-            self._logger.debug(f"Re-submitted {mutant_name} to new orchestrator")
+            self._logger.debug(f"Re-submitted {mutant_name} to new fork server")
 
-        self._logger.info(f"Orchestrator restarted, {lost_count} mutant(s) re-submitted")
+        self._logger.info(f"Fork server restarted, {lost_count} mutant(s) re-submitted")
 
     def _write_crash_log(self, exception: Exception) -> None:
-        """Best-effort dump of orchestrator crash info for debugging."""
-        crash_file = get_log_file_path().parent / ".orchestrator-crash.log"
+        """Best-effort dump of fork server crash info for debugging."""
+        crash_file = get_log_file_path().parent / ".forkserver-crash.log"
         try:
             crash_file.parent.mkdir(parents=True, exist_ok=True)
             with open(crash_file, "w") as f:
-                f.write(f"Orchestrator crash at {datetime.now()}\n")
+                f.write(f"Fork server crash at {datetime.now()}\n")
                 f.write(f"Exception: {exception}\n")
                 f.write(traceback.format_exc())
         except Exception:
             pass
 
     def _setup_sigchld_pipe(self) -> tuple[int, int]:
-        """Set up a self-pipe so SIGCHLD wakes the orchestrator's select()."""
+        """Set up a self-pipe so SIGCHLD wakes the fork server's select()."""
         sigchld_pipe_r, sigchld_pipe_w = os.pipe()
         os.set_blocking(sigchld_pipe_r, False)
         os.set_blocking(sigchld_pipe_w, False)
@@ -487,15 +488,15 @@ class HotForkRunner(MutantRunner):
         except InterruptedError:
             return True  # Interrupted by a signal; check anyway.
 
-    def _orchestrator_main(self, work_fd: int, result_fd: int) -> None:
-        """Orchestrator: import pytest once, then fork a grandchild per mutant."""
+    def _forkserver_main(self, work_fd: int, result_fd: int) -> None:
+        """Fork server: import pytest once, then fork a grandchild per mutant."""
         # The parent owns shutdown, so ignore SIGINT here.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         if config().log_to_file or config().debug:
             setup_file_logging()
-        orchestrator_logger = get_logger("mutmut.hotfork.orchestrator")
-        orchestrator_logger.info(f"Hot-fork orchestrator starting (pid={os.getpid()})")
+        forkserver_logger = get_logger("mutmut.forkserver")
+        forkserver_logger.info(f"Fork server starting (pid={os.getpid()})")
 
         test_runner: TestRunner = self.test_runner_class(**self.test_runner_args)
 
@@ -507,14 +508,14 @@ class HotForkRunner(MutantRunner):
             test_runner.warm_up()
         finally:
             sys.stdout, sys.stderr = old_stdout, old_stderr
-        orchestrator_logger.info("Test runner initialized, ready for work")
+        forkserver_logger.info("Test runner initialized, ready for work")
 
         # Set up the SIGCHLD pipe AFTER warm_up: libraries like gevent may
         # monkey-patch signals during import/collection.
         sigchld_pipe_r, sigchld_pipe_w = self._setup_sigchld_pipe()
-        orchestrator_logger.debug("SIGCHLD notification pipe set up")
+        forkserver_logger.debug("SIGCHLD notification pipe set up")
 
-        running: dict[int, HotForkRunner.RunningChild] = {}
+        running: dict[int, ForkServerRunner.RunningChild] = {}
 
         def terminate(signum: int, frame: Any) -> None:
             # The parent SIGTERMs us on Ctrl-C. Take the grandchildren down too,
@@ -530,15 +531,15 @@ class HotForkRunner(MutantRunner):
         signal.signal(signal.SIGTERM, terminate)
 
         while True:
-            self._reap_children(running, result_fd, orchestrator_logger, sigchld_pipe_r, block=False)
+            self._reap_children(running, result_fd, forkserver_logger, sigchld_pipe_r, block=False)
 
             while len(running) >= self.max_workers:
-                self._reap_children(running, result_fd, orchestrator_logger, sigchld_pipe_r, block=True, timeout=1.0)
+                self._reap_children(running, result_fd, forkserver_logger, sigchld_pipe_r, block=True, timeout=1.0)
 
             readable, _, _ = select.select([work_fd, sigchld_pipe_r], [], [], 1.0)
 
             if sigchld_pipe_r in readable:
-                self._reap_children(running, result_fd, orchestrator_logger, sigchld_pipe_r, block=False)
+                self._reap_children(running, result_fd, forkserver_logger, sigchld_pipe_r, block=False)
 
             if work_fd not in readable:
                 continue
@@ -557,7 +558,7 @@ class HotForkRunner(MutantRunner):
             # code can burn N*wall CPU seconds across N cores, so half the CPU
             # limit is a reasonable wall bound.
             wall_timeout = cpu_time_limit / 2
-            orchestrator_logger.debug(
+            forkserver_logger.debug(
                 f"Received mutant: {mutant_name} ({len(tests)} tests, "
                 f"cpu_limit={cpu_time_limit}s, wall_timeout={wall_timeout}s)"
             )
@@ -565,7 +566,7 @@ class HotForkRunner(MutantRunner):
             child_pid = os.fork()
             if child_pid == 0:
                 # Grandchild: run this mutant's tests under a CPU limit.
-                worker_logger = get_logger(f"mutmut.hotfork.worker.{os.getpid()}")
+                worker_logger = get_logger(f"mutmut.forkserver.worker.{os.getpid()}")
                 worker_logger.debug(f"Starting {mutant_name} ({len(tests)} tests)")
 
                 sys.stdout = sys.stderr = open(os.devnull, "w")
@@ -586,22 +587,22 @@ class HotForkRunner(MutantRunner):
             # A background thread sends SIGXCPU when the wall timeout expires.
             register_timeout(child_pid, wall_timeout)
 
-        orchestrator_logger.info("Work queue exhausted, waiting for remaining children")
+        forkserver_logger.info("Work queue exhausted, waiting for remaining children")
         while running:
-            self._reap_children(running, result_fd, orchestrator_logger, sigchld_pipe_r, block=True, timeout=1.0)
+            self._reap_children(running, result_fd, forkserver_logger, sigchld_pipe_r, block=True, timeout=1.0)
 
         try:
             os.close(sigchld_pipe_r)
             os.close(sigchld_pipe_w)
         except OSError:
             pass
-        orchestrator_logger.info("Orchestrator shutting down cleanly")
+        forkserver_logger.info("Fork server shutting down cleanly")
 
     def _reap_children(
         self,
         running: dict[int, RunningChild],
         result_fd: int,
-        orchestrator_logger: logging.Logger,
+        forkserver_logger: logging.Logger,
         sigchld_pipe_r: int,
         block: bool,
         timeout: float | None = None,
@@ -629,18 +630,18 @@ class HotForkRunner(MutantRunner):
             child = running.pop(pid)
             exit_code = os.waitstatus_to_exitcode(status)
             duration = time.time() - child.start_time
-            orchestrator_logger.debug(f"Completed {child.mutant_name}: exit={exit_code} ({duration:.3f}s)")
+            forkserver_logger.debug(f"Completed {child.mutant_name}: exit={exit_code} ({duration:.3f}s)")
             send_message(result_fd, (child.mutant_name, exit_code))
 
     def submit(self, mutant_name: str, tests: list[str], cpu_time_limit: int, estimated_time: float) -> None:
         if not tests:
             # Matches ForkRunner: nothing to run, so resolve it here as "no tests"
-            # rather than paying for a round trip through the orchestrator.
+            # rather than paying for a round trip through the fork server.
             self._no_tests_results.append(MutantResult(mutant_name=mutant_name, exit_code=33, duration=0.0))
             return
 
         if self.work_pipe_write is None:
-            raise RuntimeError("HotForkRunner not started - call startup() first")
+            raise RuntimeError("ForkServerRunner not started - call startup() first")
         send_message(self.work_pipe_write, (mutant_name, list(tests), cpu_time_limit))
         self._pending.add(mutant_name)
         self._pending_work[mutant_name] = (list(tests), cpu_time_limit, estimated_time, datetime.now())
@@ -649,7 +650,7 @@ class HotForkRunner(MutantRunner):
         return len(self._pending) < self.max_workers
 
     def signal_work_complete(self) -> None:
-        """Close the work pipe so the orchestrator sees EOF and drains workers."""
+        """Close the work pipe so the fork server sees EOF and drains workers."""
         if self.work_pipe_write is None:
             return
         try:
@@ -658,40 +659,40 @@ class HotForkRunner(MutantRunner):
             pass
         finally:
             self.work_pipe_write = None
-        self._logger.debug("Work pipe closed, orchestrator will drain remaining workers")
+        self._logger.debug("Work pipe closed, fork server will drain remaining workers")
 
-    def _check_orchestrator_alive(self) -> None:
-        """Detect an orchestrator crash and restart it, re-submitting pending work.
+    def _check_forkserver_alive(self) -> None:
+        """Detect a fork server crash and restart it, re-submitting pending work.
 
-        A clean exit (code 0) is left alone. Raises OrchestratorCrashError once
+        A clean exit (code 0) is left alone. Raises ForkServerCrashError once
         the restart budget is exhausted.
         """
-        if self.orchestrator_pid is None:
+        if self.forkserver_pid is None:
             return
         try:
-            pid, status = os.waitpid(self.orchestrator_pid, os.WNOHANG)
-            if pid == self.orchestrator_pid:
+            pid, status = os.waitpid(self.forkserver_pid, os.WNOHANG)
+            if pid == self.forkserver_pid:
                 exit_code = os.waitstatus_to_exitcode(status)
-                self.orchestrator_pid = None
+                self.forkserver_pid = None
 
                 if exit_code == 0:
-                    self._logger.debug(f"Orchestrator (pid={pid}) exited cleanly")
+                    self._logger.debug(f"Fork server (pid={pid}) exited cleanly")
                     return
 
-                self._logger.warning(f"Orchestrator (pid={pid}) crashed with exit code {exit_code}")
-                self._restart_orchestrator_with_pending_work(exit_code=exit_code)
+                self._logger.warning(f"Fork server (pid={pid}) crashed with exit code {exit_code}")
+                self._restart_forkserver_with_pending_work(exit_code=exit_code)
         except ChildProcessError:
-            self._logger.warning("Orchestrator process not found")
-            self.orchestrator_pid = None
-            self._restart_orchestrator_with_pending_work(exit_code=-1)
+            self._logger.warning("Fork server process not found")
+            self.forkserver_pid = None
+            self._restart_forkserver_with_pending_work(exit_code=-1)
 
     def wait_for_result(self, timeout: float | None = None) -> MutantResult:
         if self._no_tests_results:
             return self._no_tests_results.pop(0)
         if self.result_pipe_read is None:
-            raise RuntimeError("HotForkRunner not started - call startup() first")
+            raise RuntimeError("ForkServerRunner not started - call startup() first")
         while True:
-            self._check_orchestrator_alive()
+            self._check_forkserver_alive()
 
             r, _, _ = select.select([self.result_pipe_read], [], [], timeout or 1.0)
             if not r:
@@ -702,8 +703,8 @@ class HotForkRunner(MutantRunner):
             try:
                 mutant_name, exit_code = recv_message(self.result_pipe_read)
             except EOFError as err:
-                self._check_orchestrator_alive()
-                raise OrchestratorCrashError(exit_code=-1, lost_mutants=list(self._pending), crash_log=None) from err
+                self._check_forkserver_alive()
+                raise ForkServerCrashError(exit_code=-1, lost_mutants=list(self._pending), crash_log=None) from err
 
             self._pending.discard(mutant_name)
             self._pending_work.pop(mutant_name, None)
@@ -715,19 +716,19 @@ class HotForkRunner(MutantRunner):
         return len(self._pending) + len(self._no_tests_results)
 
     def stop_all_workers(self) -> None:
-        if self.orchestrator_pid:
+        if self.forkserver_pid:
             try:
-                os.kill(self.orchestrator_pid, signal.SIGTERM)
+                os.kill(self.forkserver_pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
 
     def shutdown(self) -> None:
-        """Close the work pipe, drain remaining results, and reap the orchestrator."""
+        """Close the work pipe, drain remaining results, and reap the fork server."""
         if self._shutting_down:
             return
         self._shutting_down = True
 
-        self._logger.info("HotForkRunner shutting down")
+        self._logger.info("ForkServerRunner shutting down")
 
         self.signal_work_complete()
 
@@ -737,12 +738,12 @@ class HotForkRunner(MutantRunner):
                 result = self.wait_for_result(timeout=1.0)
                 self._pending.discard(result.mutant_name)
                 self._pending_work.pop(result.mutant_name, None)
-            except (Empty, OrchestratorCrashError):
+            except (Empty, ForkServerCrashError):
                 break
 
-        if self.orchestrator_pid:
+        if self.forkserver_pid:
             try:
-                os.waitpid(self.orchestrator_pid, 0)
+                os.waitpid(self.forkserver_pid, 0)
             except ChildProcessError:
                 pass
 
@@ -753,7 +754,7 @@ class HotForkRunner(MutantRunner):
                 pass
 
         gc.unfreeze()
-        self._logger.info("HotForkRunner shutdown complete")
+        self._logger.info("ForkServerRunner shutdown complete")
 
     def collect_stats(self, tests: Iterable[str] | None) -> int:
         """Collect stats in a forked child so the parent never imports pytest.
@@ -816,7 +817,7 @@ class ForkRunner(MutantRunner):
 
     This is the traditional mutmut approach - fast, but it can misbehave with
     libraries like gevent, grpc, and torch when forking from a parent process
-    that has already imported test code. For those, use HotForkRunner instead.
+    that has already imported test code. For those, use ForkServerRunner instead.
     """
 
     def __init__(self, max_workers: int, test_runner: TestRunner, debug: bool = False) -> None:
@@ -882,7 +883,7 @@ class ForkRunner(MutantRunner):
         return len(self._running) + len(self._no_tests_results)
 
     def signal_work_complete(self) -> None:
-        """No-op for ForkRunner (there is no orchestrator to signal)."""
+        """No-op for ForkRunner (there is no fork server to signal)."""
 
     def stop_all_workers(self) -> None:
         for pid in list(self._running):
@@ -925,13 +926,13 @@ def get_mutant_runner(max_workers: int = 1) -> MutantRunner:
     if max_workers < 1:
         raise ValueError("max_workers must be at least 1")
 
-    if config().process_isolation == ProcessIsolation.HOT_FORK:
-        return HotForkRunner(
+    if config().process_isolation == ProcessIsolation.FORKSERVER:
+        return ForkServerRunner(
             max_workers=max_workers,
             test_runner_class=PytestRunner,
             test_runner_args={},
             debug=config().debug,
-            max_restarts=config().max_orchestrator_restarts,
+            max_restarts=config().max_forkserver_restarts,
         )
 
     pytest_runner = PytestRunner()

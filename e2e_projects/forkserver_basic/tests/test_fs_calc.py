@@ -1,6 +1,6 @@
-from hf_calc import add
-from hf_calc import mul
-from hf_calc import sub
+from fs_calc import add
+from fs_calc import mul
+from fs_calc import sub
 
 
 def test_add():

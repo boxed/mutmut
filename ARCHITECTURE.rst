@@ -48,3 +48,17 @@ We finally check, which mutations are caught by the test suite.
 For each mutant, we execute the test suite. If any of the tests fails, we successfully killed the mutant. To optimize performance, we only execute the tests that could cover the mutant and sort them by mutation time. We also skip mutants, which already have a result from a previous run.
 
 The results are stored in the ``.meta`` files.
+
+Every mutant is tested in its own process. Which process that one is forked from is
+owned by a ``MutantRunner`` (``src/mutmut/workers/isolation.py``), selected by the
+``process_isolation`` config. ``ForkRunner`` forks each worker straight from mutmut's
+main process, which by this point has imported pytest and run the suite once to collect
+stats. ``ForkServerRunner`` instead keeps the main process free of pytest: it forks a
+dedicated fork server child, and that child imports pytest once and forks a worker per
+mutant, streaming results back over a length-prefixed pipe. That extra generation exists
+for test setups that are not fork-safe, where inheriting the main process would hang or
+crash the workers.
+
+The runner also owns the surrounding test operations (stats collection, clean tests,
+forced fail, test listing) so that, under ``forkserver``, those too can run in short-lived
+forks and leave the main process clean.

@@ -236,6 +236,108 @@ macOS at your own risk, or to disable it on other platforms), set ``use_setproct
     use_setproctitle = false
 
 
+Process isolation (``fork`` vs ``forkserver``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    process_isolation = "fork"  # or "forkserver"
+
+Both strategies require ``os.fork``, so they are POSIX-only.
+
+``fork`` (default)
+    Mutmut's main process imports pytest and runs your test suite to collect
+    stats, then forks one child per mutant. This is fast and needs no
+    configuration, but every mutant worker inherits whatever your test setup
+    left behind in that process: monkey-patched sockets, running event loops,
+    background threads, open database connections, CUDA contexts. If any of
+    that is not fork-safe, the workers can hang, segfault, or report nonsense.
+
+``forkserver``
+    Mutmut's main process never imports pytest or your ``conftest.py``. It forks
+    a dedicated *fork server* child, and that child does the importing once and
+    forks a worker per mutant::
+
+        main process (clean) -> fork server (imports pytest) -> N mutant workers
+
+    Because the fork server only imports and forks, and never runs a test
+    itself, every worker starts from the same predictable state. This is the
+    same design as the ``forkserver`` start method in Python's
+    ``multiprocessing``, and it is still only one pytest import for the whole
+    run, so it is not slower than ``fork`` in the normal case.
+
+**Which one should you use?** Start with ``fork``. Switch to ``forkserver`` if
+your run hangs, crashes, or gives results you cannot reproduce by running the
+tests by hand, and your test setup touches something known to be fork-unsafe,
+such as ``gevent.monkey.patch_all()``, ``grpc``, or ``torch``. It is also the
+better choice if you simply do not want your session-scoped setup living in the
+process that forks mutants.
+
+
+Tuning what the fork server preloads
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``forkserver_warmup`` controls how much the fork server imports before it starts
+forking workers. It only applies when ``process_isolation = "forkserver"``.
+Anything imported in the fork server is inherited by every  worker, and anything
+left out is imported in each worker.
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    process_isolation = "forkserver"
+    forkserver_warmup = "collect"  # "collect" (default), "import" or "none"
+
+``collect`` (default)
+    Run ``pytest --collect-only``, which imports your ``conftest.py``, your
+    plugins and your test modules. This is the right default for most projects
+    and usually the fastest.
+
+``import``
+    Import only the modules listed in ``preload_modules_file`` (one dotted
+    module name per line; blank lines and ``#`` comments are ignored, and
+    modules that fail to import are skipped). Use this when test *collection*
+    itself has side effects you do not want every worker to share, but you still
+    want your slow imports warmed up.
+
+``none``
+    Import nothing beyond what running a single test requires. This is the
+    slowest option, and the most isolated. It is mostly useful for working out
+    whether a warmup side effect is what is breaking your run.
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    process_isolation = "forkserver"
+    forkserver_warmup = "import"
+    preload_modules_file = "mutmut_preload.txt"
+
+If the fork server itself crashes, mutmut starts a new one and re-submits the
+mutants that were in flight, up to ``max_forkserver_restarts`` times (default
+``3``) before giving up with a ``ForkServerCrashError``:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    max_forkserver_restarts = 3
+
+The fork server and its workers cannot write to the console without mangling
+mutmut's progress output, so they log to a file instead. Logging is off unless
+you ask for it with ``log_to_file`` (or ``debug``):
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    log_to_file = true
+    log_file_path = "mutants/mutmut-debug.log"
+
+
 Disabling mutation on specific code
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

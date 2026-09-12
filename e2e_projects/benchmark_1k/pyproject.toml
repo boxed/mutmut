@@ -14,6 +14,6 @@ packages = ["src/benchmark"]
 [tool.mutmut]
 log_to_file = true
 source_paths = ["src/"]
-process_isolation = "hot-fork"
+process_isolation = "forkserver"
 debug = false
-hot_fork_warmup = "none"
+forkserver_warmup = "none"
