@@ -4,6 +4,8 @@ Changelog
 Unreleased
 ~~~~~~~~~~
 
+* Fix obsolete test names never being removed from ``mutants/mutmut-stats.json`` (`#564`)
+
 * Fix ``# pragma: no mutate block`` being silently ignored when placed on an ``else``, ``except``, ``except*`` or ``finally`` header, and on the ``try`` line of a ``try``/``except*`` (`#559`)
 
 * Fix ``# pragma: no mutate`` being silently ignored on ``match`` and ``case`` headers (`#554`)
