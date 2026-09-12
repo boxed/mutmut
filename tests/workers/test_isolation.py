@@ -1,13 +1,19 @@
 """Tests for fork isolation utilities."""
 
 import os
+import sys
 import threading
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import config
 from mutmut.configuration import reset_config
+from mutmut.runners.harness import ListAllTestsResult
+from mutmut.state import reset_state
+from mutmut.state import state
 from mutmut.workers.isolation import ForkRunner
 from mutmut.workers.isolation import ForkServerCrashError
 from mutmut.workers.isolation import ForkServerRunner
@@ -71,6 +77,22 @@ class TestRunInForkWithResult:
             run_in_fork_with_result(crash)
 
         assert "specific error message" in str(exc_info.value)
+
+    def test_child_crash_includes_child_traceback(self):
+        """Without this the parent only reports where it forked, not what failed."""
+
+        def crash():
+            def inner_frame_with_a_distinctive_name():
+                raise RuntimeError("boom")
+
+            inner_frame_with_a_distinctive_name()
+
+        with pytest.raises(ChildProcessError) as exc_info:
+            run_in_fork_with_result(crash)
+
+        message = str(exc_info.value)
+        assert "Traceback from the child process:" in message
+        assert "inner_frame_with_a_distinctive_name" in message
 
     def test_no_temp_files_created(self, tmp_path, monkeypatch):
         """Pipe-based transport doesn't create temp files."""
@@ -353,3 +375,90 @@ class TestForkServerRunnerNoTestMutants:
         result = runner.wait_for_result()
         assert (result.mutant_name, result.exit_code) == ("mod.x_foo__mutmut_1", 33)
         assert runner.pending_count() == 0
+
+
+class _RecordingTestRunner:
+    """A TestRunner that records its pid to disk and dirties its own sys.modules.
+
+    The pid file is visible to the parent either way; the marker module only if the
+    operation ran in the parent.
+    """
+
+    MARKER_MODULE = "imported_by_the_test_runner"
+    pid_file = ""  # Set by the test before the operation runs; inherited by the fork.
+
+    def _record(self) -> None:
+        sys.modules[self.MARKER_MODULE] = ModuleType(self.MARKER_MODULE)
+        Path(self.pid_file).write_text(str(os.getpid()))
+
+    def run_stats(self, tests):
+        self._record()
+        state().duration_by_test["test_from_the_child"] = 1.5
+        state().tests_by_mangled_function_name["mod.x_foo"].add("test_from_the_child")
+        return 0
+
+    def run_tests(self, *, mutant_name, tests):
+        self._record()
+        return 0
+
+    def run_forced_fail(self):
+        self._record()
+        return 1
+
+    def list_all_tests(self):
+        self._record()
+        return ListAllTestsResult(ids={"test_from_the_child"})
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
+class TestForkServerRunnerNeverRunsTestsInTheMainProcess:
+    """Under forkserver, no test execution may happen in the main process.
+
+    A conftest that calls gevent.monkey.patch_all() must not run where we fork from.
+    """
+
+    @pytest.fixture(autouse=True)
+    def runner(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_RecordingTestRunner, "pid_file", str(tmp_path / "ran_in_pid"))
+        self.pid_file = tmp_path / "ran_in_pid"
+        reset_state()
+        yield
+        sys.modules.pop(_RecordingTestRunner.MARKER_MODULE, None)
+
+    def _runner(self):
+        return ForkServerRunner(max_workers=1, test_runner_class=_RecordingTestRunner, test_runner_args={})
+
+    def _assert_ran_in_a_child(self):
+        assert self.pid_file.exists(), "the operation never ran"
+        assert self.pid_file.read_text() != str(os.getpid()), "the operation ran in the main process"
+        assert _RecordingTestRunner.MARKER_MODULE not in sys.modules, (
+            "the test runner's imports leaked into the main process"
+        )
+
+    def test_collect_stats_runs_in_a_child(self):
+        assert self._runner().collect_stats(tests=None) == 0
+        self._assert_ran_in_a_child()
+
+    def test_collect_stats_still_merges_what_the_child_measured(self):
+        self._runner().collect_stats(tests=None)
+        # The child cannot touch the parent's state(), so these came back over the pipe.
+        assert state().duration_by_test["test_from_the_child"] == 1.5
+        assert state().tests_by_mangled_function_name["mod.x_foo"] == {"test_from_the_child"}
+
+    def test_run_clean_tests_runs_in_a_child(self):
+        assert self._runner().run_clean_tests(tests=["test_a"]) == 0
+        self._assert_ran_in_a_child()
+
+    def test_run_forced_fail_runs_in_a_child(self):
+        assert self._runner().run_forced_fail() == 1
+        self._assert_ran_in_a_child()
+
+    def test_list_all_tests_runs_in_a_child(self):
+        assert self._runner().list_all_tests().ids == {"test_from_the_child"}
+        self._assert_ran_in_a_child()
+
+    def test_the_parent_never_holds_a_test_runner_instance(self):
+        """The parent keeps the class, so it cannot run tests even by mistake."""
+        runner = self._runner()
+        assert runner.test_runner_class is _RecordingTestRunner
+        assert not any(isinstance(value, _RecordingTestRunner) for value in vars(runner).values())

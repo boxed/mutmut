@@ -15,6 +15,13 @@ We start by copying ``source_paths`` to ``mutants/`` and then mutate the ``*.py`
 
 The mutated files contains the original code and the mutants. The active mutant is stored in process-local state (and mirrored to the ``MUTANT_UNDER_TEST`` environment variable). If a mutant is not enabled, it will run the original code.
 
+When ``mutate_only_covered_lines`` is set, we also run the test suite under coverage.py
+first, to find out which lines are worth mutating. That run happens in a forked child
+(``store_lines_covered_by_tests``) which sends back only the line numbers it measured.
+Running it in the main process would import the test suite and all of its dependencies
+there, and the later phases import the same modules again -- which some native extensions
+do not survive.
+
 
 Collecting tests and stats
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -36,6 +36,7 @@ from queue import Empty
 from time import process_time
 from typing import Any
 from typing import NamedTuple
+from typing import TypeVar
 
 from mutmut.configuration import ProcessIsolation
 from mutmut.configuration import config
@@ -50,6 +51,16 @@ from mutmut.utils.logging_utils import get_logger
 from mutmut.utils.logging_utils import setup_file_logging
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
 from mutmut.workers.timeout import register_timeout
+
+T = TypeVar("T")
+
+
+def _with_child_traceback(message: str, data: dict[str, Any] | None) -> str:
+    """Append the child's traceback to *message* when the child sent one"""
+    child_traceback = (data or {}).get("traceback")
+    if not child_traceback:
+        return message
+    return f"{message}\n\nTraceback from the child process:\n{child_traceback}"
 
 
 def run_in_fork_with_result(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
@@ -83,7 +94,7 @@ def run_in_fork_with_result(fn: Callable[..., Any], *args: Any, **kwargs: Any) -
         except Exception as e:
             try:
                 with os.fdopen(write_fd, "wb") as f:
-                    pickle.dump({"ok": False, "error": str(e)}, f)
+                    pickle.dump({"ok": False, "error": str(e), "traceback": traceback.format_exc()}, f)
             except Exception:
                 pass
             os._exit(1)
@@ -107,10 +118,10 @@ def run_in_fork_with_result(fn: Callable[..., Any], *args: Any, **kwargs: Any) -
         error_msg = f"Child exited with code {exit_code}"
         if data and not data.get("ok") and "error" in data:
             error_msg += f": {data['error']}"
-        raise ChildProcessError(error_msg)
+        raise ChildProcessError(_with_child_traceback(error_msg, data))
 
     if not data.get("ok"):
-        raise ChildProcessError(f"Child failed: {data.get('error', 'unknown')}")
+        raise ChildProcessError(_with_child_traceback(f"Child failed: {data.get('error', 'unknown')}", data))
 
     return data["value"]
 
@@ -343,7 +354,7 @@ class ForkServerRunner(MutantRunner):
     def __init__(
         self,
         max_workers: int,
-        test_runner_class: type,
+        test_runner_class: type[TestRunner],
         test_runner_args: dict[str, Any],
         debug: bool = False,
         max_restarts: int | None = None,
@@ -756,16 +767,30 @@ class ForkServerRunner(MutantRunner):
         gc.unfreeze()
         self._logger.info("ForkServerRunner shutdown complete")
 
-    def collect_stats(self, tests: Iterable[str] | None) -> int:
-        """Collect stats in a forked child so the parent never imports pytest.
+    # All test-running operations go through these two, so the parent only ever holds
+    # test_runner_class and never imports pytest or a conftest itself.
+    def _run_in_child(self, operation: Callable[[TestRunner], T]) -> T:
+        """Run `operation` against a fresh TestRunner in a child, return its result."""
 
-        The child runs stats and packs the collected mapping into a StatsResult,
-        which the parent merges back into ``state()``.
-        """
+        def in_child() -> T:
+            return operation(self.test_runner_class(**self.test_runner_args))
+
+        result: T = run_in_fork_with_result(in_child)
+        return result
+
+    def _exit_code_from_child(self, operation: Callable[[TestRunner], int]) -> int:
+        """Run `operation` against a fresh TestRunner in a child, return its code."""
+
+        def in_child() -> int:
+            return operation(self.test_runner_class(**self.test_runner_args))
+
+        return run_in_fork(in_child)
+
+    def collect_stats(self, tests: Iterable[str] | None) -> int:
+        """Collect stats in a child, then merge what it measured back into state()."""
         tests_list = list(tests) if tests is not None else None
 
-        def _run_stats() -> dict[str, Any]:
-            child_runner: TestRunner = self.test_runner_class(**self.test_runner_args)
+        def run_stats(child_runner: TestRunner) -> dict[str, Any]:
             exit_code = child_runner.run_stats(tests=tests_list or [])
             return StatsResult(
                 exit_code=exit_code,
@@ -775,7 +800,7 @@ class ForkServerRunner(MutantRunner):
                 function_dependencies=dict(state().function_dependencies),
             ).to_dict()
 
-        result = StatsResult.from_dict(run_in_fork_with_result(_run_stats))
+        result = StatsResult.from_dict(self._run_in_child(run_stats))
 
         for k, v in result.tests_by_mangled_function_name.items():
             state().tests_by_mangled_function_name[k] |= v
@@ -788,27 +813,15 @@ class ForkServerRunner(MutantRunner):
 
     def run_clean_tests(self, tests: Iterable[str]) -> int:
         tests_list = list(tests)
-
-        def _run_tests() -> int:
-            child_runner: TestRunner = self.test_runner_class(**self.test_runner_args)
-            return child_runner.run_tests(mutant_name=None, tests=tests_list)
-
-        return run_in_fork(_run_tests)
+        return self._exit_code_from_child(
+            lambda child_runner: child_runner.run_tests(mutant_name=None, tests=tests_list)
+        )
 
     def run_forced_fail(self) -> int:
-        def _run_forced_fail() -> int:
-            child_runner: TestRunner = self.test_runner_class(**self.test_runner_args)
-            return child_runner.run_forced_fail()
-
-        return run_in_fork(_run_forced_fail)
+        return self._exit_code_from_child(lambda child_runner: child_runner.run_forced_fail())
 
     def list_all_tests(self) -> ListAllTestsResult:
-        def _list_all_tests() -> dict[str, Any]:
-            child_runner: TestRunner = self.test_runner_class(**self.test_runner_args)
-            result = child_runner.list_all_tests()
-            return {"ids": list(result.ids)}
-
-        data = run_in_fork_with_result(_list_all_tests)
+        data = self._run_in_child(lambda child_runner: {"ids": list(child_runner.list_all_tests().ids)})
         return ListAllTestsResult(ids=set(data["ids"]))
 
 

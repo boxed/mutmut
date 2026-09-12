@@ -20,6 +20,8 @@ Unreleased
 
 * Fix mutants stopped by the CPU-time limit being reported as killed instead of timed out (`#565`)
 
+* Fix ``mutate_only_covered_lines`` breaking when the test suite imports a dependency that cannot be initialized twice in one process, which raised for numpy and libyaml, produced misleading type errors for cryptography, and segfaulted for asyncpg. Coverage is now gathered in a separate process, so the modules the coverage run imports are no longer unloaded and re-imported in the main process (`#528`, `#566`)
+
 * Mutate the condition of ternary expressions (`#196`, `#546`)
 
 * Add a ``process_isolation`` config for choosing which process mutant workers are forked from. The new ``forkserver`` strategy keeps mutmut's main process free of pytest and your ``conftest.py``, routing every fork through a dedicated fork server process, for test setups that are not fork-safe (``gevent``, ``grpc``, ``torch``). Tune what it preloads with ``forkserver_warmup`` (`#578`, `#566`)
