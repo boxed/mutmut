@@ -1,7 +1,7 @@
 Changelog
 ---------
 
-Unreleased
+3.8.0
 ~~~~~~~~~~
 
 * Fix obsolete test names never being removed from ``mutants/mutmut-stats.json`` (`#564`)
