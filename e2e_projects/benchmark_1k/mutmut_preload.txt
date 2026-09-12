@@ -1,5 +1,5 @@
 # Modules to preload for the 'import' warmup strategy
-# These are imported in the orchestrator and inherited by forked workers
+# These are imported in the fork server and inherited by forked workers
 pytest
 
 #normally you would avoid importing the module itself in real projects

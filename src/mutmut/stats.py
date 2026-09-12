@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import json
 from collections import defaultdict
 from dataclasses import dataclass
 from json import JSONDecodeError
+from pathlib import Path
 
 from mutmut.configuration import config
 from mutmut.mutation.data import SourceFileMutationData
@@ -143,3 +145,29 @@ def save_stats() -> None:
             f,
             indent=4,
         )
+
+
+def record_trampoline_hit(name: str, caller: str | None = None) -> None:
+    assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
+
+    mutated_source_paths = config().resolved_mutated_source_paths
+
+    if config().max_stack_depth != -1:
+        f = inspect.currentframe()
+        c = config().max_stack_depth
+        while c and f:
+            filename = f.f_code.co_filename
+            f = f.f_back
+            if "pytest" in filename or "hammett" in filename or "unittest" in filename:
+                break
+            file_path = Path(filename).resolve(strict=True)
+            if any(path in file_path.parents for path in mutated_source_paths):
+                # only include stack frames of user-code; exclude mutmut and 3rd library stack frames
+                c -= 1
+
+        if not c:
+            return
+
+    state()._stats.add(name)
+    if caller is not None and config().track_dependencies:
+        state().function_dependencies[name].add(caller)

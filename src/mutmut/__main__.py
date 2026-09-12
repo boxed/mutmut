@@ -18,11 +18,8 @@ if platform.system() == "Windows":
     sys.exit(1)
 import ast
 import fnmatch
-import gc
 import hashlib
-import inspect
 import json
-import resource
 import shutil
 import subprocess
 import warnings
@@ -50,6 +47,7 @@ from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.code_coverage import get_excluded_lines_for_file
 from mutmut.configuration import Config
 from mutmut.configuration import config
+from mutmut.core import MutmutProgrammaticFailException
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.mutation.diff_apply import apply_mutant
@@ -59,9 +57,9 @@ from mutmut.mutation.file_mutation import FailedTypeCheckMutant
 from mutmut.mutation.file_mutation import MutatedFile
 from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.mutation.file_mutation import mutate_file_contents
+from mutmut.mutation.trampoline import set_mutant_under_test
 from mutmut.runners.harness import CollectTestsFailedException
 from mutmut.runners.harness import PytestRunner
-from mutmut.runners.harness import TestRunner
 from mutmut.runners.harness import collected_test_names
 from mutmut.stats import calculate_summary_stats
 from mutmut.stats import emoji_by_status
@@ -76,42 +74,13 @@ from mutmut.utils.file_utils import copy_src_dir
 from mutmut.utils.file_utils import setup_source_paths
 from mutmut.utils.file_utils import walk_mutatable_files
 from mutmut.utils.file_utils import walk_source_files
-from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
-from mutmut.workers.timeout import register_timeout
+from mutmut.workers.isolation import MutantResult
+from mutmut.workers.isolation import MutantRunner
+from mutmut.workers.isolation import get_mutant_runner
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
 # TODO: pragma no mutate should end up in `skipped` category
-
-
-def record_trampoline_hit(name: str, caller: str | None = None) -> None:
-    assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
-
-    mutated_source_paths = config().resolved_mutated_source_paths
-
-    if config().max_stack_depth != -1:
-        f = inspect.currentframe()
-        c = config().max_stack_depth
-        while c and f:
-            filename = f.f_code.co_filename
-            f = f.f_back
-            if "pytest" in filename or "hammett" in filename or "unittest" in filename:
-                break
-            file_path = Path(filename).resolve(strict=True)
-            if any(path in file_path.parents for path in mutated_source_paths):
-                # only include stack frames of user-code; exclude mutmut and 3rd library stack frames
-                c -= 1
-
-        if not c:
-            return
-
-    state()._stats.add(name)
-    if caller is not None and config().track_dependencies:
-        state().function_dependencies[name].add(caller)
-
-
-class MutmutProgrammaticFailException(Exception):
-    pass
 
 
 class InvalidGeneratedSyntaxException(Exception):
@@ -269,20 +238,8 @@ def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -
     return mutated_file
 
 
-def _set_mutant_under_test(name: str) -> None:
-    """Activate a mutant in process-local state and the environment.
-
-    Late-import the trampoline setter: that module imports from this file
-    at load time. The process-local copy is used when tests scrub
-    ``os.environ``. See #511.
-    """
-    from mutmut.mutation.trampoline import set_mutant_under_test
-
-    set_mutant_under_test(name)
-
-
-def run_forced_fail_test(runner: TestRunner) -> None:
-    _set_mutant_under_test("fail")
+def run_forced_fail_test(runner: MutantRunner) -> None:
+    set_mutant_under_test("fail")
     with CatchOutput(spinner_title="Running forced fail test") as catcher:
         try:
             if runner.run_forced_fail() == 0:
@@ -291,7 +248,7 @@ def run_forced_fail_test(runner: TestRunner) -> None:
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass
-    _set_mutant_under_test("")
+    set_mutant_under_test("")
     print("    done")
 
 
@@ -359,18 +316,18 @@ def cli() -> None:
     pass
 
 
-def run_stats_collection(runner: TestRunner, tests: Iterable[str] | None = None) -> None:
+def run_stats_collection(runner: MutantRunner, tests: Iterable[str] | None = None) -> None:
     if tests is None:
         tests = []  # Meaning all...
 
-    _set_mutant_under_test("stats")
+    set_mutant_under_test("stats")
     os.environ["PY_IGNORE_IMPORTMISMATCH"] = "1"
     depth = config().dependency_tracking_depth
     os.environ["MUTMUT_DEPENDENCY_DEPTH"] = str(depth)
     start_cpu_time = process_time()
 
     with CatchOutput(spinner_title="Running stats") as output_catcher:
-        collect_stats_exit_code = runner.run_stats(tests=tests)
+        collect_stats_exit_code = runner.collect_stats(tests)
         if collect_stats_exit_code != 0:
             output_catcher.dump_output()
             print(f"failed to collect stats. runner returned {collect_stats_exit_code}")
@@ -699,7 +656,7 @@ def _apply_config_change_invalidation(mutants_caught_by_type_checker: dict[str, 
 
 
 def collect_or_load_stats(
-    runner: TestRunner,
+    runner: MutantRunner,
     *,
     mutants_caught_by_type_checker: dict[str, Any] | None = None,
     apply_config_invalidation: bool = False,
@@ -724,7 +681,7 @@ def collect_or_load_stats(
 
         # Run incremental stats
         with CatchOutput(spinner_title="Listing all tests") as output_catcher:
-            _set_mutant_under_test("list_all_tests")
+            set_mutant_under_test("list_all_tests")
             try:
                 all_tests_result = runner.list_all_tests()
             except CollectTestsFailedException:
@@ -918,8 +875,7 @@ def estimated_worst_case_time(mutant_name: str) -> float:
 def print_time_estimates(mutant_names: tuple[str, ...]) -> None:
     assert isinstance(mutant_names, (tuple, list)), mutant_names
 
-    runner = PytestRunner()
-    runner.prepare_main_test_run()
+    runner = get_mutant_runner()
 
     collect_or_load_stats(runner)
 
@@ -948,9 +904,20 @@ def tests_for_mutant(mutant_name: str) -> None:
         print(test)
 
 
-def stop_all_children(mutants: list[tuple[SourceFileMutationData, str, int | None]]) -> None:
-    for m, _, _ in mutants:
-        m.stop_children()
+def _register_mutant_result(
+    result: MutantResult,
+    mutation_data_by_mutant_name: dict[str, SourceFileMutationData],
+) -> None:
+    """Record a completed mutant's exit code and duration onto its mutation data."""
+    mutation_data = mutation_data_by_mutant_name[result.mutant_name]
+    # Writing a key the meta file does not already know about would silently create a
+    # phantom mutant instead of recording a verdict, so fail loudly on a name mismatch.
+    assert result.mutant_name in mutation_data.exit_code_by_key, (
+        f"{result.mutant_name} is not a known mutant of {mutation_data.path}"
+    )
+    mutation_data.exit_code_by_key[result.mutant_name] = result.exit_code
+    mutation_data.durations_by_key[result.mutant_name] = result.duration
+    mutation_data.save()
 
 
 # Guard against "context has already been set" when mutmut.__main__ is
@@ -978,7 +945,7 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
 def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
-    _set_mutant_under_test("mutant_generation")
+    set_mutant_under_test("mutant_generation")
 
     if max_children is None:
         max_children = os.cpu_count() or 4
@@ -1002,10 +969,8 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         with CatchOutput(spinner_title="Filtering mutations with type checker"):
             mutants_caught_by_type_checker = filter_mutants_with_type_checker()
 
-    # TODO: config/option for runner
-    # runner = HammettRunner()
-    runner = PytestRunner()
-    runner.prepare_main_test_run()
+    # TODO: config/option for the test runner (e.g. HammettRunner)
+    runner: MutantRunner = get_mutant_runner(max_children)
 
     # TODO: run these steps only if we have mutants to test
 
@@ -1019,11 +984,11 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
 
     _check_test_to_mutant_associations(source_file_mutation_data_by_path)
 
-    _set_mutant_under_test("")
+    set_mutant_under_test("")
     with CatchOutput(spinner_title="Running clean tests") as output_catcher:
         tests = tests_for_mutant_names(mutant_names)
 
-        clean_test_exit_code = runner.run_tests(mutant_name=None, tests=tests)
+        clean_test_exit_code = runner.run_clean_tests(tests=tests)
         if clean_test_exit_code != 0:
             output_catcher.dump_output()
             print("Failed to run clean test")
@@ -1033,24 +998,23 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
     # this can't be the first thing, because it can fail deep inside pytest/django setup and then everything is destroyed
     run_forced_fail_test(runner)
 
-    runner.prepare_main_test_run()
-
-    def read_one_child_exit_status() -> None:
-        pid, wait_status = os.wait()
-        exit_code = os.waitstatus_to_exitcode(wait_status)
-        if config().debug:
-            print("    worker exit code", exit_code)
-        source_file_mutation_data_by_pid[pid].register_result(pid=pid, exit_code=exit_code)
-
-    source_file_mutation_data_by_pid: dict[int, SourceFileMutationData] = {}  # many pids map to one MutationData
-    running_children = 0
+    # Maps each submitted mutant to its mutation data, for result registration.
+    mutation_data_by_mutant_name: dict[str, SourceFileMutationData] = {}
     count_tried = 0
+
+    def drain_one_result() -> None:
+        nonlocal count_tried
+        result = runner.wait_for_result()
+        if config().debug:
+            print("    worker exit code", result.exit_code)
+        _register_mutant_result(result, mutation_data_by_mutant_name)
+        count_tried += 1
 
     # Run estimated fast mutants first, calculated as the estimated time for a surviving mutant.
     mutants = sorted(mutants, key=lambda x: estimated_worst_case_time(x[1]))
     start = datetime.now()
+    runner.startup()
     try:
-        gc.freeze()
         print("Running mutation testing")
 
         # Now do mutation
@@ -1078,54 +1042,28 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
                 continue
 
             cfg = config()
-            pid = os.fork()
-            if pid == 0:
-                # In the child
-                _set_mutant_under_test(mutant_name)
-                setproctitle(f"mutmut: {mutant_name}")
+            # signal SIGXCPU after this many CPU seconds; the runner adds one more before SIGKILL.
+            cpu_time_limit_s = ceil((estimated_time_of_tests + cfg.timeout_constant) * cfg.timeout_multiplier * 2)
 
-                # Run fast tests first
-                sorted_tests = sorted(tests, key=lambda test_name: state().duration_by_test[test_name])
-                if not sorted_tests:
-                    os._exit(33)
+            # Block for a free worker slot before submitting more work.
+            while not runner.has_capacity():
+                drain_one_result()
 
-                cpu_time_limit_s = ceil(
-                    (estimated_time_of_tests + cfg.timeout_constant) * cfg.timeout_multiplier * 2 + process_time()
-                )
-                # signal SIGXCPU after <cpu_time_limit>. One second later signal SIGKILL if it is still running
-                resource.setrlimit(resource.RLIMIT_CPU, (cpu_time_limit_s, cpu_time_limit_s + 1))
+            mutation_data_by_mutant_name[mutant_name] = mutation_data
+            runner.submit(mutant_name, list(tests), cpu_time_limit_s, estimated_time_of_tests)
 
-                with CatchOutput():
-                    result = runner.run_tests(mutant_name=mutant_name, tests=sorted_tests)
-
-                if result != 0:
-                    pass
-                os._exit(result)
-            else:
-                # in the parent
-                wall_time_limit_s = (estimated_time_of_tests + cfg.timeout_constant) * cfg.timeout_multiplier
-                register_timeout(pid=pid, timeout_s=wall_time_limit_s)
-                source_file_mutation_data_by_pid[pid] = mutation_data
-                mutation_data.register_pid(pid=pid, key=mutant_name)
-                running_children += 1
-
-            if running_children >= max_children:
-                read_one_child_exit_status()
-                count_tried += 1
-                running_children -= 1
+        runner.signal_work_complete()
 
         try:
-            while running_children:
-                read_one_child_exit_status()
-                count_tried += 1
-                running_children -= 1
+            while runner.pending_count() > 0:
+                drain_one_result()
         except ChildProcessError:
             pass
     except KeyboardInterrupt:
         print("Stopping...")
-        stop_all_children(mutants)
+        runner.stop_all_workers()
     finally:
-        gc.unfreeze()
+        runner.shutdown()
 
     elapsed_time = datetime.now() - start
 

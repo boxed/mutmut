@@ -19,3 +19,7 @@ class MutmutCallStack:
     @classmethod
     def reset(cls, token: Token[tuple[str | None, int]]) -> None:
         cls._ctx.reset(token)
+
+
+class MutmutProgrammaticFailException(Exception):
+    """Raised by the trampoline when the ``fail`` mutant is active."""

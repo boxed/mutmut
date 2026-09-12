@@ -11,10 +11,51 @@ from configparser import ConfigParser
 from configparser import NoOptionError
 from configparser import NoSectionError
 from dataclasses import dataclass
+from enum import Enum
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 from typing import Any
+
+
+class ProcessIsolation(str, Enum):
+    """Valid values for the ``process_isolation`` config.
+
+    Chooses *which process* each mutant worker is forked from. Named after the
+    ``multiprocessing`` start methods of the same name, which make the same
+    distinction:
+
+    - FORK: fork straight from mutmut's main process, which has already imported
+      pytest and run the suite to collect stats. Fastest, but every worker
+      inherits whatever the test setup left in that process.
+    - FORKSERVER: keep the main process free of pytest and fork a dedicated
+      server process that does nothing but import and fork workers. For test
+      setups that are not fork-safe (gevent, grpc, torch).
+
+    Subclassing ``str`` allows direct string comparison while still giving us
+    validation and IDE support.
+    """
+
+    FORK = "fork"
+    FORKSERVER = "forkserver"
+
+
+class ForkServerWarmup(str, Enum):
+    """Warmup strategy for the fork server.
+
+    Controls what the fork server does after importing the test runner but
+    before forking any grandchildren:
+
+    - COLLECT: run ``pytest --collect-only`` to pre-load conftest, plugins, and
+      test modules (default; biggest speedup for most projects).
+    - IMPORT: import the modules listed in ``preload_modules_file`` (useful when
+      test collection has side effects you do not want shared).
+    - NONE: import nothing extra beyond what running a test needs.
+    """
+
+    COLLECT = "collect"
+    IMPORT = "import"
+    NONE = "none"
 
 
 def _config_reader() -> Callable[[str, Any], Any]:
@@ -122,6 +163,20 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
+    isolation_str = s("process_isolation", "fork")
+    try:
+        process_isolation = ProcessIsolation(isolation_str)
+    except ValueError:
+        valid = [e.value for e in ProcessIsolation]
+        raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
+
+    warmup_str = s("forkserver_warmup", "collect")
+    try:
+        forkserver_warmup = ForkServerWarmup(warmup_str)
+    except ValueError:
+        valid = [e.value for e in ForkServerWarmup]
+        raise ValueError(f"Invalid forkserver_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
+
     return Config(
         only_mutate=only_mutate,
         do_not_mutate=do_not_mutate,
@@ -157,6 +212,12 @@ def _load_config() -> Config:
         cache_invalidation_exclude=s("cache_invalidation_exclude", []),
         on_dependency_change=s("on_dependency_change", "warn"),
         use_git_change_detection=s("use_git_change_detection", True),
+        process_isolation=process_isolation,
+        forkserver_warmup=forkserver_warmup,
+        max_forkserver_restarts=s("max_forkserver_restarts", 3),
+        preload_modules_file=s("preload_modules_file", None),
+        log_to_file=s("log_to_file", False),
+        log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
     )
 
 
@@ -186,6 +247,12 @@ class Config:
     cache_invalidation_exclude: list[str]
     on_dependency_change: str
     use_git_change_detection: bool
+    process_isolation: ProcessIsolation
+    forkserver_warmup: ForkServerWarmup
+    max_forkserver_restarts: int
+    preload_modules_file: str | None
+    log_to_file: bool
+    log_file_path: str
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the

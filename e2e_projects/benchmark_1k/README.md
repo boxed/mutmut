@@ -1,10 +1,10 @@
 # Benchmark 1K
 
-A synthetic benchmark project with 1000 mutants for validating mutmut's process isolation and hot-fork warmup strategy performance.
+A synthetic benchmark project with 1000 mutants for validating mutmut's process isolation and forkserver warmup strategy performance.
 
 **TL;DR:**
 - `fork` is fastest and nearly immune to import delays (requires fork-safe libraries)
-- `collect` (hot-fork default) is 2-9x faster than `import`/`none` depending on import cost
+- `collect` (forkserver default) is 2-9x faster than `import`/`none` depending on import cost
 - Higher import delays dramatically penalize `import` and `none` strategies
 
 

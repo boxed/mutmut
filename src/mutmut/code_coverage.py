@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING
 
 import coverage
@@ -59,15 +56,22 @@ def get_excluded_lines_for_file(filename: str, excluded_lines: dict[str, set[int
     return set(excluded_lines.get(abs_filename, ()))
 
 
-# Gathers coverage for the given source files and
-# Returns the covered and excluded lines of each of them
-# Since this is run on the source files before we create mutations,
-# we need to unload any modules that get loaded during the test run
 def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> CoverageInfo:
-    # We want to unload any python modules that get loaded
-    # because we plan to mutate them and want them to be reloaded
-    modules = dict(sys.modules)
+    """Gathers coverage for the given source files in a throwaway child process.
 
+    Returns the covered and excluded lines of each of them. Forking keeps the test
+    suite's imports out of the main process, which imports the same modules again
+    later and cannot always survive it (#528).
+    """
+    # TODO: (#397) mutmut.workers.isolation imports POSIX-only modules
+    from mutmut.workers.isolation import run_in_fork_with_result
+
+    result: CoverageInfo = run_in_fork_with_result(_gather_coverage_in_this_process, runner, source_files)
+    return result
+
+
+def _gather_coverage_in_this_process(runner: TestRunner, source_files: Iterable[Path]) -> CoverageInfo:
+    """The actual measurement. Pollutes the calling process; see gather_coverage."""
     mutants_path = Path("mutants")
 
     # Run the tests and gather coverage
@@ -85,8 +89,6 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> Coverag
         info.covered_lines[abs_filename] = set(coverage_data.lines(abs_filename) or [])
         info.excluded_lines[abs_filename] = _excluded_lines(cov, abs_filename)
 
-    _unload_modules_not_in(modules)
-
     return info
 
 
@@ -101,13 +103,3 @@ def _excluded_lines(cov: coverage.Coverage, abs_filename: str) -> set[int]:
         return set()
 
     return set(excluded)
-
-
-# Unloads modules that are not in the 'modules' list
-def _unload_modules_not_in(modules: dict[str, ModuleType]) -> None:
-    for name in list(sys.modules):
-        if name == "mutmut.code_coverage":
-            continue
-        if name not in modules:
-            sys.modules.pop(name, None)
-    importlib.invalidate_caches()
