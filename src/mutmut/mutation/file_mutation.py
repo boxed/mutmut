@@ -17,6 +17,7 @@ from typing import cast
 import libcst as cst
 import libcst.matchers as m
 from libcst.metadata import MetadataWrapper
+from libcst.metadata import ParentNodeProvider
 from libcst.metadata import PositionProvider
 
 from mutmut.configuration import config
@@ -198,7 +199,7 @@ class MutationVisitor(cst.CSTVisitor):
 
     The created mutations will be accessible at `self.mutations`."""
 
-    METADATA_DEPENDENCIES = (PositionProvider, OuterFunctionProvider)
+    METADATA_DEPENDENCIES = (PositionProvider, ParentNodeProvider, OuterFunctionProvider)
 
     def __init__(
         self,
@@ -268,6 +269,14 @@ class MutationVisitor(cst.CSTVisitor):
         return any(line in self._all_ignored_lines for line in range(position.start.line, position.end.line + 1))
 
     def _should_mutate_node(self, node: cst.CSTNode) -> bool:
+        # Concatenated strings are mutated as one unit by their outermost node.
+        # Mutating their child strings separately would create duplicate mutants
+        # and mutate more than one string part in the concatenation.
+        if isinstance(node, cst.BaseString) and isinstance(
+            self.get_metadata(ParentNodeProvider, node, None), cst.ConcatenatedString
+        ):
+            return False
+
         # currently, the position metadata does not always exist
         # (see https://github.com/Instagram/LibCST/issues/1322)
         position = self.get_metadata(PositionProvider, node, None)

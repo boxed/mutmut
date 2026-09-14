@@ -21,6 +21,20 @@ OPERATORS_TYPE = Sequence[
 NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
 
 
+def _mutated_string_contents(value: str) -> Iterable[str]:
+    supported_str_mutations: list[Callable[[str], str]] = [
+        lambda x: "XX" + x + "XX",
+        # do not modify escape sequences, as this could break python syntax
+        lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
+        lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
+    ]
+
+    for mut_func in supported_str_mutations:
+        new_value = mut_func(value)
+        if new_value != value:
+            yield new_value
+
+
 def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
     if isinstance(node, cst.Integer | cst.Float):
         yield node.with_changes(value=repr(node.evaluated_value + 1))
@@ -30,10 +44,9 @@ def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
         print("Unexpected number type", node)
 
 
-def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
+def _operator_string(node: cst.BaseString, *, skip_empty: bool) -> Iterable[cst.BaseString]:
     if isinstance(node, cst.SimpleString):
         value = node.value
-        old_value = value
         prefix = value[: min([x for x in [value.find('"'), value.find("'")] if x != -1])]
         value = value[len(prefix) :]
 
@@ -42,20 +55,36 @@ def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
             # that mutation is meaningless for
             return
 
-        supported_str_mutations: list[Callable[[str], str]] = [
-            lambda x: "XX" + x + "XX",
-            # do not modify escape sequences, as this could break python syntax
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
-        ]
+        contents = value[1:-1]
+        if skip_empty and not contents:
+            return
 
-        for mut_func in supported_str_mutations:
-            new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"
-            if new_value == value:
+        for mutated_contents in _mutated_string_contents(contents):
+            yield node.with_changes(value=f"{prefix}{value[0]}{mutated_contents}{value[-1]}")
+
+    elif isinstance(node, cst.FormattedString):
+        for index, part in enumerate(node.parts):
+            if not isinstance(part, cst.FormattedStringText) or not part.value:
                 continue
-            if new_value == old_value:
-                continue
-            yield node.with_changes(value=new_value)
+
+            for mutated_value in _mutated_string_contents(part.value):
+                mutated_part = part.with_changes(value=mutated_value)
+                yield node.with_changes(parts=[*node.parts[:index], mutated_part, *node.parts[index + 1 :]])
+            return
+
+    elif isinstance(node, cst.ConcatenatedString):
+        left_mutations = list(_operator_string(node.left, skip_empty=True))
+        if left_mutations:
+            for mutated_left in left_mutations:
+                yield node.with_changes(left=mutated_left)
+            return
+
+        for mutated_right in _operator_string(node.right, skip_empty=True):
+            yield node.with_changes(right=mutated_right)
+
+
+def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
+    yield from _operator_string(node, skip_empty=False)
 
 
 def operator_lambda(node: cst.Lambda) -> Iterable[cst.Lambda]:
