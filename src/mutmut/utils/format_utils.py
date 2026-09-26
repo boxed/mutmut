@@ -38,6 +38,17 @@ def is_mutated_method_name(name: str) -> bool:
     return name.startswith(("x_", "xǁ")) and "__mutmut" in name
 
 
+def is_mutmut_generated_name(name: str) -> bool:
+    """Return True if ``name`` is a module or class attribute that mutmut added to the mutated code.
+
+    Mutated files define extra functions (``x_foo__mutmut_orig``, ``xǁClsǁmethod__mutmut_1``, ...)
+    and the ``mutants_...`` dicts that map mutant names to them. Their names do not start with an
+    underscore, so tests that inspect a module or class (``vars()``, ``dir()``, ``inspect.getmembers()``)
+    see them as public attributes. Filter with this function to ignore them.
+    """
+    return is_mutated_method_name(name) or (name.startswith("mutants_x") and name.endswith("__mutmut"))
+
+
 def strip_prefix(s: str, *, prefix: str, strict: bool = False) -> str:
     if s.startswith(prefix):
         return s[len(prefix) :]
