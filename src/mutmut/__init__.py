@@ -7,6 +7,7 @@ from mutmut.configuration import config
 from mutmut.configuration import reset_config
 from mutmut.state import reset_state
 from mutmut.state import state
+from mutmut.utils.format_utils import is_mutmut_generated_name as is_mutmut_generated_name
 
 __version__ = importlib.metadata.version("mutmut")
 
