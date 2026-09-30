@@ -23,6 +23,7 @@ from mutmut.configuration import config
 from mutmut.mutation.data import LineSpan
 from mutmut.mutation.mutators import OPERATORS_TYPE
 from mutmut.mutation.mutators import mutation_operators
+from mutmut.mutation.mutators import operator_swap_op
 from mutmut.mutation.pragma_handling import IgnoredCode
 from mutmut.mutation.pragma_handling import get_ignored_lines
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
@@ -188,6 +189,22 @@ class OuterFunctionVisitor(cst.CSTVisitor):
         return True
 
 
+class _MatchPatternUnaryCollector(cst.CSTVisitor):
+    """Collect unary operations inside a match-case pattern.
+
+    Flipping `-`/`+` there can produce invalid syntax (e.g. `case -2`
+    becomes `case +2`), so those nodes are skipped by the mutators."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.nodes: list[cst.UnaryOperation] = []
+
+    def on_visit(self, node: cst.CSTNode) -> bool:
+        if isinstance(node, cst.UnaryOperation):
+            self.nodes.append(node)
+        return True
+
+
 class MutationVisitor(cst.CSTVisitor):
     """Iterate through all nodes in the module and create mutations for them.
 
@@ -217,10 +234,16 @@ class MutationVisitor(cst.CSTVisitor):
         )
         self.ignored_classes: set[str] = set()
         self.ignored_functions: set[str] = set()
+        self._match_pattern_unary_ops: set[int] = set()
 
     def on_visit(self, node: cst.CSTNode) -> bool:
         if self._skip_node_and_children(node):
             return False
+
+        if isinstance(node, cst.MatchCase):
+            collector = _MatchPatternUnaryCollector()
+            node.pattern.visit(collector)
+            self._match_pattern_unary_ops.update(map(id, collector.nodes))
 
         if self._should_mutate_node(node):
             self._create_mutations(node)
@@ -231,6 +254,10 @@ class MutationVisitor(cst.CSTVisitor):
     def _create_mutations(self, node: cst.CSTNode) -> None:
         for t, operator in self._operators:
             if isinstance(node, t):
+                if operator is operator_swap_op and id(node) in self._match_pattern_unary_ops:
+                    # Swapping -/+ inside a match-case pattern can produce
+                    # invalid syntax (e.g. `case -2` becomes `case +2`).
+                    continue
                 for mutated_node in operator(node):
                     if self._removes_ignored_code(node, mutated_node):
                         continue

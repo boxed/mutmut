@@ -412,6 +412,26 @@ def concat():
     assert sorted(mutants) == []
 
 
+def test_match_case_does_not_flip_unary_sign():
+    # Flipping `-` to `+` inside a match-case pattern produces `case +2`,
+    # which is a syntax error (see #583).
+    source = """
+match x:
+    case -2:
+        y = 1
+    case _:
+        y = 2""".strip()
+
+    mutants = mutants_for_source(source)
+
+    assert not any("case +2" in mutant for mutant in mutants)
+    # Every generated mutant must still be valid syntax.
+    for mutant in mutants:
+        compile(mutant, "<mutant>", "exec")
+    # Other mutants (case drop, number bump, body changes) are unaffected.
+    assert any("case -3" in mutant for mutant in mutants)
+
+
 def test_basic_class():
     source = """
 class Foo:
