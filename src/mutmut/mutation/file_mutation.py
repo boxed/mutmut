@@ -16,6 +16,7 @@ from typing import cast
 
 import libcst as cst
 import libcst.matchers as m
+from libcst.helpers import get_full_name_for_node
 from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
 
@@ -217,8 +218,13 @@ class MutationVisitor(cst.CSTVisitor):
         )
         self.ignored_classes: set[str] = set()
         self.ignored_functions: set[str] = set()
+        # names that `typing.Protocol` is imported as (`Protocol`, or an alias), and that its modules are imported as
+        self._protocol_names: set[str] = set()
+        self._protocol_module_names: set[str] = set()
 
     def on_visit(self, node: cst.CSTNode) -> bool:
+        self._record_protocol_import(node)
+
         if self._skip_node_and_children(node):
             return False
 
@@ -334,6 +340,17 @@ class MutationVisitor(cst.CSTVisitor):
                     return False
             return True
 
+        # ignore Protocol classes, because
+        # 1) the trampoline setup adds the mutant methods (`xǁFooǁbar__mutmut_1`, ...) as members of the protocol,
+        #    so classes that implement it structurally no longer conform and type checkers report errors at every
+        #    place where they are used as the protocol, which either crashes the type check filter or gets
+        #    attributed to unrelated mutants
+        # 2) method stubs are never executed, so mutants of their default arguments cannot be killed
+        # This also leaves method bodies of protocols unmutated, including default implementations
+        # that explicit subclasses inherit, because mutating them changes the members in the same way.
+        if isinstance(node, cst.ClassDef) and self._is_protocol_class(node):
+            return True
+
         # decorators are executed at definition time, so mutating them can raise
         # exceptions on import. A decorated class is still recursed into, because
         # its decorator is kept on the original class and only its methods get
@@ -342,6 +359,49 @@ class MutationVisitor(cst.CSTVisitor):
             return True
 
         return False
+
+    def _is_protocol_class(self, node: cst.ClassDef) -> bool:
+        """Does this class list `typing.Protocol` (or `Protocol[T]`, or the `typing_extensions` one) among its bases?
+
+        A class is only a protocol if it lists `Protocol` explicitly, so subclasses of a protocol
+        that do not are regular classes and still get mutated. The base is resolved through the
+        imports, so other classes named `Protocol` (`asyncio.Protocol`, ...) are not matched."""
+        for base in node.bases:
+            value = base.value
+            if isinstance(value, cst.Subscript):
+                value = value.value
+            if isinstance(value, cst.Name) and value.value in self._protocol_names:
+                return True
+            if (
+                isinstance(value, cst.Attribute)
+                and value.attr.value == "Protocol"
+                and isinstance(value.value, cst.Name)
+                and value.value.value in self._protocol_module_names
+            ):
+                return True
+        return False
+
+    def _record_protocol_import(self, node: cst.CSTNode) -> None:
+        """Record the names under which `typing.Protocol` and its modules are imported."""
+        if isinstance(node, cst.Import):
+            for alias in node.names:
+                if alias.evaluated_name in PROTOCOL_MODULES:
+                    self._protocol_module_names.add(alias.evaluated_alias or alias.evaluated_name)
+        elif (
+            isinstance(node, cst.ImportFrom)
+            and not node.relative
+            and node.module is not None
+            and get_full_name_for_node(node.module) in PROTOCOL_MODULES
+        ):
+            if isinstance(node.names, cst.ImportStar):
+                self._protocol_names.add("Protocol")
+                return
+            for alias in node.names:
+                if alias.evaluated_name == "Protocol":
+                    self._protocol_names.add(alias.evaluated_alias or "Protocol")
+
+
+PROTOCOL_MODULES = {"typing", "typing_extensions"}
 
 
 def _walk(node: cst.CSTNode) -> Iterator[cst.CSTNode]:
