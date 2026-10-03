@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Fix ``typing.Protocol`` classes being mutated. The generated mutant methods became members of the protocol, so classes implementing it no longer conformed, and ``type_check_command`` either crashed with "Could not find mutant for type error" or discarded unrelated mutants as caught by the type checker. Methods of protocols, including default implementations, are no longer mutated (`#590`)
+
 3.8.0
 ~~~~~~~~~~
 

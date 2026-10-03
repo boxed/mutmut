@@ -2,6 +2,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from collections.abc import Sequence
@@ -1239,6 +1240,105 @@ class Foo:
 
     mutants = mutants_for_source(source)
     assert mutants == [source.replace("self.x + self.y", "self.x - self.y")]
+
+
+@pytest.mark.parametrize(
+    "imports, bases",
+    [
+        ("from typing import Protocol", "Protocol"),
+        ("import typing", "typing.Protocol"),
+        ("import typing as t", "t.Protocol"),
+        ("from typing import Protocol as P", "P"),
+        ("import typing_extensions", "typing_extensions.Protocol"),
+        ("from typing_extensions import Protocol", "Protocol"),
+        ("from typing import *", "Protocol"),
+        ("from typing import Protocol", "Protocol[T]"),
+        ("import typing", "Generic[T], typing.Protocol[T]"),
+        ("from typing import Protocol", "Protocol, metaclass=Meta"),
+    ],
+)
+def test_do_not_mutate_protocol_classes(imports, bases):
+    # Mutating a method of a Protocol adds the generated mutant methods as members
+    # of the protocol, so implementations of it no longer conform (#590)
+    source = f"""
+{imports}
+
+class Source({bases}):
+    def read(self, size: int = 10) -> str: ...
+
+    def read_twice(self) -> str:
+        return self.read() + self.read()
+""".strip()
+
+    assert mutants_for_source(source) == []
+    assert "xǁSourceǁ" not in mutated_module(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            """
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Source(Protocol):
+    def read(self, size: int = 10) -> str: ...
+""",
+            id="runtime_checkable",
+        ),
+        pytest.param(
+            """
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Protocol
+else:
+    Protocol = object
+
+class Source(Protocol):
+    def read(self, size: int = 10) -> str: ...
+""",
+            id="type_checking_import",
+        ),
+        pytest.param(
+            """
+from typing import Protocol
+
+class Source[T](Protocol):
+    def read(self, size: int = 10) -> T: ...
+""",
+            id="pep695_type_parameters",
+            marks=pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 syntax needs Python 3.12"),
+        ),
+    ],
+)
+def test_do_not_mutate_protocol_class_forms(source):
+    assert "xǁSourceǁ" not in mutated_module(source.strip())
+
+
+@pytest.mark.parametrize(
+    "imports, bases",
+    [
+        # a subclass of a protocol that does not list Protocol itself is a regular class
+        ("from typing import Protocol\nclass Source(Protocol): ...", "Source"),
+        # other classes named Protocol are regular base classes
+        ("import asyncio", "asyncio.Protocol"),
+        ("from twisted.internet.protocol import Protocol", "Protocol"),
+        ("from .typing import Protocol", "Protocol"),
+    ],
+)
+def test_mutate_classes_that_are_not_protocols(imports, bases):
+    source = f"""
+{imports}
+
+class File({bases}):
+    def read(self, size: int = 10) -> str:
+        return "x" * size
+""".strip()
+
+    assert mutants_for_source(source)
+    assert "xǁFileǁread__mutmut_orig" in mutated_module(source)
 
 
 def test_do_not_mutate_pattern_single_line(patch_config):
