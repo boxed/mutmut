@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from mutmut.configuration import config
 from mutmut.mutation.trampoline_templates import CLASS_NAME_SEPARATOR
 
 
@@ -60,7 +61,12 @@ def get_module_from_key(key: str) -> str:
 
 def get_mutant_name(relative_source_path: Path, mutant_method_name: str) -> str:
     module_name = str(relative_source_path)[: -len(relative_source_path.suffix)].replace(os.sep, ".")
-    module_name = strip_prefix(module_name, prefix="src.")
+    if config().strip_src_prefix:
+        # src-layout convention: `src/` is a container dir, so the real import
+        # package starts one level deeper. A flat layout where `src` IS the
+        # import package (strip_src_prefix = false) must keep the prefix,
+        # or the trampoline routing (`module == func.__module__`) never matches.
+        module_name = strip_prefix(module_name, prefix="src.")
 
     # FYI, we currently use "mutant_name" inconsistently, for both the whole identifier including the path and only the mangled method name
     mutant_name = f"{module_name}.{mutant_method_name}"

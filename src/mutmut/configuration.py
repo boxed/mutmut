@@ -195,6 +195,7 @@ def _load_config() -> Config:
         + list(Path(".").glob("test*.py")),
         max_stack_depth=s("max_stack_depth", -1),
         debug=s("debug", False),
+        strip_src_prefix=s("strip_src_prefix", True),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
         source_paths=source_paths,
         resolved_mutated_source_paths=resolved_mutated_source_paths,
@@ -253,6 +254,10 @@ class Config:
     preload_modules_file: str | None
     log_to_file: bool
     log_file_path: str
+    # flat layout support: when the import package is literally `src` (not a
+    # src-layout container dir), mutant names must keep the `src.` prefix or
+    # the trampoline routing and the stats mapping cannot match.
+    strip_src_prefix: bool = True
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the

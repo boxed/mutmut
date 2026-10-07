@@ -60,6 +60,12 @@ class TestProcessIsolationConfig:
         assert cfg.forkserver_warmup == ForkServerWarmup.COLLECT
         assert cfg.max_forkserver_restarts == 3
         assert cfg.preload_modules_file is None
+        assert cfg.strip_src_prefix is True
+
+    def test_strip_src_prefix_disabled_for_flat_layout(self, in_tmp_dir: Path):
+        """A flat `src` import package keeps its prefix in mutant names."""
+        self._write_pyproject(in_tmp_dir, "strip_src_prefix = false")
+        assert config().strip_src_prefix is False
 
     def test_forkserver_selected(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, 'process_isolation = "forkserver"')

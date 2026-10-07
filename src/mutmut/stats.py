@@ -148,7 +148,15 @@ def save_stats() -> None:
 
 
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
-    assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
+    if config().strip_src_prefix:
+        # With the src-layout strip active, a `src.`-prefixed module name means
+        # the stats keys and the mutant names diverged (flat `src` package being
+        # imported directly) — the mapping cannot work, so fail loudly.
+        assert not name.startswith("src."), (
+            "Failed trampoline hit. Module name starts with `src.`, which is invalid. "
+            "If your import package is literally `src` (flat layout), set "
+            "[tool.mutmut] strip_src_prefix = false"
+        )
 
     mutated_source_paths = config().resolved_mutated_source_paths
 

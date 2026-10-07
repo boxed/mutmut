@@ -1,0 +1,24 @@
+[project]
+name = "flat-src"
+version = "0.1.0"
+description = "E2E fixture: flat layout where the import package is literally `src`"
+readme = "README.md"
+authors = []
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.mutmut]
+debug = true
+strip_src_prefix = false
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
