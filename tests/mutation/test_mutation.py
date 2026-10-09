@@ -2055,3 +2055,26 @@ class TestRegisterMutantResult:
             )
 
         assert unknown not in data.exit_code_by_key
+
+
+@pytest.mark.parametrize(
+    "pattern, expected",
+    [
+        # A pattern over the mutant suffix must select the tests of that function only.
+        ("pkg.mod.x_f__mutmut_*", {"test_f"}),
+        ("pkg.mod.x_f__mutmut_1*", {"test_f"}),
+        # Patterns over function names keep working.
+        ("pkg.mod.*", {"test_f", "test_g"}),
+        ("pkg.mod.x_*", {"test_f", "test_g"}),
+    ],
+)
+def test_tests_for_mutant_names_wildcard(pattern, expected):
+    """Regression test for #592: a ``__mutmut_*`` pattern selected no tests, so the clean run fell back to the whole suite."""
+    reset_state()
+    state().tests_by_mangled_function_name["pkg.mod.x_f"] = {"test_f"}
+    state().tests_by_mangled_function_name["pkg.mod.x_g"] = {"test_g"}
+    state().tests_by_mangled_function_name["other.x_h"] = {"test_h"}
+
+    # Called via the module: a bare ``tests_for_*`` import would be collected by pytest as a test.
+    assert mutmut.__main__.tests_for_mutant_names([pattern]) == expected
+    reset_state()
