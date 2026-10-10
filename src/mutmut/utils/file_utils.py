@@ -32,6 +32,9 @@ def _copy_keeping_dangling_symlinks(src: str, dst: str, *, follow_symlinks: bool
             os.unlink(dst)
         os.symlink(os.readlink(src), dst)
         return dst
+    if os.path.islink(dst):
+        # a link kept by a previous run whose target exists now: copy2 would write through it
+        os.unlink(dst)
     return str(shutil.copy2(src, dst, follow_symlinks=follow_symlinks))
 
 

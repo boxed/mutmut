@@ -64,3 +64,29 @@ def test_copies_can_be_repeated_with_dangling_symlinks(project):
 
     _assert_dangling_link_kept(project / "mutants" / "tests" / "fixtures" / "dangling")
     _assert_dangling_link_kept(project / "mutants" / "src" / "pkg" / "dangling")
+
+
+@pytest.mark.parametrize("absolute", [False, True], ids=["relative", "absolute"])
+def test_dangling_symlink_whose_target_appears_is_copied_on_the_next_run(project, absolute):
+    target = project / "tests" / "fixtures" / "later.txt"
+    os.symlink(target if absolute else "later.txt", project / "tests" / "fixtures" / "becomes_valid")
+    copy_also_copy_files()
+
+    target.write_text("data\n")
+    copy_also_copy_files()
+
+    _assert_copied_as_file(project / "mutants" / "tests" / "fixtures" / "becomes_valid")
+    assert target.read_text() == "data\n"
+
+
+def test_valid_symlink_that_becomes_dangling_is_kept_on_the_next_run(project):
+    copy_also_copy_files()
+    copy_src_dir()
+
+    (project / "shared" / "real.txt").unlink()
+    copy_also_copy_files()
+    copy_src_dir()  # skips targets that already exist, but must not fail
+
+    link = project / "mutants" / "tests" / "fixtures" / "rel_valid"
+    assert link.is_symlink()
+    assert os.readlink(link) == "../../shared/real.txt"

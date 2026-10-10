@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Fix ``mutmut run`` crashing when a source path or an ``also_copy`` directory contains a dangling symlink. Dangling symlinks are now recreated as symlinks in ``mutants/``; valid symlinks are still copied as the files they point to (`#582`)
+
 3.8.0
 ~~~~~~~~~~
 
