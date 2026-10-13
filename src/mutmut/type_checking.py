@@ -21,7 +21,8 @@ def run_type_checker(type_check_command: list[str]) -> list[TypeCheckingError]:
 
     try:
         if "mypy" in type_check_command:
-            report = [json.loads(line) for line in completed_process.stdout.splitlines()]
+            # mypy prints a lone newline (not an empty string) when it found no errors
+            report = [json.loads(line) for line in completed_process.stdout.splitlines() if line.strip()]
         else:
             report = json.loads(completed_process.stdout)
     except json.JSONDecodeError:
