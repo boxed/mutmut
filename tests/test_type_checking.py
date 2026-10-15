@@ -1,3 +1,5 @@
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,54 @@ from mutmut.mutation.file_mutation import filter_mutants_with_type_checker
 from mutmut.type_checking import TypeCheckingError
 from mutmut.type_checking import parse_mypy_report
 from mutmut.type_checking import parse_pyrefly_report
+from mutmut.type_checking import run_type_checker
+
+MYPY_COMMAND = ["mypy", "src", "--output", "json"]
+
+
+def _fake_completed_process(monkeypatch, stdout: str, returncode: int = 0, stderr: str = "") -> None:
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, returncode, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr("mutmut.type_checking.subprocess.run", fake_run)
+
+
+def test_run_type_checker_mypy_without_errors(monkeypatch):
+    # mypy prints a lone newline (and exits with 0) when it found no type errors at all
+    _fake_completed_process(monkeypatch, stdout="\n", returncode=0)
+
+    assert run_type_checker(MYPY_COMMAND) == []
+
+
+def test_run_type_checker_mypy_with_errors(monkeypatch):
+    error = {
+        "file": "src/mod.py",
+        "line": 2,
+        "column": 11,
+        "message": 'Incompatible return value type (got "int", expected "str")',
+        "hint": None,
+        "code": "return-value",
+        "severity": "error",
+    }
+    # mypy prints one JSON object per line and exits with 1 when it found type errors
+    _fake_completed_process(monkeypatch, stdout=f"{json.dumps(error)}\n{json.dumps(error)}\n", returncode=1)
+
+    errors = run_type_checker(MYPY_COMMAND)
+
+    assert [(e.file_path.name, e.line_number) for e in errors] == [("mod.py", 2), ("mod.py", 2)]
+
+
+def test_run_type_checker_mypy_still_raises_on_non_json_output(monkeypatch):
+    # a fatal mypy failure (exit code 2) must stay loud and not be mistaken for "no errors"
+    _fake_completed_process(
+        monkeypatch,
+        stdout="Found 1 error in 1 file (errors prevented further checking)\n",
+        returncode=2,
+        stderr="mypy: error: Cannot read file 'src': No such file or directory",
+    )
+
+    with pytest.raises(Exception, match="type check command did not return JSON"):
+        run_type_checker(MYPY_COMMAND)
 
 
 def test_mypy_parsing():
