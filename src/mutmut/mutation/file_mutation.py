@@ -35,6 +35,8 @@ from mutmut.utils.format_utils import get_mutant_name
 from mutmut.utils.format_utils import is_mutated_method_name
 
 NEVER_MUTATE_FUNCTION_NAMES = {"__getattribute__", "__setattr__", "__new__"}
+NEVER_MUTATE_ENUM_FUNCTION_NAMES = {"__init__", "_generate_next_value_"}
+ENUM_BASE_NAMES = {"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"}
 NEVER_MUTATE_FUNCTION_CALLS = {"len", "isinstance"}
 
 
@@ -217,6 +219,7 @@ class MutationVisitor(cst.CSTVisitor):
         )
         self.ignored_classes: set[str] = set()
         self.ignored_functions: set[str] = set()
+        self._enum_creation_hooks: set[cst.FunctionDef] = set()
 
     def on_visit(self, node: cst.CSTNode) -> bool:
         if self._skip_node_and_children(node):
@@ -300,6 +303,15 @@ class MutationVisitor(cst.CSTVisitor):
             if isinstance(node, cst.BaseExpression):
                 return True
 
+        if isinstance(node, cst.ClassDef) and _is_enum_class(node):
+            self._enum_creation_hooks.update(
+                child
+                for child in node.body.body
+                if isinstance(child, cst.FunctionDef) and child.name.value in NEVER_MUTATE_ENUM_FUNCTION_NAMES
+            )
+        if node in self._enum_creation_hooks:
+            return True
+
         if (
             isinstance(node, cst.Call)
             and isinstance(node.func, cst.Name)
@@ -342,6 +354,11 @@ class MutationVisitor(cst.CSTVisitor):
             return True
 
         return False
+
+
+def _is_enum_class(node: cst.ClassDef) -> bool:
+    bases = (base.value.attr if isinstance(base.value, cst.Attribute) else base.value for base in node.bases)
+    return any(isinstance(base, cst.Name) and base.value in ENUM_BASE_NAMES for base in bases)
 
 
 def _walk(node: cst.CSTNode) -> Iterator[cst.CSTNode]:
