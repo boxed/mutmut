@@ -299,6 +299,11 @@ def mutated_module(source: str) -> str:
         ("1.0j", "2j"),
         ("0o1", "2"),
         ("1.0e10", "10000000001.0"),
+        # too large for a float, so they evaluate to inf, which has no literal form
+        ("1e999", []),
+        ("1e999j", []),
+        ("a = 1e999", "a = None"),
+        ("1.5e400 + 2", ["1.5e400 - 2", "1.5e400 + 3"]),
         ("a = {x for x in y}", "a = None"),
         ("x+=1", ["x = 1", "x -= 1", "x+=2"]),
         ("x-=1", ["x = 1", "x += 1", "x-=2"]),
