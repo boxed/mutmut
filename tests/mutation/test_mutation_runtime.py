@@ -38,6 +38,39 @@ class Color(Enum):
     monkeypatch.setenv("MUTANT_UNDER_TEST", mutant_name)
 
 
+def test_enum_creation_hooks_runtime_execution(monkeypatch):
+    """Test that an enum whose __init__ and _generate_next_value_ run during class creation can be executed."""
+    source = """
+from enum import Enum, auto
+
+class Color(Enum):
+    def _generate_next_value_(name, start, count, last_values):
+        return count + 10
+
+    RED = auto()
+    GREEN = auto()
+
+    def __init__(self, value):
+        self.label = f"c{value}"
+
+    def describe(self):
+        return self.name.lower()
+""".strip()
+
+    mutated_file = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names = mutated_file.code, mutated_file.mutant_names
+    assert len(mutant_names) > 0, "Should have at least one mutant"
+
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
+    namespace = {"__name__": "test_module"}
+    exec(mutated_code, namespace)
+    Color = namespace["Color"]
+
+    assert Color.GREEN.value == 11
+    assert Color.GREEN.label == "c11"
+    assert Color.GREEN.describe() == "green"
+
+
 def test_type_annotation_runtime_execution(monkeypatch):
     """Test that forward and quoted annotations can be executed
 
