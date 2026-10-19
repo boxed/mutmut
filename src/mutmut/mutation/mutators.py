@@ -1,5 +1,7 @@
 """This module contains the mutations for indidvidual nodes, e.g. replacing a != b with a == b."""
 
+import cmath
+import math
 import re
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -22,10 +24,19 @@ NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
 
 
 def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
+    # A float literal too large for a float, like 1e999 (a common way to spell
+    # infinity), evaluates to inf. inf + 1 is still inf, which has no literal
+    # form, so there is no number mutant to make.
     if isinstance(node, cst.Integer | cst.Float):
-        yield node.with_changes(value=repr(node.evaluated_value + 1))
+        value = node.evaluated_value + 1
+        if isinstance(value, float) and math.isinf(value):
+            return
+        yield node.with_changes(value=repr(value))
     elif isinstance(node, cst.Imaginary):
-        yield node.with_changes(value=repr(node.evaluated_value + 1j))
+        complex_value = node.evaluated_value + 1j
+        if cmath.isinf(complex_value):
+            return
+        yield node.with_changes(value=repr(complex_value))
     else:
         print("Unexpected number type", node)
 
