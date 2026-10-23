@@ -239,6 +239,14 @@ def mutated_module(source: str) -> str:
                 "a: str = None",
             ],
         ),
+        # Escape sequences with hex digits should not produce equivalent case-flip mutants
+        (r'"\u00a0"', [r'"XX\u00a0XX"']),
+        (r'"\U0001f600"', [r'"XX\U0001f600XX"']),
+        (r'"\x7f"', [r'"XX\x7fXX"']),
+        (r'"\N{GREEK CAPITAL LETTER DELTA}"', [r'"XX\N{GREEK CAPITAL LETTER DELTA}XX"']),
+        (r'"Hello\u00a0World"', [r'"XXHello\u00a0WorldXX"', r'"hello\u00a0world"', r'"HELLO\u00a0WORLD"']),
+        # Raw strings: escapes are literal, so case changes are NOT equivalent
+        (r'r"\u00a0"', [r'r"XX\u00a0XX"', r'r"\u00A0"']),
         ("lambda: 0", ["lambda: 1", "lambda: None"]),
         ("1 in (1, 2)", ["2 in (1, 2)", "1 not in (1, 2)", "1 in (2, 2)", "1 in (1, 3)"]),
         ("1+1", ["2+1", "1 - 1", "1+2"]),
