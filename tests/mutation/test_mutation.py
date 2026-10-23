@@ -234,7 +234,7 @@ def mutated_module(source: str) -> str:
             r'a: str = "Fo\N{ghost} \U11223344"',
             [
                 r'a: str = "XXFo\N{ghost} \U11223344XX"',
-                r'a: str = "FO\N{GHOST} \U11223344"',
+                r'a: str = "FO\N{ghost} \U11223344"',
                 r'a: str = "fo\N{ghost} \U11223344"',
                 "a: str = None",
             ],

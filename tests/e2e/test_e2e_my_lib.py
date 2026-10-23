@@ -85,7 +85,6 @@ def test_my_lib_result_snapshot():
                 "my_lib.x_escape_sequences__mutmut_2": 0,
                 "my_lib.x_escape_sequences__mutmut_3": 1,
                 "my_lib.x_escape_sequences__mutmut_4": 0,
-                "my_lib.x_escape_sequences__mutmut_5": 0,
                 "my_lib.x_create_a_segfault_when_mutated__mutmut_1": -11,
                 "my_lib.x_create_a_segfault_when_mutated__mutmut_2": 0,
                 "my_lib.x_create_a_segfault_when_mutated__mutmut_3": 0,
