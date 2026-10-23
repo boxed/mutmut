@@ -41,6 +41,9 @@ from types import TracebackType
 
 import click
 import libcst as cst
+from junit_xml import TestCase
+from junit_xml import TestSuite
+from junit_xml import to_xml_report_string
 
 from mutmut.code_coverage import gather_coverage
 from mutmut.code_coverage import get_covered_lines_for_file
@@ -749,6 +752,57 @@ def export_cicd_stats() -> None:
 
     save_cicd_stats(source_file_mutation_data_by_path)
     print("Saved CI/CD stats to mutants/mutmut-cicd-stats.json")
+
+
+def create_junitxml_report(*, suspicious_policy: str, untested_policy: str) -> str:
+    test_cases: list[TestCase] = []
+    for path in walk_mutatable_files():
+        mutation_data = SourceFileMutationData(path=path)
+        mutation_data.load()
+        for mutant_name, exit_code in mutation_data.exit_code_by_key.items():
+            status = status_by_exit_code[exit_code]
+            test_case = TestCase(f"Mutant {mutant_name}", file=str(path))
+            if status == "survived":
+                test_case.add_failure_info(message=status, output=get_diff_for_mutant(mutant_name, path=path))
+            elif status in ("timeout", "segfault", "check was interrupted by user"):
+                test_case.add_error_info(
+                    message=status, error_type=status, output=get_diff_for_mutant(mutant_name, path=path)
+                )
+            elif status == "suspicious" and suspicious_policy != "ignore":
+                getattr(test_case, f"add_{suspicious_policy}_info")(
+                    message=status, output=get_diff_for_mutant(mutant_name, path=path)
+                )
+            elif status in ("no tests", "not checked") and untested_policy != "ignore":
+                getattr(test_case, f"add_{untested_policy}_info")(
+                    message=status, output=get_diff_for_mutant(mutant_name, path=path)
+                )
+            elif status == "skipped":
+                test_case.add_skipped_info(message=status)
+            test_cases.append(test_case)
+    return str(to_xml_report_string([TestSuite("mutmut", test_cases)]))
+
+
+@cli.command()
+@click.option(
+    "--suspicious-policy",
+    type=click.Choice(["ignore", "skipped", "error", "failure"]),
+    default="ignore",
+    show_default=True,
+)
+@click.option(
+    "--untested-policy",
+    type=click.Choice(["ignore", "skipped", "error", "failure"]),
+    default="ignore",
+    show_default=True,
+)
+def junitxml(suspicious_policy: str, untested_policy: str) -> None:
+    """Show the mutation results as a JUnit XML report."""
+    print(
+        create_junitxml_report(
+            suspicious_policy=suspicious_policy,
+            untested_policy=untested_policy,
+        )
+    )
 
 
 @cli.command()
