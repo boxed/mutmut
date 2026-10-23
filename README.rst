@@ -373,7 +373,7 @@ Skipping via code comments
 You can use following comments to disable mutation:
 
 - `# pragma: no mutate`: disable mutation on this single line
-- `# pragma: no mutate block`: disable mutation in the whole intendation block
+- `# pragma: no mutate block`: disable mutation in the whole indentation block
 - `# pragma: no mutate start/end`: disable mutation between the start and end comments
 
 Skipping single lines
