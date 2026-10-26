@@ -616,6 +616,37 @@ def buzz(val=1):
     assert "return val + 1" in mutated_code
 
 
+def test_pragma_no_mutate_inside_multiline_call():
+    """A pragma on one line of a multi-line call suppresses that line only;
+    the other arguments are still mutated."""
+    source = """
+def foo(a, b):
+    return max(
+        a + 1,  # pragma: no mutate
+        b - 1,
+    )
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "a - 1" not in mutated_code
+    assert "a + 2" not in mutated_code
+    assert "b + 1" in mutated_code
+    assert "b - 2" in mutated_code
+
+
+def test_pragma_no_mutate_inside_multiline_dict():
+    source = """
+def foo(a):
+    return {
+        "x": a * 2,  # pragma: no mutate
+        "y": a * 3,
+    }
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "a / 2" not in mutated_code
+    assert "a * 3,  # pragma" not in mutated_code
+    assert "a / 3" in mutated_code
+
+
 def test_pragma_no_mutate_on_match_case_guard():
     """A pragma on a `case ... if guard:` line suppresses mutation of the
     guard expression, e.g. `n > 0` becoming `n >= 0`."""

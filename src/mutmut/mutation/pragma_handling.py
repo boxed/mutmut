@@ -217,6 +217,15 @@ class PragmaVisitor(cst.CSTVisitor):
             self.no_mutate_lines.add(line)
         return True
 
+    def visit_ParenthesizedWhitespace(self, node: cst.ParenthesizedWhitespace) -> bool | None:
+        # A comment ending a line inside brackets (a call, a literal, a parenthesized
+        # condition) belongs to this whitespace node, not to the statement's trailing
+        # whitespace, so visit_SimpleStatementLine never sees it.
+        if _parse_pragma_token(node.first_line.comment) == "bare":
+            line = self.get_metadata(PositionProvider, node).start.line
+            self.no_mutate_lines.add(line)
+        return True
+
     def _visit_compound_header(self, node: cst.CSTNode) -> None:
         body = getattr(node, "body", None)
         if isinstance(body, cst.IndentedBlock):

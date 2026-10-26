@@ -113,6 +113,56 @@ def foo():
         assert ignored_code.ignore_node_lines == set()
 
 
+class TestMultiLineStatementPragma:
+    """A pragma at the end of a line inside brackets suppresses that line."""
+
+    def test_call_argument(self):
+        source = """
+def foo(a, b):
+    return max(
+        a + 1,  # pragma: no mutate
+        b - 1,
+    )
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+        assert ignored_code.ignore_node_lines == set()
+
+    def test_dict_entry(self):
+        source = """
+def foo(a):
+    return {
+        "x": a * 2,  # pragma: no mutate
+        "y": a * 3,
+    }
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+
+    def test_parenthesized_condition(self):
+        source = """
+def foo(a, b):
+    if (
+        a > 1  # pragma: no mutate
+        and b > 1
+    ):
+        return 1
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {4}
+
+    def test_other_comment_inside_brackets_ignored(self):
+        source = """
+def foo(a, b):
+    return max(
+        a + 1,  # just a comment
+        b - 1,
+    )
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == set()
+
+
 class TestMatchCasePragma:
     """Tests for pragmas on `match` and `case` headers."""
 
