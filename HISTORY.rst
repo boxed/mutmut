@@ -1,6 +1,11 @@
 Changelog
 ---------
 
+Unreleased
+~~~~~~~~~~
+
+* Add ``mutmut.is_mutmut_generated_name`` so tests that inspect modules or classes can skip the functions and dicts mutmut adds to mutated code
+
 3.8.0
 ~~~~~~~~~~
 

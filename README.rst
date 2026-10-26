@@ -622,6 +622,29 @@ directory. If you want to make sure you run a full mutmut run you can delete
 this directory to start from scratch.
 
 
+Tests that inspect modules or classes
+-------------------------------------
+
+To switch between mutants, mutmut adds functions and dicts to the mutated
+modules and classes, such as ``x_foo__mutmut_orig``,
+``xǁMyClassǁmethod__mutmut_1`` and ``mutants_x_foo__mutmut``. Their names
+don't start with an underscore, so a test that walks ``vars()``, ``dir()`` or
+``inspect.getmembers()`` sees them as public attributes. A test that checks
+every public method has a docstring, for example, fails in the stats run
+and no mutants get tested.
+
+Use ``mutmut.is_mutmut_generated_name`` to skip them:
+
+.. code-block:: python
+
+    import mutmut
+
+    public = [
+        name for name in vars(MyClass)
+        if not name.startswith("_") and not mutmut.is_mutmut_generated_name(name)
+    ]
+
+
 Mutation score badges
 ---------------------
 
