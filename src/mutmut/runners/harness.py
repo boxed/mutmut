@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Iterable
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -14,6 +15,7 @@ from mutmut.utils.file_utils import change_cwd
 from mutmut.utils.format_utils import strip_prefix
 
 if TYPE_CHECKING:
+    import pytest
     from coverage import Coverage
 
 
@@ -147,18 +149,18 @@ class PytestRunner(TestRunner):
     def run_stats(self, *, tests: Iterable[str]) -> int:
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
-            def pytest_runtest_logstart(self, nodeid: str, location: Any) -> None:
+            def pytest_runtest_logstart(self, nodeid: str) -> None:
                 state().duration_by_test[nodeid] = 0
 
             # noinspection PyMethodMayBeStatic
-            def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
+            def pytest_runtest_teardown(self, item: pytest.Item, nextitem: pytest.Item | None) -> None:
                 unused(nextitem)
                 for function in state()._stats:
                     state().tests_by_mangled_function_name[function].add(strip_prefix(item.nodeid, prefix="mutants/"))
                 state()._stats.clear()
 
             # noinspection PyMethodMayBeStatic
-            def pytest_runtest_makereport(self, item: Any, call: Any) -> None:
+            def pytest_runtest_makereport(self, item: pytest.Item, call: pytest.CallInfo[None]) -> None:
                 if call.when != "call":
                     return
                 state().duration_by_test[item.nodeid] += call.duration
@@ -186,10 +188,10 @@ class PytestRunner(TestRunner):
                 self.collected_nodeids: set[str] = set()
                 self.deselected_nodeids: set[str] = set()
 
-            def pytest_collection_modifyitems(self, items: Any) -> None:
+            def pytest_collection_modifyitems(self, items: list[pytest.Item]) -> None:
                 self.collected_nodeids |= {item.nodeid for item in items}
 
-            def pytest_deselected(self, items: Any) -> None:
+            def pytest_deselected(self, items: Sequence[pytest.Item]) -> None:
                 self.deselected_nodeids |= {item.nodeid for item in items}
 
         collector = TestsCollector()
