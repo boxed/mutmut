@@ -589,7 +589,7 @@ class ForkServerRunner(MutantRunner):
                 try:
                     exit_code = test_runner.run_tests(mutant_name=mutant_name, tests=tests)
                 except Exception:
-                    exit_code = -1
+                    exit_code = 35
 
                 worker_logger.debug(f"Finished {mutant_name}: exit={exit_code}")
                 os._exit(exit_code)
@@ -867,7 +867,10 @@ class ForkRunner(MutantRunner):
             if not self.debug:
                 sys.stdout = sys.stderr = open(os.devnull, "w")
 
-            result = self.test_runner.run_tests(mutant_name=mutant_name, tests=tests_sorted)
+            try:
+                result = self.test_runner.run_tests(mutant_name=mutant_name, tests=tests_sorted)
+            except Exception:
+                result = 35
             os._exit(result)
         else:
             # In the parent.
