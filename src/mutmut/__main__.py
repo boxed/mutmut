@@ -941,8 +941,42 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
     _run(mutant_names, max_children)
 
 
+def _pin_macos_proxy_settings() -> None:
+    """Resolve macOS system proxy settings once, before forking, into the environment.
+
+    On macOS, ``urllib.request.getproxies()`` (called by requests, httpx, aiohttp, ...)
+    falls back to the SystemConfiguration framework when no ``*_proxy`` environment
+    variable is set. That framework is not fork-safe: calling it in a forked child
+    aborts or segfaults the child, so every mutant reports as a segfault. Python reads
+    the environment first, so exporting the system settings here keeps the children
+    off that code path while preserving what the tests would see.
+    """
+    if sys.platform != "darwin":
+        return
+    import urllib.request
+
+    if urllib.request.getproxies_environment():
+        return  # the user configured proxies explicitly; children never reach SystemConfiguration
+    try:
+        import _scproxy
+
+        proxies = _scproxy._get_proxies()
+        settings = _scproxy._get_proxy_settings()
+    except Exception:
+        return
+    if not proxies:
+        os.environ["no_proxy"] = "*"  # no system proxy: every host is reached directly
+        return
+    for scheme, url in proxies.items():
+        os.environ[f"{scheme}_proxy"] = url
+    exceptions = list(settings.get("exceptions") or ())
+    if exceptions:
+        os.environ["no_proxy"] = ",".join(exceptions)
+
+
 # separate function, so we can call it directly from the tests
 def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
+    _pin_macos_proxy_settings()
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     set_mutant_under_test("mutant_generation")
