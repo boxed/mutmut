@@ -154,7 +154,7 @@ class PytestRunner(TestRunner):
             def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
                 unused(nextitem)
                 for function in state()._stats:
-                    state().tests_by_mangled_function_name[function].add(strip_prefix(item._nodeid, prefix="mutants/"))
+                    state().tests_by_mangled_function_name[function].add(strip_prefix(item.nodeid, prefix="mutants/"))
                 state()._stats.clear()
 
             # noinspection PyMethodMayBeStatic

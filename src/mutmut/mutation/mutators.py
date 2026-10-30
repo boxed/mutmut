@@ -19,8 +19,17 @@ OPERATORS_TYPE = Sequence[
     ]
 ]
 
-# pattern to match (nearly) all chars in a string that are not part of an escape sequence
-NON_ESCAPE_SEQUENCE = re.compile(r"((?<!\\)[^\\]+)")
+# Pattern matching either: (1) escape sequences with case-sensitive parts (preserved as group None),
+# or (2) runs of non-backslash characters (captured as group 1 for case transformation).
+# For non-raw strings, preserve \xHH, \uHHHH, \UHHHHHHHH, \N{NAME} to avoid equivalent mutants.
+NON_ESCAPE_SEQUENCE = re.compile(
+    r"\\x[0-9a-fA-F]{2}"  # \xHH
+    r"|\\u[0-9a-fA-F]{4}"  # \uHHHH
+    r"|\\U[0-9a-fA-F]{8}"  # \UHHHHHHHH
+    r"|\\N\{[^}]+\}"  # \N{NAME}
+    r"|(\\.)"  # other escapes like \\, \n, \t (group 1, but treat as escape)
+    r"|((?<!\\)[^\\]+)"  # OR non-backslash run (group 2, to be transformed)
+)
 
 
 def operator_number(node: cst.BaseNumber) -> Iterable[cst.BaseNumber]:
@@ -53,12 +62,30 @@ def operator_string(node: cst.BaseString) -> Iterable[cst.BaseString]:
             # that mutation is meaningless for
             return
 
+        # For raw strings (r"..." or R"..."), escape sequences are literal, so case changes are NOT equivalent
+        is_raw = "r" in prefix.lower()
+
         supported_str_mutations: list[Callable[[str], str]] = [
             lambda x: "XX" + x + "XX",
-            # do not modify escape sequences, as this could break python syntax
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).lower(), x),
-            lambda x: NON_ESCAPE_SEQUENCE.sub(lambda match: match.group(1).upper(), x),
         ]
+
+        if is_raw:
+            # Raw strings: use original regex (all non-backslash chars)
+            old_pattern = re.compile(r"((?<!\\)[^\\]+)")
+            supported_str_mutations.extend(
+                [
+                    lambda x: old_pattern.sub(lambda m: m.group(1).lower(), x),
+                    lambda x: old_pattern.sub(lambda m: m.group(1).upper(), x),
+                ]
+            )
+        else:
+            # Regular strings: preserve escape sequences with case-sensitive hex/names
+            supported_str_mutations.extend(
+                [
+                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda m: m.group(2).lower() if m.group(2) else m.group(0), x),
+                    lambda x: NON_ESCAPE_SEQUENCE.sub(lambda m: m.group(2).upper() if m.group(2) else m.group(0), x),
+                ]
+            )
 
         for mut_func in supported_str_mutations:
             new_value = f"{prefix}{value[0]}{mut_func(value[1:-1])}{value[-1]}"

@@ -1,6 +1,21 @@
 Changelog
 ---------
 
+3.8.1
+~~~~~
+
+* Fix stats collection crashing with pytest 9.2 (`#615`, `#616`)
+
+* Fix ``# pragma: no mutate`` being ignored inside multi-line statements (`#614`)
+
+* Don't produce equivalent case mutants inside string escape sequences like `` `` and ``\N{...}`` (`#609`, `#611`)
+
+* Fix enums with a custom ``__init__`` failing to import under mutmut (`#600`, `#603`)
+
+* Fix crash when mutating float literals too large for a float, like ``1e999`` (`#604`, `#605`)
+
+* Fix crash when mypy reports no errors (`#598`, `#599`)
+
 3.8.0
 ~~~~~~~~~~
 

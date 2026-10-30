@@ -234,11 +234,19 @@ def mutated_module(source: str) -> str:
             r'a: str = "Fo\N{ghost} \U11223344"',
             [
                 r'a: str = "XXFo\N{ghost} \U11223344XX"',
-                r'a: str = "FO\N{GHOST} \U11223344"',
+                r'a: str = "FO\N{ghost} \U11223344"',
                 r'a: str = "fo\N{ghost} \U11223344"',
                 "a: str = None",
             ],
         ),
+        # Escape sequences with hex digits should not produce equivalent case-flip mutants
+        (r'"\u00a0"', [r'"XX\u00a0XX"']),
+        (r'"\U0001f600"', [r'"XX\U0001f600XX"']),
+        (r'"\x7f"', [r'"XX\x7fXX"']),
+        (r'"\N{GREEK CAPITAL LETTER DELTA}"', [r'"XX\N{GREEK CAPITAL LETTER DELTA}XX"']),
+        (r'"Hello\u00a0World"', [r'"XXHello\u00a0WorldXX"', r'"hello\u00a0world"', r'"HELLO\u00a0WORLD"']),
+        # Raw strings: escapes are literal, so case changes are NOT equivalent
+        (r'r"\u00a0"', [r'r"XX\u00a0XX"', r'r"\u00A0"']),
         ("lambda: 0", ["lambda: 1", "lambda: None"]),
         ("1 in (1, 2)", ["2 in (1, 2)", "1 not in (1, 2)", "1 in (2, 2)", "1 in (1, 3)"]),
         ("1+1", ["2+1", "1 - 1", "1+2"]),
@@ -606,6 +614,37 @@ def buzz(val=1):
     mutated_code = mutated_module(source)
     assert "x_buzz__mutmut_orig" in mutated_code
     assert "return val + 1" in mutated_code
+
+
+def test_pragma_no_mutate_inside_multiline_call():
+    """A pragma on one line of a multi-line call suppresses that line only;
+    the other arguments are still mutated."""
+    source = """
+def foo(a, b):
+    return max(
+        a + 1,  # pragma: no mutate
+        b - 1,
+    )
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "a - 1" not in mutated_code
+    assert "a + 2" not in mutated_code
+    assert "b + 1" in mutated_code
+    assert "b - 2" in mutated_code
+
+
+def test_pragma_no_mutate_inside_multiline_dict():
+    source = """
+def foo(a):
+    return {
+        "x": a * 2,  # pragma: no mutate
+        "y": a * 3,
+    }
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "a / 2" not in mutated_code
+    assert "a * 3,  # pragma" not in mutated_code
+    assert "a / 3" in mutated_code
 
 
 def test_pragma_no_mutate_on_match_case_guard():
