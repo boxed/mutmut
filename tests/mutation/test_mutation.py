@@ -1285,6 +1285,53 @@ class Foo:
     assert mutants == [source.replace("self.x + self.y", "self.x - self.y")]
 
 
+@pytest.mark.parametrize(
+    "decorators",
+    [
+        ["@override"],
+        ["@typing.override"],
+        ["@typing_extensions.override"],
+        ["@staticmethod", "@override"],
+        ["@override", "@classmethod"],
+    ],
+)
+def test_mutate_override_methods(decorators):
+    # `typing.override` returns the function itself, only marked (PEP 698),
+    # so copying it onto the trampoline and the mutants is side-effect free
+    decorator_lines = "\n    ".join(decorators)
+    source = f"""
+class Foo:
+    {decorator_lines}
+    def sum(self, a, b):
+        return a + b
+""".strip()
+
+    mutants = mutants_for_source(source)
+    assert mutants == [source.replace("a + b", "a - b")]
+
+
+@pytest.mark.parametrize(
+    "decorators",
+    [
+        ["@override", "@property"],
+        ["@override", "@staticmethod", "@classmethod"],
+        ["@override(1)"],
+        ["@other.override"],
+    ],
+)
+def test_do_not_mutate_override_methods_with_other_decorators(decorators):
+    # only `override` is transparent: anything else keeps the method out
+    decorator_lines = "\n    ".join(decorators)
+    source = f"""
+class Foo:
+    {decorator_lines}
+    def sum(self, a, b):
+        return a + b
+""".strip()
+
+    assert not mutants_for_source(source)
+
+
 def test_do_not_mutate_pattern_single_line(patch_config):
     source = 'logger.info("hello")'
     patch_config("do_not_mutate_patterns", [r"logger\.\w+\("])
