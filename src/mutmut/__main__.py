@@ -942,36 +942,27 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
 
 
 def _pin_macos_proxy_settings() -> None:
-    """Resolve macOS system proxy settings once, before forking, into the environment.
+    """Query macOS system proxy settings once, before forking, and reuse the answers.
 
-    On macOS, ``urllib.request.getproxies()`` (called by requests, httpx, aiohttp, ...)
-    falls back to the SystemConfiguration framework when no ``*_proxy`` environment
-    variable is set. That framework is not fork-safe: calling it in a forked child
-    aborts or segfaults the child, so every mutant reports as a segfault. Python reads
-    the environment first, so exporting the system settings here keeps the children
-    off that code path while preserving what the tests would see.
+    On macOS, ``urllib.request.getproxies()`` and ``proxy_bypass()`` (used by requests,
+    httpx, aiohttp, ...) query the SystemConfiguration framework through ``_scproxy``
+    when no ``*_proxy`` environment variable is set. That framework is not fork-safe:
+    calling it in a forked child aborts or segfaults the child, so every mutant reports
+    as a segfault. Querying it here, in the unforked parent, and replacing urllib's
+    lookups with the cached answers keeps children off that code path. Forked children
+    inherit the patched module, and proxy and bypass results stay exactly the same.
     """
     if sys.platform != "darwin":
         return
     import urllib.request
 
-    if urllib.request.getproxies_environment():
-        return  # the user configured proxies explicitly; children never reach SystemConfiguration
     try:
-        import _scproxy
-
-        proxies = _scproxy._get_proxies()
-        settings = _scproxy._get_proxy_settings()
+        proxies = urllib.request._get_proxies()
+        settings = urllib.request._get_proxy_settings()
     except Exception:
         return
-    if not proxies:
-        os.environ["no_proxy"] = "*"  # no system proxy: every host is reached directly
-        return
-    for scheme, url in proxies.items():
-        os.environ[f"{scheme}_proxy"] = url
-    exceptions = list(settings.get("exceptions") or ())
-    if exceptions:
-        os.environ["no_proxy"] = ",".join(exceptions)
+    urllib.request._get_proxies = lambda: dict(proxies)
+    urllib.request._get_proxy_settings = lambda: dict(settings)
 
 
 # separate function, so we can call it directly from the tests
