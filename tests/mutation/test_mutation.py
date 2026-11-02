@@ -1244,9 +1244,9 @@ def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
     return runner
 
 
-def test_do_not_mutate_top_level_decorators():
-    # Modifying top-level decorators could influence all mutations
-    # because they are executed at import time
+def test_decorated_bodies_are_mutated_but_never_their_decorators():
+    # Decorators run at import time, so mutating their arguments could break every mutant;
+    # the bodies they decorate are mutated like any other
     source = """
 @some_decorator(a = 2)
 def foo():
@@ -1261,10 +1261,62 @@ class A(Enum):
 """.strip()
 
     mutants = mutants_for_source(source)
-    for m in mutants:
-        print(m)  # pragma: no cover
 
-    assert not mutants
+    assert len(mutants) == 7
+    assert all("@some_decorator(a = 2)" in m and "@unique" in m and "@property" in m for m in mutants)
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    [
+        "@overload",
+        "@typing.overload",
+        "@x.setter",
+        "@x.getter",
+        "@x.deleter",
+        "@process.register",
+        "@process.register(int)",
+    ],
+)
+def test_a_decorator_that_defines_a_namesake_is_not_mutated(decorator):
+    # Another function of the same name follows in the same scope: their copies would collide
+    source = f"""
+class A:
+    {decorator}
+    def x(self, value):
+        return value + 1
+""".strip()
+
+    assert mutants_for_source(source) == []
+
+
+@pytest.mark.parametrize("decorator", ["@cache", "@functools.cache", "@lru_cache(maxsize=2)", "@cached_property"])
+def test_a_caching_decorator_is_not_mutated(decorator):
+    # A cache on the trampoline answers every mutant from what the parent process computed
+    source = f"""
+class A:
+    {decorator}
+    def x(self):
+        return 1 + 2
+""".strip()
+
+    assert mutants_for_source(source) == []
+
+
+def test_the_copies_keep_only_the_binding_decorators():
+    source = """
+class A:
+    @register
+    @classmethod
+    def make(cls):
+        return 1 + 2
+""".strip()
+
+    code = mutated_module(source)
+
+    assert "@register\n    @classmethod\n    @_mutmut_mutated(" in code
+    assert "@classmethod\n    def xǁAǁmake__mutmut_orig(cls)" in code
+    assert "@register\n    @classmethod\n    def xǁAǁmake__mutmut_" not in code
 
 
 @pytest.mark.parametrize("decorator", ["@dataclass", "@dataclass(frozen=True)"])
