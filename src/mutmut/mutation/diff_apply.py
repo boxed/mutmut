@@ -37,6 +37,24 @@ def find_top_level_function_or_method(module: cst.Module, name: str) -> cst.Func
     return None
 
 
+def find_function(module: cst.Module, name: str, class_name: str | None) -> cst.FunctionDef | None:
+    """Find the top-level function `name`, or the method `name` of the top-level class `class_name`."""
+    for child in module.body:
+        if class_name is None and isinstance(child, cst.FunctionDef) and child.name.value == name:
+            return child
+        if (
+            class_name is not None
+            and isinstance(child, cst.ClassDef)
+            and child.name.value == class_name
+            and isinstance(child.body, cst.IndentedBlock)
+        ):
+            for method in child.body.body:
+                if isinstance(method, cst.FunctionDef) and method.name.value == name:
+                    return method
+
+    return None
+
+
 def read_original_function(module: cst.Module, mutant_name: str) -> cst.FunctionDef:
     orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
     orig_name = mangled_name_from_mutant_name(mutant_name) + "__mutmut_orig"
@@ -164,12 +182,12 @@ def get_diff_for_mutant(
 def apply_mutant(mutant_name: str) -> None:
     path = find_mutant(mutant_name).path
 
-    orig_function_name, _ = orig_function_and_class_names_from_key(mutant_name)
+    orig_function_name, class_name = orig_function_and_class_names_from_key(mutant_name)
     orig_function_name = orig_function_name.rpartition(".")[-1]
 
     orig_module = read_orig_module(path)
 
-    original_function = find_top_level_function_or_method(orig_module, orig_function_name)
+    original_function = find_function(orig_module, orig_function_name, class_name)
     if not original_function:
         raise FileNotFoundError(f"Could not apply mutant {mutant_name}")
 

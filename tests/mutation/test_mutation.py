@@ -1163,6 +1163,50 @@ def test_apply_mutant_from_line_span_index(mutant_index: int, tmp_path: Path, mo
     assert "# a comment above the function\nasync def foo(\n" in applied[True]
 
 
+SAME_NAME_SOURCE = """\
+class Box:
+    def size(self, n):
+        return n + 1
+
+
+class Crate:
+    def size(self, n):
+        return n - 1
+
+
+def size(n):
+    return n * 2
+"""
+
+
+@pytest.mark.parametrize("write_line_spans", [True, False], ids=["with index", "without index"])
+@pytest.mark.parametrize(
+    ("mutant_name", "original_line", "mutated_line"),
+    [
+        ("test.x_size__mutmut_1", "return n * 2", "return n / 2"),
+        ("test.xǁBoxǁsize__mutmut_1", "return n + 1", "return n - 1"),
+        ("test.xǁCrateǁsize__mutmut_1", "return n - 1", "return n + 1"),
+    ],
+    ids=["top level function", "method of first class", "method of second class"],
+)
+def test_apply_mutant_only_changes_the_function_it_belongs_to(
+    mutant_name: str,
+    original_line: str,
+    mutated_line: str,
+    write_line_spans: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A method and a function, or the methods of two classes, can share a name without being mixed up."""
+    monkeypatch.chdir(tmp_path)
+    mutant_names = write_mutants_dir(tmp_path, SAME_NAME_SOURCE, write_line_spans=write_line_spans)
+    assert mutant_name in mutant_names
+
+    apply_mutant(mutant_name)
+
+    assert (tmp_path / "test.py").read_text() == SAME_NAME_SOURCE.replace(original_line, mutated_line)
+
+
 def test_from_future_still_first():
     source = """
 from __future__ import annotations
