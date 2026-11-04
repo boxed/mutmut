@@ -1090,8 +1090,13 @@ def tests_for_mutant_names(mutant_names: tuple[str, ...] | list[str]) -> set[str
     tests = set()
     for mutant_name in mutant_names:
         if "*" in mutant_name:
+            # Keys are function names (``pkg.mod.x_f``), so a pattern over the mutant
+            # suffix (``pkg.mod.x_f__mutmut_*``) is matched by its function part. This may
+            # select a few extra tests, which is safe for the clean run; selecting none is not,
+            # because an empty selection runs the whole suite.
+            function_pattern = mutant_name.partition("__mutmut_")[0]
             for name, tests_of_this_name in state().tests_by_mangled_function_name.items():
-                if fnmatch.fnmatch(name, mutant_name):
+                if fnmatch.fnmatch(name, function_pattern):
                     tests |= set(tests_of_this_name)
         else:
             tests |= set(state().tests_by_mangled_function_name[mangled_name_from_mutant_name(mutant_name)])
