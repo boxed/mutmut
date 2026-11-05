@@ -212,6 +212,12 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             merged[key] = data.exit_code_by_key.get(key)
     data.exit_code_by_key = merged
     data.hash_by_function_name = dict(hash_by_function_name)
+    data.source_span_by_key = {
+        get_mutant_name(filename, name): span for name, span in mutated_file.source_span_by_mutant_name.items()
+    }
+    data.removed_span_by_key = {
+        get_mutant_name(filename, name): span for name, span in mutated_file.removed_span_by_mutant_name.items()
+    }
     data.save()
 
     MutantLineSpans(path=filename, span_by_function_name=mutated_file.line_span_by_function_name).save()

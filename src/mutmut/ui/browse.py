@@ -44,6 +44,7 @@ def run_result_browser(*, show_killed: bool) -> None:
             ("m", "retest_module()", "Retest module"),
             ("a", "apply_mutant()", "Apply mutant to disk"),
             ("t", "view_tests()", "View tests for mutant"),
+            ("s", "toggle_shadowed()", "Show/hide shadowed mutants"),
         ]
 
         columns = [
@@ -53,6 +54,9 @@ def run_result_browser(*, show_killed: bool) -> None:
         cursor_type = "row"
         source_file_mutation_data_and_stat_by_path: dict[str, tuple[SourceFileMutationData, Stat]] = {}
         path_by_name: dict[str, Path] = {}
+        shadowed_by_key: dict[str, str] = {}
+        show_shadowed = False
+        selected_path: str | None = None
         diff_load_lock = Lock()
 
         def compose(self) -> Iterable[Any]:
@@ -82,6 +86,7 @@ def run_result_browser(*, show_killed: bool) -> None:
         def read_data(self) -> None:
             self.source_file_mutation_data_and_stat_by_path = {}
             self.path_by_name: dict[str, Path] = {}
+            self.shadowed_by_key = {}
 
             for p in walk_mutatable_files():
                 source_file_mutation_data = SourceFileMutationData(path=p)
@@ -91,6 +96,7 @@ def run_result_browser(*, show_killed: bool) -> None:
                 self.source_file_mutation_data_and_stat_by_path[str(p)] = source_file_mutation_data, stat
                 for name in source_file_mutation_data.exit_code_by_key:
                     self.path_by_name[name] = p
+                self.shadowed_by_key.update(source_file_mutation_data.shadowed_by_key())
 
         def populate_files_table(self) -> None:
             # noinspection PyTypeChecker
@@ -107,18 +113,28 @@ def run_result_browser(*, show_killed: bool) -> None:
 
             files_table.move_cursor(row=selected_row)
 
+        def populate_mutants_table(self) -> None:
+            # noinspection PyTypeChecker
+            mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
+            mutants_table.clear()
+            if self.selected_path is None:
+                return
+
+            source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[self.selected_path]
+            for k, v in source_file_mutation_data.exit_code_by_key.items():
+                status = status_by_exit_code[v]
+                if self.is_listed(status) and (self.show_shadowed or k not in self.shadowed_by_key):
+                    mutants_table.add_row(k, emoji_by_status[status], key=k)
+
+        def is_listed(self, status: str) -> bool:
+            return status not in ("killed", "caught by type check") or show_killed
+
         def on_data_table_row_highlighted(self, event: Any) -> None:
             if not event.row_key or not event.row_key.value:
                 return
             if event.data_table.id == "files":
-                # noinspection PyTypeChecker
-                mutants_table: DataTable[Any] = self.query_one("#mutants")  # type: ignore[assignment]
-                mutants_table.clear()
-                source_file_mutation_data, stat = self.source_file_mutation_data_and_stat_by_path[event.row_key.value]
-                for k, v in source_file_mutation_data.exit_code_by_key.items():
-                    status = status_by_exit_code[v]
-                    if status not in ("killed", "caught by type check") or show_killed:
-                        mutants_table.add_row(k, emoji_by_status[status], key=k)
+                self.selected_path = event.row_key.value
+                self.populate_mutants_table()
             else:
                 assert event.data_table.id == "mutants"
                 # noinspection PyTypeChecker
@@ -165,6 +181,22 @@ def run_result_browser(*, show_killed: bool) -> None:
                         description = "Not checked in the last mutmut run."
                     case _:
                         description = f"Unknown status ({exit_code=}, {status=})"
+
+                shadowed_count = sum(
+                    1
+                    for k, shadowing_key in self.shadowed_by_key.items()
+                    if shadowing_key == mutant_name
+                    and self.is_listed(status_by_exit_code[source_file_mutation_data.exit_code_by_key[k]])
+                )
+                if shadowed_count:
+                    mutants = "mutant" if shadowed_count == 1 else "mutants"
+                    description += (
+                        f"\n It shadows {shadowed_count} {mutants} in the code it removes (press s to show/hide them)."
+                    )
+                if mutant_name in self.shadowed_by_key:
+                    description += (
+                        f"\n Shadowed by {self.shadowed_by_key[mutant_name]}, which removes this code and survived."
+                    )
                 description_view.update(f"\n {description}\n")
 
                 diff_view: Static = self.query_one("#diff_view")  # type: ignore[assignment]
@@ -250,5 +282,9 @@ def run_result_browser(*, show_killed: bool) -> None:
             name = self.get_mutant_name_from_selection()
             if name is not None:
                 self.view_tests(name)
+
+        def action_toggle_shadowed(self) -> None:
+            self.show_shadowed = not self.show_shadowed
+            self.populate_mutants_table()
 
     ResultBrowser().run()
