@@ -211,10 +211,12 @@ class PragmaVisitor(cst.CSTVisitor):
             )
 
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> bool | None:
-        tok = _parse_pragma_token(node.trailing_whitespace.comment)
-        if tok is not None:
-            line = self.get_metadata(PositionProvider, node).start.line
-            self.no_mutate_lines.add(line)
+        comment = node.trailing_whitespace.comment
+        if comment is not None and _parse_pragma_token(comment) is not None:
+            # On a multi-line statement the trailing comment sits on the last line,
+            # so mark the comment's own line as well as the line the statement starts on.
+            self.no_mutate_lines.add(self.get_metadata(PositionProvider, node).start.line)
+            self.no_mutate_lines.add(self.get_metadata(PositionProvider, comment).start.line)
         return True
 
     def visit_ParenthesizedWhitespace(self, node: cst.ParenthesizedWhitespace) -> bool | None:

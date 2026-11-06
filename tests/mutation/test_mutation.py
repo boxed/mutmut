@@ -647,6 +647,22 @@ def foo(a):
     assert "a / 3" in mutated_code
 
 
+def test_pragma_no_mutate_on_closing_line_of_multiline_call():
+    """A pragma after the closing bracket suppresses the last line of the call;
+    the earlier arguments are still mutated."""
+    source = """
+def foo(a, b):
+    return max(
+        a + 1,
+        b * 2)  # pragma: no mutate
+""".strip()
+    mutated_code = mutated_module(source)
+    assert "b / 2" not in mutated_code
+    assert "b * 3" not in mutated_code
+    assert "a - 1" in mutated_code
+    assert "a + 2" in mutated_code
+
+
 def test_pragma_no_mutate_on_match_case_guard():
     """A pragma on a `case ... if guard:` line suppresses mutation of the
     guard expression, e.g. `n > 0` becoming `n >= 0`."""

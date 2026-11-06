@@ -162,6 +162,16 @@ def foo(a, b):
         ignored_code = _parse_ignored_code("test.py", source)
         assert ignored_code.no_mutate_lines == set()
 
+    def test_closing_line_of_statement(self):
+        source = """
+def foo(a, b):
+    return max(
+        a + 1,
+        b * 2)  # pragma: no mutate
+"""
+        ignored_code = _parse_ignored_code("test.py", source)
+        assert ignored_code.no_mutate_lines == {3, 5}
+
 
 class TestMatchCasePragma:
     """Tests for pragmas on `match` and `case` headers."""
