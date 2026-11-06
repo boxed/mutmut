@@ -4,9 +4,11 @@ from contextvars import ContextVar
 from contextvars import Token
 from typing import ClassVar
 
-# On CPython < 3.12 the cyclic GC can run while ContextVar.set()/reset() is allocating. A garbage object whose
-# (trampolined) __del__ is finalized at that point touches the same ContextVar while it is half updated, which
-# corrupts it and can segfault (python/cpython#148891). The GC runs finalizers on the thread that triggered it, so a
+# Mitigation for #596. On CPython < 3.12 the cyclic GC can run while ContextVar.set()/reset() is allocating. A garbage
+# object whose (trampolined) __del__ is finalized at that point touches the same ContextVar while it is half updated,
+# which is believed to corrupt it (see python/cpython#148891) and was observed to segfault stats collection. The
+# version gate is our best estimate of where this stops happening, not a verified boundary. The GC runs finalizers on
+# the thread that triggered it, so a
 # per-thread flag is enough to detect that case without touching any process-wide GC state. While the flag is set,
 # get() reports "no caller" and set()/reset() do nothing, so such a finalizer is simply not tracked.
 _GUARD_REENTRANCY = sys.version_info < (3, 12)

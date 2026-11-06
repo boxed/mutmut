@@ -106,6 +106,16 @@ def test_finalizer_interrupting_reset_does_not_touch_the_contextvar(monkeypatch,
     assert fake.value == (None, 0)
 
 
+def test_reset_with_a_token_from_inside_an_interrupting_finalizer_is_skipped(monkeypatch, guard_on):
+    """Defensive: even a real token must not reach ContextVar.reset() while this thread is inside set()/reset()."""
+    fake = FakeContextVar(interrupt=lambda: MutmutCallStack.reset("token:from-elsewhere"))
+    install(monkeypatch, fake)
+
+    MutmutCallStack.set(("outer", 1))
+
+    assert fake.calls == ["set"]
+
+
 def test_reset_none_is_a_noop(monkeypatch, guard_on):
     fake = FakeContextVar()
     install(monkeypatch, fake)
