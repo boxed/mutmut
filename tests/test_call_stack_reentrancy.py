@@ -269,16 +269,48 @@ def test_make_garbage():
 """
 
 
+REPRO_TEST_THREADS = """
+import threading
+
+from repro596.core import make_garbage
+
+errors = []
+
+
+def _work():
+    try:
+        for i in range(5_000):
+            assert make_garbage(i % 13) == 2
+    except BaseException as e:  # exceptions in threads must fail the test, not just print a warning
+        errors.append(e)
+
+
+def test_make_garbage():
+    threads = [threading.Thread(target=_work) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+"""
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="mutmut forks, which Windows does not support")
-@pytest.mark.parametrize("core_source", [REPRO_DIRECT, REPRO_HELPER], ids=["del-is-mutable", "del-calls-helper"])
-def test_stats_collection_survives_trampolined_finalizers(tmp_path: Path, core_source: str):
-    """End-to-end regression for #596. Before the fix this segfaults (exit -11) on CPython 3.10 and 3.11."""
+@pytest.mark.parametrize(
+    ("core_source", "test_source"),
+    [(REPRO_DIRECT, REPRO_TEST), (REPRO_HELPER, REPRO_TEST), (REPRO_DIRECT, REPRO_TEST_THREADS)],
+    ids=["del-is-mutable", "del-calls-helper", "multithreaded"],
+)
+def test_stats_collection_survives_trampolined_finalizers(tmp_path: Path, core_source: str, test_source: str):
+    """End-to-end regression for #596. Before the fix the two single-threaded cases segfault (exit -11) on CPython
+    3.10 and 3.11. The multithreaded case did not fail on unfixed code in our runs; it is a concurrency
+    non-regression check (finalizers on several threads, no hang, no crash)."""
     (tmp_path / "pyproject.toml").write_text(REPRO_PYPROJECT)
     (tmp_path / "repro596").mkdir()
     (tmp_path / "repro596" / "__init__.py").write_text("")
     (tmp_path / "repro596" / "core.py").write_text(textwrap.dedent(core_source))
     (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "test_core.py").write_text(textwrap.dedent(REPRO_TEST))
+    (tmp_path / "tests" / "test_core.py").write_text(textwrap.dedent(test_source))
 
     result = subprocess.run(
         [sys.executable, "-m", "mutmut", "run"],
