@@ -108,7 +108,10 @@ class SourceFileMutationData:
         try:
             with open(self.meta_path) as f:
                 meta = json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError):
+            # A missing cache and a torn one (e.g. the run was killed
+            # mid-write, leaving an empty or truncated file) are equivalent:
+            # there is no usable prior state, so start from empty.
             return
 
         self.exit_code_by_key = meta.pop("exit_code_by_key")

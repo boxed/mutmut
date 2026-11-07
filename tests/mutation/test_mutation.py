@@ -2099,3 +2099,45 @@ class TestRegisterMutantResult:
             )
 
         assert unknown not in data.exit_code_by_key
+
+
+class TestSourceFileMutationDataLoad:
+    """load() must treat an unusable cache file like a missing one."""
+
+    @staticmethod
+    def _meta_path(tmp_path):
+        meta_path = tmp_path / "mutants" / "mymod.py.meta"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        return meta_path
+
+    def test_round_trip(self, tmp_path):
+        data = SourceFileMutationData(path="mymod.py")
+        data.meta_path = self._meta_path(tmp_path)
+        data.exit_code_by_key = {"mymod.x_foo__mutmut_1": 1}
+        data.durations_by_key = {"mymod.x_foo__mutmut_1": 0.5}
+        data.save()
+
+        reloaded = SourceFileMutationData(path="mymod.py")
+        reloaded.meta_path = data.meta_path
+        reloaded.load()
+        assert reloaded.exit_code_by_key == {"mymod.x_foo__mutmut_1": 1}
+        assert reloaded.durations_by_key == {"mymod.x_foo__mutmut_1": 0.5}
+
+    def test_missing_meta_file_is_fine(self, tmp_path):
+        data = SourceFileMutationData(path="mymod.py")
+        data.meta_path = self._meta_path(tmp_path)
+        data.load()
+        assert data.exit_code_by_key == {}
+
+    @pytest.mark.parametrize("contents", ["", '{"exit_code_by_key": {"mymod.x_foo__mutmut_1": 1,', "this is not json"])
+    def test_torn_meta_file_is_treated_like_a_missing_one(self, tmp_path, contents):
+        """A run killed mid-write can leave an empty or truncated .meta behind;
+        load() must not crash with JSONDecodeError but start from empty state."""
+        meta_path = self._meta_path(tmp_path)
+        meta_path.write_text(contents)
+
+        data = SourceFileMutationData(path="mymod.py")
+        data.meta_path = meta_path
+        data.load()
+        assert data.exit_code_by_key == {}
+        assert data.durations_by_key == {}
