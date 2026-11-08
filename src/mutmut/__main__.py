@@ -378,6 +378,7 @@ def _cleanup_stale_stats() -> None:
 
 
 def _invalidate_stale_dependency_edges() -> set[str]:
+    """Reset dependent verdicts before discarding edges from changed functions."""
     old_hashes = state().old_function_hashes
     new_hashes = state().current_function_hashes
 
@@ -389,6 +390,18 @@ def _invalidate_stale_dependency_edges() -> set[str]:
 
     if not changed_functions:
         return set()
+
+    # The graph maps callees to callers. Walk the previous graph before pruning
+    # it so that indirect callers and callers of deleted functions are included.
+    stale_functions = set(changed_functions)
+    pending = list(changed_functions)
+    while pending:
+        for caller in state().function_dependencies.get(pending.pop(), ()):
+            if caller not in stale_functions:
+                stale_functions.add(caller)
+                pending.append(caller)
+
+    _reset_mutant_results(lambda key, _: mangled_name_from_mutant_name(key) in stale_functions)
 
     for callers in state().function_dependencies.values():
         callers -= changed_functions
@@ -674,9 +687,18 @@ def collect_or_load_stats(
         # Run full stats
         run_stats_collection(runner)
     else:
-        _cleanup_stale_stats()
+        changed_functions: set[str] = set()
         if config().track_dependencies and invalidate_stale_callers:
-            _invalidate_stale_dependency_edges()
+            changed_functions = _invalidate_stale_dependency_edges()
+        _cleanup_stale_stats()
+        if changed_functions:
+            # Changed callers may now call different functions. Rebuild the
+            # observed graph so later edits do not use incomplete dependencies.
+            state().tests_by_mangled_function_name.clear()
+            state().duration_by_test.clear()
+            state().function_dependencies.clear()
+            run_stats_collection(runner)
+            return
         save_stats()
 
         # Run incremental stats
