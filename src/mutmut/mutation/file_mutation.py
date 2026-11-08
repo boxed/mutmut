@@ -334,16 +334,18 @@ class MutationVisitor(cst.CSTVisitor):
         ):
             return True
 
-        # ignore decorated functions, because
-        # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
-        # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
-        # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
-        # Exception: @staticmethod and @classmethod are allowed because they are predictable and it's easy to set up trampolines for them
-        if isinstance(node, cst.FunctionDef) and len(node.decorators):
-            if len(node.decorators) == 1:
-                decorator = node.decorators[0].decorator
-                if isinstance(decorator, cst.Name) and decorator.value in ("staticmethod", "classmethod"):
-                    return False
+        # A decorated function is mutated: its decorators stay on the trampoline only, and the copies
+        # (original and mutants) carry none but the binding ones (see `function_trampoline_arrangement`).
+        # So a decorator runs once, as it would without mutmut (no second `@app.post("/foo")`), it never
+        # wraps a copy (`@property` sees the trampoline, a plain function), and its arguments are not
+        # mutated (decorator nodes are skipped below).
+        # Still skipped: decorators that define SEVERAL functions under one name, whose copies would collide,
+        # and caching decorators -- a cache on the trampoline answers every mutant from what the parent
+        # process computed before forking, so the mutants would never run (false survivors).
+        if isinstance(node, cst.FunctionDef) and any(
+            _defines_a_namesake(d.decorator) or _decorator_name(d.decorator) in _CACHING_DECORATORS
+            for d in node.decorators
+        ):
             return True
 
         # decorators are executed at definition time, so mutating them can raise
@@ -354,6 +356,43 @@ class MutationVisitor(cst.CSTVisitor):
             return True
 
         return False
+
+
+#: Decorators after which another function of the same name follows in the same scope.
+_NAMESAKE_DECORATORS = frozenset({"overload"})
+_NAMESAKE_ATTRIBUTES = frozenset({"setter", "getter", "deleter", "register"})
+
+#: Decorators that memoise the decorated function's results.
+_CACHING_DECORATORS = frozenset({"cache", "lru_cache", "cached_property"})
+
+#: Decorators that decide how a function binds in its class; the copies need them to be called alike.
+BINDING_DECORATORS = frozenset({"staticmethod", "classmethod"})
+
+
+def _decorator_name(decorator: cst.BaseExpression) -> str | None:
+    """The last name of `decorator`: `overload`, `typing.overload` and `overload()` all give `overload`."""
+    if isinstance(decorator, cst.Call):
+        decorator = decorator.func
+    if isinstance(decorator, cst.Name):
+        return decorator.value
+    if isinstance(decorator, cst.Attribute):
+        return decorator.attr.value
+    return None
+
+
+def _defines_a_namesake(decorator: cst.BaseExpression) -> bool:
+    """`@overload`, `@x.setter` / `.getter` / `.deleter`, `@f.register`: a sibling shares the name."""
+    target = decorator.func if isinstance(decorator, cst.Call) else decorator
+    if isinstance(target, cst.Attribute) and target.attr.value in _NAMESAKE_ATTRIBUTES:
+        return True
+    return _decorator_name(decorator) in _NAMESAKE_DECORATORS
+
+
+def _binding_decorators(function: cst.FunctionDef) -> list[cst.Decorator]:
+    """The decorators a copy keeps: only those deciding how it binds (`staticmethod`, `classmethod`)."""
+    return [
+        d for d in function.decorators if isinstance(d.decorator, cst.Name) and d.decorator.value in BINDING_DECORATORS
+    ]
 
 
 def _is_enum_class(node: cst.ClassDef) -> bool:
@@ -543,7 +582,7 @@ def function_trampoline_arrangement(
     # trampoline with same signature, that forwards the calls to the activated mutant/original method
     # (put first, s.t. it stays next to @overload definitions of this function. mypy needs this)
     decorator_args = [cst.Arg(cst.Name(mutants_dict_name))]
-    if len(function.decorators) == 1 and m.matches(function.decorators[0].decorator, m.Name("classmethod")):
+    if any(m.matches(d.decorator, m.Name("classmethod")) for d in function.decorators):
         decorator_args.append(cst.Arg(cst.Name("True"), keyword=cst.Name("is_classmethod")))
     trampoline = function.with_changes(
         decorators=[
@@ -553,14 +592,17 @@ def function_trampoline_arrangement(
     )
     method_nodes.append(trampoline)
 
+    # the copies carry only the decorators that decide how they bind; the others act on the trampoline alone
+    copy = function.with_changes(decorators=_binding_decorators(function))
+
     # copy of original function
-    method_nodes.append(function.with_changes(name=cst.Name(mangled_name + "_orig")))
+    method_nodes.append(copy.with_changes(name=cst.Name(mangled_name + "_orig")))
 
     # mutated versions of the function
     for i, mutant in enumerate(mutants):
         mutant_name = f"{mangled_name}_{i + 1}"
         mutant_names.append(mutant_name)
-        mutated_method = function.with_changes(name=cst.Name(mutant_name))
+        mutated_method = copy.with_changes(name=cst.Name(mutant_name))
         mutated_method = cast(cst.FunctionDef, deep_replace(mutated_method, mutant.original_node, mutant.mutated_node))
         method_nodes.append(mutated_method)
 
