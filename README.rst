@@ -622,6 +622,34 @@ directory. If you want to make sure you run a full mutmut run you can delete
 this directory to start from scratch.
 
 
+JUnit XML support
+-----------------
+
+To better integrate with CI/CD systems, ``mutmut`` can generate a JUnit XML
+report from the results of the last run:
+
+.. code-block:: console
+
+    mutmut junitxml
+
+The report is written to stdout. Suspicious and untested mutants are ignored by
+default, but their handling can be configured with:
+
+.. code-block:: console
+
+    mutmut junitxml --suspicious-policy=ignore --untested-policy=ignore
+
+The possible values for these policies are:
+
+- ``ignore``: do not include the result in the report
+- ``skipped``: include the mutant as skipped
+- ``error``: include the mutant as an error
+- ``failure``: include the mutant as a failure
+
+Surviving mutants are always reported as failures and timeouts as errors. The
+unified diff of a failing mutant is included in the report for debugging.
+
+
 Mutation score badges
 ---------------------
 
