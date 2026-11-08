@@ -18,9 +18,14 @@ def status_printer() -> Callable[..., None]:
     last_update = [datetime(1900, 1, 1)]
     update_threshold = timedelta(seconds=0.1)
 
-    def p(s: str, *, force_output: bool = False) -> None:
-        if not force_output and (datetime.now() - last_update[0]) < update_threshold:
+    def p(s: str | Callable[[], str], *, force_output: bool = False) -> None:
+        now = datetime.now()
+        if not force_output and (now - last_update[0]) < update_threshold:
             return
+        # Build the string from the callable once we know it will be used
+        if not isinstance(s, str):
+            s = s()
+
         s = next(spinner) + " " + s
         len_s = len(s)
         output = "\r" + s + (" " * max(last_len[0] - len_s, 0))
@@ -28,6 +33,7 @@ def status_printer() -> Callable[..., None]:
         sys.__stdout__.write(output)
         sys.__stdout__.flush()
         last_len[0] = len_s
+        last_update[0] = now
 
     return p
 
