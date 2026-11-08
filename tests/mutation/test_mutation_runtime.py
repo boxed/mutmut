@@ -194,3 +194,46 @@ def foo(a: int, b: int = 2):
 
     assert foo(1) == 4
     assert foo(1, 10) == 11
+
+
+def test_override_classmethod_subclass_runtime(monkeypatch):
+    """A @classmethod stacked with @override still binds to the subclass, and keeps its override marker"""
+    source = """
+from typing_extensions import override
+
+class Base:
+    @classmethod
+    def create(cls):
+        return cls(0)
+
+class Child(Base):
+    def __init__(self, value):
+        self.value = value
+
+    @classmethod
+    @override
+    def create(cls):
+        return cls(1)
+
+class GrandChild(Child):
+    pass
+""".strip()
+
+    mutated_file = mutate_file_contents("test.py", source)
+    mutated_code, mutant_names = mutated_file.code, mutated_file.mutant_names
+    child_mutants = [name for name in mutant_names if name.startswith("xǁChildǁcreate__mutmut")]
+    assert len(child_mutants) > 0, "Should have at least one mutant of the override"
+
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
+    namespace = {"__name__": "test_module"}
+    exec(mutated_code, namespace)
+    GrandChild = namespace["GrandChild"]
+
+    created = GrandChild.create()
+    assert type(created) is GrandChild
+    assert created.value == 1
+    assert namespace["Child"].__dict__["create"].__func__.__override__ is True
+
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "test_module." + child_mutants[0])
+
+    assert GrandChild.create().value is None

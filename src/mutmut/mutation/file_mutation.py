@@ -338,13 +338,10 @@ class MutationVisitor(cst.CSTVisitor):
         # 1) copying them for the trampoline setup can cause side effects (e.g. multiple @app.post("/foo") definitions)
         # 2) decorators are executed when the function is defined, so we don't want to mutate their arguments and cause exceptions
         # 3) @property decorators break the trampoline signature assignment (which expects it to be a function)
-        # Exception: @staticmethod and @classmethod are allowed because they are predictable and it's easy to set up trampolines for them
+        # Exception: @staticmethod and @classmethod are allowed because they are predictable and it's easy to set up trampolines for them,
+        # and @override (PEP 698) is allowed alongside them because it returns the function itself, only marked
         if isinstance(node, cst.FunctionDef) and len(node.decorators):
-            if len(node.decorators) == 1:
-                decorator = node.decorators[0].decorator
-                if isinstance(decorator, cst.Name) and decorator.value in ("staticmethod", "classmethod"):
-                    return False
-            return True
+            return not _has_supported_decorators(node)
 
         # decorators are executed at definition time, so mutating them can raise
         # exceptions on import. A decorated class is still recursed into, because
@@ -524,6 +521,22 @@ def collect_line_spans(
         line += child_part.count("\n")
 
 
+def _is_override(decorator: cst.BaseExpression) -> bool:
+    """`@override`, `@typing.override` or `@typing_extensions.override`: returns the function itself, only marked."""
+    return m.matches(
+        decorator,
+        m.Name("override") | m.Attribute(value=m.Name("typing") | m.Name("typing_extensions"), attr=m.Name("override")),
+    )
+
+
+def _has_supported_decorators(function: cst.FunctionDef) -> bool:
+    """Decorators the trampoline setup can copy: at most one `staticmethod`/`classmethod`, plus `override`."""
+    others = [d.decorator for d in function.decorators if not _is_override(d.decorator)]
+    if not others:
+        return True
+    return len(others) == 1 and m.matches(others[0], m.Name("staticmethod") | m.Name("classmethod"))
+
+
 def function_trampoline_arrangement(
     function: cst.FunctionDef, mutants: Iterable[Mutation], class_name: str | None
 ) -> tuple[Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], Sequence[MODULE_STATEMENT], Sequence[str]]:
@@ -543,7 +556,7 @@ def function_trampoline_arrangement(
     # trampoline with same signature, that forwards the calls to the activated mutant/original method
     # (put first, s.t. it stays next to @overload definitions of this function. mypy needs this)
     decorator_args = [cst.Arg(cst.Name(mutants_dict_name))]
-    if len(function.decorators) == 1 and m.matches(function.decorators[0].decorator, m.Name("classmethod")):
+    if any(m.matches(d.decorator, m.Name("classmethod")) for d in function.decorators):
         decorator_args.append(cst.Arg(cst.Name("True"), keyword=cst.Name("is_classmethod")))
     trampoline = function.with_changes(
         decorators=[
