@@ -18,6 +18,7 @@ import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import _apply_config_change_invalidation
 from mutmut.__main__ import _changed_dependency_files
+from mutmut.__main__ import _changed_hashed_files
 from mutmut.__main__ import _changed_test_files
 from mutmut.__main__ import _cleanup_stale_stats
 from mutmut.__main__ import _forget_tests_in_changed_files
@@ -2299,6 +2300,28 @@ def test_test_file_baseline_keeps_changed_conftest_until_full_run(tmp_path, monk
 
     _refresh_test_file_baseline(full_run=True)
     assert state().test_file_hashes == compute_test_file_hashes(["tests/test_a.py::t"])
+    reset_state()
+
+
+def test_cache_invalidation_glob_matches_top_level_file(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        mutmut.__main__,
+        "config",
+        lambda: _config_for_invalidation(cache_invalidation_files=["tests/**/*.py"]),
+    )
+    pathlib.Path("tests/sub").mkdir(parents=True)
+    pathlib.Path("tests/test_ops.py").write_text("x = 1")
+    pathlib.Path("tests/sub/test_deep.py").write_text("x = 1")
+    state().old_watched_file_hashes = {
+        "tests/test_ops.py": "deadbeef0000",
+        "tests/sub/test_deep.py": "deadbeef0000",
+    }
+
+    changed = _changed_hashed_files(restrict_to=["tests/**/*.py"])
+
+    assert changed == {"tests/test_ops.py", "tests/sub/test_deep.py"}
     reset_state()
 
 
