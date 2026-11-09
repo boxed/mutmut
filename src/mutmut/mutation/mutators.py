@@ -179,7 +179,10 @@ def operator_unsymmetrical_string_methods_swap(node: cst.Call) -> Iterable[cst.C
 
 def operator_remove_unary_ops(node: cst.UnaryOperation) -> Iterable[cst.BaseExpression]:
     if isinstance(node.operator, cst.Not | cst.BitInvert):
-        yield node.expression
+        yield node.expression.with_changes(
+            lpar=[*node.lpar, *node.expression.lpar],
+            rpar=[*node.expression.rpar, *node.rpar],
+        )
 
 
 _keyword_mapping: dict[type[cst.CSTNode], type[cst.CSTNode]] = {
