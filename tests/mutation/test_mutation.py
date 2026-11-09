@@ -16,6 +16,7 @@ import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import _apply_config_change_invalidation
 from mutmut.__main__ import _changed_dependency_files
+from mutmut.__main__ import _changed_hashed_files
 from mutmut.__main__ import _cleanup_stale_stats
 from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import _refresh_change_detection_baseline
@@ -1849,6 +1850,28 @@ def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
 
     assert "pyproject.toml" in hashes
     assert "query.sql" in hashes
+
+
+def test_cache_invalidation_glob_matches_top_level_file(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        mutmut.__main__,
+        "config",
+        lambda: _config_for_invalidation(cache_invalidation_files=["tests/**/*.py"]),
+    )
+    pathlib.Path("tests/sub").mkdir(parents=True)
+    pathlib.Path("tests/test_ops.py").write_text("x = 1")
+    pathlib.Path("tests/sub/test_deep.py").write_text("x = 1")
+    state().old_watched_file_hashes = {
+        "tests/test_ops.py": "deadbeef0000",
+        "tests/sub/test_deep.py": "deadbeef0000",
+    }
+
+    changed = _changed_hashed_files(restrict_to=["tests/**/*.py"])
+
+    assert changed == {"tests/test_ops.py", "tests/sub/test_deep.py"}
+    reset_state()
 
 
 # --- git-based change detection (soft dependency) ---
