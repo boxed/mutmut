@@ -46,6 +46,7 @@ from mutmut.runners.harness import ListAllTestsResult
 from mutmut.runners.harness import PytestRunner
 from mutmut.runners.harness import TestRunner
 from mutmut.state import state
+from mutmut.stats import SUSPICIOUS_EXIT_CODE
 from mutmut.utils.logging_utils import get_log_file_path
 from mutmut.utils.logging_utils import get_logger
 from mutmut.utils.logging_utils import setup_file_logging
@@ -589,7 +590,7 @@ class ForkServerRunner(MutantRunner):
                 try:
                     exit_code = test_runner.run_tests(mutant_name=mutant_name, tests=tests)
                 except Exception:
-                    exit_code = -1
+                    exit_code = SUSPICIOUS_EXIT_CODE
 
                 worker_logger.debug(f"Finished {mutant_name}: exit={exit_code}")
                 os._exit(exit_code)
@@ -867,7 +868,10 @@ class ForkRunner(MutantRunner):
             if not self.debug:
                 sys.stdout = sys.stderr = open(os.devnull, "w")
 
-            result = self.test_runner.run_tests(mutant_name=mutant_name, tests=tests_sorted)
+            try:
+                result = self.test_runner.run_tests(mutant_name=mutant_name, tests=tests_sorted)
+            except Exception:
+                result = SUSPICIOUS_EXIT_CODE
             os._exit(result)
         else:
             # In the parent.

@@ -14,6 +14,7 @@ from mutmut.configuration import reset_config
 from mutmut.runners.harness import ListAllTestsResult
 from mutmut.state import reset_state
 from mutmut.state import state
+from mutmut.stats import status_by_exit_code
 from mutmut.workers.isolation import ForkRunner
 from mutmut.workers.isolation import ForkServerCrashError
 from mutmut.workers.isolation import ForkServerRunner
@@ -375,6 +376,44 @@ class TestForkServerRunnerNoTestMutants:
         result = runner.wait_for_result()
         assert (result.mutant_name, result.exit_code) == ("mod.x_foo__mutmut_1", 33)
         assert runner.pending_count() == 0
+
+
+class _RaisingTestRunner:
+    """A TestRunner whose session raises, like a pytest session failing its cleanup at session finish."""
+
+    def warm_up(self):
+        pass
+
+    def run_tests(self, *, mutant_name, tests):
+        raise RuntimeError("cleanup failed")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
+class TestAnExceptionFromTheTestRun:
+    """The tests did not finish, so the mutant was neither killed nor timed out."""
+
+    @pytest.fixture(autouse=True)
+    def in_project_dir(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "src").mkdir()
+        reset_config()
+        reset_state()
+
+    @pytest.mark.parametrize(
+        "make_runner",
+        [
+            lambda: ForkRunner(max_workers=1, test_runner=_RaisingTestRunner(), debug=False),
+            lambda: ForkServerRunner(max_workers=1, test_runner_class=_RaisingTestRunner, test_runner_args={}),
+        ],
+        ids=["fork", "forkserver"],
+    )
+    def test_reports_the_mutant_as_suspicious(self, make_runner):
+        runner = make_runner()
+        runner.startup()
+        runner.submit("mod.x_foo__mutmut_1", ["test_a"], cpu_time_limit=10, estimated_time=0.0)
+        result = runner.wait_for_result()
+        runner.shutdown()
+        assert status_by_exit_code[result.exit_code] == "suspicious"
 
 
 class _RecordingTestRunner:
