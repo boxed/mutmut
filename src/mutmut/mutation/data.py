@@ -1,6 +1,7 @@
 import json
 from collections.abc import Mapping
 from collections.abc import Sequence
+from dataclasses import astuple
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
@@ -12,6 +13,23 @@ class LineSpan:
 
     start: int
     end: int
+
+
+@dataclass(frozen=True)
+class SourceSpan:
+    """A range of code in a source file, as libcst reports it.
+
+    Lines are 1-based and columns 0-based. The end column is exclusive."""
+
+    start_line: int
+    start_column: int
+    end_line: int
+    end_column: int
+
+    def contains(self, other: "SourceSpan") -> bool:
+        starts_before = (self.start_line, self.start_column) <= (other.start_line, other.start_column)
+        ends_after = (other.end_line, other.end_column) <= (self.end_line, self.end_column)
+        return starts_before and ends_after
 
 
 class MutantLineSpans:
@@ -103,6 +121,10 @@ class SourceFileMutationData:
         self.hash_by_function_name: dict[str, str] = {}
         self.durations_by_key: dict[str, float] = {}
         self.type_check_error_by_key: dict[str, str | None] = {}
+        #: The code in the source file that each mutant changes
+        self.source_span_by_key: dict[str, SourceSpan] = {}
+        #: The code that mutants like `a = b` -> `a = None` remove, see `shadowed_by_key`
+        self.removed_span_by_key: dict[str, SourceSpan] = {}
 
     def load(self) -> None:
         try:
@@ -119,6 +141,8 @@ class SourceFileMutationData:
         self.type_check_error_by_key = meta.pop("type_check_error_by_key", {})
         self.durations_by_key = meta.pop("durations_by_key")
         self.estimated_time_of_tests_by_mutant = meta.pop("estimated_durations_by_key")
+        self.source_span_by_key = {k: SourceSpan(*v) for k, v in meta.pop("source_span_by_key", {}).items()}
+        self.removed_span_by_key = {k: SourceSpan(*v) for k, v in meta.pop("removed_span_by_key", {}).items()}
         assert not meta, f"Meta file {self.meta_path} constains unexpected keys: {set(meta.keys())}"
 
     def save(self) -> None:
@@ -130,7 +154,35 @@ class SourceFileMutationData:
                     "type_check_error_by_key": self.type_check_error_by_key,
                     "durations_by_key": self.durations_by_key,
                     "estimated_durations_by_key": self.estimated_time_of_tests_by_mutant,
+                    "source_span_by_key": {k: astuple(v) for k, v in self.source_span_by_key.items()},
+                    "removed_span_by_key": {k: astuple(v) for k, v in self.removed_span_by_key.items()},
                 },
                 f,
                 indent=4,
             )
+
+    def shadowed_by_key(self) -> dict[str, str]:
+        """Find the mutants that are shadowed by a surviving mutant that removes their code.
+
+        If the tests do not notice that `x = foo(a + 1)` became `x = None`, the mutants inside
+        `foo(a + 1)` are not worth looking at on their own. Fixing the tests for the mutant that
+        removes the code is likely to deal with them too.
+
+        :return: The outermost surviving mutant that shadows each shadowed mutant."""
+        # exit code 0 means the mutant survived
+        shadowing_keys = [key for key in self.removed_span_by_key if self.exit_code_by_key.get(key) == 0]
+
+        def outermost_first(key: str) -> tuple[int, int, int, int]:
+            # the removed spans that contain a mutant are nested in each other
+            span = self.removed_span_by_key[key]
+            return span.start_line, span.start_column, -span.end_line, -span.end_column
+
+        shadowing_keys.sort(key=outermost_first)
+
+        shadowed_by_key: dict[str, str] = {}
+        for key, span in self.source_span_by_key.items():
+            for shadowing_key in shadowing_keys:
+                if key != shadowing_key and self.removed_span_by_key[shadowing_key].contains(span):
+                    shadowed_by_key[key] = shadowing_key
+                    break
+        return shadowed_by_key

@@ -58,6 +58,10 @@ left off.
 To work with the results, use `mutmut browse` where you can see the mutants,
 retest them when you've updated your tests.
 
+When a mutant that removes code, like ``x = foo(a)`` -> ``x = None``, survives,
+`browse` hides the other mutants inside that code, because they are shadowed by
+it. Press `s` to show them.
+
 You can also write a mutant to disk from the `browse` interface, or via
 `mutmut apply <mutant>`. You should **REALLY** have the file you mutate under
 source code control and committed before you apply a mutant!
