@@ -16,12 +16,17 @@ import mutmut
 from mutmut.__main__ import CatchOutput
 from mutmut.__main__ import _apply_config_change_invalidation
 from mutmut.__main__ import _changed_dependency_files
+from mutmut.__main__ import _changed_test_files
 from mutmut.__main__ import _cleanup_stale_stats
+from mutmut.__main__ import _forget_tests_in_changed_files
 from mutmut.__main__ import _invalidate_stale_dependency_edges
 from mutmut.__main__ import _refresh_change_detection_baseline
+from mutmut.__main__ import _refresh_test_file_baseline
 from mutmut.__main__ import _register_mutant_result
 from mutmut.__main__ import _report_watched_file_changes
 from mutmut.__main__ import _reset_mutant_results
+from mutmut.__main__ import _reset_results_for_test_changes
+from mutmut.__main__ import compute_test_file_hashes
 from mutmut.__main__ import compute_watched_file_hashes
 from mutmut.__main__ import git_changed_non_py_files
 from mutmut.__main__ import git_head
@@ -1849,6 +1854,178 @@ def test_compute_watched_file_hashes_includes_user_globs(tmp_path, monkeypatch):
 
     assert "pyproject.toml" in hashes
     assert "query.sql" in hashes
+
+
+# --- test file change detection ---
+
+
+def _write_tests(files):
+    for rel, content in files.items():
+        path = pathlib.Path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+
+def test_compute_test_file_hashes_includes_conftests_above_test_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_tests(
+        {
+            "conftest.py": "",
+            "tests/conftest.py": "",
+            "tests/unit/test_a.py": "def test_a(): pass",
+            "other/conftest.py": "",  # not above any test, so not tracked
+        }
+    )
+
+    hashes = compute_test_file_hashes(["tests/unit/test_a.py::test_a", "tests/unit/test_a.py::TestX::test_b[1]"])
+
+    assert set(hashes) == {"conftest.py", "tests/conftest.py", "tests/unit/test_a.py"}
+
+
+def test_compute_test_file_hashes_skips_ids_without_a_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert compute_test_file_hashes(["tests.test_a.test_a"]) == {}
+
+
+def test_edited_test_file_forgets_its_tests_and_returns_covered_functions(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/test_a.py": "v1", "tests/test_b.py": "v1"})
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t", "tests/test_b.py::t"])
+    state().duration_by_test.update({"tests/test_a.py::t": 1.0, "tests/test_b.py::t": 1.0})
+    state().tests_by_mangled_function_name["mymod.x_foo"] = {"tests/test_a.py::t"}
+    state().tests_by_mangled_function_name["mymod.x_bar"] = {"tests/test_a.py::t", "tests/test_b.py::t"}
+    state().tests_by_mangled_function_name["mymod.x_baz"] = {"tests/test_b.py::t"}
+
+    pathlib.Path("tests/test_a.py").write_text("v2")
+
+    assert _forget_tests_in_changed_files() == {"mymod.x_foo", "mymod.x_bar"}
+    # the edited test is forgotten, so the incremental stats collection treats it as new
+    assert set(state().duration_by_test) == {"tests/test_b.py::t"}
+    assert state().tests_by_mangled_function_name["mymod.x_foo"] == set()
+    assert state().tests_by_mangled_function_name["mymod.x_bar"] == {"tests/test_b.py::t"}
+    assert state().tests_by_mangled_function_name["mymod.x_baz"] == {"tests/test_b.py::t"}
+    reset_state()
+
+
+def test_deleted_test_file_counts_as_changed(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/test_a.py": "v1"})
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t"])
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+    state().tests_by_mangled_function_name["mymod.x_foo"] = {"tests/test_a.py::t"}
+
+    pathlib.Path("tests/test_a.py").unlink()
+
+    assert _forget_tests_in_changed_files() == {"mymod.x_foo"}
+    reset_state()
+
+
+def test_unchanged_test_files_keep_their_stats(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/test_a.py": "v1"})
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t"])
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+    state().tests_by_mangled_function_name["mymod.x_foo"] = {"tests/test_a.py::t"}
+
+    assert _forget_tests_in_changed_files() == set()
+    assert set(state().duration_by_test) == {"tests/test_a.py::t"}
+    reset_state()
+
+
+def test_absent_test_file_baseline_is_silent(tmp_path, monkeypatch):
+    # cache written by an older mutmut, without test file hashes
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/test_a.py": "v1"})
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+
+    assert _changed_test_files() == set()
+    assert _forget_tests_in_changed_files() == set()
+    reset_state()
+
+
+def test_conftest_changes_are_left_to_the_dependency_policy(tmp_path, monkeypatch, capsys):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
+    _write_tests({"tests/conftest.py": "v1", "tests/test_a.py": "v1"})
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t"])
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+
+    pathlib.Path("tests/conftest.py").write_text("v2")
+
+    assert _forget_tests_in_changed_files() == set()
+    assert _report_watched_file_changes() is False  # default policy: warn
+    assert "tests/conftest.py" in capsys.readouterr().out
+
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation(on_dependency_change="rerun"))
+    assert _report_watched_file_changes() is True
+    reset_state()
+
+
+def test_new_conftest_next_to_known_tests_is_detected(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/test_a.py": "v1"})
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t"])
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+
+    _write_tests({"tests/conftest.py": "import pytest"})
+
+    assert _changed_test_files() == {"tests/conftest.py"}
+    reset_state()
+
+
+def test_test_changes_reset_only_affected_verdicts(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutmut.__main__, "config", lambda: _config_for_invalidation())
+    state().tests_by_mangled_function_name["mymod.x_newly_covered"] = {"tests/test_new.py::t"}
+    state().tests_by_mangled_function_name["mymod.x_unrelated"] = {"tests/test_other.py::t"}
+    _write_meta(
+        {
+            "mymod.x_edited__mutmut_1": 1,  # killed by a test that was edited -> may now survive
+            "mymod.x_edited__mutmut_2": 0,
+            "mymod.x_newly_covered__mutmut_1": 0,  # survived -> new test may kill it
+            "mymod.x_newly_covered__mutmut_2": 33,  # no tests -> new test may kill it
+            "mymod.x_newly_covered__mutmut_3": 1,  # killed by another test -> stays killed
+            "mymod.x_unrelated__mutmut_1": 0,
+        }
+    )
+
+    _reset_results_for_test_changes({"mymod.x_edited"}, {"tests/test_new.py::t"})
+
+    assert _load_results() == {
+        "mymod.x_edited__mutmut_1": None,
+        "mymod.x_edited__mutmut_2": None,
+        "mymod.x_newly_covered__mutmut_1": None,
+        "mymod.x_newly_covered__mutmut_2": None,
+        "mymod.x_newly_covered__mutmut_3": 1,
+        "mymod.x_unrelated__mutmut_1": 0,
+    }
+    reset_state()
+
+
+def test_test_file_baseline_keeps_changed_conftest_until_full_run(tmp_path, monkeypatch):
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    _write_tests({"tests/conftest.py": "v1", "tests/test_a.py": "v1"})
+    state().duration_by_test["tests/test_a.py::t"] = 1.0
+    state().old_test_file_hashes = compute_test_file_hashes(["tests/test_a.py::t"])
+    old = dict(state().old_test_file_hashes)
+
+    _write_tests({"tests/conftest.py": "v2", "tests/test_a.py": "v2"})
+
+    _refresh_test_file_baseline(full_run=False)
+    assert state().test_file_hashes["tests/conftest.py"] == old["tests/conftest.py"]  # warn keeps firing
+    assert state().test_file_hashes["tests/test_a.py"] != old["tests/test_a.py"]  # edit already handled
+
+    _refresh_test_file_baseline(full_run=True)
+    assert state().test_file_hashes == compute_test_file_hashes(["tests/test_a.py::t"])
+    reset_state()
 
 
 # --- git-based change detection (soft dependency) ---
