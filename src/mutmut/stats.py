@@ -119,6 +119,8 @@ def load_stats() -> bool:
             state().old_config_fingerprint = data.pop("config_fingerprint", {})
             state().old_watched_file_hashes = data.pop("watched_file_hashes", {})
             state().old_git_commit = data.pop("git_commit", None)
+            state().old_test_file_hashes = data.pop("test_file_hashes", {})
+            state().test_file_hashes = state().old_test_file_hashes
             # Preserve the loaded baseline; only a full run refreshes it.
             state().watched_file_hashes = state().old_watched_file_hashes
             state().git_commit = state().old_git_commit
@@ -141,6 +143,7 @@ def save_stats() -> None:
                 config_fingerprint=config().config_fingerprint(),
                 watched_file_hashes=state().watched_file_hashes,
                 git_commit=state().git_commit,
+                test_file_hashes=state().test_file_hashes,
             ),
             f,
             indent=4,
