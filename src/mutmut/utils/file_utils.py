@@ -75,6 +75,39 @@ def copy_also_copy_files() -> None:
             shutil.copy2(path, destination)
         else:
             shutil.copytree(path, destination, dirs_exist_ok=True)
+            remove_files_missing_from_source(path, destination)
+
+
+def _overlaps_source_paths(path: Path) -> bool:
+    resolved = path.resolve()
+    for source_path in config().source_paths:
+        source = Path(source_path).resolve()
+        if resolved == source or source in resolved.parents or resolved in source.parents:
+            return True
+    return False
+
+
+def remove_files_missing_from_source(source: Path, destination: Path) -> None:
+    """Remove files from the mutants/ copy that were deleted in the project.
+
+    copytree with dirs_exist_ok never deletes anything, so a deleted test module would
+    otherwise keep running from mutants/. __pycache__ is left alone, and source paths
+    are skipped because mutants/ has mutmut's own files there.
+    """
+    if _overlaps_source_paths(source):
+        return
+    for root, dirs, files in walk(destination, topdown=False):
+        root_path = Path(root)
+        if "__pycache__" in root_path.relative_to(destination).parts:
+            continue
+        relative_root = root_path.relative_to(destination)
+        for name in files:
+            if not (source / relative_root / name).exists():
+                (root_path / name).unlink()
+        for name in dirs:
+            copied_dir = root_path / name
+            if name != "__pycache__" and not (source / relative_root / name).exists():
+                shutil.rmtree(copied_dir)
 
 
 def setup_source_paths() -> None:
