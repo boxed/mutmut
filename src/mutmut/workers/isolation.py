@@ -16,13 +16,14 @@ libraries.
 from __future__ import annotations
 
 import gc
+import json
 import logging
 import os
 import pickle
-import resource
 import select
 import signal
 import struct
+import subprocess
 import sys
 import time
 import traceback
@@ -33,6 +34,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Empty
+from queue import Queue
+from threading import Thread
 from time import process_time
 from typing import Any
 from typing import NamedTuple
@@ -52,7 +55,15 @@ from mutmut.utils.logging_utils import setup_file_logging
 from mutmut.utils.safe_setproctitle import safe_setproctitle as setproctitle
 from mutmut.workers.timeout import register_timeout
 
+if sys.platform != "win32":
+    import resource
+
 T = TypeVar("T")
+
+# Reported for a mutant whose worker was killed for running too long ("timeout").
+_TIMEOUT_EXIT_CODE = 36
+# Windows reports a crashed process as an NTSTATUS error code, all of which are at least this.
+_FIRST_NTSTATUS_ERROR = 0xC0000000
 
 
 def _with_child_traceback(message: str, data: dict[str, Any] | None) -> str:
@@ -927,6 +938,155 @@ class ForkRunner(MutantRunner):
         return self.test_runner.list_all_tests()
 
 
+@dataclass
+class _SpawnedJob:
+    """A mutant being tested by a SpawnRunner worker process."""
+
+    process: subprocess.Popen[str]
+    mutant_name: str
+    start_time: datetime
+    deadline: float
+    timed_out: bool = False
+
+
+class SpawnRunner(MutantRunner):
+    """Runner that tests each mutant in a freshly started Python process.
+
+    Needs no os.fork(), so it is the one that works on Windows. A new process inherits
+    nothing, so each worker pays for the interpreter start, the pytest import and the
+    test collection itself. To hide part of that, a replacement worker is started as
+    soon as a result is collected, and imports pytest while it waits for its mutant.
+
+    There is no CPU-time limit here, only the wall-clock one.
+    """
+
+    def __init__(self, *, max_workers: int, test_runner: TestRunner, debug: bool = False) -> None:
+        self.max_workers = max_workers
+        self.test_runner = test_runner
+        self.debug = debug
+        self._accepting_work = True
+        self._idle: list[subprocess.Popen[str]] = []
+        self._running: dict[int, _SpawnedJob] = {}  # pid -> job
+        self._exited_pids: Queue[int] = Queue()
+        self._no_tests_results: list[MutantResult] = []
+
+    def startup(self) -> None:
+        """No-op: workers are started when there is work for them."""
+
+    def _start_worker(self) -> subprocess.Popen[str]:
+        output = None if self.debug else subprocess.DEVNULL
+        return subprocess.Popen(
+            [sys.executable, "-m", "mutmut.workers.spawn_worker"],
+            stdin=subprocess.PIPE,
+            stdout=output,
+            stderr=output,
+            text=True,
+        )
+
+    def _report_exit(self, process: subprocess.Popen[str]) -> None:
+        process.wait()
+        self._exited_pids.put(process.pid)
+
+    def submit(self, mutant_name: str, tests: list[str], cpu_time_limit: int, estimated_time: float) -> None:
+        if not tests:
+            self._no_tests_results.append(MutantResult(mutant_name=mutant_name, exit_code=33, duration=0.0))
+            return
+
+        process = self._idle.pop() if self._idle else self._start_worker()
+        # Run fast tests first.
+        tests_sorted = sorted(tests, key=lambda test_name: state().duration_by_test[test_name])
+        assert process.stdin is not None
+        try:
+            # json.dumps escapes non-ASCII, so the encoding of the worker's stdin does not matter.
+            process.stdin.write(json.dumps({"mutant_name": mutant_name, "tests": tests_sorted}) + "\n")
+            process.stdin.close()
+        except OSError:
+            pass  # The worker died while idle. Its exit code is reported like any other result.
+
+        cfg = config()
+        wall_time_limit_s = (estimated_time + cfg.timeout_constant) * cfg.timeout_multiplier
+        self._running[process.pid] = _SpawnedJob(
+            process=process,
+            mutant_name=mutant_name,
+            start_time=datetime.now(),
+            deadline=time.monotonic() + wall_time_limit_s,
+        )
+        Thread(target=self._report_exit, args=(process,), daemon=True).start()
+
+    def has_capacity(self) -> bool:
+        return len(self._running) < self.max_workers
+
+    def _kill_timed_out_workers(self) -> None:
+        now = time.monotonic()
+        for job in self._running.values():
+            if not job.timed_out and job.deadline <= now:
+                job.timed_out = True
+                job.process.kill()
+
+    def wait_for_result(self, timeout: float | None = None) -> MutantResult:
+        if self._no_tests_results:
+            return self._no_tests_results.pop(0)
+        if not self._running:
+            raise ChildProcessError("No mutant is being tested")
+
+        while True:
+            self._kill_timed_out_workers()
+            try:
+                # A blocked Queue.get() cannot be interrupted by Ctrl-C on Windows, so wake up regularly.
+                pid = self._exited_pids.get(timeout=1.0)
+            except Empty:
+                continue
+            job = self._running.pop(pid)
+            if self._accepting_work:
+                self._idle.append(self._start_worker())
+
+            exit_code = job.process.returncode
+            if job.timed_out:
+                exit_code = _TIMEOUT_EXIT_CODE
+            elif exit_code >= _FIRST_NTSTATUS_ERROR:
+                exit_code = -11  # Reported as "segfault", like a SIGSEGV death on POSIX.
+            duration = (datetime.now() - job.start_time).total_seconds()
+            return MutantResult(mutant_name=job.mutant_name, exit_code=exit_code, duration=duration)
+
+    def pending_count(self) -> int:
+        return len(self._running) + len(self._no_tests_results)
+
+    def signal_work_complete(self) -> None:
+        self._accepting_work = False
+
+    def _stop_idle_workers(self) -> None:
+        for process in self._idle:
+            process.kill()
+            process.wait()
+            assert process.stdin is not None
+            process.stdin.close()
+        self._idle.clear()
+
+    def stop_all_workers(self) -> None:
+        self._accepting_work = False
+        for job in self._running.values():
+            job.process.kill()
+        self._stop_idle_workers()
+
+    def shutdown(self) -> None:
+        self._accepting_work = False
+        while self._running:
+            self.wait_for_result()
+        self._stop_idle_workers()
+
+    def collect_stats(self, tests: Iterable[str] | None) -> int:
+        return self.test_runner.run_stats(tests=tests or [])
+
+    def run_clean_tests(self, tests: Iterable[str]) -> int:
+        return self.test_runner.run_tests(mutant_name=None, tests=tests)
+
+    def run_forced_fail(self) -> int:
+        return self.test_runner.run_forced_fail()
+
+    def list_all_tests(self) -> ListAllTestsResult:
+        return self.test_runner.list_all_tests()
+
+
 def get_mutant_runner(max_workers: int = 1) -> MutantRunner:
     """Create a MutantRunner based on the configured ``process_isolation``.
 
@@ -947,6 +1107,9 @@ def get_mutant_runner(max_workers: int = 1) -> MutantRunner:
             debug=config().debug,
             max_restarts=config().max_forkserver_restarts,
         )
+
+    if config().process_isolation == ProcessIsolation.SPAWN:
+        return SpawnRunner(max_workers=max_workers, test_runner=PytestRunner(), debug=config().debug)
 
     pytest_runner = PytestRunner()
     pytest_runner.prepare_main_test_run()
