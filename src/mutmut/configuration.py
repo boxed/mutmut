@@ -87,7 +87,7 @@ def _config_reader() -> Callable[[str, Any], Any]:
             return toml_conf
 
     config_parser = ConfigParser()
-    config_parser.read("setup.cfg")
+    config_parser.read("setup.cfg", encoding="utf-8")
 
     def setup_cfg_conf(key: str, default: Any) -> Any:
         try:

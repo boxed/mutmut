@@ -980,7 +980,7 @@ class SpawnRunner(MutantRunner):
             stdin=subprocess.PIPE,
             stdout=output,
             stderr=output,
-            text=True,
+            encoding="utf-8",
         )
 
     def _report_exit(self, process: subprocess.Popen[str]) -> None:
