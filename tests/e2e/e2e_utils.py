@@ -34,7 +34,7 @@ def read_all_stats_for_project(project_path: Path) -> dict[str, dict]:
                 continue
             data = SourceFileMutationData(path=p)
             data.load()
-            stats[str(data.meta_path)] = data.exit_code_by_key
+            stats[Path(data.meta_path).as_posix()] = data.exit_code_by_key
 
         return stats
 

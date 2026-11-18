@@ -1,31 +1,18 @@
 from __future__ import annotations
 
-import os
-import platform
-import sys
-from collections.abc import Iterable
-from typing import Any
-
-from mutmut.state import state
-from mutmut.utils.format_utils import get_module_from_key
-from mutmut.utils.format_utils import get_mutant_name
-from mutmut.utils.format_utils import mangled_name_from_mutant_name
-
-if platform.system() == "Windows":
-    print(
-        "To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue https://github.com/boxed/mutmut/issues/397"
-    )
-    sys.exit(1)
 import ast
 import ctypes
 import fnmatch
 import hashlib
 import json
+import os
 import shutil
 import signal
 import subprocess
+import sys
 import warnings
 from collections.abc import Callable
+from collections.abc import Iterable
 from colorsys import hls_to_rgb
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
@@ -43,6 +30,7 @@ from os import makedirs
 from pathlib import Path
 from time import process_time
 from types import TracebackType
+from typing import Any
 
 import click
 import libcst as cst
@@ -67,6 +55,7 @@ from mutmut.mutation.trampoline import set_mutant_under_test
 from mutmut.runners.harness import CollectTestsFailedException
 from mutmut.runners.harness import PytestRunner
 from mutmut.runners.harness import collected_test_names
+from mutmut.state import state
 from mutmut.stats import calculate_summary_stats
 from mutmut.stats import emoji_by_status
 from mutmut.stats import load_stats
@@ -80,6 +69,9 @@ from mutmut.utils.file_utils import copy_src_dir
 from mutmut.utils.file_utils import setup_source_paths
 from mutmut.utils.file_utils import walk_mutatable_files
 from mutmut.utils.file_utils import walk_source_files
+from mutmut.utils.format_utils import get_module_from_key
+from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.workers.isolation import MutantResult
 from mutmut.workers.isolation import MutantRunner
 from mutmut.workers.isolation import get_mutant_runner
@@ -144,7 +136,8 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
     executor = ProcessPoolExecutor(
         max_workers=max_children,
         initializer=_init_mutant_generation_worker,
-        initargs=(files_in_progress,),
+        # Under the spawn start method the workers do not inherit state(), so hand them what they read from it.
+        initargs=(files_in_progress, state()._covered_lines, state()._excluded_lines),
     )
     try:
         futures = [executor.submit(_create_file_mutants_in_worker, i, path) for i, path in enumerate(paths)]
@@ -175,9 +168,14 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
 _files_in_progress: ctypes.Array[ctypes.c_bool] | None = None
 
 
-def _init_mutant_generation_worker(files_in_progress: ctypes.Array[ctypes.c_bool]) -> None:
+def _init_mutant_generation_worker(
+    files_in_progress: ctypes.Array[ctypes.c_bool],
+    covered_lines: dict[str, set[int]] | None,
+    excluded_lines: dict[str, set[int]] | None,
+) -> None:
     global _files_in_progress
     _files_in_progress = files_in_progress
+    _set_lines_covered_by_tests(covered_lines, excluded_lines)
     # Die on Ctrl-C, like the workers of multiprocessing.Pool did. Otherwise a worker
     # reports the KeyboardInterrupt and goes on with the next file, and we wait for it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -205,6 +203,13 @@ def create_file_mutants(path: Path) -> FileMutationResult:
             return FileMutationResult(ignored=True)
     except Exception as e:
         return FileMutationResult(error=e)
+
+
+def _set_lines_covered_by_tests(
+    covered_lines: dict[str, set[int]] | None, excluded_lines: dict[str, set[int]] | None
+) -> None:
+    state()._covered_lines = covered_lines
+    state()._excluded_lines = excluded_lines
 
 
 def store_lines_covered_by_tests() -> None:
@@ -1128,7 +1133,9 @@ def _register_mutant_result(
 
 # Guard against "context has already been set" when mutmut.__main__ is
 # re-executed (see GH-466).
-if get_start_method(allow_none=True) is None:
+if sys.platform == "win32":
+    pass  # Windows only has the spawn start method, and spawned children import this module again.
+elif get_start_method(allow_none=True) is None:
     set_start_method("fork")
 elif "mutmut.__main__" not in sys.modules:
     warnings.warn(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
+from multiprocessing import get_context
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -65,11 +68,26 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> Coverag
     suite's imports out of the main process, which imports the same modules again
     later and cannot always survive it (#528).
     """
-    # TODO: (#397) mutmut.workers.isolation imports POSIX-only modules
+    if sys.platform == "win32":
+        with get_context("spawn").Pool(1) as pool:
+            spawned_result: CoverageInfo = pool.apply(_gather_coverage_in_spawned_process, (runner, source_files))
+        return spawned_result
+
     from mutmut.workers.isolation import run_in_fork_with_result
 
     result: CoverageInfo = run_in_fork_with_result(_gather_coverage_in_this_process, runner, source_files)
     return result
+
+
+def _gather_coverage_in_spawned_process(runner: TestRunner, source_files: Iterable[Path]) -> CoverageInfo:
+    """Sets up what a forked child would have inherited, then measures."""
+    from mutmut.configuration import config
+    from mutmut.utils.file_utils import setup_source_paths
+
+    setup_source_paths()
+    if not config().debug:
+        sys.stdout = sys.stderr = open(os.devnull, "w")
+    return _gather_coverage_in_this_process(runner, source_files)
 
 
 def _gather_coverage_in_this_process(runner: TestRunner, source_files: Iterable[Path]) -> CoverageInfo:
