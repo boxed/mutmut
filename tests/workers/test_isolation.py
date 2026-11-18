@@ -18,6 +18,7 @@ from mutmut.stats import status_by_exit_code
 from mutmut.workers.isolation import ForkRunner
 from mutmut.workers.isolation import ForkServerCrashError
 from mutmut.workers.isolation import ForkServerRunner
+from mutmut.workers.isolation import SpawnRunner
 from mutmut.workers.isolation import get_mutant_runner
 from mutmut.workers.isolation import recv_message
 from mutmut.workers.isolation import run_in_fork
@@ -230,7 +231,7 @@ class TestForkRunnerNoTestMutants:
         def explode():
             raise AssertionError("os.fork() must not be called for a mutant with no tests")
 
-        monkeypatch.setattr(os, "fork", explode)
+        monkeypatch.setattr(os, "fork", explode, raising=False)
         self._submit_without_tests(self._runner())
 
     def test_queued_result_counts_as_pending(self):
@@ -280,6 +281,7 @@ class TestGetMutantRunner:
         reset_config()
         return tmp_path
 
+    @pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
     def test_selects_fork_by_default(self, in_project_dir):
         runner = get_mutant_runner(2)
         assert isinstance(runner, ForkRunner)
@@ -292,9 +294,96 @@ class TestGetMutantRunner:
         assert runner.max_workers == 4
         assert runner.max_restarts == config().max_forkserver_restarts
 
+    def test_selects_spawn(self, in_project_dir, monkeypatch):
+        monkeypatch.setattr(config(), "process_isolation", ProcessIsolation.SPAWN)
+        runner = get_mutant_runner(3)
+        assert isinstance(runner, SpawnRunner)
+        assert runner.max_workers == 3
+
     def test_rejects_zero_workers(self, in_project_dir):
         with pytest.raises(ValueError, match="at least 1"):
             get_mutant_runner(0)
+
+
+class TestSpawnRunner:
+    """Runs real worker processes against a small project, as SpawnRunner has no other I/O to mock."""
+
+    TESTS = """
+import time
+
+def test_passes():
+    pass
+
+def test_fails():
+    assert False
+
+def test_hangs():
+    time.sleep(600)
+
+def test_crashes_the_interpreter():
+    import os, signal, sys
+    if sys.platform == "win32":
+        os._exit(-1073741819)  # 0xC0000005, the exit code Windows reports after an access violation.
+    os.kill(os.getpid(), signal.SIGSEGV)
+"""
+
+    @pytest.fixture
+    def runner(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "src").mkdir()
+        (tmp_path / "mutants" / "tests").mkdir(parents=True)
+        (tmp_path / "mutants" / "tests" / "test_sample.py").write_text(self.TESTS)
+        reset_config()
+        reset_state()
+        runner = SpawnRunner(max_workers=2, test_runner=object(), debug=False)
+        yield runner
+        runner.stop_all_workers()
+        runner.shutdown()
+
+    @staticmethod
+    def _result_of(runner, test_name):
+        runner.submit(
+            "mod.x_foo__mutmut_1", [f"tests/test_sample.py::{test_name}"], cpu_time_limit=1, estimated_time=0.0
+        )
+        result = runner.wait_for_result()
+        return result.mutant_name, result.exit_code
+
+    def test_hanging_test_is_killed_and_reported_as_timeout(self, runner, monkeypatch):
+        monkeypatch.setattr(config(), "timeout_multiplier", 1.0)
+        monkeypatch.setattr(config(), "timeout_constant", 3.0)
+        assert self._result_of(runner, "test_hangs") == ("mod.x_foo__mutmut_1", 36)
+
+    def test_worker_failing_outside_the_tests_is_not_reported_as_killed(self, runner):
+        """pytest cannot find this test, which is a usage error and not a verdict on the mutant."""
+        assert self._result_of(runner, "test_does_not_exist") == ("mod.x_foo__mutmut_1", 35)
+
+    def test_crashed_worker_is_reported_as_segfault_on_every_platform(self, runner):
+        assert self._result_of(runner, "test_crashes_the_interpreter") == ("mod.x_foo__mutmut_1", -11)
+
+    @pytest.mark.parametrize(("test_name", "exit_code"), [("test_fails", 1), ("test_passes", 0)])
+    def test_reports_the_exit_code_of_the_test_run(self, runner, test_name, exit_code):
+        assert self._result_of(runner, test_name) == ("mod.x_foo__mutmut_1", exit_code)
+
+    def test_no_test_mutant_reports_exit_code_33_without_a_worker(self, runner, monkeypatch):
+        monkeypatch.setattr(runner, "_start_worker", None)
+        runner.submit("mod.x_foo__mutmut_1", [], cpu_time_limit=1, estimated_time=0.0)
+        assert runner.pending_count() == 1
+        result = runner.wait_for_result()
+        assert (result.mutant_name, result.exit_code) == ("mod.x_foo__mutmut_1", 33)
+
+    def test_waiting_with_nothing_running_raises(self, runner):
+        with pytest.raises(ChildProcessError):
+            runner.wait_for_result()
+
+    def test_runs_no_more_than_max_workers_at_once(self, runner):
+        for i in (1, 2):
+            runner.submit(
+                f"mod.x_foo__mutmut_{i}", ["tests/test_sample.py::test_passes"], cpu_time_limit=1, estimated_time=0.0
+            )
+        assert not runner.has_capacity()
+        names = {runner.wait_for_result().mutant_name for _ in range(2)}
+        assert names == {"mod.x_foo__mutmut_1", "mod.x_foo__mutmut_2"}
+        assert runner.has_capacity()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX pipes required")
