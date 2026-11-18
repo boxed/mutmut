@@ -101,7 +101,7 @@ def test_read_function_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.chdir(tmp_path)
     (tmp_path / "mutants").mkdir()
-    (tmp_path / "mutants" / "test.py").write_text(mutated_file.code)
+    (tmp_path / "mutants" / "test.py").write_text(mutated_file.code, encoding="utf-8")
     line_spans = MutantLineSpans(path="test.py", span_by_function_name=mutated_file.line_span_by_function_name)
     line_spans.save()
 

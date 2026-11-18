@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
 from io import TextIOBase
+from io import TextIOWrapper
 from json import JSONDecodeError
 from math import ceil
 from multiprocessing import get_start_method
@@ -75,6 +76,12 @@ from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.workers.isolation import MutantResult
 from mutmut.workers.isolation import MutantRunner
 from mutmut.workers.isolation import get_mutant_runner
+
+if sys.platform == "win32":
+    # A redirected stdout uses the ANSI code page on Windows, which cannot encode the spinner or the emoji.
+    for _stream in (sys.__stdout__, sys.__stderr__):
+        if isinstance(_stream, TextIOWrapper):
+            _stream.reconfigure(encoding="utf-8")
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
@@ -239,10 +246,10 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
     except OSError:
         pass
 
-    with open(filename) as f:
+    with open(filename, encoding="utf-8") as f:
         source = f.read()
 
-    with open(output_path, "w") as out:
+    with open(output_path, "w", encoding="utf-8") as out:
         try:
             mutated_file = write_all_mutants_to_file(out=out, source=source, filename=filename)
         except cst.ParserSyntaxError as e:
@@ -254,7 +261,7 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             )
 
     # validate no syntax errors of mutants
-    with open(output_path) as f:
+    with open(output_path, encoding="utf-8") as f:
         try:
             ast.parse(f.read())
         except (IndentationError, SyntaxError) as e:
@@ -637,7 +644,7 @@ def _run_git(args: list[str]) -> str | None:
     never raises so callers can silently fall back to content hashing.
     """
     try:
-        result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+        result = subprocess.run(["git", *args], capture_output=True, check=False, encoding="utf-8")
     except OSError:
         return None
     if result.returncode != 0:
@@ -907,7 +914,7 @@ def collect_or_load_stats(
 
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
     s = calculate_summary_stats(source_file_mutation_data_by_path)
-    with open(get_mutants_dir() / "mutmut-cicd-stats.json", "w") as f:
+    with open(get_mutants_dir() / "mutmut-cicd-stats.json", "w", encoding="utf-8") as f:
         json.dump(
             dict(
                 killed=s.killed,
@@ -974,7 +981,7 @@ def badge(input_path: Path | None, output: Path, label: str) -> None:
         if not input_path.is_file():
             raise click.ClickException(f"{input_path} does not exist")
     try:
-        with input_path.open() as f:
+        with input_path.open(encoding="utf-8") as f:
             stats = json.load(f)
     except JSONDecodeError as e:
         raise click.ClickException(f"{input_path} does not contain valid JSON") from e
@@ -982,7 +989,7 @@ def badge(input_path: Path | None, output: Path, label: str) -> None:
     tested = int(stats.get("total", 0)) - int(stats.get("skipped", 0))
     score = 0.0 if tested <= 0 else ((int(stats.get("killed", 0)) + int(stats.get("timeout", 0))) / tested) * 100
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w") as f:
+    with output.open("w", encoding="utf-8") as f:
         json.dump(
             {
                 "schemaVersion": 1,

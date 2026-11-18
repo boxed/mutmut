@@ -86,7 +86,7 @@ def _gather_coverage_in_spawned_process(runner: TestRunner, source_files: Iterab
 
     setup_source_paths()
     if not config().debug:
-        sys.stdout = sys.stderr = open(os.devnull, "w")
+        sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")
     return _gather_coverage_in_this_process(runner, source_files)
 
 
