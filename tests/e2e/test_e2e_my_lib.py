@@ -1,10 +1,18 @@
+import sys
+
 from inline_snapshot import snapshot
 
 from tests.e2e.e2e_utils import run_mutmut_on_project
 
 
 def test_my_lib_result_snapshot():
-    assert run_mutmut_on_project("my_lib") == snapshot(
+    result = run_mutmut_on_project("my_lib")
+    if sys.platform == "win32":
+        # ctypes turns the access violation into an OSError on Windows, so that mutant is killed by a failing test.
+        mutants = result["mutants/src/my_lib/__init__.py.meta"]
+        assert mutants["my_lib.x_create_a_segfault_when_mutated__mutmut_1"] == 1
+        mutants["my_lib.x_create_a_segfault_when_mutated__mutmut_1"] = -11
+    assert result == snapshot(
         {
             "mutants/src/my_lib/__init__.py.meta": {
                 "my_lib.x_hello__mutmut_1": 1,
