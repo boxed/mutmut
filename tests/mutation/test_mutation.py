@@ -1102,11 +1102,11 @@ def write_mutants_dir(directory: Path, source: str, *, write_line_spans: bool) -
 
     :return: The names of the mutants that were generated."""
     (directory / "pyproject.toml").write_text('[tool.mutmut]\nsource_paths = ["test.py"]\n')
-    (directory / "test.py").write_text(source)
+    (directory / "test.py").write_text(source, encoding="utf-8")
 
     mutated_file = mutate_file_contents("test.py", source)
     (directory / "mutants").mkdir()
-    (directory / "mutants" / "test.py").write_text(mutated_file.code)
+    (directory / "mutants" / "test.py").write_text(mutated_file.code, encoding="utf-8")
     if write_line_spans:
         MutantLineSpans(path="test.py", span_by_function_name=mutated_file.line_span_by_function_name).save()
 
@@ -1155,7 +1155,7 @@ def test_apply_mutant_from_line_span_index(mutant_index: int, tmp_path: Path, mo
         mutant_names = write_mutants_dir(directory, DIFF_SOURCE, write_line_spans=write_line_spans)
 
         apply_mutant(mutant_names[mutant_index])
-        applied[write_line_spans] = (directory / "test.py").read_text()
+        applied[write_line_spans] = (directory / "test.py").read_text(encoding="utf-8")
 
     assert applied[True] == applied[False]
     assert applied[True] != DIFF_SOURCE

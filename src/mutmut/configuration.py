@@ -31,6 +31,8 @@ class ProcessIsolation(str, Enum):
     - FORKSERVER: keep the main process free of pytest and fork a dedicated
       server process that does nothing but import and fork workers. For test
       setups that are not fork-safe (gevent, grpc, torch).
+    - SPAWN: start a fresh Python process per mutant. Slowest, but the only one
+      that works without ``os.fork``, so it is the default on Windows.
 
     Subclassing ``str`` allows direct string comparison while still giving us
     validation and IDE support.
@@ -38,6 +40,7 @@ class ProcessIsolation(str, Enum):
 
     FORK = "fork"
     FORKSERVER = "forkserver"
+    SPAWN = "spawn"
 
 
 class ForkServerWarmup(str, Enum):
@@ -84,7 +87,7 @@ def _config_reader() -> Callable[[str, Any], Any]:
             return toml_conf
 
     config_parser = ConfigParser()
-    config_parser.read("setup.cfg")
+    config_parser.read("setup.cfg", encoding="utf-8")
 
     def setup_cfg_conf(key: str, default: Any) -> Any:
         try:
@@ -163,12 +166,16 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
-    isolation_str = s("process_isolation", "fork")
+    isolation_str = s("process_isolation", "spawn" if sys.platform == "win32" else "fork")
     try:
         process_isolation = ProcessIsolation(isolation_str)
     except ValueError:
         valid = [e.value for e in ProcessIsolation]
         raise ValueError(f"Invalid process_isolation value: {isolation_str!r}. Expected one of: {valid}") from None
+    if sys.platform == "win32" and process_isolation != ProcessIsolation.SPAWN:
+        # A pyproject.toml shared with POSIX users must keep working here, so fall back instead of failing.
+        warnings.warn(f'process_isolation = "{isolation_str}" needs os.fork, which Windows lacks. Using "spawn".')
+        process_isolation = ProcessIsolation.SPAWN
 
     warmup_str = s("forkserver_warmup", "collect")
     try:
