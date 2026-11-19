@@ -520,7 +520,15 @@ To catch this, mutmut detects non-Python files that changed since the last full
 run and warns you about them. If your project is a git repository and git is
 installed, mutmut uses git (a soft dependency no extra package is required) to
 find every changed non-Python file, respecting your `.gitignore`. Python files
-are excluded because their changes are already tracked per function.
+are excluded because their changes are already tracked: source files per
+function, and test files as described below.
+
+Test files are tracked by their content. If you edit or delete a test file,
+mutmut re-runs the mutants of the functions its tests covered, so removing an
+assertion won't leave old ``killed`` results around. New tests also re-run the
+``survived`` and ``no tests`` mutants of the functions they cover. Changes to a
+``conftest.py`` are handled like a dependency file change (see
+``on_dependency_change`` below), since they can affect any test.
 
 On a full run with git available, mutmut also records the content hashes of the
 tracked non-Python files. This means a later run in an environment without git

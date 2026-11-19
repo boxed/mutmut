@@ -454,6 +454,95 @@ def compute_watched_file_hashes() -> dict[str, str]:
     return _hash_files(paths)
 
 
+def _test_file_of(test_name: str) -> str:
+    # "tests/test_x.py::TestA::test_b[1]" -> "tests/test_x.py"
+    return test_name.split("::", 1)[0]
+
+
+def _is_conftest(path: str) -> bool:
+    return Path(path).name == "conftest.py"
+
+
+def compute_test_file_hashes(test_names: Iterable[str]) -> dict[str, str]:
+    """Hash the files these tests live in, plus any conftest.py above them."""
+    files = {_test_file_of(name) for name in test_names}
+    conftests = {
+        str(parent / "conftest.py") for f in files for parent in Path(f).parents if (parent / "conftest.py").is_file()
+    }
+    return _hash_files(sorted(files | conftests))
+
+
+def _changed_test_files() -> set[str]:
+    """Test files (and conftest.py files) that were changed, added or deleted since the last run."""
+    old = state().old_test_file_hashes
+    if not old:
+        return set()
+    new = _hash_files(old.keys())
+    new.update(compute_test_file_hashes(collected_test_names()))
+    return {p for p in old.keys() | new.keys() if old.get(p) != new.get(p)}
+
+
+def _forget_tests_in_changed_files() -> set[str]:
+    """Forget the stats of tests in changed files so they get collected again as new tests.
+
+    Returns the functions those tests used to cover. conftest.py changes are left to
+    on_dependency_change since they can affect any test.
+    """
+    changed_files = {p for p in _changed_test_files() if not _is_conftest(p)}
+    if not changed_files:
+        return set()
+
+    tests_by_function = state().tests_by_mangled_function_name
+    known_tests = collected_test_names().union(*tests_by_function.values())
+    stale_tests = {t for t in known_tests if _test_file_of(t) in changed_files}
+    covered = {f for f, tests in tests_by_function.items() if tests & stale_tests}
+    for f in covered:
+        tests_by_function[f] -= stale_tests
+    for t in stale_tests:
+        state().duration_by_test.pop(t, None)
+
+    print(f"    {len(changed_files)} test file(s) changed since the last run: {', '.join(sorted(changed_files))}")
+    return covered
+
+
+def _reset_results_for_test_changes(edited_functions: set[str], recollected_tests: set[str]) -> None:
+    """Reset verdicts that new or edited tests may have changed.
+
+    Functions an edited test used to cover get all their verdicts reset (a weaker test
+    can turn a kill into a survivor). Functions that new/edited tests now cover only get
+    survived and "no tests" reset, since extra coverage can't un-kill a mutant.
+    """
+    newly_covered = {
+        f for f, tests in state().tests_by_mangled_function_name.items() if tests & recollected_tests
+    } - edited_functions
+    if not edited_functions and not newly_covered:
+        return
+
+    def should_reset(key: str, exit_code: int) -> bool:
+        function = mangled_name_from_mutant_name(key)
+        if function in edited_functions:
+            return True
+        return function in newly_covered and status_by_exit_code[exit_code] in ("survived", "no tests")
+
+    count = _reset_mutant_results(should_reset)
+    if count:
+        print(f"    Re-testing {count} mutant(s) affected by the test changes")
+
+
+def _refresh_test_file_baseline(*, full_run: bool) -> None:
+    """Save test file hashes for the next run.
+
+    conftest.py hashes are only updated on a full run, same as the watched files, so the
+    warning keeps showing until the cache is rebuilt.
+    """
+    new = compute_test_file_hashes(collected_test_names())
+    old = state().old_test_file_hashes
+    if not full_run and old:
+        new = {p: h for p, h in new.items() if not _is_conftest(p)}
+        new.update({p: h for p, h in old.items() if _is_conftest(p)})
+    state().test_file_hashes = new
+
+
 def _run_git(args: list[str]) -> str | None:
     """Run a git command at the project root. Returns stdout, or None on any failure
     (git not installed, not a repo, unknown ref, ...). Git is a soft dependency: this
@@ -547,6 +636,8 @@ def _changed_dependency_files() -> set[str]:
             changed = _changed_hashed_files()
     else:
         changed = _changed_hashed_files()
+    # conftest.py can affect every test, so treat it like a dependency file
+    changed |= {p for p in _changed_test_files() if _is_conftest(p)}
     return {p for p in changed if not _is_excluded(p, cfg)}
 
 
@@ -598,7 +689,7 @@ def _reset_mutant_results(should_reset: Callable[[str, int], bool]) -> int:
 
 
 def _report_watched_file_changes() -> bool:
-    """Surface non-Python files that changed since the last full run.
+    """Surface non-Python files (and conftest.py) that changed since the last full run.
 
     Returns True only when the configured policy is ``rerun`` and something changed,
     asking the caller to reset all results. Silent when there is no baseline yet.
@@ -612,10 +703,10 @@ def _report_watched_file_changes() -> bool:
         return False
     listed = sorted(changed)
     if policy == "rerun":
-        print(f"    {len(listed)} non-Python file(s) changed; rerunning all mutants: {', '.join(listed)}")
+        print(f"    {len(listed)} dependency file(s) changed; rerunning all mutants: {', '.join(listed)}")
         return True
     # default: warn but keep the cache
-    print(f"    Warning: {len(listed)} non-Python file(s) changed since the last full run: {', '.join(listed)}")
+    print(f"    Warning: {len(listed)} dependency file(s) changed since the last full run: {', '.join(listed)}")
     print("    These cannot be tracked for behavioral changes, so cached results were kept.")
     print('    If the changes affect your tests, delete the mutants/ directory or set on_dependency_change = "rerun".')
     return False
@@ -668,7 +759,8 @@ def collect_or_load_stats(
     if did_load and apply_config_invalidation:
         force_full = _apply_config_change_invalidation(mutants_caught_by_type_checker or {})
 
-    if not did_load or force_full:
+    full_run = not did_load or force_full
+    if full_run:
         # A full run rebuilds the cache, so reset the change-detection baseline to "now".
         _refresh_change_detection_baseline()
         # Run full stats
@@ -678,6 +770,9 @@ def collect_or_load_stats(
         if config().track_dependencies and invalidate_stale_callers:
             _invalidate_stale_dependency_edges()
         save_stats()
+
+        # tests in edited files are forgotten here so they get picked up as new tests below
+        edited_functions = _forget_tests_in_changed_files()
 
         # Run incremental stats
         with CatchOutput(spinner_title="Listing all tests") as output_catcher:
@@ -694,8 +789,13 @@ def collect_or_load_stats(
         new_tests = all_tests_result.new_tests()
 
         if new_tests:
-            print(f"Found {len(new_tests)} new tests, rerunning stats collection")
+            print(f"Found {len(new_tests)} new or changed tests, rerunning stats collection")
             run_stats_collection(runner, tests=new_tests)
+
+        _reset_results_for_test_changes(edited_functions, new_tests)
+
+    _refresh_test_file_baseline(full_run=full_run)
+    save_stats()
 
 
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
