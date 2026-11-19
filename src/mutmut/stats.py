@@ -160,7 +160,11 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
             f = f.f_back
             if "pytest" in filename or "hammett" in filename or "unittest" in filename:
                 break
-            file_path = Path(filename).resolve(strict=True)
+            try:
+                file_path = Path(filename).resolve(strict=True)
+            except OSError:
+                # frames without a source file, e.g. "<string>" for the __init__ that @dataclass generates
+                continue
             if any(path in file_path.parents for path in mutated_source_paths):
                 # only include stack frames of user-code; exclude mutmut and 3rd library stack frames
                 c -= 1
