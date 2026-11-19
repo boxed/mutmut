@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
+from dataclasses import field
 from dataclasses import replace
 from pathlib import Path
 from typing import Union
@@ -21,7 +22,9 @@ from libcst.metadata import PositionProvider
 
 from mutmut.configuration import config
 from mutmut.mutation.data import LineSpan
+from mutmut.mutation.data import SourceSpan
 from mutmut.mutation.mutators import OPERATORS_TYPE
+from mutmut.mutation.mutators import code_removing_operators
 from mutmut.mutation.mutators import mutation_operators
 from mutmut.mutation.pragma_handling import IgnoredCode
 from mutmut.mutation.pragma_handling import get_ignored_lines
@@ -88,6 +91,10 @@ class Mutation:
     original_node: cst.CSTNode
     mutated_node: cst.CSTNode
     contained_by_top_level_function: cst.FunctionDef | None
+    #: The code this mutation changes
+    source_span: SourceSpan | None = None
+    #: The code this mutation removes, if it is made by one of the `code_removing_operators`
+    removed_span: SourceSpan | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +107,10 @@ class MutatedFile:
     line_span_by_function_name: Mapping[str, LineSpan]
     #: Hash of each mutated function, used to detect which functions changed between runs
     hash_by_function_name: Mapping[str, str]
+    #: The code in the source file that each mutant changes
+    source_span_by_mutant_name: Mapping[str, SourceSpan] = field(default_factory=dict)
+    #: The code that each mutant made by one of the `code_removing_operators` removes
+    removed_span_by_mutant_name: Mapping[str, SourceSpan] = field(default_factory=dict)
 
 
 def mutate_file_contents(
@@ -241,8 +252,44 @@ class MutationVisitor(cst.CSTVisitor):
                         original_node=node,
                         mutated_node=mutated_node,
                         contained_by_top_level_function=self.get_metadata(OuterFunctionProvider, node, None),  # type: ignore
+                        source_span=self._source_span(node),
+                        removed_span=self._removed_span(node, mutated_node)
+                        if operator in code_removing_operators
+                        else None,
                     )
                     self.mutations.append(mutation)
+
+    def _source_span(self, node: cst.CSTNode) -> SourceSpan | None:
+        position = self.get_metadata(PositionProvider, node, None)
+        if position is None:
+            return None
+        return SourceSpan(position.start.line, position.start.column, position.end.line, position.end.column)
+
+    def _removed_span(self, node: cst.CSTNode, mutated_node: cst.CSTNode) -> SourceSpan | None:
+        """The span of the children of `node` that are not in `mutated_node` anymore.
+
+        The operators build the mutated node with `node.with_changes(...)`, so the children
+        that are kept are the very same objects.
+
+        Replacing a plain name or literal, like `x = False` -> `x = None`, does not count as
+        removing code. Such mutants often survive (None is falsy too), and would then hide
+        the mutants worth looking at, like `x = False` -> `x = True`."""
+        kept = {id(child) for child in mutated_node.children}
+        removed = [child for child in node.children if id(child) not in kept]
+        if all(_is_name_or_literal(child.value if isinstance(child, cst.Arg) else child) for child in removed):
+            return None
+
+        spans: list[SourceSpan] = []
+        for child in removed:
+            span = self._source_span(child)
+            if span is None:
+                return None
+            spans.append(span)
+
+        return SourceSpan(
+            *min((span.start_line, span.start_column) for span in spans),
+            *max((span.end_line, span.end_column) for span in spans),
+        )
 
     def _removes_ignored_code(self, node: cst.CSTNode, mutated_node: cst.CSTNode) -> bool:
         """Does this mutation delete code that we were told not to mutate?
@@ -361,6 +408,10 @@ def _is_enum_class(node: cst.ClassDef) -> bool:
     return any(isinstance(base, cst.Name) and base.value in ENUM_BASE_NAMES for base in bases)
 
 
+def _is_name_or_literal(node: cst.CSTNode) -> bool:
+    return isinstance(node, cst.Name | cst.BaseNumber | cst.SimpleString | cst.Ellipsis)
+
+
 def _walk(node: cst.CSTNode) -> Iterator[cst.CSTNode]:
     """Yield `node` and every node below it."""
     stack = [node]
@@ -397,6 +448,16 @@ def combine_mutations_to_source(
     # copy start of the module (in particular __future__ imports)
     result: list[MODULE_STATEMENT] = get_statements_until_func_or_class(module.body)
     mutation_names: list[str] = []
+    source_span_by_mutant_name: dict[str, SourceSpan] = {}
+    removed_span_by_mutant_name: dict[str, SourceSpan] = {}
+
+    def add_mutant_names(mutant_names: Sequence[str], mutants: Sequence[Mutation]) -> None:
+        mutation_names.extend(mutant_names)
+        for mutant_name, mutant in zip(mutant_names, mutants, strict=True):
+            if mutant.source_span is not None:
+                source_span_by_mutant_name[mutant_name] = mutant.source_span
+            if mutant.removed_span is not None:
+                removed_span_by_mutant_name[mutant_name] = mutant.removed_span
 
     # statements we still need to potentially mutate and add to the result
     remaining_statements = module.body[len(result) :]
@@ -422,7 +483,7 @@ def combine_mutations_to_source(
             result.extend(empty_dict_nodes)
             result.extend(nodes)
             result.extend(mutant_dict_assignment_nodes)
-            mutation_names.extend(mutant_names)
+            add_mutant_names(mutant_names, func_mutants)
         elif isinstance(statement, cst.ClassDef):
             cls = statement
             if not isinstance(cls.body, cst.IndentedBlock):
@@ -444,7 +505,7 @@ def combine_mutations_to_source(
                     pre_class_nodes.extend(empty_dict_nodes)
                     mutated_body.extend(nodes)
                     post_class_nodes.extend(mutant_dict_assignment_nodes)
-                    mutation_names.extend(mutant_names)
+                    add_mutant_names(mutant_names, method_mutants)
 
                 result.extend(pre_class_nodes)
                 result.append(cls.with_changes(body=cls.body.with_changes(body=mutated_body)))
@@ -459,6 +520,8 @@ def combine_mutations_to_source(
         mutant_names=mutation_names,
         line_span_by_function_name=line_spans,
         hash_by_function_name={},
+        source_span_by_mutant_name=source_span_by_mutant_name,
+        removed_span_by_mutant_name=removed_span_by_mutant_name,
     )
 
 

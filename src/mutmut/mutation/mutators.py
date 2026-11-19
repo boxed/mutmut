@@ -327,6 +327,10 @@ mutation_operators: OPERATORS_TYPE = [
     (cst.IfExp, operator_if_exp),
 ]
 
+# Operators that remove code, like `a = b` -> `a = None`. If such a mutant survives, it shadows
+# the other mutants inside the code it removes.
+code_removing_operators = {operator_assignment, operator_arg_removal, operator_lambda, operator_match}
+
 
 def _simple_mutation_mapping(
     node: cst.CSTNode, mapping: dict[type[cst.CSTNode], type[cst.CSTNode]]
