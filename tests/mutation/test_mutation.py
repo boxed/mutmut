@@ -1623,6 +1623,29 @@ def test_record_trampoline_hit_with_max_stack_depth_from_dataclass_init(monkeypa
     reset_state()
 
 
+def test_record_trampoline_hit_without_resolvable_config(monkeypatch, tmp_path):
+    """
+    A trampoline hit in a process without a resolvable mutmut config is skipped instead of crashing.
+
+    Tests can run mutated code in a subprocess with another working directory, where no
+    config can be loaded. Hits from such a process never reach mutmut's stats anyway.
+    The failed load is remembered, so later hits do not try to load the config again.
+    """
+
+    reset_state()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutmut.stats, "_config_unavailable", False)
+    load_config = Mock(wraps=mutmut.configuration._load_config)
+    monkeypatch.setattr(mutmut.configuration, "_load_config", load_config)
+
+    record_trampoline_hit("my_module.x_foo")
+    record_trampoline_hit("my_module.x_foo")
+
+    assert "my_module.x_foo" not in state()._stats
+    assert load_config.call_count == 1
+    reset_state()
+
+
 def test_cleanup_stale_stats_removes_unknown_modules(monkeypatch):
     """_cleanup_stale_stats removes test associations for modules not in current_function_hashes."""
 
