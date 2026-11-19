@@ -3,10 +3,12 @@
 import json
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from mutmut.runners.harness import ListAllTestsResult
+from mutmut.runners.harness import PytestRunner
 from mutmut.state import state
 
 STATS_FILE = Path("mutants/mutmut-stats.json")
@@ -69,3 +71,33 @@ class TestClearOutObsoleteTestNames:
         assert dict(state().tests_by_mangled_function_name) == {"pkg.foo.x_add": {"tests/test_foo.py::test_add"}}
         assert capsys.readouterr().out == ""
         assert not STATS_FILE.exists()
+
+
+class TestStatsCollectorCollectionHits:
+    def test_hits_recorded_during_collection_are_not_credited_to_the_first_test(self, monkeypatch):
+        captured = []
+
+        def fake_execute_pytest(self, params, **kwargs):
+            captured.extend(kwargs["plugins"])
+            return 0
+
+        monkeypatch.setattr(PytestRunner, "execute_pytest", fake_execute_pytest)
+        state()._stats.clear()
+
+        PytestRunner().run_stats(tests=[])
+        (collector,) = captured
+
+        # Importing a module during collection calls a trampolined function.
+        state()._stats.add("pkg.mod.x_table")
+        collector.pytest_collection_finish(None)
+
+        # Only hits recorded while the test runs belong to it.
+        item = SimpleNamespace(nodeid="tests/test_mod.py::test_first")
+        collector.pytest_runtest_logstart(item.nodeid, location=None)
+        state()._stats.add("pkg.mod.x_double")
+        collector.pytest_runtest_teardown(item, None)
+
+        assert dict(state().tests_by_mangled_function_name) == {
+            "pkg.mod.x_double": {"tests/test_mod.py::test_first"},
+        }
+        assert state()._stats == set()
