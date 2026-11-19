@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import pathlib
 import shutil
@@ -1588,6 +1589,37 @@ def test_record_trampoline_hit_skips_caller_when_disabled(monkeypatch):
     record_trampoline_hit("my_module.x_foo", caller="my_module.x_bar")
 
     assert "my_module.x_foo" not in state().function_dependencies
+    reset_state()
+
+
+def test_record_trampoline_hit_with_max_stack_depth_from_dataclass_init(monkeypatch):
+    """
+    A trampoline hit from a dataclass's generated __init__ is recorded when max_stack_depth is set.
+
+    The generated __init__ has no source file (its co_filename is "<string>"),
+    so the stack walk must skip that frame instead of failing to resolve it.
+    """
+
+    reset_state()
+    state()._stats.clear()
+
+    cfg = Mock(spec=Config)
+    cfg.max_stack_depth = 5
+    cfg.source_paths = []
+    cfg.resolved_mutated_source_paths = []
+    cfg.track_dependencies = False
+    monkeypatch.setattr(mutmut.stats, "config", lambda: cfg)
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+        def __post_init__(self):
+            record_trampoline_hit("my_module.xǁPointǁ__post_init__")
+
+    Point(1)
+
+    assert "my_module.xǁPointǁ__post_init__" in state()._stats
     reset_state()
 
 
