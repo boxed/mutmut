@@ -94,12 +94,15 @@ def calculate_summary_stats(source_file_mutation_data_by_path: dict[str, SourceF
     )
 
 
+def _format(s: Stat) -> str:
+    return f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}  🧙 {s.caught_by_type_check}"
+
+
 def print_stats(
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData], force_output: bool = False
 ) -> None:
-    s = calculate_summary_stats(source_file_mutation_data_by_path)
     print_status(
-        f"{(s.total - s.not_checked)}/{s.total}  🎉 {s.killed} 🫥 {s.no_tests}  ⏰ {s.timeout}  🤔 {s.suspicious}  🙁 {s.survived}  🔇 {s.skipped}  🧙 {s.caught_by_type_check}",
+        lambda: _format(calculate_summary_stats(source_file_mutation_data_by_path)),
         force_output=force_output,
     )
 
