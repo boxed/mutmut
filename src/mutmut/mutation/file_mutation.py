@@ -25,6 +25,7 @@ from mutmut.mutation.mutators import OPERATORS_TYPE
 from mutmut.mutation.mutators import mutation_operators
 from mutmut.mutation.pragma_handling import IgnoredCode
 from mutmut.mutation.pragma_handling import get_ignored_lines
+from mutmut.mutation.trampoline_templates import GENERATED_MARKER
 from mutmut.mutation.trampoline_templates import build_mutants_dict_and_name
 from mutmut.mutation.trampoline_templates import mangle_function_name
 from mutmut.mutation.trampoline_templates import trampoline_imports
@@ -537,7 +538,7 @@ def function_trampoline_arrangement(
     mangled_name = mangle_function_name(name=name, class_name=class_name) + "__mutmut"
     mutants_dict_name = f"mutants_{mangled_name}"
 
-    mutants_dict_empty_code = f"{mutants_dict_name}: MutantDict = {{}}  # type: ignore"
+    mutants_dict_empty_code = f"{mutants_dict_name}: MutantDict = {{}}  {GENERATED_MARKER}"
     mutant_dict_declaration_nodes = list(cst.parse_module(mutants_dict_empty_code).body)
 
     # trampoline with same signature, that forwards the calls to the activated mutant/original method
@@ -694,6 +695,9 @@ def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
                     (m for m in mutated_methods if m.line_number_start <= error.line_number <= m.line_number_end), None
                 )
                 if mutant is None:
+                    line = source.splitlines()[error.line_number - 1]
+                    if GENERATED_MARKER in line:
+                        continue
                     raise Exception(
                         f"Could not find mutant for type error {error.file_path}:{error.line_number} ({error.error_description}). \n"
                         "Probably, a code mutation influenced types in unexpected locations. \n"
