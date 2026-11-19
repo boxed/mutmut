@@ -437,6 +437,21 @@ _DEFAULT_INVALIDATION_EXCLUDE = (
 )
 
 
+def _matches_glob(path: str, pattern: str) -> bool:
+    """Match ``path`` against ``pattern``; ``**/`` may match zero directories."""
+    if fnmatch.fnmatch(path, pattern):
+        return True
+    if "**/" not in pattern:
+        return False
+    variants = {pattern}
+    while True:
+        expanded = {variant.replace("**/", "", 1) for variant in variants if "**/" in variant}
+        if not expanded or expanded <= variants:
+            break
+        variants |= expanded
+    return any(fnmatch.fnmatch(path, variant) for variant in variants)
+
+
 def _hash_files(paths: Iterable[str]) -> dict[str, str]:
     """Content hash each existing path; missing files are simply omitted."""
     hashes: dict[str, str] = {}
@@ -513,7 +528,7 @@ def _changed_hashed_files(restrict_to: list[str] | None = None) -> set[str]:
     new.update(compute_watched_file_hashes())  # pick up newly-added curated/user files
     changed = {p for p in old.keys() | new.keys() if old.get(p) != new.get(p)}
     if restrict_to is not None:
-        changed = {p for p in changed if any(fnmatch.fnmatch(p, pat) for pat in restrict_to)}
+        changed = {p for p in changed if any(_matches_glob(p, pat) for pat in restrict_to)}
     return changed
 
 
@@ -522,10 +537,10 @@ def _is_excluded(path: str, config: Config) -> bool:
 
     Files explicitly registered in ``cache_invalidation_files`` are never excluded.
     """
-    if any(fnmatch.fnmatch(path, pat) for pat in config.cache_invalidation_files):
+    if any(_matches_glob(path, pat) for pat in config.cache_invalidation_files):
         return False
     patterns = list(_DEFAULT_INVALIDATION_EXCLUDE) + list(config.cache_invalidation_exclude)
-    return any(fnmatch.fnmatch(path, pat) for pat in patterns)
+    return any(_matches_glob(path, pat) for pat in patterns)
 
 
 def _changed_dependency_files() -> set[str]:
