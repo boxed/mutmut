@@ -107,7 +107,7 @@ def print_stats(
 def load_stats() -> bool:
     did_load = False
     try:
-        with open("mutants/mutmut-stats.json") as f:
+        with open("mutants/mutmut-stats.json", encoding="utf-8") as f:
             data = json.load(f)
             for k, v in data.pop("tests_by_mangled_function_name").items():
                 state().tests_by_mangled_function_name[k] |= set(v)
@@ -130,7 +130,7 @@ def load_stats() -> bool:
 
 
 def save_stats() -> None:
-    with open("mutants/mutmut-stats.json", "w") as f:
+    with open("mutants/mutmut-stats.json", "w", encoding="utf-8") as f:
         json.dump(
             dict(
                 tests_by_mangled_function_name={k: list(v) for k, v in state().tests_by_mangled_function_name.items()},

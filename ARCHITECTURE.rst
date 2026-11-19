@@ -64,7 +64,9 @@ stats. ``ForkServerRunner`` instead keeps the main process free of pytest: it fo
 dedicated fork server child, and that child imports pytest once and forks a worker per
 mutant, streaming results back over a length-prefixed pipe. That extra generation exists
 for test setups that are not fork-safe, where inheriting the main process would hang or
-crash the workers.
+crash the workers. ``SpawnRunner`` is for Windows, which cannot fork: it starts a new
+Python process per mutant (``src/mutmut/workers/spawn_worker.py``), hands it the mutant
+and its tests on stdin, and reads the verdict from its exit code.
 
 The runner also owns the surrounding test operations (stats collection, clean tests,
 forced fail, test listing) so that, under ``forkserver``, those too can run in short-lived

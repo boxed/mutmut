@@ -40,7 +40,7 @@ class MutantLineSpans:
         """
         index = cls(path=path, span_by_function_name={})
         try:
-            with open(index.index_path) as f:
+            with open(index.index_path, encoding="utf-8") as f:
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return None
@@ -52,7 +52,7 @@ class MutantLineSpans:
         return index
 
     def save(self) -> None:
-        with open(self.index_path, "w") as f:
+        with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "version": self.format_version,
@@ -78,7 +78,7 @@ def read_line_spans(file_path: Path | str, spans: Sequence[LineSpan]) -> list[st
     """
     sources: list[str] = [""] * len(spans)
 
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         line_number = 1
         for i in sorted(range(len(spans)), key=lambda i: spans[i].start):
             span = spans[i]
@@ -106,7 +106,7 @@ class SourceFileMutationData:
 
     def load(self) -> None:
         try:
-            with open(self.meta_path) as f:
+            with open(self.meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             # A missing cache and a torn one (e.g. the run was killed
@@ -122,7 +122,7 @@ class SourceFileMutationData:
         assert not meta, f"Meta file {self.meta_path} constains unexpected keys: {set(meta.keys())}"
 
     def save(self) -> None:
-        with open(self.meta_path, "w") as f:
+        with open(self.meta_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "exit_code_by_key": self.exit_code_by_key,
