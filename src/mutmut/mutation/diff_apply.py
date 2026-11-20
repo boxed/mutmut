@@ -7,6 +7,7 @@ from pathlib import Path
 
 import libcst as cst
 
+from mutmut.configuration import get_mutants_dir
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
 from mutmut.utils.file_utils import walk_mutatable_files
@@ -15,7 +16,7 @@ from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 
 def read_mutants_module(path: Path | str) -> cst.Module:
-    with open(Path("mutants") / path) as f:
+    with open(get_mutants_dir() / path) as f:
         return cst.parse_module(f.read())
 
 

@@ -10,13 +10,15 @@ import coverage
 from coverage import CoverageData
 from coverage.exceptions import CoverageException
 
+from mutmut.configuration import get_mutants_dir
+
 if TYPE_CHECKING:
     from mutmut.runners.harness import TestRunner
 
 
 @dataclass
 class CoverageInfo:
-    """What coverage.py knows about the source files, keyed by absolute path in `mutants/`.
+    """What coverage.py knows about the source files, keyed by resolved path in the mutants directory.
 
     `covered_lines` are the lines that actually executed. `excluded_lines` are the lines
     coverage.py was told to ignore (`# pragma: no cover`, `exclude_lines`, `exclude_also`).
@@ -37,7 +39,7 @@ def get_covered_lines_for_file(filename: str, covered_lines: dict[str, set[int]]
     if covered_lines is None or filename is None:
         return None
 
-    abs_filename = str((Path("mutants") / filename).absolute())
+    abs_filename = str((get_mutants_dir() / filename).resolve())
     lines: set[int] = set()
     if abs_filename in covered_lines:
         lines = set(covered_lines[abs_filename])
@@ -52,7 +54,7 @@ def get_excluded_lines_for_file(filename: str, excluded_lines: dict[str, set[int
     if excluded_lines is None or filename is None:
         return set()
 
-    abs_filename = str((Path("mutants") / filename).absolute())
+    abs_filename = str((get_mutants_dir() / filename).resolve())
     return set(excluded_lines.get(abs_filename, ()))
 
 
@@ -72,10 +74,16 @@ def gather_coverage(runner: TestRunner, source_files: Iterable[Path]) -> Coverag
 
 def _gather_coverage_in_this_process(runner: TestRunner, source_files: Iterable[Path]) -> CoverageInfo:
     """The actual measurement. Pollutes the calling process; see gather_coverage."""
-    mutants_path = Path("mutants")
-
-    # Run the tests and gather coverage
-    cov = coverage.Coverage(data_file=None)
+    # Run the tests and gather coverage. When mutants_dir lives outside the
+    # project root, coverage.py's default cwd-based filter would ignore it
+    # unless we explicitly point `source` at the mutants directory.
+    resolved_mutants = get_mutants_dir().resolve()
+    source = (
+        [str(resolved_mutants)]
+        if resolved_mutants.is_dir() and not resolved_mutants.is_relative_to(Path.cwd().resolve())
+        else None
+    )
+    cov = coverage.Coverage(data_file=None, source=source)
     runner.collect_main_test_coverage(cov)
 
     # Build mapping of filenames to covered lines
@@ -85,7 +93,7 @@ def _gather_coverage_in_this_process(runner: TestRunner, source_files: Iterable[
     coverage_data: CoverageData = cov.get_data()
 
     for filename in source_files:
-        abs_filename = str((mutants_path / filename).absolute())
+        abs_filename = str((resolved_mutants / filename).resolve())
         info.covered_lines[abs_filename] = set(coverage_data.lines(abs_filename) or [])
         info.excluded_lines[abs_filename] = _excluded_lines(cov, abs_filename)
 

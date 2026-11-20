@@ -8,6 +8,7 @@ from typing import Any
 
 from mutmut.configuration import ForkServerWarmup
 from mutmut.configuration import config
+from mutmut.configuration import get_mutants_dir
 from mutmut.state import state
 from mutmut.stats import save_stats
 from mutmut.utils.file_utils import change_cwd
@@ -104,7 +105,7 @@ class PytestRunner(TestRunner):
         warmup = config().forkserver_warmup
 
         if warmup == ForkServerWarmup.COLLECT:
-            with change_cwd("mutants"):
+            with change_cwd(get_mutants_dir()):
                 self.execute_pytest(["--collect-only", "-qqq"] + self._pytest_add_cli_args_test_selection)
         elif warmup == ForkServerWarmup.IMPORT:
             preload_file = config().preload_modules_file
@@ -145,6 +146,9 @@ class PytestRunner(TestRunner):
         return pytest_args
 
     def run_stats(self, *, tests: Iterable[str]) -> int:
+        mutants_dir = get_mutants_dir()
+        prefix = f"{mutants_dir.as_posix().rstrip('/')}/"
+
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
             def pytest_runtest_logstart(self, nodeid: str, location: Any) -> None:
@@ -154,7 +158,7 @@ class PytestRunner(TestRunner):
             def pytest_runtest_teardown(self, item: Any, nextitem: Any) -> None:
                 unused(nextitem)
                 for function in state()._stats:
-                    state().tests_by_mangled_function_name[function].add(strip_prefix(item.nodeid, prefix="mutants/"))
+                    state().tests_by_mangled_function_name[function].add(strip_prefix(item.nodeid, prefix=prefix))
                 state()._stats.clear()
 
             # noinspection PyMethodMayBeStatic
@@ -165,15 +169,15 @@ class PytestRunner(TestRunner):
 
         stats_collector = StatsCollector()
 
-        with change_cwd("mutants"):
+        with change_cwd(mutants_dir):
             return int(self.execute_pytest(self._pytest_args_regular_run(tests), plugins=[stats_collector]))
 
     def run_tests(self, *, mutant_name: str | None, tests: Iterable[str]) -> int:
-        with change_cwd("mutants"):
+        with change_cwd(get_mutants_dir()):
             return int(self.execute_pytest(self._pytest_args_regular_run(tests)))
 
     def collect_main_test_coverage(self, cov: Coverage) -> int:
-        with change_cwd("mutants"), cov.collect():
+        with change_cwd(get_mutants_dir()), cov.collect():
             self.prepare_main_test_run()
             return int(self.execute_pytest(self._pytest_args_regular_run([])))
 
@@ -196,7 +200,7 @@ class PytestRunner(TestRunner):
 
         pytest_args = ["-x", "-q", "--collect-only"] + self._pytest_add_cli_args_test_selection
 
-        with change_cwd("mutants"):
+        with change_cwd(get_mutants_dir()):
             exit_code = int(self.execute_pytest(pytest_args, plugins=[collector]))
             if exit_code != 0:
                 raise CollectTestsFailedException()

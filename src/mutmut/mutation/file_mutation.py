@@ -20,6 +20,7 @@ from libcst.metadata import MetadataWrapper
 from libcst.metadata import PositionProvider
 
 from mutmut.configuration import config
+from mutmut.configuration import get_mutants_dir
 from mutmut.mutation.data import LineSpan
 from mutmut.mutation.mutators import OPERATORS_TYPE
 from mutmut.mutation.mutators import mutation_operators
@@ -671,7 +672,7 @@ def group_by_path(errors: list[TypeCheckingError]) -> dict[Path, list[TypeChecki
 
 
 def filter_mutants_with_type_checker() -> dict[str, FailedTypeCheckMutant]:
-    with change_cwd(Path("mutants")):
+    with change_cwd(get_mutants_dir()):
         errors = run_type_checker(config().type_check_command)
         errors_by_path = group_by_path(errors)
 
