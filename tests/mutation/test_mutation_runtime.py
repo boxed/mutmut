@@ -194,3 +194,118 @@ def foo(a: int, b: int = 2):
 
     assert foo(1) == 4
     assert foo(1, 10) == 11
+
+
+def _load(source, monkeypatch, mutant_of=None):
+    """`source` mutated and executed, with the first mutant of the function `mutant_of` active, or none."""
+    mutated_file = mutate_file_contents("test.py", source)
+    of_it = [m for m in mutated_file.mutant_names if mutant_of is not None and f"{mutant_of}__mutmut_" in m]
+    name = "test_module." + of_it[0] if of_it else "none"
+    assert (mutant_of is None) or of_it, f"no mutant of {mutant_of}"
+    monkeypatch.setenv("MUTANT_UNDER_TEST", name)
+    namespace = {"__name__": "test_module"}
+    exec(mutated_file.code, namespace)
+    return namespace, mutated_file.mutant_names
+
+
+def test_a_property_stays_a_property_and_its_mutants_run(monkeypatch):
+    source = """
+class Box:
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+
+    @property
+    def total(self):
+        return self.a + self.b
+""".strip()
+
+    namespace, mutants = _load(source, monkeypatch)
+    assert isinstance(namespace["Box"].__dict__["total"], property)
+    assert namespace["Box"](2, 3).total == 5
+    assert mutants
+
+    namespace, _ = _load(source, monkeypatch, mutant_of="total")
+    assert namespace["Box"](2, 3).total == -1
+
+
+def test_a_context_manager_keeps_working_and_its_mutants_run(monkeypatch):
+    source = """
+from contextlib import contextmanager
+
+@contextmanager
+def scope(value):
+    yield value + 1
+""".strip()
+
+    namespace, _ = _load(source, monkeypatch)
+    with namespace["scope"](1) as inside:
+        assert inside == 2
+
+    namespace, _ = _load(source, monkeypatch, mutant_of="scope")
+    with namespace["scope"](1) as inside:
+        assert inside == 0
+
+
+def test_a_registering_decorator_runs_once_and_registers_the_trampoline(monkeypatch):
+    source = """
+REGISTRY = []
+
+def register(fn):
+    REGISTRY.append(fn)
+    return fn
+
+@register
+def double(x):
+    return x * 2
+""".strip()
+
+    namespace, _ = _load(source, monkeypatch)
+    assert [fn(3) for fn in namespace["REGISTRY"]] == [6]
+
+    namespace, _ = _load(source, monkeypatch, mutant_of="double")
+    assert [fn(3) for fn in namespace["REGISTRY"]] == [3 / 2]
+
+
+def test_a_classmethod_under_another_decorator_binds_to_the_subclass(monkeypatch):
+    source = """
+def marked(fn):
+    return fn
+
+class Base:
+    @marked
+    @classmethod
+    def create(cls):
+        return cls(1)
+
+class SubClass(Base):
+    def __init__(self, value):
+        self.value = value
+""".strip()
+
+    namespace, _ = _load(source, monkeypatch)
+    assert namespace["SubClass"].create().value == 1
+
+    namespace, _ = _load(source, monkeypatch, mutant_of="create")
+    assert namespace["SubClass"].create().value is None
+
+
+def test_an_override_method_is_mutated(monkeypatch):
+    source = """
+def override(fn):  # typing.override (3.12+) is an identity decorator too
+    return fn
+
+class Base:
+    def area(self):
+        return 0
+
+class Square(Base):
+    @override
+    def area(self):
+        return 2 * 2
+""".strip()
+
+    namespace, _ = _load(source, monkeypatch)
+    assert namespace["Square"]().area() == 4
+
+    namespace, _ = _load(source, monkeypatch, mutant_of="Squareǁarea")
+    assert namespace["Square"]().area() != 4
