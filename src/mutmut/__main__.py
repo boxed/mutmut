@@ -941,8 +941,33 @@ def run(mutant_names: tuple[str, ...] | list[str], *, max_children: int | None) 
     _run(mutant_names, max_children)
 
 
+def _pin_macos_proxy_settings() -> None:
+    """Query macOS system proxy settings once, before forking, and reuse the answers.
+
+    On macOS, ``urllib.request.getproxies()`` and ``proxy_bypass()`` (used by requests,
+    httpx, aiohttp, ...) query the SystemConfiguration framework through ``_scproxy``
+    when no ``*_proxy`` environment variable is set. That framework is not fork-safe:
+    calling it in a forked child aborts or segfaults the child, so every mutant reports
+    as a segfault. Querying it here, in the unforked parent, and replacing urllib's
+    lookups with the cached answers keeps children off that code path. Forked children
+    inherit the patched module, and proxy and bypass results stay exactly the same.
+    """
+    if sys.platform != "darwin":
+        return
+    import urllib.request
+
+    try:
+        proxies = urllib.request._get_proxies()
+        settings = urllib.request._get_proxy_settings()
+    except Exception:
+        return
+    urllib.request._get_proxies = lambda: dict(proxies)
+    urllib.request._get_proxy_settings = lambda: dict(settings)
+
+
 # separate function, so we can call it directly from the tests
 def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) -> None:
+    _pin_macos_proxy_settings()
     # TODO: run no-ops once in a while to detect if we get false negatives
     # TODO: we should be able to get information on which tests killed mutants, which means we can get a list of tests and how many mutants each test kills. Those that kill zero mutants are redundant!
     set_mutant_under_test("mutant_generation")
