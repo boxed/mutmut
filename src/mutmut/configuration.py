@@ -135,6 +135,28 @@ def _guess_source_paths() -> list[str]:
     )
 
 
+def _parse_mutants_dir(raw: Any) -> Path:
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("Invalid mutants_dir value: must be a non-empty path.")
+    mutants_dir = Path(raw)
+    cwd = Path.cwd().resolve()
+    resolved = (cwd / mutants_dir).resolve()
+    if cwd.is_relative_to(resolved):
+        raise ValueError("Invalid mutants_dir value: must not be the project root or an ancestor directory.")
+    return mutants_dir
+
+
+def _validate_mutants_dir_overlap(mutants_dir: Path, source_paths: list[Path], also_copy: list[Path]) -> None:
+    cwd = Path.cwd().resolve()
+    resolved_mutants = (cwd / mutants_dir).resolve()
+    for entry in [*source_paths, *also_copy]:
+        resolved_entry = (cwd / entry).resolve()
+        if resolved_entry == cwd:
+            continue
+        if resolved_mutants.is_relative_to(resolved_entry) or resolved_entry.is_relative_to(resolved_mutants):
+            raise ValueError(f"Invalid mutants_dir value: {mutants_dir} must not overlap configured path {entry}.")
+
+
 def _load_config() -> Config:
     s = _config_reader()
 
@@ -144,8 +166,11 @@ def _load_config() -> Config:
     source_paths = [Path(path) for path in s("source_paths", [])]
     source_paths = source_paths or paths_to_mutate or [Path(path) for path in _guess_source_paths()]
 
+    mutants_dir = _parse_mutants_dir(s("mutants_dir", "mutants"))
+    resolved_mutants = (Path.cwd().resolve(strict=True) / mutants_dir).resolve()
+
     # We resolve at startup, s.t. we are still in the current working directory (and no tests modified the directory)
-    resolved_mutated_source_paths = [Path.cwd().resolve(strict=True) / "mutants" / p for p in source_paths]
+    resolved_mutated_source_paths = [(resolved_mutants / p).resolve() for p in source_paths]
 
     tests_dir = s("tests_dir", [])
     if tests_dir:
@@ -177,11 +202,8 @@ def _load_config() -> Config:
         valid = [e.value for e in ForkServerWarmup]
         raise ValueError(f"Invalid forkserver_warmup value: {warmup_str!r}. Expected one of: {valid}") from None
 
-    return Config(
-        only_mutate=only_mutate,
-        do_not_mutate=do_not_mutate,
-        do_not_mutate_patterns=s("do_not_mutate_patterns", []),
-        also_copy=[Path(y) for y in s("also_copy", [])]
+    also_copy = (
+        [Path(y) for y in s("also_copy", [])]
         + [
             Path("tests/"),
             Path("test/"),
@@ -192,7 +214,15 @@ def _load_config() -> Config:
             Path("Pipfile.lock"),
             Path("pdm.lock"),
         ]
-        + list(Path(".").glob("test*.py")),
+        + list(Path(".").glob("test*.py"))
+    )
+    _validate_mutants_dir_overlap(mutants_dir, source_paths, also_copy)
+
+    return Config(
+        only_mutate=only_mutate,
+        do_not_mutate=do_not_mutate,
+        do_not_mutate_patterns=s("do_not_mutate_patterns", []),
+        also_copy=also_copy,
         max_stack_depth=s("max_stack_depth", -1),
         debug=s("debug", False),
         mutate_only_covered_lines=s("mutate_only_covered_lines", False),
@@ -217,7 +247,8 @@ def _load_config() -> Config:
         max_forkserver_restarts=s("max_forkserver_restarts", 3),
         preload_modules_file=s("preload_modules_file", None),
         log_to_file=s("log_to_file", False),
-        log_file_path=s("log_file_path", "mutants/mutmut-debug.log"),
+        log_file_path=s("log_file_path", str(mutants_dir / "mutmut-debug.log")),
+        mutants_dir=mutants_dir,
     )
 
 
@@ -253,6 +284,7 @@ class Config:
     preload_modules_file: str | None
     log_to_file: bool
     log_file_path: str
+    mutants_dir: Path = Path("mutants")
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the
@@ -306,6 +338,13 @@ def config() -> Config:
     if _config is None:
         _config = _load_config()
     return _config
+
+
+def get_mutants_dir() -> Path:
+    """Return the configured mutants directory without requiring source_paths to resolve."""
+    if _config is not None:
+        return _config.mutants_dir
+    return _parse_mutants_dir(_config_reader()("mutants_dir", "mutants"))
 
 
 def reset_config() -> None:

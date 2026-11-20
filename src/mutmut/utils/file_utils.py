@@ -11,6 +11,7 @@ from os.path import isfile
 from pathlib import Path
 
 from mutmut.configuration import config
+from mutmut.configuration import get_mutants_dir
 
 
 @contextmanager
@@ -48,9 +49,10 @@ def walk_mutatable_files() -> Iterator[Path]:
 
 
 def copy_src_dir() -> None:
+    mutants_dir = get_mutants_dir()
     for root, name in walk_all_files():
         source_path = Path(root) / name
-        target_path = Path("mutants") / root / name
+        target_path = mutants_dir / root / name
 
         if target_path.exists():
             continue
@@ -65,10 +67,11 @@ def copy_src_dir() -> None:
 
 def copy_also_copy_files() -> None:
     assert isinstance(config().also_copy, list)
+    mutants_dir = get_mutants_dir()
     for path in config().also_copy:
         print("     also copying", path)
         path = Path(path)
-        destination = Path("mutants") / path
+        destination = mutants_dir / path
         if not path.exists():
             continue
         if path.is_file():
@@ -79,11 +82,12 @@ def copy_also_copy_files() -> None:
 
 def setup_source_paths() -> None:
     # ensure that the mutated source code can be imported by the tests
+    mutants_dir = get_mutants_dir()
     source_code_paths = [Path("."), Path("src"), Path("source")]
     for path in source_code_paths:
-        mutated_path = Path("mutants") / path
+        mutated_path = mutants_dir / path
         if mutated_path.exists():
-            sys.path.insert(0, str(mutated_path.absolute()))
+            sys.path.insert(0, str(mutated_path.resolve()))
 
     # ensure that the original code CANNOT be imported by the tests
     for path in source_code_paths:

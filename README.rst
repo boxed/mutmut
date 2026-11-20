@@ -102,6 +102,26 @@ If you use `pyproject.toml`, you must specify the paths as array in a `tool.mutm
 See below for more options for configuring mutmut.
 
 
+Custom mutants directory
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, mutmut writes mutated files, metadata, stats, and debug logs into ``mutants/`` in the current working directory. You can point it to a different relative or absolute directory with ``mutants_dir``:
+
+.. code-block:: toml
+
+    # pyproject.toml
+    [tool.mutmut]
+    mutants_dir = ".mutmut-cache"
+
+.. code-block:: ini
+
+    # setup.cfg
+    [mutmut]
+    mutants_dir = /tmp/my-project-mutants
+
+When ``log_file_path`` is not set explicitly, it defaults to ``<mutants_dir>/mutmut-debug.log``.
+
+
 "also copy" files
 ~~~~~~~~~~~~~~~~~
 
@@ -617,9 +637,10 @@ This section describes how to work with mutmut to enhance your test suite.
 3. Find a mutant you want to work on and write a test to try to kill it.
 4. Press `r` to rerun the mutant and see if you successfully managed to kill it.
 
-Mutmut keeps the data of what it has done and the mutants in the `mutants/`
-directory. If you want to make sure you run a full mutmut run you can delete
-this directory to start from scratch.
+Mutmut keeps the data of what it has done and the mutants in the ``mutants/``
+directory (or the directory configured via ``mutants_dir``). If you want to
+make sure you run a full mutmut run you can delete this directory to start
+from scratch.
 
 
 Mutation score badges
