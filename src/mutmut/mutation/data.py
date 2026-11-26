@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
+from mutmut.configuration import get_mutants_dir
+
 
 @dataclass(frozen=True)
 class LineSpan:
@@ -26,9 +28,10 @@ class MutantLineSpans:
     format_version = 1
 
     def __init__(self, *, path: Path | str, span_by_function_name: Mapping[str, LineSpan]) -> None:
+        base = get_mutants_dir()
         self.path = path
-        self.mutants_path = Path("mutants") / str(path)
-        self.index_path = Path("mutants") / (str(path) + ".spans")
+        self.mutants_path = base / str(path)
+        self.index_path = base / (str(path) + ".spans")
         self.span_by_function_name = span_by_function_name
 
     @classmethod
@@ -98,7 +101,7 @@ class SourceFileMutationData:
     def __init__(self, *, path: Path | str) -> None:
         self.estimated_time_of_tests_by_mutant: dict[str, float] = {}
         self.path = path
-        self.meta_path = Path("mutants") / (str(path) + ".meta")
+        self.meta_path = get_mutants_dir() / (str(path) + ".meta")
         self.exit_code_by_key: dict[str, int | None] = {}
         self.hash_by_function_name: dict[str, str] = {}
         self.durations_by_key: dict[str, float] = {}

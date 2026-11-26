@@ -9,6 +9,7 @@ from mutmut.configuration import _config_reader
 from mutmut.configuration import _guess_source_paths
 from mutmut.configuration import _load_config
 from mutmut.configuration import config
+from mutmut.configuration import get_mutants_dir
 from mutmut.configuration import reset_config
 
 
@@ -395,3 +396,91 @@ timeout_constant = 0.5
         assert Path("poetry.lock") in config.also_copy
         assert Path("Pipfile.lock") in config.also_copy
         assert Path("pdm.lock") in config.also_copy
+
+
+class TestMutantsDirConfig:
+    def test_defaults_to_mutants(self, in_tmp_dir: Path):
+        (in_tmp_dir / "src").mkdir()
+        cfg = _load_config()
+        assert cfg.mutants_dir == Path("mutants")
+        assert cfg.log_file_path == str(Path("mutants") / "mutmut-debug.log")
+        assert cfg.resolved_mutated_source_paths == [(in_tmp_dir / "mutants" / "src").resolve()]
+
+    def test_relative_mutants_dir_from_pyproject(self, in_tmp_dir: Path):
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text('[tool.mutmut]\nmutants_dir = ".cache/mutmut"\n')
+        cfg = _load_config()
+        assert cfg.mutants_dir == Path(".cache/mutmut")
+        assert cfg.log_file_path == str(Path(".cache/mutmut") / "mutmut-debug.log")
+        assert cfg.resolved_mutated_source_paths == [(in_tmp_dir / ".cache/mutmut/src").resolve()]
+
+    def test_absolute_mutants_dir_from_setup_cfg(self, in_tmp_dir: Path, tmp_path_factory: pytest.TempPathFactory):
+        out_dir = tmp_path_factory.mktemp("external_mutants")
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "setup.cfg").write_text(f"[mutmut]\nmutants_dir = {out_dir}\n")
+        cfg = _load_config()
+        assert cfg.mutants_dir == out_dir
+        assert cfg.log_file_path == str(out_dir / "mutmut-debug.log")
+        assert cfg.resolved_mutated_source_paths == [(out_dir / "src").resolve()]
+
+    def test_explicit_log_file_path_overrides_mutants_dir_default(self, in_tmp_dir: Path):
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text(
+            '[tool.mutmut]\nmutants_dir = "build/mutants"\nlog_file_path = "custom.log"\n'
+        )
+        cfg = _load_config()
+        assert cfg.mutants_dir == Path("build/mutants")
+        assert cfg.log_file_path == "custom.log"
+
+    @pytest.mark.parametrize("bad_value", ["", "   ", ".", "./", "..", "../..", "/"])
+    def test_rejects_empty_root_or_ancestor_mutants_dir(self, in_tmp_dir: Path, bad_value: str):
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text(f'[tool.mutmut]\nmutants_dir = "{bad_value}"\n')
+        with pytest.raises(ValueError, match="Invalid mutants_dir value"):
+            _load_config()
+
+    @pytest.mark.parametrize("toml_literal", ["123", '["mutants"]'])
+    def test_rejects_non_string_mutants_dir(self, in_tmp_dir: Path, toml_literal: str):
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text(f"[tool.mutmut]\nmutants_dir = {toml_literal}\n")
+        with pytest.raises(ValueError, match="Invalid mutants_dir value"):
+            _load_config()
+
+    @pytest.mark.parametrize(
+        ("source_paths", "mutants_dir", "extra_config"),
+        [
+            ('["src"]', "src", ""),
+            ('["src"]', "src/mutants", ""),
+            ('["src/pkg"]', "src", ""),
+            ('["src"]', "tests", ""),
+            ('["src"]', "tests/mutants", ""),
+            ('["src"]', "fixtures/mutants", 'also_copy = ["fixtures"]\n'),
+            ('["src"]', "fixtures", 'also_copy = ["fixtures/data"]\n'),
+        ],
+    )
+    def test_rejects_mutants_dir_overlapping_source_or_also_copy(
+        self, in_tmp_dir: Path, source_paths: str, mutants_dir: str, extra_config: str
+    ):
+        (in_tmp_dir / "src" / "pkg").mkdir(parents=True)
+        (in_tmp_dir / "pyproject.toml").write_text(
+            f'[tool.mutmut]\nsource_paths = {source_paths}\nmutants_dir = "{mutants_dir}"\n{extra_config}'
+        )
+        with pytest.raises(ValueError, match="Invalid mutants_dir value"):
+            _load_config()
+
+    def test_allows_mutants_dir_sharing_name_prefix_with_source_path(self, in_tmp_dir: Path):
+        (in_tmp_dir / "src").mkdir()
+        (in_tmp_dir / "pyproject.toml").write_text(
+            '[tool.mutmut]\nsource_paths = ["src"]\nmutants_dir = "src_mutants"\n'
+        )
+        assert _load_config().mutants_dir == Path("src_mutants")
+
+    def test_get_mutants_dir_works_without_source_paths(self, in_tmp_dir: Path):
+        assert get_mutants_dir() == Path("mutants")
+        (in_tmp_dir / "pyproject.toml").write_text('[tool.mutmut]\nmutants_dir = "alt_mutants"\n')
+        assert get_mutants_dir() == Path("alt_mutants")
+
+    def test_get_mutants_dir_reads_loaded_config(self, in_tmp_dir: Path, patch_config):
+        (in_tmp_dir / "src").mkdir()
+        patch_config("mutants_dir", Path("patched_mutants"))
+        assert get_mutants_dir() == Path("patched_mutants")

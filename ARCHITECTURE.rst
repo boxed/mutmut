@@ -9,7 +9,7 @@ Phases of ``mutmut run``
 Generating mutants
 ^^^^^^^^^^^^^^^^^^
 
-This phase creates a ``./mutants/`` directory, which will be used by all following phases.
+This phase creates the mutants directory (``./mutants/`` by default, configurable via ``mutants_dir``), which will be used by all following phases.
 
 We start by copying ``source_paths`` to ``mutants/`` and then mutate the ``*.py`` files in there. Finally, we also copy ``also_copy`` paths to ``mutants/``, including the (guessed) test directories and some project files.
 

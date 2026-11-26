@@ -47,6 +47,7 @@ from mutmut.code_coverage import get_covered_lines_for_file
 from mutmut.code_coverage import get_excluded_lines_for_file
 from mutmut.configuration import Config
 from mutmut.configuration import config
+from mutmut.configuration import get_mutants_dir
 from mutmut.core import MutmutProgrammaticFailException
 from mutmut.mutation.data import MutantLineSpans
 from mutmut.mutation.data import SourceFileMutationData
@@ -133,7 +134,7 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
 def create_file_mutants(path: Path) -> FileMutationResult:
     try:
         print(path)
-        output_path = Path("mutants") / path
+        output_path = get_mutants_dir() / path
         makedirs(output_path.parent, exist_ok=True)
 
         if config().should_mutate(path):
@@ -517,11 +518,24 @@ def _changed_hashed_files(restrict_to: list[str] | None = None) -> set[str]:
     return changed
 
 
+def _is_in_mutants_dir(path: str, mutants_dir: Path) -> bool:
+    cwd = Path.cwd().resolve()
+    resolved_mutants = (cwd / mutants_dir).resolve()
+    if not resolved_mutants.is_relative_to(cwd):
+        return False
+    rel_mutants = resolved_mutants.relative_to(cwd).as_posix()
+    rel_path = Path(path).as_posix()
+    return rel_path == rel_mutants or rel_path.startswith(f"{rel_mutants}/")
+
+
 def _is_excluded(path: str, config: Config) -> bool:
     """Whether ``path`` should be dropped from change reporting as noise.
 
-    Files explicitly registered in ``cache_invalidation_files`` are never excluded.
+    Generated files under ``mutants_dir`` are always excluded. Files explicitly
+    registered in ``cache_invalidation_files`` are otherwise never excluded.
     """
+    if _is_in_mutants_dir(path, config.mutants_dir):
+        return True
     if any(fnmatch.fnmatch(path, pat) for pat in config.cache_invalidation_files):
         return False
     patterns = list(_DEFAULT_INVALIDATION_EXCLUDE) + list(config.cache_invalidation_exclude)
@@ -581,7 +595,7 @@ def _reset_mutant_results(should_reset: Callable[[str, int], bool]) -> int:
     """
     count = 0
     for path in walk_mutatable_files():
-        meta_path = Path("mutants") / (str(path) + ".meta")
+        meta_path = get_mutants_dir() / (str(path) + ".meta")
         if not meta_path.exists():
             continue
         m = SourceFileMutationData(path=path)
@@ -617,7 +631,9 @@ def _report_watched_file_changes() -> bool:
     # default: warn but keep the cache
     print(f"    Warning: {len(listed)} non-Python file(s) changed since the last full run: {', '.join(listed)}")
     print("    These cannot be tracked for behavioral changes, so cached results were kept.")
-    print('    If the changes affect your tests, delete the mutants/ directory or set on_dependency_change = "rerun".')
+    print(
+        f'    If the changes affect your tests, delete the {get_mutants_dir()}/ directory or set on_dependency_change = "rerun".'
+    )
     return False
 
 
@@ -700,7 +716,7 @@ def collect_or_load_stats(
 
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
     s = calculate_summary_stats(source_file_mutation_data_by_path)
-    with open("mutants/mutmut-cicd-stats.json", "w") as f:
+    with open(get_mutants_dir() / "mutmut-cicd-stats.json", "w") as f:
         json.dump(
             dict(
                 killed=s.killed,
@@ -732,7 +748,7 @@ def export_cicd_stats() -> None:
     source_file_mutation_data_by_path: dict[str, SourceFileMutationData] = {}
 
     for path in walk_mutatable_files():
-        meta_path = Path("mutants") / (str(path) + ".meta")
+        meta_path = get_mutants_dir() / (str(path) + ".meta")
         if not meta_path.exists():
             continue
 
@@ -748,20 +764,24 @@ def export_cicd_stats() -> None:
         return
 
     save_cicd_stats(source_file_mutation_data_by_path)
-    print("Saved CI/CD stats to mutants/mutmut-cicd-stats.json")
+    print(f"Saved CI/CD stats to {get_mutants_dir() / 'mutmut-cicd-stats.json'}")
 
 
 @cli.command()
 @click.option(
     "--input",
     "input_path",
-    default="mutants/mutmut-cicd-stats.json",
-    show_default=True,
+    default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to mutmut-cicd-stats.json (defaults to <mutants_dir>/mutmut-cicd-stats.json).",
 )
 @click.option("--output", required=True, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--label", default="mutation", show_default=True)
-def badge(input_path: Path, output: Path, label: str) -> None:
+def badge(input_path: Path | None, output: Path, label: str) -> None:
+    if input_path is None:
+        input_path = get_mutants_dir() / "mutmut-cicd-stats.json"
+        if not input_path.is_file():
+            raise click.ClickException(f"{input_path} does not exist")
     try:
         with input_path.open() as f:
             stats = json.load(f)
@@ -951,7 +971,9 @@ def _run(mutant_names: tuple[str, ...] | list[str], max_children: int | None) ->
         max_children = os.cpu_count() or 4
 
     start = datetime.now()
-    makedirs(Path("mutants"), exist_ok=True)
+    # Validate full config before creating the output directory.
+    config()
+    makedirs(get_mutants_dir(), exist_ok=True)
     with CatchOutput(spinner_title="Generating mutants"):
         copy_src_dir()
         copy_also_copy_files()
