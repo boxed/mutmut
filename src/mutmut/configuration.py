@@ -68,7 +68,8 @@ class ForkServerWarmup(str, Enum):
 
     - COLLECT: run ``pytest --collect-only`` to pre-load conftest, plugins, and
       test modules (default; biggest speedup for most projects).
-    - IMPORT: import the modules listed in ``preload_modules_file`` (useful when
+    - IMPORT: import the modules listed in ``preload_modules`` and in
+      ``preload_modules_file`` (useful when
       test collection has side effects you do not want shared).
     - NONE: import nothing extra beyond what running a test needs.
     """
@@ -268,6 +269,7 @@ def _load_config() -> Config:
         process_isolation=process_isolation,
         forkserver_warmup=forkserver_warmup,
         max_forkserver_restarts=s("max_forkserver_restarts", 3),
+        preload_modules=s("preload_modules", []),
         preload_modules_file=s("preload_modules_file", None),
         log_to_file=s("log_to_file", False),
         log_file_path=s("log_file_path", str(mutants_dir / "mutmut-debug.log")),
@@ -310,6 +312,7 @@ class Config:
     log_file_path: str
     mutants_dir: Path = Path("mutants")
     disable_mutation_types: list[str] = field(default_factory=list)
+    preload_modules: list[str] = field(default_factory=list)
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the
