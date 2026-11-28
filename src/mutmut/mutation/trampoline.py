@@ -58,6 +58,20 @@ def get_mutant_under_test() -> str:
     return ""
 
 
+def get_class_attribute(owner: Any, name: str) -> Any:
+    """Return ``owner.name`` without calling a ``__getattribute__`` of the metaclass.
+
+    Mutated code reads its generated methods from the class. A metaclass can override
+    ``__getattribute__`` to refuse names it does not know, e.g. to deprecate a class, which
+    would make the mutated module fail to import. ``type.__getattribute__`` is what
+    ``owner.name`` runs for any metaclass that does not override it. A class decorator can
+    replace the class with another object; that object is read normally.
+    """
+    if isinstance(owner, type):
+        return type.__getattribute__(owner, name)
+    return getattr(owner, name)
+
+
 def wrap_in_trampoline(
     mutants_dict: dict[str, F], is_classmethod: bool = False
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
@@ -77,10 +91,10 @@ def wrap_in_trampoline(
 
             if is_classmethod:
                 # for @classmethod, the first arg is cls
-                # with getattr(cls, 'some_method'), we get cls.some_method
+                # with get_class_attribute(cls, 'some_method'), we get cls.some_method
                 # which is necessary to get the method bound to the subclass, even if it's declared on the parent class
                 call_args = list(args[1:])
-                orig_func = getattr(args[0], orig_func.__name__)
+                orig_func = get_class_attribute(args[0], orig_func.__name__)
 
             mutant_under_test = get_mutant_under_test()
 
@@ -116,7 +130,7 @@ def wrap_in_trampoline(
                 return orig_func(*call_args, **kwargs)
 
             if is_classmethod:
-                mutated_func = getattr(args[0], mutated_func.__name__)
+                mutated_func = get_class_attribute(args[0], mutated_func.__name__)
             return mutated_func(*call_args, **kwargs)
 
         # ensure that inspect calls still produce the same result for the trampoline

@@ -71,6 +71,100 @@ class Color(Enum):
     assert Color.GREEN.describe() == "green"
 
 
+GUARDED_METACLASS_SOURCE = """
+class _Guarded(type):
+    def __getattribute__(cls, name):
+        if not name.startswith("__"):
+            raise RuntimeError(f"{name} is deprecated")
+        return super().__getattribute__(name)
+
+
+class Catalog(metaclass=_Guarded):
+    def __init__(self, value):
+        self.value = value + 1
+
+    @classmethod
+    def create(cls, value):
+        return cls(value * 2)
+
+
+class Child(Catalog):
+    def describe(self):
+        return f"child {self.value}"
+""".strip()
+
+
+def test_metaclass_getattribute_runtime_execution(monkeypatch):
+    """
+    Classes whose metaclass refuses reads of unknown attributes can be imported and run when mutated.
+
+    pypdf's CatalogDictionary raises a DeprecationError for every attribute read through its metaclass,
+    which made importing the mutated module fail. Child inherits the metaclass without naming it.
+    """
+    mutated_file = mutate_file_contents("test.py", GUARDED_METACLASS_SOURCE)
+    assert "xǁCatalogǁcreate__mutmut_1" in mutated_file.mutant_names
+
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
+    namespace = {"__name__": "test_module"}
+    exec(mutated_file.code, namespace)
+    Child = namespace["Child"]
+
+    created = Child(0).create(3)
+
+    assert type(created) is Child
+    assert created.value == 7
+    assert created.describe() == "child 7"
+
+
+def test_metaclass_getattribute_classmethod_mutant_activation(monkeypatch):
+    """
+    A mutant of a classmethod can be activated on a class whose metaclass refuses reads of unknown attributes.
+
+    The trampoline of a classmethod looks the method up on the class it was called on (here the
+    subclass Child), which must not go through the __getattribute__ of the metaclass.
+    """
+    mutated_file = mutate_file_contents("test.py", GUARDED_METACLASS_SOURCE)
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
+    namespace = {"__name__": "test_module"}
+    exec(mutated_file.code, namespace)
+    Child = namespace["Child"]
+    child = Child(0)
+
+    # mutant 2 turns `value * 2` into `value / 2`
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "test_module.xǁCatalogǁcreate__mutmut_2")
+    created = child.create(3)
+
+    assert type(created) is Child
+    assert created.value == 2.5
+
+
+def test_class_replaced_by_decorator_import(monkeypatch):
+    """
+    A mutated module still imports when a class decorator replaces the class with an instance.
+
+    The generated methods are then read from the instance, as before reading them
+    without the metaclass. Calling such a method is a different problem and is not checked here.
+    """
+    source = """
+def singleton(cls):
+    return cls()
+
+
+@singleton
+class Config:
+    def get(self):
+        return 1 + 1
+""".strip()
+    mutated_file = mutate_file_contents("test.py", source)
+    assert "xǁConfigǁget__mutmut_1" in mutated_file.mutant_names
+
+    monkeypatch.setenv("MUTANT_UNDER_TEST", "none")
+    namespace = {"__name__": "test_module"}
+    exec(mutated_file.code, namespace)
+
+    assert type(namespace["Config"]).__name__ == "Config"
+
+
 def test_type_annotation_runtime_execution(monkeypatch):
     """Test that forward and quoted annotations can be executed
 
