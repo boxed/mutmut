@@ -57,9 +57,10 @@ from enum import Enum
 import lib
 
 lib.foo()
-
-
 from mutmut.mutation.trampoline import wrap_in_trampoline as _mutmut_mutated, MutantDict
+
+
+from mutmut.mutation.trampoline import get_class_attribute as _mutmut_get_class_attribute
 mutants_x_foo__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
 @_mutmut_mutated(mutants_x_foo__mutmut)
@@ -132,15 +133,15 @@ class Adder:
     def xǁAdderǁnegated__mutmut_2(adder: "Adder") -> Self:
         return Adder(+adder.amount)
 
-mutants_xǁAdderǁ__init____mutmut['_mutmut_orig'] = Adder.xǁAdderǁ__init____mutmut_orig # type: ignore # mutmut generated
-mutants_xǁAdderǁ__init____mutmut['xǁAdderǁ__init____mutmut_1'] = Adder.xǁAdderǁ__init____mutmut_1 # type: ignore # mutmut generated
+mutants_xǁAdderǁ__init____mutmut['_mutmut_orig'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁ__init____mutmut_orig') # type: ignore # mutmut generated
+mutants_xǁAdderǁ__init____mutmut['xǁAdderǁ__init____mutmut_1'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁ__init____mutmut_1') # type: ignore # mutmut generated
 
-mutants_xǁAdderǁadd__mutmut['_mutmut_orig'] = Adder.xǁAdderǁadd__mutmut_orig # type: ignore # mutmut generated
-mutants_xǁAdderǁadd__mutmut['xǁAdderǁadd__mutmut_1'] = Adder.xǁAdderǁadd__mutmut_1 # type: ignore # mutmut generated
+mutants_xǁAdderǁadd__mutmut['_mutmut_orig'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁadd__mutmut_orig') # type: ignore # mutmut generated
+mutants_xǁAdderǁadd__mutmut['xǁAdderǁadd__mutmut_1'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁadd__mutmut_1') # type: ignore # mutmut generated
 
-mutants_xǁAdderǁnegated__mutmut['_mutmut_orig'] = Adder.xǁAdderǁnegated__mutmut_orig # type: ignore # mutmut generated
-mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_1'] = Adder.xǁAdderǁnegated__mutmut_1 # type: ignore # mutmut generated
-mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_2'] = Adder.xǁAdderǁnegated__mutmut_2 # type: ignore # mutmut generated
+mutants_xǁAdderǁnegated__mutmut['_mutmut_orig'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁnegated__mutmut_orig') # type: ignore # mutmut generated
+mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_1'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁnegated__mutmut_1') # type: ignore # mutmut generated
+mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_2'] = _mutmut_get_class_attribute(Adder, 'xǁAdderǁnegated__mutmut_2') # type: ignore # mutmut generated
 mutants_xǁColorǁdarken__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 mutants_xǁColorǁfrom_name__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
@@ -178,12 +179,12 @@ class Color(Enum):
     def default(cls) -> "Color":
         return cls.RED
 
-mutants_xǁColorǁdarken__mutmut['_mutmut_orig'] = Color.xǁColorǁdarken__mutmut_orig # type: ignore # mutmut generated
-mutants_xǁColorǁdarken__mutmut['xǁColorǁdarken__mutmut_1'] = Color.xǁColorǁdarken__mutmut_1 # type: ignore # mutmut generated
-mutants_xǁColorǁdarken__mutmut['xǁColorǁdarken__mutmut_2'] = Color.xǁColorǁdarken__mutmut_2 # type: ignore # mutmut generated
+mutants_xǁColorǁdarken__mutmut['_mutmut_orig'] = _mutmut_get_class_attribute(Color, 'xǁColorǁdarken__mutmut_orig') # type: ignore # mutmut generated
+mutants_xǁColorǁdarken__mutmut['xǁColorǁdarken__mutmut_1'] = _mutmut_get_class_attribute(Color, 'xǁColorǁdarken__mutmut_1') # type: ignore # mutmut generated
+mutants_xǁColorǁdarken__mutmut['xǁColorǁdarken__mutmut_2'] = _mutmut_get_class_attribute(Color, 'xǁColorǁdarken__mutmut_2') # type: ignore # mutmut generated
 
-mutants_xǁColorǁfrom_name__mutmut['_mutmut_orig'] = Color.xǁColorǁfrom_name__mutmut_orig # type: ignore # mutmut generated
-mutants_xǁColorǁfrom_name__mutmut['xǁColorǁfrom_name__mutmut_1'] = Color.xǁColorǁfrom_name__mutmut_1 # type: ignore # mutmut generated
+mutants_xǁColorǁfrom_name__mutmut['_mutmut_orig'] = _mutmut_get_class_attribute(Color, 'xǁColorǁfrom_name__mutmut_orig') # type: ignore # mutmut generated
+mutants_xǁColorǁfrom_name__mutmut['xǁColorǁfrom_name__mutmut_1'] = _mutmut_get_class_attribute(Color, 'xǁColorǁfrom_name__mutmut_1') # type: ignore # mutmut generated
 
 
 print(Adder(1).add(2))\

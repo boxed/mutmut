@@ -38,11 +38,16 @@ def build_mutants_dict_and_name(
     :param mutants_dict_name: Variable name of the dictionary containing the mutants
     :return: String containing the mutants dict assignments
     """
-    lines = []
-    class_prefix = f"{class_name}." if class_name else ""
-    lines.append(f"{mutants_dict_name}['_mutmut_orig'] = {class_prefix}{mangled_name}_orig")
+
+    def create_reference(name: str) -> str:
+        if not class_name:
+            return name
+        # not ``Class.name``: a metaclass can refuse to give out names it does not know
+        return f"_mutmut_get_class_attribute({class_name}, {name!r})"
+
+    lines = [f"{mutants_dict_name}['_mutmut_orig'] = {create_reference(mangled_name + '_orig')}"]
     for mutant_name in mutants:
-        lines.append(f"{mutants_dict_name}['{mutant_name}'] = {class_prefix}{mutant_name}")
+        lines.append(f"{mutants_dict_name}['{mutant_name}'] = {create_reference(mutant_name)}")
 
     return _mark_generated("\n".join(lines))
 
@@ -51,4 +56,5 @@ def build_mutants_dict_and_name(
 # language=python
 trampoline_imports = """
 from mutmut.mutation.trampoline import wrap_in_trampoline as _mutmut_mutated, MutantDict
+from mutmut.mutation.trampoline import get_class_attribute as _mutmut_get_class_attribute
 """
