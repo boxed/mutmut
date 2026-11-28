@@ -17,23 +17,28 @@ if platform.system() == "Windows":
     )
     sys.exit(1)
 import ast
+import ctypes
 import fnmatch
 import hashlib
 import json
 import shutil
+import signal
 import subprocess
 import warnings
 from collections.abc import Callable
 from colorsys import hls_to_rgb
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
 from io import TextIOBase
 from json import JSONDecodeError
 from math import ceil
-from multiprocessing import Pool
 from multiprocessing import get_start_method
 from multiprocessing import set_start_method
+from multiprocessing.sharedctypes import RawArray
 from os import makedirs
 from pathlib import Path
 from time import process_time
@@ -93,6 +98,22 @@ class InvalidGeneratedSyntaxException(Exception):
         )
 
 
+class MutantGenerationWorkerDiedException(Exception):
+    def __init__(self, files: list[Path]) -> None:
+        if len(files) == 1:
+            working_on = f" while generating mutants for {files[0]}"
+        elif files:
+            working_on = f" while generating mutants for one of {', '.join(str(f) for f in files)}"
+        else:
+            working_on = ""
+        super().__init__(
+            f"A worker process died unexpectedly{working_on}. "
+            "This usually means it was killed by the operating system for using too much memory. "
+            "Try running with fewer worker processes, e.g. `mutmut run --max-children 1` "
+            "(the default is the number of CPUs), or give mutmut more memory."
+        )
+
+
 @dataclass
 class FileMutationResult:
     """Dataclass to transfer warnings and errors from child processes to the parent"""
@@ -114,8 +135,25 @@ class MutantGenerationStats:
 
 def create_mutants(max_children: int) -> MutantGenerationStats:
     stats = MutantGenerationStats()
-    with Pool(processes=max_children) as p:
-        for result in p.imap_unordered(create_file_mutants, walk_source_files()):
+    paths = list(walk_source_files())
+    # A flag per file, set while a worker processes that file. It is in shared memory, so it
+    # is still readable after a worker is killed, to report what that worker was working on.
+    files_in_progress = RawArray(ctypes.c_bool, len(paths))
+    # Not multiprocessing.Pool: when one of its workers dies, the task it was running is
+    # lost and we would wait for its result forever. The executor raises BrokenProcessPool.
+    executor = ProcessPoolExecutor(
+        max_workers=max_children,
+        initializer=_init_mutant_generation_worker,
+        initargs=(files_in_progress,),
+    )
+    try:
+        futures = [executor.submit(_create_file_mutants_in_worker, i, path) for i, path in enumerate(paths)]
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+            except BrokenProcessPool as e:
+                in_progress = [path for path, flag in zip(paths, files_in_progress, strict=True) if flag]
+                raise MutantGenerationWorkerDiedException(in_progress) from e
             for warning in result.warnings:
                 warnings.warn(warning)
             if result.error:
@@ -128,7 +166,30 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
                 stats.mutated += 1
             if result.current_hashes:
                 state().current_function_hashes.update(result.current_hashes)
+    finally:
+        # if we stop early, skip the files not yet handed to a worker
+        executor.shutdown(cancel_futures=True)
     return stats
+
+
+_files_in_progress: ctypes.Array[ctypes.c_bool] | None = None
+
+
+def _init_mutant_generation_worker(files_in_progress: ctypes.Array[ctypes.c_bool]) -> None:
+    global _files_in_progress
+    _files_in_progress = files_in_progress
+    # Die on Ctrl-C, like the workers of multiprocessing.Pool did. Otherwise a worker
+    # reports the KeyboardInterrupt and goes on with the next file, and we wait for it.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
+def _create_file_mutants_in_worker(index: int, path: Path) -> FileMutationResult:
+    assert _files_in_progress is not None
+    _files_in_progress[index] = True
+    try:
+        return create_file_mutants(path)
+    finally:
+        _files_in_progress[index] = False
 
 
 def create_file_mutants(path: Path) -> FileMutationResult:
