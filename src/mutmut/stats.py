@@ -156,14 +156,29 @@ def save_stats() -> None:
         )
 
 
+# Set once loading the config failed in this process, so later hits skip the reload.
+_config_unavailable = False
+
+
 def record_trampoline_hit(name: str, caller: str | None = None) -> None:
+    global _config_unavailable
     assert not name.startswith("src."), "Failed trampoline hit. Module name starts with `src.`, which is invalid"
 
-    mutated_source_paths = config().resolved_mutated_source_paths
+    if _config_unavailable:
+        return
+    try:
+        cfg = config()
+    except FileNotFoundError:
+        # Mutated code can run in a process that mutmut did not start, e.g. a subprocess that a test
+        # spawns in another working directory. Its hits never reach mutmut's stats, so skip them.
+        _config_unavailable = True
+        return
 
-    if config().max_stack_depth != -1:
+    mutated_source_paths = cfg.resolved_mutated_source_paths
+
+    if cfg.max_stack_depth != -1:
         f = inspect.currentframe()
-        c = config().max_stack_depth
+        c = cfg.max_stack_depth
         while c and f:
             filename = f.f_code.co_filename
             f = f.f_back
@@ -182,5 +197,5 @@ def record_trampoline_hit(name: str, caller: str | None = None) -> None:
             return
 
     state()._stats.add(name)
-    if caller is not None and config().track_dependencies:
+    if caller is not None and cfg.track_dependencies:
         state().function_dependencies[name].add(caller)
