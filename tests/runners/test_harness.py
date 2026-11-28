@@ -101,3 +101,54 @@ class TestStatsCollectorCollectionHits:
             "pkg.mod.x_double": {"tests/test_mod.py::test_first"},
         }
         assert state()._stats == set()
+
+
+class TestPreloadModuleNames:
+    @staticmethod
+    def _config(preload_modules, preload_modules_file):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(preload_modules=preload_modules, preload_modules_file=preload_modules_file)
+
+    def test_list_only(self):
+        from mutmut.runners.harness import _preload_module_names
+
+        assert _preload_module_names(self._config(["json", "decimal"], None)) == ["json", "decimal"]
+
+    def test_file_only_skips_blank_lines_and_comments(self, tmp_path):
+        from mutmut.runners.harness import _preload_module_names
+
+        preload = tmp_path / "preload.txt"
+        preload.write_text("# heavy imports\njson\n\n  decimal  \n")
+        assert _preload_module_names(self._config([], str(preload))) == ["json", "decimal"]
+
+    def test_list_comes_before_file(self, tmp_path):
+        from mutmut.runners.harness import _preload_module_names
+
+        preload = tmp_path / "preload.txt"
+        preload.write_text("decimal\n")
+        assert _preload_module_names(self._config(["json"], str(preload))) == ["json", "decimal"]
+
+    def test_nothing_configured(self):
+        from mutmut.runners.harness import _preload_module_names
+
+        assert _preload_module_names(self._config([], None)) == []
+
+
+def test_import_warmup_imports_listed_modules_and_skips_failures(patch_config, monkeypatch):
+    from mutmut.configuration import ForkServerWarmup
+    from mutmut.runners import harness
+
+    imported = []
+
+    def fake_import(name):
+        imported.append(name)
+        if name == "missing_module":
+            raise ImportError(name)
+
+    patch_config("forkserver_warmup", ForkServerWarmup.IMPORT)
+    patch_config("preload_modules", ["json", "missing_module", "decimal"])
+    patch_config("preload_modules_file", None)
+    monkeypatch.setattr(harness.importlib, "import_module", fake_import)
+    harness.PytestRunner().warm_up()
+    assert imported == ["json", "missing_module", "decimal"]

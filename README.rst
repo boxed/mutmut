@@ -321,9 +321,10 @@ left out is imported in each worker.
     and usually the fastest.
 
 ``import``
-    Import only the modules listed in ``preload_modules_file`` (one dotted
-    module name per line; blank lines and ``#`` comments are ignored, and
-    modules that fail to import are skipped). Use this when test *collection*
+    Import only the modules listed in ``preload_modules`` (a list of dotted
+    module names) and in ``preload_modules_file`` (one dotted module name per
+    line; blank lines and ``#`` comments are ignored); the list is imported
+    first. Modules that fail to import are skipped. Use this when test *collection*
     itself has side effects you do not want every worker to share, but you still
     want your slow imports warmed up.
 
@@ -338,7 +339,9 @@ left out is imported in each worker.
     [tool.mutmut]
     process_isolation = "forkserver"
     forkserver_warmup = "import"
-    preload_modules_file = "mutmut_preload.txt"
+    preload_modules = ["numpy", "scipy"]
+    # or keep the list in a file:
+    # preload_modules_file = "mutmut_preload.txt"
 
 If the fork server itself crashes, mutmut starts a new one and re-submits the
 mutants that were in flight, up to ``max_forkserver_restarts`` times (default

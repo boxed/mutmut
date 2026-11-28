@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Iterable
@@ -16,6 +17,8 @@ from mutmut.utils.format_utils import strip_prefix
 
 if TYPE_CHECKING:
     from coverage import Coverage
+
+    from mutmut.configuration import Config
 
 
 class CollectTestsFailedException(Exception):
@@ -99,7 +102,8 @@ class PytestRunner(TestRunner):
 
         - COLLECT (default): run ``pytest --collect-only`` to import conftest,
           plugins, and test modules (biggest speedup for most projects).
-        - IMPORT: import the modules listed in ``preload_modules_file``.
+        - IMPORT: import the modules listed in ``preload_modules``, then those
+          in ``preload_modules_file``.
         - NONE: import nothing beyond what running a test already needs.
         """
         warmup = config().forkserver_warmup
@@ -108,18 +112,11 @@ class PytestRunner(TestRunner):
             with change_cwd(get_mutants_dir()):
                 self.execute_pytest(["--collect-only", "-qqq"] + self._pytest_add_cli_args_test_selection)
         elif warmup == ForkServerWarmup.IMPORT:
-            preload_file = config().preload_modules_file
-            if preload_file:
-                import importlib
-
-                with open(preload_file) as f:
-                    for line in f:
-                        module_name = line.strip()
-                        if module_name and not module_name.startswith("#"):
-                            try:
-                                importlib.import_module(module_name)
-                            except ImportError:
-                                pass  # Best effort.
+            for module_name in _preload_module_names(config()):
+                try:
+                    importlib.import_module(module_name)
+                except ImportError:
+                    pass  # Best effort.
         # ForkServerWarmup.NONE -> no-op.
 
     # noinspection PyMethodMayBeStatic
@@ -265,3 +262,12 @@ class HammettRunner(TestRunner):
 
         hammett.Config.workerinput = dict(workerinput=f"_{mutant_name}")
         return int(hammett.main_run_tests(**self.hammett_kwargs, tests=tests))
+
+
+def _preload_module_names(cfg: Config) -> list[str]:
+    """Module names to import before forking: ``preload_modules``, then the file's."""
+    names = list(cfg.preload_modules)
+    if cfg.preload_modules_file:
+        with open(cfg.preload_modules_file) as f:
+            names += [stripped for line in f if (stripped := line.strip()) and not stripped.startswith("#")]
+    return names

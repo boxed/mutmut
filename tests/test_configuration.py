@@ -60,7 +60,12 @@ class TestProcessIsolationConfig:
         assert cfg.process_isolation == ProcessIsolation.FORK
         assert cfg.forkserver_warmup == ForkServerWarmup.COLLECT
         assert cfg.max_forkserver_restarts == 3
+        assert cfg.preload_modules == []
         assert cfg.preload_modules_file is None
+
+    def test_preload_modules_list(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'preload_modules = ["json", "decimal"]')
+        assert config().preload_modules == ["json", "decimal"]
 
     def test_forkserver_selected(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, 'process_isolation = "forkserver"')
