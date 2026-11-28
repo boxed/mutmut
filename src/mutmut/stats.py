@@ -13,6 +13,8 @@ from mutmut.mutation.data import SourceFileMutationData
 from mutmut.state import state
 from mutmut.ui.terminal import print_status
 
+SUSPICIOUS_EXIT_CODE = 35
+
 status_by_exit_code = defaultdict(
     lambda: "suspicious",
     {
@@ -24,7 +26,7 @@ status_by_exit_code = defaultdict(
         None: "not checked",
         33: "no tests",
         34: "skipped",
-        35: "suspicious",
+        SUSPICIOUS_EXIT_CODE: "suspicious",
         36: "timeout",
         37: "caught by type check",
         -24: "timeout",  # SIGXCPU
