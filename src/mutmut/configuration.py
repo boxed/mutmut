@@ -11,11 +11,31 @@ from configparser import ConfigParser
 from configparser import NoOptionError
 from configparser import NoSectionError
 from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
 from os.path import isdir
 from os.path import isfile
 from pathlib import Path
 from typing import Any
+
+from mutmut.mutation.mutators import mutation_type_names
+
+
+def _mutation_type_matches(configured_type: str, mutation_type: str) -> bool:
+    return mutation_type == configured_type or mutation_type.startswith(f"{configured_type}.")
+
+
+def _validate_mutation_types(configured_types: list[str]) -> None:
+    invalid_types = [
+        configured_type
+        for configured_type in configured_types
+        if not any(_mutation_type_matches(configured_type, mutation_type) for mutation_type in mutation_type_names)
+    ]
+    if invalid_types:
+        available_types = ", ".join(sorted(mutation_type_names))
+        raise ValueError(
+            f"Unknown mutation type(s): {', '.join(invalid_types)}. Available mutation types: {available_types}"
+        )
 
 
 class ProcessIsolation(str, Enum):
@@ -188,6 +208,9 @@ def _load_config() -> Config:
             f'The configs only_mutate and do_not_mutate expect glob patterns like "src/api/*" or "src/main.py". Following patterns are likely invalid: {invalid_patterns}'
         )
 
+    disable_mutation_types = s("disable_mutation_types", [])
+    _validate_mutation_types(disable_mutation_types)
+
     isolation_str = s("process_isolation", "fork")
     try:
         process_isolation = ProcessIsolation(isolation_str)
@@ -249,6 +272,7 @@ def _load_config() -> Config:
         log_to_file=s("log_to_file", False),
         log_file_path=s("log_file_path", str(mutants_dir / "mutmut-debug.log")),
         mutants_dir=mutants_dir,
+        disable_mutation_types=disable_mutation_types,
     )
 
 
@@ -285,6 +309,7 @@ class Config:
     log_to_file: bool
     log_file_path: str
     mutants_dir: Path = Path("mutants")
+    disable_mutation_types: list[str] = field(default_factory=list)
 
     def config_fingerprint(self) -> dict[str, str]:
         """Hash the config fields that can change cached mutant *results*, grouped so the
@@ -307,7 +332,14 @@ class Config:
             "timeout": _hash((self.timeout_multiplier, self.timeout_constant)),
             # only changes the type-check pre-filter
             "type_check": _hash(tuple(self.type_check_command)),
+            # Filtering changes mutant numbering, so no cached verdict is safe to reuse.
+            "mutant_generation": _hash(tuple(self.disable_mutation_types)),
         }
+
+    def should_mutate_type(self, mutation_type: str) -> bool:
+        return not any(
+            _mutation_type_matches(disabled_type, mutation_type) for disabled_type in self.disable_mutation_types
+        )
 
     def should_mutate(self, path: Path | str) -> bool:
         return self._should_include_for_mutation(path) and not self._should_ignore_for_mutation(path)
