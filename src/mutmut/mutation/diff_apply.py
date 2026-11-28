@@ -16,12 +16,12 @@ from mutmut.utils.format_utils import orig_function_and_class_names_from_key
 
 
 def read_mutants_module(path: Path | str) -> cst.Module:
-    with open(get_mutants_dir() / path) as f:
+    with open(get_mutants_dir() / path, encoding="utf-8") as f:
         return cst.parse_module(f.read())
 
 
 def read_orig_module(path: Path | str) -> cst.Module:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return cst.parse_module(f.read())
 
 
@@ -201,5 +201,5 @@ def apply_mutant(mutant_name: str) -> None:
 
     new_module: cst.Module = orig_module.deep_replace(original_function, mutant_function)  # type: ignore[arg-type]
 
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(new_module.code)

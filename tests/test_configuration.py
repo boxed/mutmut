@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,7 +58,8 @@ class TestProcessIsolationConfig:
     def test_defaults(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, "")
         cfg = config()
-        assert cfg.process_isolation == ProcessIsolation.FORK
+        expected = ProcessIsolation.SPAWN if sys.platform == "win32" else ProcessIsolation.FORK
+        assert cfg.process_isolation == expected
         assert cfg.forkserver_warmup == ForkServerWarmup.COLLECT
         assert cfg.max_forkserver_restarts == 3
         assert cfg.preload_modules == []
@@ -67,9 +69,21 @@ class TestProcessIsolationConfig:
         self._write_pyproject(in_tmp_dir, 'preload_modules = ["json", "decimal"]')
         assert config().preload_modules == ["json", "decimal"]
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Forking not supported on Windows")
     def test_forkserver_selected(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, 'process_isolation = "forkserver"')
         assert config().process_isolation == ProcessIsolation.FORKSERVER
+
+    def test_spawn_selected(self, in_tmp_dir: Path):
+        self._write_pyproject(in_tmp_dir, 'process_isolation = "spawn"')
+        assert config().process_isolation == ProcessIsolation.SPAWN
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Only Windows lacks os.fork")
+    @pytest.mark.parametrize("isolation", ["fork", "forkserver"])
+    def test_forking_isolation_falls_back_to_spawn_on_windows(self, in_tmp_dir: Path, isolation: str):
+        self._write_pyproject(in_tmp_dir, f'process_isolation = "{isolation}"')
+        with pytest.warns(UserWarning, match="needs os.fork"):
+            assert _load_config().process_isolation == ProcessIsolation.SPAWN
 
     def test_invalid_process_isolation_raises(self, in_tmp_dir: Path):
         self._write_pyproject(in_tmp_dir, 'process_isolation = "bogus"')

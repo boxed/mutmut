@@ -54,6 +54,7 @@ class TestRegisterTimeout:
         assert root_pid == 1
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Forking not supported on Windows")
 class TestTimeoutCheckerThread:
     """Tests for the timeout checker thread behavior."""
 

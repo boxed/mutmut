@@ -1,31 +1,18 @@
 from __future__ import annotations
 
-import os
-import platform
-import sys
-from collections.abc import Iterable
-from typing import Any
-
-from mutmut.state import state
-from mutmut.utils.format_utils import get_module_from_key
-from mutmut.utils.format_utils import get_mutant_name
-from mutmut.utils.format_utils import mangled_name_from_mutant_name
-
-if platform.system() == "Windows":
-    print(
-        "To run mutmut on Windows, please use the WSL. Native windows support is tracked in issue https://github.com/boxed/mutmut/issues/397"
-    )
-    sys.exit(1)
 import ast
 import ctypes
 import fnmatch
 import hashlib
 import json
+import os
 import shutil
 import signal
 import subprocess
+import sys
 import warnings
 from collections.abc import Callable
+from collections.abc import Iterable
 from colorsys import hls_to_rgb
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
@@ -34,6 +21,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
 from io import TextIOBase
+from io import TextIOWrapper
 from json import JSONDecodeError
 from math import ceil
 from multiprocessing import get_start_method
@@ -43,6 +31,7 @@ from os import makedirs
 from pathlib import Path
 from time import process_time
 from types import TracebackType
+from typing import Any
 
 import click
 import libcst as cst
@@ -67,6 +56,7 @@ from mutmut.mutation.trampoline import set_mutant_under_test
 from mutmut.runners.harness import CollectTestsFailedException
 from mutmut.runners.harness import PytestRunner
 from mutmut.runners.harness import collected_test_names
+from mutmut.state import state
 from mutmut.stats import calculate_summary_stats
 from mutmut.stats import emoji_by_status
 from mutmut.stats import load_stats
@@ -80,9 +70,18 @@ from mutmut.utils.file_utils import copy_src_dir
 from mutmut.utils.file_utils import setup_source_paths
 from mutmut.utils.file_utils import walk_mutatable_files
 from mutmut.utils.file_utils import walk_source_files
+from mutmut.utils.format_utils import get_module_from_key
+from mutmut.utils.format_utils import get_mutant_name
+from mutmut.utils.format_utils import mangled_name_from_mutant_name
 from mutmut.workers.isolation import MutantResult
 from mutmut.workers.isolation import MutantRunner
 from mutmut.workers.isolation import get_mutant_runner
+
+if sys.platform == "win32":
+    # A redirected stdout uses the ANSI code page on Windows, which cannot encode the spinner or the emoji.
+    for _stream in (sys.__stdout__, sys.__stderr__):
+        if isinstance(_stream, TextIOWrapper):
+            _stream.reconfigure(encoding="utf-8")
 
 # Document: surviving mutants are retested when you ask mutmut to retest them, interactively in the UI or via command line
 
@@ -144,7 +143,8 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
     executor = ProcessPoolExecutor(
         max_workers=max_children,
         initializer=_init_mutant_generation_worker,
-        initargs=(files_in_progress,),
+        # Under the spawn start method the workers do not inherit state(), so hand them what they read from it.
+        initargs=(files_in_progress, state()._covered_lines, state()._excluded_lines),
     )
     try:
         futures = [executor.submit(_create_file_mutants_in_worker, i, path) for i, path in enumerate(paths)]
@@ -175,9 +175,14 @@ def create_mutants(max_children: int) -> MutantGenerationStats:
 _files_in_progress: ctypes.Array[ctypes.c_bool] | None = None
 
 
-def _init_mutant_generation_worker(files_in_progress: ctypes.Array[ctypes.c_bool]) -> None:
+def _init_mutant_generation_worker(
+    files_in_progress: ctypes.Array[ctypes.c_bool],
+    covered_lines: dict[str, set[int]] | None,
+    excluded_lines: dict[str, set[int]] | None,
+) -> None:
     global _files_in_progress
     _files_in_progress = files_in_progress
+    _set_lines_covered_by_tests(covered_lines, excluded_lines)
     # Die on Ctrl-C, like the workers of multiprocessing.Pool did. Otherwise a worker
     # reports the KeyboardInterrupt and goes on with the next file, and we wait for it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -207,6 +212,13 @@ def create_file_mutants(path: Path) -> FileMutationResult:
         return FileMutationResult(error=e)
 
 
+def _set_lines_covered_by_tests(
+    covered_lines: dict[str, set[int]] | None, excluded_lines: dict[str, set[int]] | None
+) -> None:
+    state()._covered_lines = covered_lines
+    state()._excluded_lines = excluded_lines
+
+
 def store_lines_covered_by_tests() -> None:
     if config().mutate_only_covered_lines:
         coverage_info = gather_coverage(PytestRunner(), list(walk_source_files()))
@@ -234,10 +246,10 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
     except OSError:
         pass
 
-    with open(filename) as f:
+    with open(filename, encoding="utf-8") as f:
         source = f.read()
 
-    with open(output_path, "w") as out:
+    with open(output_path, "w", encoding="utf-8") as out:
         try:
             mutated_file = write_all_mutants_to_file(out=out, source=source, filename=filename)
         except cst.ParserSyntaxError as e:
@@ -249,7 +261,7 @@ def create_mutants_for_file(filename: Path, output_path: Path) -> FileMutationRe
             )
 
     # validate no syntax errors of mutants
-    with open(output_path) as f:
+    with open(output_path, encoding="utf-8") as f:
         try:
             ast.parse(f.read())
         except (IndentationError, SyntaxError) as e:
@@ -533,7 +545,7 @@ def _hash_files(paths: Iterable[str]) -> dict[str, str]:
 def compute_watched_file_hashes() -> dict[str, str]:
     """Map watched-file path -> content hash for the default set plus user globs."""
     patterns = list(_DEFAULT_WATCHED_FILES) + list(config().cache_invalidation_files)
-    paths = [str(path) for pattern in patterns for path in sorted(Path(".").glob(pattern))]
+    paths = [path.as_posix() for pattern in patterns for path in sorted(Path(".").glob(pattern))]
     return _hash_files(paths)
 
 
@@ -550,7 +562,10 @@ def compute_test_file_hashes(test_names: Iterable[str]) -> dict[str, str]:
     """Hash the files these tests live in, plus any conftest.py above them."""
     files = {_test_file_of(name) for name in test_names}
     conftests = {
-        str(parent / "conftest.py") for f in files for parent in Path(f).parents if (parent / "conftest.py").is_file()
+        (parent / "conftest.py").as_posix()
+        for f in files
+        for parent in Path(f).parents
+        if (parent / "conftest.py").is_file()
     }
     return _hash_files(sorted(files | conftests))
 
@@ -632,7 +647,7 @@ def _run_git(args: list[str]) -> str | None:
     never raises so callers can silently fall back to content hashing.
     """
     try:
-        result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+        result = subprocess.run(["git", *args], capture_output=True, check=False, encoding="utf-8")
     except OSError:
         return None
     if result.returncode != 0:
@@ -902,7 +917,7 @@ def collect_or_load_stats(
 
 def save_cicd_stats(source_file_mutation_data_by_path: dict[str, SourceFileMutationData]) -> None:
     s = calculate_summary_stats(source_file_mutation_data_by_path)
-    with open(get_mutants_dir() / "mutmut-cicd-stats.json", "w") as f:
+    with open(get_mutants_dir() / "mutmut-cicd-stats.json", "w", encoding="utf-8") as f:
         json.dump(
             dict(
                 killed=s.killed,
@@ -969,7 +984,7 @@ def badge(input_path: Path | None, output: Path, label: str) -> None:
         if not input_path.is_file():
             raise click.ClickException(f"{input_path} does not exist")
     try:
-        with input_path.open() as f:
+        with input_path.open(encoding="utf-8") as f:
             stats = json.load(f)
     except JSONDecodeError as e:
         raise click.ClickException(f"{input_path} does not contain valid JSON") from e
@@ -977,7 +992,7 @@ def badge(input_path: Path | None, output: Path, label: str) -> None:
     tested = int(stats.get("total", 0)) - int(stats.get("skipped", 0))
     score = 0.0 if tested <= 0 else ((int(stats.get("killed", 0)) + int(stats.get("timeout", 0))) / tested) * 100
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w") as f:
+    with output.open("w", encoding="utf-8") as f:
         json.dump(
             {
                 "schemaVersion": 1,
@@ -1128,7 +1143,9 @@ def _register_mutant_result(
 
 # Guard against "context has already been set" when mutmut.__main__ is
 # re-executed (see GH-466).
-if get_start_method(allow_none=True) is None:
+if sys.platform == "win32":
+    pass  # Windows only has the spawn start method, and spawned children import this module again.
+elif get_start_method(allow_none=True) is None:
     set_start_method("fork")
 elif "mutmut.__main__" not in sys.modules:
     warnings.warn(

@@ -32,8 +32,9 @@ which has a different execution model than mutmut 3+.
 Requirements
 ------------
 
-Mutmut must be run on a system with `fork` support. This means that if you want
-to run on windows, you must run inside WSL.
+Mutmut runs on Linux, macOS and Windows. Windows has no `fork`, so there mutmut
+starts a new Python process for every mutant, which is slower. See
+`Process isolation`_.
 
 
 
@@ -260,18 +261,20 @@ macOS at your own risk, or to disable it on other platforms), set ``use_setproct
     use_setproctitle = false
 
 
-Process isolation (``fork`` vs ``forkserver``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Process isolation
+~~~~~~~~~~~~~~~~~
 
 .. code-block:: toml
 
     # pyproject.toml
     [tool.mutmut]
-    process_isolation = "fork"  # or "forkserver"
+    process_isolation = "fork"  # or "forkserver" or "spawn"
 
-Both strategies require ``os.fork``, so they are POSIX-only.
+``fork`` and ``forkserver`` require ``os.fork``, so they are POSIX-only. On
+Windows mutmut always uses ``spawn``, and warns if the config asks for one of
+the other two.
 
-``fork`` (default)
+``fork`` (default on POSIX)
     Mutmut's main process imports pytest and runs your test suite to collect
     stats, then forks one child per mutant. This is fast and needs no
     configuration, but every mutant worker inherits whatever your test setup
@@ -291,6 +294,14 @@ Both strategies require ``os.fork``, so they are POSIX-only.
     same design as the ``forkserver`` start method in Python's
     ``multiprocessing``, and it is still only one pytest import for the whole
     run, so it is not slower than ``fork`` in the normal case.
+
+``spawn`` (default on Windows)
+    Mutmut starts a new Python process for every mutant. Nothing is inherited,
+    so every worker imports pytest and collects its tests itself, which makes
+    this the slowest strategy. Mutmut starts the next worker ahead of time so
+    that part of that cost is paid while it waits for a mutant. A mutant that
+    runs too long is stopped by wall-clock time only; there is no CPU-time
+    limit as with the fork-based strategies.
 
 **Which one should you use?** Start with ``fork``. Switch to ``forkserver`` if
 your run hangs, crashes, or gives results you cannot reproduce by running the

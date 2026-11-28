@@ -34,11 +34,12 @@ jobs:
         run: uv run pre-commit run --all-files --show-diff-on-failure --color=always
 
   tests:
-    name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]
     steps:
       - name: Checkout

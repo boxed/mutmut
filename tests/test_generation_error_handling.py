@@ -1,6 +1,7 @@
 import os
 import shutil
 import signal
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -62,6 +63,7 @@ def create_file_mutants_or_get_killed(path: Path):
     return create_file_mutants(path)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Uses SIGALRM and SIGKILL, which Windows lacks")
 def test_mutant_generation_fails_when_a_worker_dies(monkeypatch):
     mutmut._reset_globals()
 
