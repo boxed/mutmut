@@ -151,6 +151,14 @@ class PytestRunner(TestRunner):
 
         class StatsCollector:
             # noinspection PyMethodMayBeStatic
+            def pytest_collection_finish(self, session: Any) -> None:
+                # Importing test and source modules during collection calls
+                # trampolined functions, but that is not evidence a test calls
+                # them. Drop those hits instead of crediting the first test.
+                unused(session)
+                state()._stats.clear()
+
+            # noinspection PyMethodMayBeStatic
             def pytest_runtest_logstart(self, nodeid: str, location: Any) -> None:
                 state().duration_by_test[nodeid] = 0
 
