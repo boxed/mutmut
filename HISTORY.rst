@@ -1,12 +1,54 @@
 Changelog
 ---------
 
-Unreleased
-~~~~~~~~~~
+3.9.0
+~~~~~
 
-* Add ``mutmut.is_mutmut_generated_name`` so tests that inspect modules or classes can skip the functions and dicts mutmut adds to mutated code
+* Run natively on Windows. A new ``spawn`` value for ``process_isolation`` starts a fresh Python process per mutant, and is used automatically on Windows, where ``fork`` and ``forkserver`` fall back to it with a warning (`#397`, `#640`)
 
-* Fix ``typing.Protocol`` classes being mutated. The generated mutant methods became members of the protocol, so classes implementing it no longer conformed, and ``type_check_command`` either crashed with "Could not find mutant for type error" or discarded unrelated mutants as caught by the type checker. Methods of protocols, including default implementations, are no longer mutated (`#590`)
+* Add a ``mutants_dir`` config to write mutants, metadata and logs somewhere other than ``./mutants/`` (`#648`)
+
+* Add a ``disable_mutation_types`` config to turn off mutation types that are not useful for your codebase, for example ``["string.lower", "string.upper"]`` (`#579`)
+
+* Add a ``preload_modules`` config to list the modules the fork server imports directly, instead of in a separate ``preload_modules_file`` (`#650`)
+
+* Add ``mutmut.is_mutmut_generated_name`` so tests that inspect modules or classes can skip the functions and dicts mutmut adds to mutated code (`#587`)
+
+* Re-run mutants when tests are edited or added. Previously only source changes invalidated cached results, so a removed assertion left its mutants as killed, and a new test didn't kill survivors until ``mutants/`` was deleted (`#626`, `#635`)
+
+* ``mutmut browse`` hides mutants inside code removed by a surviving mutant (for example the mutants inside ``foo(a + 1)`` when ``x = foo(a + 1)`` -> ``x = None`` survives). Press ``s`` to show them (`#367`, `#628`)
+
+* Much faster runs with many cached mutants: the status line was redrawn on every loop iteration instead of at most every 0.1 seconds. A fully cached run of 58,270 mutants went from 286 s to 69 s (`#413`, `#633`)
+
+* Fix ``typing.Protocol`` classes being mutated. The generated mutant methods became members of the protocol, so classes implementing it no longer conformed, and ``type_check_command`` either crashed with "Could not find mutant for type error" or discarded unrelated mutants as caught by the type checker. Methods of protocols, including default implementations, are no longer mutated (`#590`, `#591`)
+
+* Fix ``type_check_command`` crashing with "Could not find mutant for type error" on the ``# type: ignore`` comments mutmut generates, for example with mypy's ``ignore-without-code`` (`#638`, `#639`)
+
+* Fix every mutant being reported as a segfault on macOS when tests build an HTTP client (requests, httpx, aiohttp), because the system proxy lookup is not fork-safe (`#619`)
+
+* Fix an exception from the test run reporting the mutant as killed instead of suspicious (`#601`, `#621`)
+
+* Fix ``mutmut apply`` writing a mutant into a different function or method with the same name (`#624`, `#625`)
+
+* Fix functions only called at import time being counted as covered by the first test, so their mutants were reported as survived instead of no tests (`#646`)
+
+* Fix "Generating mutants" hanging forever when a worker process dies, for example from running out of memory. It now fails with an error naming the file being processed (`#642`, `#645`)
+
+* Fix stats collection crashing when tests run mutated code in a subprocess with another working directory (`#644`)
+
+* Fix stats collection crashing on ``@dataclass`` methods when ``max_stack_depth`` is set (`#643`)
+
+* Fix a segfault during stats collection on Python < 3.12 when a garbage-collected object has a mutated ``__del__`` (`#596`, `#637`)
+
+* Fix a crash when a ``mutants/*.meta`` file was left empty or truncated by a killed run (`#630`)
+
+* Fix ``**/`` in ``cache_invalidation_files`` and ``cache_invalidation_exclude`` not matching files at the top level of the directory, so ``tests/**/*.py`` missed ``tests/test_ops.py`` (`#627`, `#634`)
+
+* Fix ``# pragma: no mutate`` being ignored on the last line of a multi-line statement (`#629`)
+
+* Fix unary operator removal dropping needed parentheses (`#602`, `#606`)
+
+* Don't produce invalid ``case +2`` mutants from ``case -2`` in ``match`` statements (`#583`, `#589`)
 
 3.8.1
 ~~~~~
