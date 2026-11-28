@@ -60,7 +60,7 @@ lib.foo()
 
 
 from mutmut.mutation.trampoline import wrap_in_trampoline as _mutmut_mutated, MutantDict
-mutants_x_foo__mutmut: MutantDict = {}  # type: ignore
+mutants_x_foo__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
 @_mutmut_mutated(mutants_x_foo__mutmut)
 def foo(a: list[int], b):
@@ -78,7 +78,7 @@ def x_foo__mutmut_2(a: list[int], b):
 mutants_x_foo__mutmut['_mutmut_orig'] = x_foo__mutmut_orig # type: ignore # mutmut generated
 mutants_x_foo__mutmut['x_foo__mutmut_1'] = x_foo__mutmut_1 # type: ignore # mutmut generated
 mutants_x_foo__mutmut['x_foo__mutmut_2'] = x_foo__mutmut_2 # type: ignore # mutmut generated
-mutants_x_bar__mutmut: MutantDict = {}  # type: ignore
+mutants_x_bar__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
 @_mutmut_mutated(mutants_x_bar__mutmut)
 def bar():
@@ -92,9 +92,9 @@ def x_bar__mutmut_1():
 
 mutants_x_bar__mutmut['_mutmut_orig'] = x_bar__mutmut_orig # type: ignore # mutmut generated
 mutants_x_bar__mutmut['x_bar__mutmut_1'] = x_bar__mutmut_1 # type: ignore # mutmut generated
-mutants_xǁAdderǁ__init____mutmut: MutantDict = {}  # type: ignore
-mutants_xǁAdderǁadd__mutmut: MutantDict = {}  # type: ignore
-mutants_xǁAdderǁnegated__mutmut: MutantDict = {}  # type: ignore
+mutants_xǁAdderǁ__init____mutmut: MutantDict = {}  # type: ignore # mutmut generated
+mutants_xǁAdderǁadd__mutmut: MutantDict = {}  # type: ignore # mutmut generated
+mutants_xǁAdderǁnegated__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
 class Adder:
     @_mutmut_mutated(mutants_xǁAdderǁ__init____mutmut)
@@ -141,8 +141,8 @@ mutants_xǁAdderǁadd__mutmut['xǁAdderǁadd__mutmut_1'] = Adder.xǁAdderǁadd__
 mutants_xǁAdderǁnegated__mutmut['_mutmut_orig'] = Adder.xǁAdderǁnegated__mutmut_orig # type: ignore # mutmut generated
 mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_1'] = Adder.xǁAdderǁnegated__mutmut_1 # type: ignore # mutmut generated
 mutants_xǁAdderǁnegated__mutmut['xǁAdderǁnegated__mutmut_2'] = Adder.xǁAdderǁnegated__mutmut_2 # type: ignore # mutmut generated
-mutants_xǁColorǁdarken__mutmut: MutantDict = {}  # type: ignore
-mutants_xǁColorǁfrom_name__mutmut: MutantDict = {}  # type: ignore
+mutants_xǁColorǁdarken__mutmut: MutantDict = {}  # type: ignore # mutmut generated
+mutants_xǁColorǁfrom_name__mutmut: MutantDict = {}  # type: ignore # mutmut generated
 
 class Color(Enum):
     RED = 'red'
