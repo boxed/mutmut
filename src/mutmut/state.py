@@ -19,6 +19,9 @@ class MutmutState:
     watched_file_hashes: dict[str, str] = field(default_factory=dict)
     old_git_commit: str | None = None
     git_commit: str | None = None
+    # Hashes of test files (and conftest.py) from the last run, updated every run.
+    old_test_file_hashes: dict[str, str] = field(default_factory=dict)
+    test_file_hashes: dict[str, str] = field(default_factory=dict)
     # Migrated from module-level globals in mutmut/__init__.py.
     stats_time: float | None = None
     duration_by_test: defaultdict[str, float] = field(default_factory=lambda: defaultdict(float))
