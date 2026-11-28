@@ -545,7 +545,7 @@ def _hash_files(paths: Iterable[str]) -> dict[str, str]:
 def compute_watched_file_hashes() -> dict[str, str]:
     """Map watched-file path -> content hash for the default set plus user globs."""
     patterns = list(_DEFAULT_WATCHED_FILES) + list(config().cache_invalidation_files)
-    paths = [str(path) for pattern in patterns for path in sorted(Path(".").glob(pattern))]
+    paths = [path.as_posix() for pattern in patterns for path in sorted(Path(".").glob(pattern))]
     return _hash_files(paths)
 
 
@@ -562,7 +562,10 @@ def compute_test_file_hashes(test_names: Iterable[str]) -> dict[str, str]:
     """Hash the files these tests live in, plus any conftest.py above them."""
     files = {_test_file_of(name) for name in test_names}
     conftests = {
-        str(parent / "conftest.py") for f in files for parent in Path(f).parents if (parent / "conftest.py").is_file()
+        (parent / "conftest.py").as_posix()
+        for f in files
+        for parent in Path(f).parents
+        if (parent / "conftest.py").is_file()
     }
     return _hash_files(sorted(files | conftests))
 
