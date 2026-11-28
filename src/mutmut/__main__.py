@@ -318,13 +318,25 @@ def write_all_mutants_to_file(*, out: TextIOBase, source: str, filename: Path) -
     return mutated_file
 
 
+PYTEST_EXIT_INTERNAL_ERROR = 3
+PYTEST_EXIT_NO_TESTS_COLLECTED = 5
+
+
 def run_forced_fail_test(runner: MutantRunner) -> None:
     set_mutant_under_test("fail")
     with CatchOutput(spinner_title="Running forced fail test") as catcher:
         try:
-            if runner.run_forced_fail() == 0:
+            exit_code = runner.run_forced_fail()
+            if exit_code == 0:
                 catcher.dump_output()
                 print("FAILED: Unable to force test failures")
+                raise SystemExit(1)
+            if exit_code in (PYTEST_EXIT_INTERNAL_ERROR, PYTEST_EXIT_NO_TESTS_COLLECTED):
+                # No test could run, so the control proves nothing. Exit codes 1 (tests failed) and
+                # 2 (interrupted) are accepted: with the forced fail enabled, a test module that calls
+                # mutated code while it is imported fails collection, which pytest reports as code 2.
+                catcher.dump_output()
+                print(f"FAILED: Forced fail test could not run the tests (exit code {exit_code})")
                 raise SystemExit(1)
         except MutmutProgrammaticFailException:
             pass

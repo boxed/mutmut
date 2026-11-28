@@ -1345,6 +1345,40 @@ def test_run_forced_fail_test_with_all_tests_passing(_start, _stop, _dump_output
     assert "FAILED: Unable to force test failures" in out
 
 
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@pytest.mark.parametrize("exit_code", [3, 5])
+@patch.object(CatchOutput, "dump_output")
+@patch.object(CatchOutput, "stop")
+@patch.object(CatchOutput, "start")
+def test_run_forced_fail_test_aborts_when_no_tests_could_run(_start, _stop, _dump_output, exit_code, capfd):
+    # pytest exit codes 3 (internal error) and 5 (no tests collected) mean that no test ran,
+    # so the forced fail test must not be accepted.
+    runner = _mocked_runner_run_forced_failed(return_value=exit_code)
+
+    with pytest.raises(SystemExit) as error:
+        run_forced_fail_test(runner)
+
+    assert error.value.code == 1
+    out, _ = capfd.readouterr()
+    assert f"FAILED: Forced fail test could not run the tests (exit code {exit_code})" in out
+
+
+# Negate the effects of CatchOutput because it does not play nicely with capfd in GitHub Actions
+@patch.object(CatchOutput, "dump_output")
+@patch.object(CatchOutput, "stop")
+@patch.object(CatchOutput, "start")
+def test_run_forced_fail_test_accepts_interrupted_collection(_start, _stop, _dump_output, capfd):
+    # With the forced fail enabled, a test module that calls mutated code at import time
+    # (e.g. in `parametrize`) fails collection, which pytest reports as exit code 2.
+    runner = _mocked_runner_run_forced_failed(return_value=2)
+
+    run_forced_fail_test(runner)
+
+    out, _ = capfd.readouterr()
+    assert "done" in out
+    assert not os.environ["MUTANT_UNDER_TEST"]
+
+
 def _mocked_runner_run_forced_failed(return_value=None, side_effect=None):
     runner = Mock()
     runner.run_forced_fail = Mock(return_value=return_value, side_effect=side_effect)
